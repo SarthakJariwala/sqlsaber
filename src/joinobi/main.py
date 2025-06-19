@@ -83,9 +83,16 @@ def sql(
 
         explanation_parts = []
         displayed_results = False
+        has_content = False
+        status = console.status("[yellow]🧠 Crunching data...[/yellow]")
+        status.start()
 
         async for event in agent.query_stream(user_query):
             if event.type == "tool_use":
+                if not has_content:
+                    status.stop()
+                    has_content = True
+
                 if event.data["status"] == "started":
                     console.print(
                         f"\n[yellow]🔧 Using tool: {event.data['name']}[/yellow]"
@@ -103,6 +110,10 @@ def sql(
                         console.print(syntax)
 
             elif event.type == "text":
+                if not has_content:
+                    status.stop()
+                    has_content = True
+
                 # Collect text for final explanation
                 explanation_parts.append(event.data)
                 # Optionally show streaming text
@@ -135,8 +146,23 @@ def sql(
 
                     displayed_results = True
 
+            elif event.type == "processing":
+                # Show status when processing tool results
+                status.stop()
+                status = console.status(f"[yellow]🧠 {event.data}[/yellow]")
+                status.start()
+
             elif event.type == "error":
+                if not has_content:
+                    status.stop()
+                    has_content = True
                 console.print(f"\n[bold red]Error:[/bold red] {event.data}")
+
+        # Make sure status is stopped
+        try:
+            status.stop()
+        except Exception:
+            pass  # Status might already be stopped
 
         # Display the final explanation
         if explanation_parts:

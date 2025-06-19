@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict, List, Optional, AsyncIterator
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from anthropic import AsyncAnthropic
 
@@ -12,7 +12,9 @@ class StreamEvent:
     """Event emitted during streaming processing."""
 
     def __init__(self, event_type: str, data: Any = None):
-        self.type = event_type  # 'tool_use', 'text', 'query_result', 'error'
+        self.type = (
+            event_type  # 'tool_use', 'text', 'query_result', 'error', 'processing'
+        )
         self.data = data
 
 
@@ -39,7 +41,7 @@ class AnthropicSQLAgent:
         self.db = db_connection
         self.allow_write = allow_write
         self.client = AsyncAnthropic(api_key=get_api_key())
-        self.model = os.getenv("JOINOBI_MODEL", "claude-3-5-sonnet-20241022").replace(
+        self.model = os.getenv("JOINOBI_MODEL", "claude-sonnet-4-20250514").replace(
             "anthropic:", ""
         )
         self.conversation_history: List[Dict[str, Any]] = []
@@ -169,7 +171,7 @@ Guidelines:
             if query_upper.startswith("SELECT") and "LIMIT" not in query_upper:
                 query = f"{query.rstrip(';')} LIMIT {limit};"
 
-            # Execute the query
+            # Execute the query (wrapped in a transaction for safety)
             results = await self.db.execute_query(query)
 
             # Format results - but also store the actual data
@@ -354,6 +356,9 @@ Guidelines:
 
                 # Continue conversation with tool results
                 collected_content.append({"role": "user", "content": tool_results})
+
+                # Signal that we're processing the tool results
+                yield StreamEvent("processing", "Analyzing results...")
 
                 # Stream the next response
                 stream = await self.client.messages.create(

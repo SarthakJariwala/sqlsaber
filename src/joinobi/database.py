@@ -28,11 +28,23 @@ class DatabaseConnection:
             self._pool = None
 
     async def execute_query(self, query: str, *args) -> list[Dict[str, Any]]:
-        """Execute a query and return results as list of dicts."""
+        """Execute a query and return results as list of dicts.
+
+        All queries run in a transaction that is rolled back at the end,
+        ensuring no changes are persisted to the database.
+        """
         pool = await self.get_pool()
         async with pool.acquire() as conn:
-            rows = await conn.fetch(query, *args)
-            return [dict(row) for row in rows]
+            # Start a transaction that we'll always rollback
+            transaction = conn.transaction()
+            await transaction.start()
+
+            try:
+                rows = await conn.fetch(query, *args)
+                return [dict(row) for row in rows]
+            finally:
+                # Always rollback to ensure no changes are committed
+                await transaction.rollback()
 
     async def get_schema_info(self) -> Dict[str, Any]:
         """Get database schema information."""
