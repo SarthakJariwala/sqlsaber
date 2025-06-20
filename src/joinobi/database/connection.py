@@ -1,6 +1,5 @@
 """Database connection management."""
 
-import os
 from typing import Any, Dict, Optional
 
 import asyncpg
@@ -9,10 +8,8 @@ import asyncpg
 class DatabaseConnection:
     """Manages database connections for the SQL agent."""
 
-    def __init__(self, connection_string: Optional[str] = None):
-        self.connection_string = connection_string or os.getenv(
-            "DATABASE_URL", "postgresql://localhost:5432/postgres"
-        )
+    def __init__(self, connection_string: str):
+        self.connection_string = connection_string
         self._pool: Optional[asyncpg.Pool] = None
 
     async def get_pool(self) -> asyncpg.Pool:

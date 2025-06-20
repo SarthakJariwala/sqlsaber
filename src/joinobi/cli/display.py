@@ -45,7 +45,7 @@ class DisplayManager:
         elif tool_name == "execute_sql":
             query = tool_input.get("query", "")
             self.console.print("\n[bold green]Executing SQL:[/bold green]")
-            syntax = Syntax(query, "sql", theme="monokai", line_numbers=True)
+            syntax = Syntax(query, "sql")
             self.console.print(syntax)
 
     def show_explanation_start(self):

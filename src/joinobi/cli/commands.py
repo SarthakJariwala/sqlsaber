@@ -1,74 +1,107 @@
 """CLI command definitions and handlers."""
 
 import asyncio
-import os
 from typing import Optional
 
 import typer
 from rich.console import Console
 
 from joinobi.agents.anthropic import AnthropicSQLAgent
+from joinobi.cli.database import create_db_app
 from joinobi.cli.interactive import InteractiveSession
 from joinobi.cli.streaming import StreamingQueryHandler
+from joinobi.config.database import DatabaseConfigManager
 from joinobi.database.connection import DatabaseConnection
 
 app = typer.Typer(
     name="joinobi",
-    help="JoinObi CLI - SQL like Claude Code",
+    help="JoinObi - Use the agent Luke!\n\nSQL assistant for your database",
     add_completion=True,
 )
 
+
 console = Console()
+config_manager = DatabaseConfigManager()
 
 
-@app.callback(invoke_without_command=True)
+@app.callback()
 def main_callback(
-    ctx: typer.Context,
-    query: Optional[str] = typer.Argument(None, help="SQL query in natural language"),
-    database_url: Optional[str] = typer.Option(
+    database: Optional[str] = typer.Option(
         None,
-        "--db",
+        "--database",
         "-d",
-        help="Database URL (defaults to DATABASE_URL env var)",
-        envvar="DATABASE_URL",
+        help="Database connection name (uses default if not specified)",
     ),
 ):
     """
     Query your database using natural language.
 
     Examples:
-        jb "show me all users"  # Run a single query
-        jb                       # Start interactive mode
+        jb query                             # Start interactive mode
+        jb query "show me all users"         # Run a single query with default database
+        jb query -d mydb "show me users"     # Run a query with specific database
     """
-    # If a subcommand was invoked, don't run the main logic
-    if ctx.invoked_subcommand is not None:
-        return
+    pass
 
-    async def main_async():
-        # Check if database URL is provided
-        if not database_url:
-            if not os.getenv("DATABASE_URL"):
-                console.print("[bold red]Error:[/bold red] No database URL provided.")
+
+@app.command()
+def query(
+    query_text: Optional[str] = typer.Argument(
+        None,
+        help="SQL query in natural language (if not provided, starts interactive mode)",
+    ),
+    database: Optional[str] = typer.Option(
+        None,
+        "--database",
+        "-d",
+        help="Database connection name (uses default if not specified)",
+    ),
+):
+    """Run a query against the database or start interactive mode."""
+
+    async def run_session():
+        # Get database configuration
+        if database:
+            db_config = config_manager.get_database(database)
+            if not db_config:
                 console.print(
-                    "Please set DATABASE_URL environment variable or use --db option."
+                    f"[bold red]Error:[/bold red] Database connection '{database}' not found."
+                )
+                console.print("Use 'joinobi db list' to see available connections.")
+                raise typer.Exit(1)
+        else:
+            db_config = config_manager.get_default_database()
+            if not db_config:
+                console.print(
+                    "[bold red]Error:[/bold red] No database connections configured."
+                )
+                console.print(
+                    "Use 'joinobi db add <name>' to add a database connection."
                 )
                 raise typer.Exit(1)
 
         # Create database connection
-        db_conn = DatabaseConnection(database_url)
+        try:
+            connection_string = db_config.to_connection_string()
+            db_conn = DatabaseConnection(connection_string)
+        except Exception as e:
+            console.print(
+                f"[bold red]Error creating database connection:[/bold red] {e}"
+            )
+            raise typer.Exit(1)
 
         # Create agent instance
         agent = AnthropicSQLAgent(db_conn)
 
         try:
-            if query is None:
+            if query_text:
+                # Single query mode with streaming
+                streaming_handler = StreamingQueryHandler(console)
+                await streaming_handler.execute_streaming_query(query_text, agent)
+            else:
                 # Interactive mode
                 session = InteractiveSession(console, agent)
                 await session.run()
-            else:
-                # Single query mode with streaming
-                streaming_handler = StreamingQueryHandler(console)
-                await streaming_handler.execute_streaming_query(query, agent)
 
         finally:
             # Clean up
@@ -76,7 +109,12 @@ def main_callback(
             console.print("\n[green]Goodbye![/green]")
 
     # Run the async function
-    asyncio.run(main_async())
+    asyncio.run(run_session())
+
+
+# Add database management commands after main callback is defined
+db_app = create_db_app()
+app.add_typer(db_app, name="db")
 
 
 def main():

@@ -3,7 +3,7 @@
 import os
 from typing import Optional
 
-from .api_keys import APIKeyManager
+from joinobi.config.api_keys import APIKeyManager
 
 
 class Config:
@@ -13,7 +13,6 @@ class Config:
         self.model_name = self._get_model_name()
         self.api_key_manager = APIKeyManager()
         self.api_key = self._get_api_key()
-        self.database_url = self._get_database_url()
 
     def _get_model_name(self) -> str:
         """Get the model name from environment or use default."""
@@ -30,10 +29,6 @@ class Config:
         else:
             # For other providers, use generic key
             return self.api_key_manager.get_api_key("generic")
-
-    def _get_database_url(self) -> Optional[str]:
-        """Get database URL from environment."""
-        return os.getenv("DATABASE_URL")
 
     def validate(self):
         """Validate that necessary configuration is present."""
