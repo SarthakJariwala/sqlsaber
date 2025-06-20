@@ -22,5 +22,5 @@ build-backend = "hatchling.build"
 packages = ["src/joinobi"]
 
 [project.scripts]
-jb = "joinobi.main:main"
-joinobi = "joinobi.main:main"
+jb = "joinobi.cli.commands:main"
+joinobi = "joinobi.cli.commands:main"

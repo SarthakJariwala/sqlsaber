@@ -1,53 +1,41 @@
+"""Anthropic-specific SQL agent implementation."""
+
 import json
 import os
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from anthropic import AsyncAnthropic
 
-from .config import get_api_key
-from .database import DatabaseConnection
+from joinobi.agents.base import BaseSQLAgent
+from joinobi.agents.streaming import (
+    StreamingResponse,
+    build_tool_result_block,
+    extract_sql_from_text,
+)
+from joinobi.config.settings import get_api_key
+from joinobi.database.connection import DatabaseConnection
+from joinobi.database.schema import SchemaManager
+from joinobi.models.events import SQLResponse, StreamEvent
+from joinobi.models.types import ToolDefinition
 
 
-class StreamEvent:
-    """Event emitted during streaming processing."""
-
-    def __init__(self, event_type: str, data: Any = None):
-        self.type = (
-            event_type  # 'tool_use', 'text', 'query_result', 'error', 'processing'
-        )
-        self.data = data
-
-
-class SQLResponse:
-    """Response from the SQL agent."""
-
-    def __init__(
-        self,
-        query: Optional[str] = None,
-        explanation: str = "",
-        results: Optional[List[Dict[str, Any]]] = None,
-        error: Optional[str] = None,
-    ):
-        self.query = query
-        self.explanation = explanation
-        self.results = results
-        self.error = error
-
-
-class AnthropicSQLAgent:
+class AnthropicSQLAgent(BaseSQLAgent):
     """SQL Agent using Anthropic SDK directly."""
 
     def __init__(self, db_connection: DatabaseConnection, allow_write: bool = False):
-        self.db = db_connection
-        self.allow_write = allow_write
+        super().__init__(db_connection, allow_write)
         self.client = AsyncAnthropic(api_key=get_api_key())
         self.model = os.getenv("JOINOBI_MODEL", "claude-sonnet-4-20250514").replace(
             "anthropic:", ""
         )
-        self.conversation_history: List[Dict[str, Any]] = []
+        self.schema_manager = SchemaManager(db_connection)
+
+        # Track last query results for streaming
+        self._last_results = None
+        self._last_query = None
 
         # Define tools in Anthropic format
-        self.tools = [
+        self.tools: List[ToolDefinition] = [
             {
                 "name": "list_tables",
                 "description": "Get a list of all tables in the database with row counts. Use this first to discover available tables.",
@@ -120,7 +108,7 @@ Guidelines:
         """Introspect database schema to understand table structures."""
         try:
             # Pass table_pattern to get_schema_info for efficient filtering at DB level
-            schema_info = await self.db.get_schema_info(table_pattern)
+            schema_info = await self.schema_manager.get_schema_info(table_pattern)
 
             # Format the schema information
             formatted_info = {}
@@ -148,42 +136,26 @@ Guidelines:
     async def list_tables(self) -> str:
         """List all tables in the database with basic information."""
         try:
-            tables_info = await self.db.list_tables()
+            tables_info = await self.schema_manager.list_tables()
             return json.dumps(tables_info)
         except Exception as e:
             return json.dumps({"error": f"Error listing tables: {str(e)}"})
 
-    async def execute_sql(
-        self, query: str, limit: Optional[int] = 100
-    ) -> Dict[str, Any]:
+    async def execute_sql(self, query: str, limit: Optional[int] = 100) -> str:
         """Execute a SQL query against the database."""
         try:
             # Security check - only allow SELECT queries unless write is enabled
-            query_upper = query.strip().upper()
-
-            # Check for write operations
-            write_keywords = [
-                "INSERT",
-                "UPDATE",
-                "DELETE",
-                "DROP",
-                "CREATE",
-                "ALTER",
-                "TRUNCATE",
-            ]
-            is_write_query = any(query_upper.startswith(kw) for kw in write_keywords)
-
-            if is_write_query and not self.allow_write:
+            write_error = self._validate_write_operation(query)
+            if write_error:
                 return json.dumps(
                     {
-                        "error": "Write operations are not allowed. Only SELECT queries are permitted.",
+                        "error": write_error,
                         "suggestion": "If you need to perform write operations, please enable write mode.",
                     }
                 )
 
             # Add LIMIT if not present and it's a SELECT query
-            if query_upper.startswith("SELECT") and "LIMIT" not in query_upper:
-                query = f"{query.rstrip(';')} LIMIT {limit};"
+            query = self._add_limit_to_query(query, limit)
 
             # Execute the query (wrapped in a transaction for safety)
             results = await self.db.execute_query(query)
@@ -293,8 +265,6 @@ Guidelines:
                     elif hasattr(event.delta, "partial_json"):
                         # Accumulate tool input
                         if tool_use_blocks:
-                            import json
-
                             try:
                                 # Parse accumulated JSON
                                 current_json = tool_use_blocks[-1].get("_partial", "")
@@ -321,12 +291,7 @@ Guidelines:
                 content_blocks.extend(tool_use_blocks)
 
             # Create a response-like object
-            class Response:
-                def __init__(self, content, stop_reason):
-                    self.content = content
-                    self.stop_reason = stop_reason
-
-            response = Response(content_blocks, stop_reason)
+            response = StreamingResponse(content_blocks, stop_reason)
 
             # Process tool calls if needed
             while response.stop_reason == "tool_use":
@@ -363,11 +328,7 @@ Guidelines:
                             )
 
                         tool_results.append(
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": block["id"],
-                                "content": tool_result,
-                            }
+                            build_tool_result_block(block["id"], tool_result)
                         )
 
                 # Continue conversation with tool results
@@ -411,8 +372,6 @@ Guidelines:
                                 content_blocks[-1]["text"] += event.delta.text
                         elif hasattr(event.delta, "partial_json"):
                             if tool_use_blocks:
-                                import json
-
                                 try:
                                     current_json = tool_use_blocks[-1].get(
                                         "_partial", ""
@@ -438,7 +397,7 @@ Guidelines:
                             del block["_partial"]
                     content_blocks.extend(tool_use_blocks)
 
-                response = Response(content_blocks, stop_reason)
+                response = StreamingResponse(content_blocks, stop_reason)
 
             # Update conversation history if using history
             if use_history:
@@ -453,10 +412,6 @@ Guidelines:
 
         except Exception as e:
             yield StreamEvent("error", str(e))
-
-    def clear_history(self):
-        """Clear conversation history."""
-        self.conversation_history = []
 
     async def query(self, user_query: str) -> SQLResponse:
         """Process a user query and return the response (legacy non-streaming)."""
@@ -485,11 +440,7 @@ Guidelines:
                             block.name, block.input
                         )
                         tool_results.append(
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": block.id,
-                                "content": tool_result,
-                            }
+                            build_tool_result_block(block.id, tool_result)
                         )
 
                 # Send tool results back
@@ -511,25 +462,13 @@ Guidelines:
                     final_text += block.text
 
             # Parse the response to extract query and results
-            # The agent should mention the query and results in the text
-            # This is a simple approach - in production, you might want a more structured response
-            query_executed = None
-            results = None
-            error = None
-
-            # Try to extract information from the response
-            if "```sql" in final_text:
-                # Extract SQL query
-                sql_start = final_text.find("```sql") + 6
-                sql_end = final_text.find("```", sql_start)
-                if sql_end > sql_start:
-                    query_executed = final_text[sql_start:sql_end].strip()
+            query_executed = extract_sql_from_text(final_text)
 
             return SQLResponse(
                 query=query_executed,
                 explanation=final_text,
-                results=results,
-                error=error,
+                results=None,
+                error=None,
             )
 
         except Exception as e:

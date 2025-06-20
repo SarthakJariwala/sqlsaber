@@ -1,4 +1,4 @@
-from joinobi.main import main
+from joinobi.cli.commands import main
 
 if __name__ == "__main__":
     main()
