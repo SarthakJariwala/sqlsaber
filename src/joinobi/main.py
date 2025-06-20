@@ -8,7 +8,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
-from .agent_anthropic import AnthropicSQLAgent, query_database
+from .agent_anthropic import AnthropicSQLAgent
 from .database import DatabaseConnection
 
 app = typer.Typer(
@@ -20,39 +20,9 @@ app = typer.Typer(
 console = Console()
 
 
-@app.callback()
-def callback():
-    """
-    JoinObi CLI tool
-
-    A powerful command-line interface for JoinObi operations.
-    """
-    pass
-
-
-@app.command()
-def hello(
-    name: Optional[str] = typer.Option(None, "--name", "-n", help="Name to greet"),
-):
-    """
-    Say hello to someone.
-    """
-    if name:
-        typer.echo(f"Hello, {name}! Welcome to JoinObi CLI.")
-    else:
-        typer.echo("Hello! Welcome to JoinObi CLI.")
-
-
-@app.command()
-def version():
-    """
-    Show the CLI version.
-    """
-    typer.echo("JoinObi CLI v0.1.0")
-
-
-@app.command()
-def sql(
+@app.callback(invoke_without_command=True)
+def main_callback(
+    ctx: typer.Context,
     query: Optional[str] = typer.Argument(None, help="SQL query in natural language"),
     database_url: Optional[str] = typer.Option(
         None,
@@ -64,18 +34,17 @@ def sql(
     allow_write: bool = typer.Option(
         False, "--write", "-w", help="Allow write operations (INSERT, UPDATE, DELETE)"
     ),
-    interactive: bool = typer.Option(
-        False, "--interactive", "-i", help="Start interactive SQL session"
-    ),
 ):
     """
     Query your database using natural language.
 
     Examples:
-        jb sql "show me all users"
-        jb sql "count orders by status"
-        jb sql -i  # Interactive mode
+        jb "show me all users"  # Run a single query
+        jb                       # Start interactive mode
     """
+    # If a subcommand was invoked, don't run the main logic
+    if ctx.invoked_subcommand is not None:
+        return
 
     async def run_streaming_query(user_query: str, agent: AnthropicSQLAgent):
         """Execute a query with streaming display."""
@@ -183,53 +152,6 @@ def sql(
         if explanation_started:
             console.print()  # Empty line for better readability
 
-    async def run_query(user_query: str, db_conn: DatabaseConnection):
-        """Execute a single query and display results (legacy non-streaming)."""
-        console.print(f"\n[bold blue]Query:[/bold blue] {user_query}")
-
-        with console.status("[yellow]Processing query...[/yellow]"):
-            response = await query_database(db_conn, user_query, allow_write)
-
-        # Display SQL query if generated
-        if response.query:
-            syntax = Syntax(response.query, "sql", theme="monokai", line_numbers=True)
-            console.print("\n[bold green]Generated SQL:[/bold green]")
-            console.print(syntax)
-
-        # Display explanation
-        console.print(f"\n[bold cyan]Explanation:[/bold cyan] {response.explanation}")
-
-        # Display results if any
-        if response.results:
-            console.print(
-                f"\n[bold magenta]Results ({len(response.results)} rows):[/bold magenta]"
-            )
-
-            if response.results:
-                # Create a rich table
-                table = Table(show_header=True, header_style="bold blue")
-
-                # Add columns
-                for key in response.results[0].keys():
-                    table.add_column(key)
-
-                # Add rows
-                for row in response.results[:20]:  # Show first 20 rows
-                    table.add_row(
-                        *[str(row[key]) for key in response.results[0].keys()]
-                    )
-
-                console.print(table)
-
-                if len(response.results) > 20:
-                    console.print(
-                        f"[yellow]... and {len(response.results) - 20} more rows[/yellow]"
-                    )
-
-        # Display error if any
-        if response.error:
-            console.print(f"\n[bold red]Error:[/bold red] {response.error}")
-
     async def main_async():
         # Check if database URL is provided
         if not database_url:
@@ -247,7 +169,7 @@ def sql(
         agent = AnthropicSQLAgent(db_conn, allow_write)
 
         try:
-            if interactive or query is None:
+            if query is None:
                 # Interactive mode with conversation history
                 console.print(
                     Panel.fit(
@@ -293,8 +215,8 @@ def sql(
                         console.print(f"[bold red]Error:[/bold red] {str(e)}")
 
             else:
-                # Single query mode (non-streaming for backward compatibility)
-                await run_query(query, db_conn)
+                # Single query mode with streaming
+                await run_streaming_query(query, agent)
 
         finally:
             # Clean up
