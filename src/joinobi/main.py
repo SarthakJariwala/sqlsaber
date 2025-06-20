@@ -81,7 +81,6 @@ def sql(
         """Execute a query with streaming display."""
         console.print(f"\n[bold blue]Query:[/bold blue] {user_query}")
 
-        displayed_results = False
         has_content = False
         explanation_started = False
         status = console.status("[yellow]🧠 Crunching data...[/yellow]")
@@ -132,7 +131,7 @@ def sql(
                 console.print(event.data, end="", markup=False)
 
             elif event.type == "query_result":
-                if not displayed_results and event.data["results"]:
+                if event.data["results"]:
                     results = event.data["results"]
                     console.print(
                         f"\n[bold magenta]Results ({len(results)} rows):[/bold magenta]"
@@ -155,8 +154,6 @@ def sql(
                         console.print(
                             f"[yellow]... and {len(results) - 20} more rows[/yellow]"
                         )
-
-                    displayed_results = True
 
             elif event.type == "processing":
                 # Show status when processing tool results
