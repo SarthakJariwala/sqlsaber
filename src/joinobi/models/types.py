@@ -3,16 +3,6 @@
 from typing import Any, Dict, List, Optional, TypedDict
 
 
-class TableInfo(TypedDict):
-    """Type definition for table information."""
-
-    schema: str
-    name: str
-    full_name: str
-    type: str
-    row_count: int
-
-
 class ColumnInfo(TypedDict):
     """Type definition for column information."""
 

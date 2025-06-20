@@ -11,13 +11,6 @@ class StreamingResponse:
         self.stop_reason = stop_reason
 
 
-def build_tool_use_block(
-    event_id: str, name: str, input_data: Dict[str, Any]
-) -> Dict[str, Any]:
-    """Build a tool use block for the conversation."""
-    return {"id": event_id, "type": "tool_use", "name": name, "input": input_data}
-
-
 def build_tool_result_block(tool_use_id: str, content: str) -> Dict[str, Any]:
     """Build a tool result block for the conversation."""
     return {"type": "tool_result", "tool_use_id": tool_use_id, "content": content}

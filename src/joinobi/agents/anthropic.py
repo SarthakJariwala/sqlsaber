@@ -10,12 +10,11 @@ from joinobi.agents.base import BaseSQLAgent
 from joinobi.agents.streaming import (
     StreamingResponse,
     build_tool_result_block,
-    extract_sql_from_text,
 )
 from joinobi.config.settings import get_api_key
 from joinobi.database.connection import DatabaseConnection
 from joinobi.database.schema import SchemaManager
-from joinobi.models.events import SQLResponse, StreamEvent
+from joinobi.models.events import StreamEvent
 from joinobi.models.types import ToolDefinition
 
 
@@ -412,85 +411,3 @@ Guidelines:
 
         except Exception as e:
             yield StreamEvent("error", str(e))
-
-    async def query(self, user_query: str) -> SQLResponse:
-        """Process a user query and return the response (legacy non-streaming)."""
-        messages = [{"role": "user", "content": user_query}]
-
-        try:
-            # Initial message to Claude
-            response = await self.client.messages.create(
-                model=self.model,
-                max_tokens=4096,
-                system=self.system_prompt,
-                messages=messages,
-                tools=self.tools,
-            )
-
-            # Process tool calls if needed
-            while response.stop_reason == "tool_use":
-                # Add assistant's response to messages
-                messages.append({"role": "assistant", "content": response.content})
-
-                # Process each tool use
-                tool_results = []
-                for block in response.content:
-                    if block.type == "tool_use":
-                        tool_result = await self.process_tool_call(
-                            block.name, block.input
-                        )
-                        tool_results.append(
-                            build_tool_result_block(block.id, tool_result)
-                        )
-
-                # Send tool results back
-                messages.append({"role": "user", "content": tool_results})
-
-                # Get next response
-                response = await self.client.messages.create(
-                    model=self.model,
-                    max_tokens=4096,
-                    system=self.system_prompt,
-                    messages=messages,
-                    tools=self.tools,
-                )
-
-            # Extract final response
-            final_text = ""
-            for block in response.content:
-                if hasattr(block, "text"):
-                    final_text += block.text
-
-            # Parse the response to extract query and results
-            query_executed = extract_sql_from_text(final_text)
-
-            return SQLResponse(
-                query=query_executed,
-                explanation=final_text,
-                results=None,
-                error=None,
-            )
-
-        except Exception as e:
-            return SQLResponse(
-                explanation=f"An error occurred while processing your request: {str(e)}",
-                error=str(e),
-            )
-
-
-async def query_database(
-    db_connection: DatabaseConnection, user_query: str, allow_write: bool = False
-) -> SQLResponse:
-    """
-    Main function to query the database using natural language.
-
-    Args:
-        db_connection: Database connection instance
-        user_query: Natural language query from the user
-        allow_write: Whether to allow write operations
-
-    Returns:
-        SQLResponse with query, explanation, and results
-    """
-    agent = AnthropicSQLAgent(db_connection, allow_write)
-    return await agent.query(user_query)

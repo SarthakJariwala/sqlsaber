@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from joinobi.database.connection import DatabaseConnection
-from joinobi.models.events import SQLResponse, StreamEvent
+from joinobi.models.events import StreamEvent
 
 
 class BaseSQLAgent(ABC):
@@ -20,11 +20,6 @@ class BaseSQLAgent(ABC):
         self, user_query: str, use_history: bool = True
     ) -> AsyncIterator[StreamEvent]:
         """Process a user query and stream responses."""
-        pass
-
-    @abstractmethod
-    async def query(self, user_query: str) -> SQLResponse:
-        """Process a user query and return the response (legacy non-streaming)."""
         pass
 
     def clear_history(self):

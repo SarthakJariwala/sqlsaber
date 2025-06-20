@@ -60,3 +60,9 @@ def get_config() -> Config:
     if _config is None:
         _config = Config()
     return _config
+
+
+# Convenience function for backward compatibility
+def get_api_key() -> Optional[str]:
+    """Get API key for the model provider."""
+    return get_config().api_key
