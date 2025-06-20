@@ -10,9 +10,8 @@ from joinobi.models.events import StreamEvent
 class BaseSQLAgent(ABC):
     """Abstract base class for SQL agents."""
 
-    def __init__(self, db_connection: DatabaseConnection, allow_write: bool = False):
+    def __init__(self, db_connection: DatabaseConnection):
         self.db = db_connection
-        self.allow_write = allow_write
         self.conversation_history: List[Dict[str, Any]] = []
 
     @abstractmethod
@@ -53,7 +52,7 @@ class BaseSQLAgent(ABC):
         ]
         is_write_query = any(query_upper.startswith(kw) for kw in write_keywords)
 
-        if is_write_query and not self.allow_write:
+        if is_write_query:
             return (
                 "Write operations are not allowed. Only SELECT queries are permitted."
             )

@@ -21,8 +21,8 @@ from joinobi.models.types import ToolDefinition
 class AnthropicSQLAgent(BaseSQLAgent):
     """SQL Agent using Anthropic SDK directly."""
 
-    def __init__(self, db_connection: DatabaseConnection, allow_write: bool = False):
-        super().__init__(db_connection, allow_write)
+    def __init__(self, db_connection: DatabaseConnection):
+        super().__init__(db_connection)
         self.client = AsyncAnthropic(api_key=get_api_key())
         self.model = os.getenv("JOINOBI_MODEL", "claude-sonnet-4-20250514").replace(
             "anthropic:", ""
@@ -149,7 +149,6 @@ Guidelines:
                 return json.dumps(
                     {
                         "error": write_error,
-                        "suggestion": "If you need to perform write operations, please enable write mode.",
                     }
                 )
 

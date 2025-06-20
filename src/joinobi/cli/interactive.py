@@ -11,12 +11,9 @@ from joinobi.cli.streaming import StreamingQueryHandler
 class InteractiveSession:
     """Manages interactive CLI sessions."""
 
-    def __init__(
-        self, console: Console, agent: BaseSQLAgent, allow_write: bool = False
-    ):
+    def __init__(self, console: Console, agent: BaseSQLAgent):
         self.console = console
         self.agent = agent
-        self.allow_write = allow_write
         self.display = DisplayManager(console)
         self.streaming_handler = StreamingQueryHandler(console)
 
@@ -30,11 +27,6 @@ class InteractiveSession:
                 border_style="green",
             )
         )
-
-        if self.allow_write:
-            self.console.print(
-                "[yellow]Warning: Write operations are enabled![/yellow]\n"
-            )
 
         self.console.print(
             "[dim]Commands: 'clear' to reset conversation, 'exit' or 'quit' to leave[/dim]\n"

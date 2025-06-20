@@ -32,9 +32,6 @@ def main_callback(
         help="Database URL (defaults to DATABASE_URL env var)",
         envvar="DATABASE_URL",
     ),
-    allow_write: bool = typer.Option(
-        False, "--write", "-w", help="Allow write operations (INSERT, UPDATE, DELETE)"
-    ),
 ):
     """
     Query your database using natural language.
@@ -61,12 +58,12 @@ def main_callback(
         db_conn = DatabaseConnection(database_url)
 
         # Create agent instance
-        agent = AnthropicSQLAgent(db_conn, allow_write)
+        agent = AnthropicSQLAgent(db_conn)
 
         try:
             if query is None:
                 # Interactive mode
-                session = InteractiveSession(console, agent, allow_write)
+                session = InteractiveSession(console, agent)
                 await session.run()
             else:
                 # Single query mode with streaming
