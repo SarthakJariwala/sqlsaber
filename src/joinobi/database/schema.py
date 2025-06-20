@@ -101,6 +101,13 @@ class SchemaManager:
 
             # Get foreign keys for filtered tables
             if tables:
+                # Build proper table filters with tc. prefix
+                fk_table_filters = []
+                for table in tables:
+                    fk_table_filters.append(
+                        f"(tc.table_schema = '{table['table_schema']}' AND tc.table_name = '{table['table_name']}')"
+                    )
+
                 fk_query = f"""
                     SELECT
                         tc.table_schema,
@@ -117,7 +124,7 @@ class SchemaManager:
                         ON ccu.constraint_name = tc.constraint_name
                         AND ccu.table_schema = tc.table_schema
                     WHERE tc.constraint_type = 'FOREIGN KEY'
-                        AND ({" OR ".join(table_filters)});
+                        AND ({" OR ".join(fk_table_filters)});
                 """
                 foreign_keys = await conn.fetch(fk_query)
             else:
@@ -125,6 +132,13 @@ class SchemaManager:
 
             # Get primary keys for filtered tables
             if tables:
+                # Build proper table filters with tc. prefix
+                pk_table_filters = []
+                for table in tables:
+                    pk_table_filters.append(
+                        f"(tc.table_schema = '{table['table_schema']}' AND tc.table_name = '{table['table_name']}')"
+                    )
+
                 pk_query = f"""
                     SELECT
                         tc.table_schema,
@@ -135,7 +149,7 @@ class SchemaManager:
                         ON tc.constraint_name = kcu.constraint_name
                         AND tc.table_schema = kcu.table_schema
                     WHERE tc.constraint_type = 'PRIMARY KEY'
-                        AND ({" OR ".join(table_filters)})
+                        AND ({" OR ".join(pk_table_filters)})
                     ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position;
                 """
                 primary_keys = await conn.fetch(pk_query)

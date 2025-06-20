@@ -336,6 +336,16 @@ Guidelines:
                                 },
                             )
 
+                        # If this was introspect_schema, yield the tool result for display
+                        elif block["name"] == "introspect_schema":
+                            yield StreamEvent(
+                                "tool_result",
+                                {
+                                    "tool_name": "introspect_schema",
+                                    "result": tool_result,
+                                },
+                            )
+
                         tool_results.append(
                             build_tool_result_block(block["id"], tool_result)
                         )

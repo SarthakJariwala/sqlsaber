@@ -128,3 +128,69 @@ class DisplayManager:
             self.show_error("Failed to parse table list data")
         except Exception as e:
             self.show_error(f"Error displaying table list: {str(e)}")
+
+    def show_schema_info(self, schema_data: str):
+        """Display the results from introspect_schema tool."""
+        try:
+            data = json.loads(schema_data)
+
+            # Handle error case
+            if "error" in data:
+                self.show_error(data["error"])
+                return
+
+            if not data:
+                self.console.print("[yellow]No schema information found.[/yellow]")
+                return
+
+            self.console.print(
+                f"\n[bold green]Schema Information ({len(data)} tables):[/bold green]"
+            )
+
+            # Display each table's schema
+            for table_name, table_info in data.items():
+                self.console.print(f"\n[bold cyan]Table: {table_name}[/bold cyan]")
+
+                # Show columns
+                columns = table_info.get("columns", {})
+                if columns:
+                    # Create a table for columns
+                    col_table = Table(
+                        show_header=True, header_style="bold blue", title="Columns"
+                    )
+                    col_table.add_column("Column Name", style="white")
+                    col_table.add_column("Type", style="yellow")
+                    col_table.add_column("Nullable", style="cyan")
+                    col_table.add_column("Default", style="dim")
+
+                    for col_name, col_info in columns.items():
+                        nullable = "✓" if col_info.get("nullable", False) else "✗"
+                        default = (
+                            str(col_info.get("default", ""))
+                            if col_info.get("default")
+                            else ""
+                        )
+                        col_table.add_row(
+                            col_name, col_info.get("type", ""), nullable, default
+                        )
+
+                    self.console.print(col_table)
+
+                # Show primary keys
+                primary_keys = table_info.get("primary_keys", [])
+                if primary_keys:
+                    self.console.print(
+                        f"[bold yellow]Primary Keys:[/bold yellow] {', '.join(primary_keys)}"
+                    )
+
+                # Show foreign keys
+                foreign_keys = table_info.get("foreign_keys", [])
+                if foreign_keys:
+                    self.console.print("[bold magenta]Foreign Keys:[/bold magenta]")
+                    for fk in foreign_keys:
+                        self.console.print(f"  • {fk}")
+
+        except json.JSONDecodeError:
+            self.show_error("Failed to parse schema data")
+        except Exception as e:
+            self.show_error(f"Error displaying schema information: {str(e)}")
