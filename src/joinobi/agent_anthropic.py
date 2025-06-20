@@ -49,6 +49,15 @@ class AnthropicSQLAgent:
         # Define tools in Anthropic format
         self.tools = [
             {
+                "name": "list_tables",
+                "description": "Get a list of all tables in the database with row counts. Use this first to discover available tables.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+            {
                 "name": "introspect_schema",
                 "description": "Introspect database schema to understand table structures.",
                 "input_schema": {
@@ -56,7 +65,7 @@ class AnthropicSQLAgent:
                     "properties": {
                         "table_pattern": {
                             "type": "string",
-                            "description": "Optional pattern to filter tables (e.g., 'public.users')",
+                            "description": "Optional pattern to filter tables (e.g., 'public.users', 'user%', '%order%')",
                         }
                     },
                     "required": [],
@@ -86,14 +95,20 @@ class AnthropicSQLAgent:
         self.system_prompt = """You are a helpful SQL assistant that helps users query their PostgreSQL database.
 
 Your responsibilities:
-1. Understand user's natural language requests and convert them to SQL
-2. Use the database schema introspection tool to understand table structures
+1. Understand user's natural language requests, think and convert them to SQL
+2. Use the provided tools efficiently to explore database schema
 3. Generate appropriate SQL queries
 4. Execute queries safely (only SELECT queries unless explicitly allowed)
 5. Format and explain results clearly
 
+IMPORTANT - Schema Discovery Strategy:
+1. ALWAYS start with 'list_tables' to see available tables and row counts
+2. Based on the user's query, identify which specific tables are relevant
+3. Use 'introspect_schema' with a table_pattern to get details ONLY for relevant tables
+
 Guidelines:
-- Always check the schema before writing queries
+- Use list_tables first, then introspect_schema for specific tables only
+- Use table patterns like 'sample%' or '%experiment%' to filter related tables
 - Use proper JOIN syntax and avoid cartesian products
 - Include appropriate WHERE clauses to limit results
 - Explain what the query does in simple terms
@@ -104,17 +119,8 @@ Guidelines:
     async def introspect_schema(self, table_pattern: Optional[str] = None) -> str:
         """Introspect database schema to understand table structures."""
         try:
-            schema_info = await self.db.get_schema_info()
-
-            # Filter by pattern if provided
-            if table_pattern:
-                pattern = table_pattern.lower()
-                filtered_schema = {
-                    k: v
-                    for k, v in schema_info.items()
-                    if pattern in k.lower() or pattern in v["name"].lower()
-                }
-                schema_info = filtered_schema
+            # Pass table_pattern to get_schema_info for efficient filtering at DB level
+            schema_info = await self.db.get_schema_info(table_pattern)
 
             # Format the schema information
             formatted_info = {}
@@ -138,6 +144,14 @@ Guidelines:
             return json.dumps(formatted_info)
         except Exception as e:
             return json.dumps({"error": f"Error introspecting schema: {str(e)}"})
+
+    async def list_tables(self) -> str:
+        """List all tables in the database with basic information."""
+        try:
+            tables_info = await self.db.list_tables()
+            return json.dumps(tables_info)
+        except Exception as e:
+            return json.dumps({"error": f"Error listing tables: {str(e)}"})
 
     async def execute_sql(
         self, query: str, limit: Optional[int] = 100
@@ -211,7 +225,9 @@ Guidelines:
         self, tool_name: str, tool_input: Dict[str, Any]
     ) -> str:
         """Process a tool call and return the result."""
-        if tool_name == "introspect_schema":
+        if tool_name == "list_tables":
+            return await self.list_tables()
+        elif tool_name == "introspect_schema":
             return await self.introspect_schema(tool_input.get("table_pattern"))
         elif tool_name == "execute_sql":
             return await self.execute_sql(

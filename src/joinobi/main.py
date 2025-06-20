@@ -81,24 +81,31 @@ def sql(
         """Execute a query with streaming display."""
         console.print(f"\n[bold blue]Query:[/bold blue] {user_query}")
 
-        explanation_parts = []
         displayed_results = False
         has_content = False
+        explanation_started = False
         status = console.status("[yellow]🧠 Crunching data...[/yellow]")
         status.start()
 
         async for event in agent.query_stream(user_query):
             if event.type == "tool_use":
-                if not has_content:
+                # Stop any ongoing status, but don't mark has_content yet
+                try:
                     status.stop()
-                    has_content = True
+                except Exception:
+                    pass
 
                 if event.data["status"] == "started":
+                    # If explanation was streaming, add newline before tool use
+                    if explanation_started:
+                        console.print()
                     console.print(
                         f"\n[yellow]🔧 Using tool: {event.data['name']}[/yellow]"
                     )
                 elif event.data["status"] == "executing":
-                    if event.data["name"] == "introspect_schema":
+                    if event.data["name"] == "list_tables":
+                        console.print("[dim]  → Discovering available tables[/dim]")
+                    elif event.data["name"] == "introspect_schema":
                         pattern = event.data["input"].get("table_pattern", "all tables")
                         console.print(f"[dim]  → Examining schema for: {pattern}[/dim]")
                     elif event.data["name"] == "execute_sql":
@@ -110,14 +117,19 @@ def sql(
                         console.print(syntax)
 
             elif event.type == "text":
-                if not has_content:
+                # Always stop status when text streaming starts
+                try:
                     status.stop()
+                except Exception:
+                    pass
+
+                if not explanation_started:
+                    console.print("\n[bold cyan]Explanation:[/bold cyan] ", end="")
+                    explanation_started = True
                     has_content = True
 
-                # Collect text for final explanation
-                explanation_parts.append(event.data)
-                # Optionally show streaming text
-                # console.print(event.data, end='')
+                # Print text as it streams
+                console.print(event.data, end="", markup=False)
 
             elif event.type == "query_result":
                 if not displayed_results and event.data["results"]:
@@ -148,9 +160,15 @@ def sql(
 
             elif event.type == "processing":
                 # Show status when processing tool results
-                status.stop()
+                if explanation_started:
+                    console.print()  # Add newline after explanation text
+                try:
+                    status.stop()
+                except Exception:
+                    pass  # Status might already be stopped
                 status = console.status(f"[yellow]🧠 {event.data}[/yellow]")
                 status.start()
+                has_content = True
 
             elif event.type == "error":
                 if not has_content:
@@ -164,10 +182,9 @@ def sql(
         except Exception:
             pass  # Status might already be stopped
 
-        # Display the final explanation
-        if explanation_parts:
-            full_explanation = "".join(explanation_parts)
-            console.print(f"\n[bold cyan]Explanation:[/bold cyan] {full_explanation}")
+        # Add a newline after streaming completes if explanation was shown
+        if explanation_started:
+            console.print()  # Empty line for better readability
 
     async def run_query(user_query: str, db_conn: DatabaseConnection):
         """Execute a single query and display results (legacy non-streaming)."""
