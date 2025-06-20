@@ -9,6 +9,7 @@ dependencies = [
     "typer>=0.16.0",
     "rich>=13.7.0",
     "anthropic>=0.54.0",
+    "keyring>=25.6.0",
 ]
 
 [tool.uv]
