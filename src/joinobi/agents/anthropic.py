@@ -326,6 +326,16 @@ Guidelines:
                                 },
                             )
 
+                        # If this was list_tables, yield the tool result for display
+                        elif block["name"] == "list_tables":
+                            yield StreamEvent(
+                                "tool_result",
+                                {
+                                    "tool_name": "list_tables",
+                                    "result": tool_result,
+                                },
+                            )
+
                         tool_results.append(
                             build_tool_result_block(block["id"], tool_result)
                         )

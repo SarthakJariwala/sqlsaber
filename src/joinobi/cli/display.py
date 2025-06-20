@@ -1,5 +1,7 @@
 """Display utilities for the CLI interface."""
 
+import json
+
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
@@ -79,3 +81,50 @@ class DisplayManager:
     def show_newline(self):
         """Display a newline for spacing."""
         self.console.print()
+
+    def show_table_list(self, tables_data: str):
+        """Display the results from list_tables tool."""
+        try:
+            data = json.loads(tables_data)
+
+            # Handle error case
+            if "error" in data:
+                self.show_error(data["error"])
+                return
+
+            tables = data.get("tables", [])
+            total_tables = data.get("total_tables", 0)
+
+            if not tables:
+                self.console.print("[yellow]No tables found in the database.[/yellow]")
+                return
+
+            self.console.print(
+                f"\n[bold green]Database Tables ({total_tables} total):[/bold green]"
+            )
+
+            # Create a rich table for displaying table information
+            table = Table(show_header=True, header_style="bold blue")
+            table.add_column("Schema", style="cyan")
+            table.add_column("Table Name", style="white")
+            table.add_column("Type", style="yellow")
+            table.add_column("Row Count", justify="right", style="magenta")
+
+            # Add rows
+            for table_info in tables:
+                schema = table_info.get("schema", "")
+                name = table_info.get("name", "")
+                table_type = table_info.get("type", "")
+                row_count = table_info.get("row_count", 0)
+
+                # Format row count with commas for readability
+                formatted_count = f"{row_count:,}" if row_count else "0"
+
+                table.add_row(schema, name, table_type, formatted_count)
+
+            self.console.print(table)
+
+        except json.JSONDecodeError:
+            self.show_error("Failed to parse table list data")
+        except Exception as e:
+            self.show_error(f"Error displaying table list: {str(e)}")

@@ -213,7 +213,7 @@ class SchemaManager:
                 WITH table_stats AS (
                     SELECT
                         schemaname,
-                        tablename,
+                        relname as tablename,
                         n_live_tup as approximate_row_count
                     FROM pg_stat_user_tables
                 )

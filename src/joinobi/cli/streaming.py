@@ -54,6 +54,12 @@ class StreamingQueryHandler:
                     if event.data["results"]:
                         self.display.show_query_results(event.data["results"])
 
+                elif event.type == "tool_result":
+                    # Handle tool results - particularly list_tables
+                    if event.data.get("tool_name") == "list_tables":
+                        self.display.show_table_list(event.data["result"])
+                        has_content = True
+
                 elif event.type == "processing":
                     # Show status when processing tool results
                     if explanation_started:
