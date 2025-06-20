@@ -1,0 +1,4 @@
+- Run python comamnds with: `uv run python`
+- Lint code with: `uv run ruff check --fix`
+- Format code with: `uv run ruff format`
+- Lint and format after making changes
