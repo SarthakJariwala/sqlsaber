@@ -13,6 +13,20 @@ class DisplayManager:
     def __init__(self, console: Console):
         self.console = console
 
+    def _create_table(
+        self, columns: list, header_style: str = "bold blue", title: str = None
+    ) -> Table:
+        """Create a Rich table with specified columns."""
+        table = Table(show_header=True, header_style=header_style, title=title)
+        for col in columns:
+            if isinstance(col, dict):
+                table.add_column(
+                    col["name"], style=col.get("style"), justify=col.get("justify")
+                )
+            else:
+                table.add_column(col)
+        return table
+
     def show_query_header(self, user_query: str):
         """Display the query header."""
         self.console.print(f"\n[bold blue]Query:[/bold blue] {user_query}")
@@ -51,16 +65,13 @@ class DisplayManager:
             f"\n[bold magenta]Results ({len(results)} rows):[/bold magenta]"
         )
 
-        # Create a rich table
-        table = Table(show_header=True, header_style="bold blue")
-
-        # Add columns
-        for key in results[0].keys():
-            table.add_column(key)
+        # Create table with columns from first result
+        columns = list(results[0].keys())
+        table = self._create_table(columns)
 
         # Add rows (show first 20 rows)
         for row in results[:20]:
-            table.add_row(*[str(row[key]) for key in results[0].keys()])
+            table.add_row(*[str(row[key]) for key in columns])
 
         self.console.print(table)
 
@@ -104,11 +115,13 @@ class DisplayManager:
             )
 
             # Create a rich table for displaying table information
-            table = Table(show_header=True, header_style="bold blue")
-            table.add_column("Schema", style="cyan")
-            table.add_column("Table Name", style="white")
-            table.add_column("Type", style="yellow")
-            table.add_column("Row Count", justify="right", style="magenta")
+            columns = [
+                {"name": "Schema", "style": "cyan"},
+                {"name": "Table Name", "style": "white"},
+                {"name": "Type", "style": "yellow"},
+                {"name": "Row Count", "justify": "right", "style": "magenta"},
+            ]
+            table = self._create_table(columns)
 
             # Add rows
             for table_info in tables:
@@ -152,18 +165,18 @@ class DisplayManager:
                 self.console.print(f"\n[bold cyan]Table: {table_name}[/bold cyan]")
 
                 # Show columns
-                columns = table_info.get("columns", {})
-                if columns:
+                table_columns = table_info.get("columns", {})
+                if table_columns:
                     # Create a table for columns
-                    col_table = Table(
-                        show_header=True, header_style="bold blue", title="Columns"
-                    )
-                    col_table.add_column("Column Name", style="white")
-                    col_table.add_column("Type", style="yellow")
-                    col_table.add_column("Nullable", style="cyan")
-                    col_table.add_column("Default", style="dim")
+                    columns = [
+                        {"name": "Column Name", "style": "white"},
+                        {"name": "Type", "style": "yellow"},
+                        {"name": "Nullable", "style": "cyan"},
+                        {"name": "Default", "style": "dim"},
+                    ]
+                    col_table = self._create_table(columns, title="Columns")
 
-                    for col_name, col_info in columns.items():
+                    for col_name, col_info in table_columns.items():
                         nullable = "✓" if col_info.get("nullable", False) else "✗"
                         default = (
                             str(col_info.get("default", ""))
