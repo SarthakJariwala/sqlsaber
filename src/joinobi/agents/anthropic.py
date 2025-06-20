@@ -1,7 +1,6 @@
 """Anthropic-specific SQL agent implementation."""
 
 import json
-import os
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from anthropic import AsyncAnthropic
@@ -11,7 +10,7 @@ from joinobi.agents.streaming import (
     StreamingResponse,
     build_tool_result_block,
 )
-from joinobi.config.settings import get_api_key
+from joinobi.config.settings import Config
 from joinobi.database.connection import DatabaseConnection
 from joinobi.database.schema import SchemaManager
 from joinobi.models.events import StreamEvent
@@ -23,10 +22,12 @@ class AnthropicSQLAgent(BaseSQLAgent):
 
     def __init__(self, db_connection: DatabaseConnection):
         super().__init__(db_connection)
-        self.client = AsyncAnthropic(api_key=get_api_key())
-        self.model = os.getenv("JOINOBI_MODEL", "claude-sonnet-4-20250514").replace(
-            "anthropic:", ""
-        )
+
+        config = Config()
+        config.validate()  # This will raise ValueError if API key is missing
+
+        self.client = AsyncAnthropic(api_key=config.api_key)
+        self.model = config.model_name.replace("anthropic:", "")
         self.schema_manager = SchemaManager(db_connection)
 
         # Track last query results for streaming

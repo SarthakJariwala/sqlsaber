@@ -1,8 +1,7 @@
 """Configuration module for JoinObi."""
 
-from .settings import Config, get_config
+from .settings import Config
 
 __all__ = [
     "Config",
-    "get_config",
 ]
