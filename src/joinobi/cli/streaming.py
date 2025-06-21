@@ -19,7 +19,9 @@ class StreamingQueryHandler:
 
         has_content = False
         explanation_started = False
-        status = self.console.status("[yellow]🧠 Crunching data...[/yellow]")
+        status = self.console.status(
+            "[yellow]Crunching data...[/yellow]", spinner="bouncingBall"
+        )
         status.start()
 
         try:

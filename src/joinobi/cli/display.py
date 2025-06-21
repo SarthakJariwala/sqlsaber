@@ -87,7 +87,9 @@ class DisplayManager:
     def show_processing(self, message: str):
         """Display processing message."""
         self.console.print()  # Add newline
-        return self.console.status(f"[yellow]🧠 {message}[/yellow]")
+        return self.console.status(
+            f"[yellow]{message}[/yellow]", spinner="bouncingBall"
+        )
 
     def show_newline(self):
         """Display a newline for spacing."""

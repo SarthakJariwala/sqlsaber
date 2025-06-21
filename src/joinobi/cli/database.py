@@ -4,9 +4,9 @@ import asyncio
 import getpass
 from typing import Optional
 
+import questionary
 import typer
 from rich.console import Console
-from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from joinobi.config.database import DatabaseConfig, DatabaseConfigManager
@@ -51,30 +51,32 @@ def add_database(
 
         # Database type
         if not type or type == "postgresql":
-            type = Prompt.ask(
-                "Database type",
+            type = questionary.select(
+                "Database type:",
                 choices=["postgresql", "mysql", "sqlite"],
                 default="postgresql",
-            )
+            ).ask()
 
         if type == "sqlite":
             # SQLite only needs database path
-            database = database or Prompt.ask("Database file path")
+            database = database or questionary.text("Database file path:").ask()
             host = "localhost"
             port = 0
             username = "sqlite"
         else:
             # PostgreSQL/MySQL need connection details
-            host = host or Prompt.ask("Host", default="localhost")
+            host = host or questionary.text("Host:", default="localhost").ask()
 
             default_port = 5432 if type == "postgresql" else 3306
-            port = port or int(Prompt.ask("Port", default=str(default_port)))
+            port = port or int(
+                questionary.text("Port:", default=str(default_port)).ask()
+            )
 
-            database = database or Prompt.ask("Database name")
-            username = username or Prompt.ask("Username")
+            database = database or questionary.text("Database name:").ask()
+            username = username or questionary.text("Username:").ask()
 
             # Ask for password
-            password = getpass.getpass("Password (optional, will be stored securely): ")
+            password = getpass.getpass("Password (stored in your OS keychain): ")
     else:
         # Non-interactive mode - use provided values or defaults
         if type == "sqlite":
@@ -98,8 +100,8 @@ def add_database(
                 port = 5432 if type == "postgresql" else 3306
 
             password = (
-                getpass.getpass("Password (optional): ")
-                if typer.confirm("Enter password?")
+                getpass.getpass("Password (stored in your OS keychain): ")
+                if questionary.confirm("Enter password?").ask()
                 else ""
             )
 
@@ -173,7 +175,9 @@ def remove_database(
         )
         raise typer.Exit(1)
 
-    if Confirm.ask(f"Are you sure you want to remove database connection '{name}'?"):
+    if questionary.confirm(
+        f"Are you sure you want to remove database connection '{name}'?"
+    ).ask():
         if config_manager.remove_database(name):
             console.print(
                 f"[green]Successfully removed database connection '{name}'[/green]"

@@ -1,5 +1,6 @@
 """Interactive mode handling for the CLI."""
 
+import questionary
 from rich.console import Console
 from rich.panel import Panel
 
@@ -22,8 +23,9 @@ class InteractiveSession:
         self.console.print(
             Panel.fit(
                 "[bold green]JoinObi - Use the agent Luke![/bold green]\n\n"
-                "Type your queries in natural language. Type 'exit' or 'quit' to leave.\n"
-                "[dim]Now with conversation memory and real-time visibility![/dim]",
+                "Type your queries in natural language.\n\n"
+                "Press Esc-Enter or Meta-Enter to submit your query.\n\n"
+                "Type 'exit' or 'quit' to leave.",
                 border_style="green",
             )
         )
@@ -38,7 +40,12 @@ class InteractiveSession:
 
         while True:
             try:
-                user_query = self.console.input("[bold blue]sql> [/bold blue]")
+                user_query = await questionary.text(
+                    ">",
+                    qmark="",
+                    multiline=True,
+                    instruction="",
+                ).ask_async()
 
                 if user_query.lower() in ["exit", "quit", "q"]:
                     break

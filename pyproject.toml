@@ -11,6 +11,7 @@ dependencies = [
     "anthropic>=0.54.0",
     "keyring>=25.6.0",
     "platformdirs>=4.0.0",
+    "questionary>=2.1.0",
 ]
 
 [tool.uv]
