@@ -207,6 +207,98 @@ Guidelines:
         else:
             return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
+    async def _process_stream_events(
+        self, stream, content_blocks: List[Dict], tool_use_blocks: List[Dict]
+    ) -> AsyncIterator[StreamEvent]:
+        """Process stream events and yield appropriate StreamEvents."""
+        async for event in stream:
+            if event.type == "content_block_start":
+                if hasattr(event.content_block, "type"):
+                    if event.content_block.type == "tool_use":
+                        yield StreamEvent(
+                            "tool_use",
+                            {"name": event.content_block.name, "status": "started"},
+                        )
+                        tool_use_blocks.append(
+                            {
+                                "id": event.content_block.id,
+                                "name": event.content_block.name,
+                                "input": {},
+                            }
+                        )
+                    elif event.content_block.type == "text":
+                        content_blocks.append({"type": "text", "text": ""})
+
+            elif event.type == "content_block_delta":
+                if hasattr(event.delta, "text"):
+                    yield StreamEvent("text", event.delta.text)
+                    if content_blocks and content_blocks[-1]["type"] == "text":
+                        content_blocks[-1]["text"] += event.delta.text
+                elif hasattr(event.delta, "partial_json"):
+                    if tool_use_blocks:
+                        try:
+                            current_json = tool_use_blocks[-1].get("_partial", "")
+                            current_json += event.delta.partial_json
+                            tool_use_blocks[-1]["_partial"] = current_json
+                            tool_use_blocks[-1]["input"] = json.loads(current_json)
+                        except json.JSONDecodeError:
+                            pass
+
+            elif event.type == "message_stop":
+                break
+
+    def _finalize_tool_blocks(self, tool_use_blocks: List[Dict]) -> str:
+        """Finalize tool use blocks and return stop reason."""
+        if tool_use_blocks:
+            for block in tool_use_blocks:
+                block["type"] = "tool_use"
+                if "_partial" in block:
+                    del block["_partial"]
+            return "tool_use"
+        return "stop"
+
+    async def _process_tool_results(
+        self, response: StreamingResponse
+    ) -> AsyncIterator[StreamEvent]:
+        """Process tool results and yield appropriate events."""
+        tool_results = []
+        for block in response.content:
+            if block.get("type") == "tool_use":
+                yield StreamEvent(
+                    "tool_use",
+                    {
+                        "name": block["name"],
+                        "input": block["input"],
+                        "status": "executing",
+                    },
+                )
+
+                tool_result = await self.process_tool_call(
+                    block["name"], block["input"]
+                )
+
+                # Yield specific events based on tool type
+                if block["name"] == "execute_sql" and self._last_results:
+                    yield StreamEvent(
+                        "query_result",
+                        {
+                            "query": self._last_query,
+                            "results": self._last_results,
+                        },
+                    )
+                elif block["name"] in ["list_tables", "introspect_schema"]:
+                    yield StreamEvent(
+                        "tool_result",
+                        {
+                            "tool_name": block["name"],
+                            "result": tool_result,
+                        },
+                    )
+
+                tool_results.append(build_tool_result_block(block["id"], tool_result))
+
+        yield StreamEvent("tool_result_data", tool_results)
+
     async def query_stream(
         self, user_query: str, use_history: bool = True
     ) -> AsyncIterator[StreamEvent]:
@@ -224,73 +316,15 @@ Guidelines:
             messages = [{"role": "user", "content": user_query}]
 
         try:
-            # Stream the initial message
-            stream = await self.client.messages.create(
-                model=self.model,
-                max_tokens=4096,
-                system=self.system_prompt,
-                messages=messages,
-                tools=self.tools,
-                stream=True,
-            )
+            # Create initial stream and get response
+            response = None
+            async for event in self._create_and_process_stream(messages):
+                if event.type == "response_ready":
+                    response = event.data
+                else:
+                    yield event
 
             collected_content = []
-            content_blocks = []
-            tool_use_blocks = []
-
-            async for event in stream:
-                if event.type == "content_block_start":
-                    if hasattr(event.content_block, "type"):
-                        if event.content_block.type == "tool_use":
-                            yield StreamEvent(
-                                "tool_use",
-                                {"name": event.content_block.name, "status": "started"},
-                            )
-                            tool_use_blocks.append(
-                                {
-                                    "id": event.content_block.id,
-                                    "name": event.content_block.name,
-                                    "input": {},
-                                }
-                            )
-                        elif event.content_block.type == "text":
-                            content_blocks.append({"type": "text", "text": ""})
-
-                elif event.type == "content_block_delta":
-                    if hasattr(event.delta, "text"):
-                        yield StreamEvent("text", event.delta.text)
-                        if content_blocks and content_blocks[-1]["type"] == "text":
-                            content_blocks[-1]["text"] += event.delta.text
-                    elif hasattr(event.delta, "partial_json"):
-                        # Accumulate tool input
-                        if tool_use_blocks:
-                            try:
-                                # Parse accumulated JSON
-                                current_json = tool_use_blocks[-1].get("_partial", "")
-                                current_json += event.delta.partial_json
-                                tool_use_blocks[-1]["_partial"] = current_json
-                                # Try to parse complete JSON
-                                tool_use_blocks[-1]["input"] = json.loads(current_json)
-                            except json.JSONDecodeError:
-                                # Not complete yet
-                                pass
-
-                elif event.type == "message_stop":
-                    break
-
-            # Check if we need to use tools
-            stop_reason = "stop"
-            if tool_use_blocks:
-                stop_reason = "tool_use"
-                # Convert to proper format
-                for block in tool_use_blocks:
-                    block["type"] = "tool_use"
-                    if "_partial" in block:
-                        del block["_partial"]
-                content_blocks.extend(tool_use_blocks)
-
-            # Create a response-like object
-            response = StreamingResponse(content_blocks, stop_reason)
 
             # Process tool calls if needed
             while response.stop_reason == "tool_use":
@@ -299,56 +333,13 @@ Guidelines:
                     {"role": "assistant", "content": response.content}
                 )
 
-                # Process each tool use
+                # Process tool results
                 tool_results = []
-                for block in response.content:
-                    if block.get("type") == "tool_use":
-                        yield StreamEvent(
-                            "tool_use",
-                            {
-                                "name": block["name"],
-                                "input": block["input"],
-                                "status": "executing",
-                            },
-                        )
-
-                        tool_result = await self.process_tool_call(
-                            block["name"], block["input"]
-                        )
-
-                        # If this was a SQL execution, yield the results
-                        if block["name"] == "execute_sql" and self._last_results:
-                            yield StreamEvent(
-                                "query_result",
-                                {
-                                    "query": self._last_query,
-                                    "results": self._last_results,
-                                },
-                            )
-
-                        # If this was list_tables, yield the tool result for display
-                        elif block["name"] == "list_tables":
-                            yield StreamEvent(
-                                "tool_result",
-                                {
-                                    "tool_name": "list_tables",
-                                    "result": tool_result,
-                                },
-                            )
-
-                        # If this was introspect_schema, yield the tool result for display
-                        elif block["name"] == "introspect_schema":
-                            yield StreamEvent(
-                                "tool_result",
-                                {
-                                    "tool_name": "introspect_schema",
-                                    "result": tool_result,
-                                },
-                            )
-
-                        tool_results.append(
-                            build_tool_result_block(block["id"], tool_result)
-                        )
+                async for event in self._process_tool_results(response):
+                    if event.type == "tool_result_data":
+                        tool_results = event.data
+                    else:
+                        yield event
 
                 # Continue conversation with tool results
                 collected_content.append({"role": "user", "content": tool_results})
@@ -356,67 +347,15 @@ Guidelines:
                 # Signal that we're processing the tool results
                 yield StreamEvent("processing", "Analyzing results...")
 
-                # Stream the next response
-                stream = await self.client.messages.create(
-                    model=self.model,
-                    max_tokens=4096,
-                    system=self.system_prompt,
-                    messages=messages + collected_content,
-                    tools=self.tools,
-                    stream=True,
-                )
-
-                # Reset for next iteration
-                content_blocks = []
-                tool_use_blocks = []
-
-                async for event in stream:
-                    if event.type == "content_block_start":
-                        if hasattr(event.content_block, "type"):
-                            if event.content_block.type == "tool_use":
-                                tool_use_blocks.append(
-                                    {
-                                        "id": event.content_block.id,
-                                        "name": event.content_block.name,
-                                        "input": {},
-                                    }
-                                )
-                            elif event.content_block.type == "text":
-                                content_blocks.append({"type": "text", "text": ""})
-
-                    elif event.type == "content_block_delta":
-                        if hasattr(event.delta, "text"):
-                            yield StreamEvent("text", event.delta.text)
-                            if content_blocks and content_blocks[-1]["type"] == "text":
-                                content_blocks[-1]["text"] += event.delta.text
-                        elif hasattr(event.delta, "partial_json"):
-                            if tool_use_blocks:
-                                try:
-                                    current_json = tool_use_blocks[-1].get(
-                                        "_partial", ""
-                                    )
-                                    current_json += event.delta.partial_json
-                                    tool_use_blocks[-1]["_partial"] = current_json
-                                    tool_use_blocks[-1]["input"] = json.loads(
-                                        current_json
-                                    )
-                                except json.JSONDecodeError:
-                                    pass
-
-                    elif event.type == "message_stop":
-                        break
-
-                # Check if we need more tools
-                stop_reason = "stop"
-                if tool_use_blocks:
-                    stop_reason = "tool_use"
-                    for block in tool_use_blocks:
-                        block["type"] = "tool_use"
-                        if "_partial" in block:
-                            del block["_partial"]
-                    content_blocks.extend(tool_use_blocks)
-
-                response = StreamingResponse(content_blocks, stop_reason)
+                # Get next response
+                response = None
+                async for event in self._create_and_process_stream(
+                    messages + collected_content
+                ):
+                    if event.type == "response_ready":
+                        response = event.data
+                    else:
+                        yield event
 
             # Update conversation history if using history
             if use_history:
@@ -431,3 +370,32 @@ Guidelines:
 
         except Exception as e:
             yield StreamEvent("error", str(e))
+
+    async def _create_and_process_stream(
+        self, messages: List[Dict]
+    ) -> AsyncIterator[StreamEvent]:
+        """Create a stream and yield events while building response."""
+        stream = await self.client.messages.create(
+            model=self.model,
+            max_tokens=4096,
+            system=self.system_prompt,
+            messages=messages,
+            tools=self.tools,
+            stream=True,
+        )
+
+        content_blocks = []
+        tool_use_blocks = []
+
+        async for event in self._process_stream_events(
+            stream, content_blocks, tool_use_blocks
+        ):
+            yield event
+
+        # Finalize tool blocks and create response
+        stop_reason = self._finalize_tool_blocks(tool_use_blocks)
+        content_blocks.extend(tool_use_blocks)
+
+        yield StreamEvent(
+            "response_ready", StreamingResponse(content_blocks, stop_reason)
+        )
