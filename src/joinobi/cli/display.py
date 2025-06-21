@@ -27,10 +27,6 @@ class DisplayManager:
                 table.add_column(col)
         return table
 
-    def show_query_header(self, user_query: str):
-        """Display the query header."""
-        self.console.print(f"\n[bold blue]Query:[/bold blue] {user_query}")
-
     def show_tool_started(self, tool_name: str):
         """Display tool started message."""
         self.console.print(f"\n[yellow]🔧 Using tool: {tool_name}[/yellow]")
@@ -47,10 +43,6 @@ class DisplayManager:
             self.console.print("\n[bold green]Executing SQL:[/bold green]")
             syntax = Syntax(query, "sql")
             self.console.print(syntax)
-
-    def show_explanation_start(self):
-        """Display explanation header."""
-        self.console.print("\n[bold cyan]Explanation:[/bold cyan] ", end="")
 
     def show_text_stream(self, text: str):
         """Display streaming text."""

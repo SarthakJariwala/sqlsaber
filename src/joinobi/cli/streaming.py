@@ -15,7 +15,6 @@ class StreamingQueryHandler:
 
     async def execute_streaming_query(self, user_query: str, agent: BaseSQLAgent):
         """Execute a query with streaming display."""
-        self.display.show_query_header(user_query)
 
         has_content = False
         explanation_started = False
@@ -45,7 +44,6 @@ class StreamingQueryHandler:
                     self._stop_status(status)
 
                     if not explanation_started:
-                        self.display.show_explanation_start()
                         explanation_started = True
                         has_content = True
 
