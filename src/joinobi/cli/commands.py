@@ -9,6 +9,7 @@ from rich.console import Console
 from joinobi.agents.anthropic import AnthropicSQLAgent
 from joinobi.cli.database import create_db_app
 from joinobi.cli.interactive import InteractiveSession
+from joinobi.cli.memory import create_memory_app
 from joinobi.cli.streaming import StreamingQueryHandler
 from joinobi.config.database import DatabaseConfigManager
 from joinobi.database.connection import DatabaseConnection
@@ -90,8 +91,8 @@ def query(
             )
             raise typer.Exit(1)
 
-        # Create agent instance
-        agent = AnthropicSQLAgent(db_conn)
+        # Create agent instance with database name for memory context
+        agent = AnthropicSQLAgent(db_conn, db_config.name)
 
         try:
             if query_text:
@@ -115,6 +116,10 @@ def query(
 # Add database management commands after main callback is defined
 db_app = create_db_app()
 app.add_typer(db_app, name="db")
+
+# Add memory management commands
+memory_app = create_memory_app()
+app.add_typer(memory_app, name="memory")
 
 
 def main():

@@ -31,7 +31,10 @@ class InteractiveSession:
         )
 
         self.console.print(
-            "[dim]Commands: 'clear' to reset conversation, 'exit' or 'quit' to leave[/dim]\n"
+            "[dim]Commands: 'clear' to reset conversation, 'exit' or 'quit' to leave[/dim]"
+        )
+        self.console.print(
+            "[dim]Memory: Start a message with '#' to add it as a memory for this database[/dim]\n"
         )
 
     async def run(self):
@@ -55,7 +58,30 @@ class InteractiveSession:
                     self.console.print("[green]Conversation history cleared.[/green]\n")
                     continue
 
-                if user_query.strip():
+                if memory_text := user_query.strip():
+                    # Check if query starts with # for memory addition
+                    if memory_text.startswith("#"):
+                        memory_content = memory_text[1:].strip()  # Remove # and trim
+                        if memory_content:
+                            # Add memory
+                            memory_id = self.agent.add_memory(memory_content)
+                            if memory_id:
+                                self.console.print(
+                                    f"[green]✓ Memory added:[/green] {memory_content}"
+                                )
+                                self.console.print(
+                                    f"[dim]Memory ID: {memory_id}[/dim]\n"
+                                )
+                            else:
+                                self.console.print(
+                                    "[yellow]Could not add memory (no database context)[/yellow]\n"
+                                )
+                        else:
+                            self.console.print(
+                                "[yellow]Empty memory content after '#'[/yellow]\n"
+                            )
+                        continue
+
                     await self.streaming_handler.execute_streaming_query(
                         user_query, self.agent
                     )

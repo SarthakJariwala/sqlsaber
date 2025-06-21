@@ -13,6 +13,7 @@ from joinobi.agents.streaming import (
 from joinobi.config.settings import Config
 from joinobi.database.connection import DatabaseConnection
 from joinobi.database.schema import SchemaManager
+from joinobi.memory.manager import MemoryManager
 from joinobi.models.events import StreamEvent
 from joinobi.models.types import ToolDefinition
 
@@ -20,7 +21,9 @@ from joinobi.models.types import ToolDefinition
 class AnthropicSQLAgent(BaseSQLAgent):
     """SQL Agent using Anthropic SDK directly."""
 
-    def __init__(self, db_connection: DatabaseConnection):
+    def __init__(
+        self, db_connection: DatabaseConnection, database_name: Optional[str] = None
+    ):
         super().__init__(db_connection)
 
         config = Config()
@@ -29,6 +32,9 @@ class AnthropicSQLAgent(BaseSQLAgent):
         self.client = AsyncAnthropic(api_key=config.api_key)
         self.model = config.model_name.replace("anthropic:", "")
         self.schema_manager = SchemaManager(db_connection)
+
+        self.database_name = database_name
+        self.memory_manager = MemoryManager()
 
         # Track last query results for streaming
         self._last_results = None
@@ -80,7 +86,12 @@ class AnthropicSQLAgent(BaseSQLAgent):
             },
         ]
 
-        self.system_prompt = """You are a helpful SQL assistant that helps users query their PostgreSQL database.
+        # Build system prompt with memories if available
+        self.system_prompt = self._build_system_prompt()
+
+    def _build_system_prompt(self) -> str:
+        """Build system prompt with optional memory context."""
+        base_prompt = """You are a helpful SQL assistant that helps users query their PostgreSQL database.
 
 Your responsibilities:
 1. Understand user's natural language requests, think and convert them to SQL
@@ -103,6 +114,26 @@ Guidelines:
 - Handle errors gracefully and suggest fixes
 - Be security conscious - use parameterized queries when needed
 """
+
+        # Add memory context if database name is available
+        if self.database_name:
+            memory_context = self.memory_manager.format_memories_for_prompt(
+                self.database_name
+            )
+            if memory_context.strip():
+                base_prompt += memory_context
+
+        return base_prompt
+
+    def add_memory(self, content: str) -> Optional[str]:
+        """Add a memory for the current database."""
+        if not self.database_name:
+            return None
+
+        memory = self.memory_manager.add_memory(self.database_name, content)
+        # Rebuild system prompt with new memory
+        self.system_prompt = self._build_system_prompt()
+        return memory.id
 
     async def introspect_schema(self, table_pattern: Optional[str] = None) -> str:
         """Introspect database schema to understand table structures."""
