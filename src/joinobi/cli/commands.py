@@ -10,6 +10,7 @@ from joinobi.agents.anthropic import AnthropicSQLAgent
 from joinobi.cli.database import create_db_app
 from joinobi.cli.interactive import InteractiveSession
 from joinobi.cli.memory import create_memory_app
+from joinobi.cli.models import create_models_app
 from joinobi.cli.streaming import StreamingQueryHandler
 from joinobi.config.database import DatabaseConfigManager
 from joinobi.database.connection import DatabaseConnection
@@ -120,6 +121,10 @@ app.add_typer(db_app, name="db")
 # Add memory management commands
 memory_app = create_memory_app()
 app.add_typer(memory_app, name="memory")
+
+# Add model management commands
+models_app = create_models_app()
+app.add_typer(models_app, name="models")
 
 
 def main():

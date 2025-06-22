@@ -303,6 +303,7 @@ source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
     { name = "asyncpg" },
+    { name = "httpx" },
     { name = "keyring" },
     { name = "platformdirs" },
     { name = "questionary" },
@@ -319,6 +320,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", specifier = ">=0.54.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "keyring", specifier = ">=25.6.0" },
     { name = "platformdirs", specifier = ">=4.0.0" },
     { name = "questionary", specifier = ">=2.1.0" },
