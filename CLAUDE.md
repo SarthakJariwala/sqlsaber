@@ -2,3 +2,4 @@
 - Lint code with: `uv run ruff check --fix`
 - Format code with: `uv run ruff format`
 - Lint and format after making changes
+- Run tests with: `uv run pytest`
