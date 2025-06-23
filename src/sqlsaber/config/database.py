@@ -156,6 +156,10 @@ class DatabaseConfigManager:
         """Add a database configuration."""
         config = self._load_config()
 
+        # Check if database with this name already exists
+        if db_config.name in config["connections"]:
+            raise ValueError(f"Database '{db_config.name}' already exists")
+
         # Store password in keyring if provided
         if password:
             db_config.store_password_in_keyring(password)

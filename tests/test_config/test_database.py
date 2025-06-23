@@ -140,7 +140,6 @@ class TestDatabaseConfigManager:
         assert retrieved.name == "new_db"
         assert retrieved.type == "postgresql"
 
-    @pytest.mark.xfail
     def test_add_duplicate_database(self, db_manager):
         """Test error when adding duplicate database name."""
         config1 = DatabaseConfig(
