@@ -109,6 +109,13 @@ def add_database(
             )
 
     # Create database config
+    # At this point, all required values should be set
+    assert database is not None, "Database should be set by now"
+    if type != "sqlite":
+        assert host is not None, "Host should be set by now"
+        assert port is not None, "Port should be set by now"
+        assert username is not None, "Username should be set by now"
+
     db_config = DatabaseConfig(
         name=name,
         type=type,

@@ -208,15 +208,16 @@ Guidelines:
             results = await self.db.execute_query(query)
 
             # Format results - but also store the actual data
-            self._last_results = results[:limit]
+            actual_limit = limit if limit is not None else len(results)
+            self._last_results = results[:actual_limit]
             self._last_query = query
 
             return json.dumps(
                 {
                     "success": True,
                     "row_count": len(results),
-                    "results": results[:limit],  # Extra safety for limit
-                    "truncated": len(results) > limit,
+                    "results": results[:actual_limit],  # Extra safety for limit
+                    "truncated": len(results) > actual_limit,
                 }
             )
 
@@ -375,7 +376,7 @@ Guidelines:
             collected_content = []
 
             # Process tool calls if needed
-            while response.stop_reason == "tool_use":
+            while response is not None and response.stop_reason == "tool_use":
                 # Add assistant's response to conversation
                 collected_content.append(
                     {"role": "assistant", "content": response.content}
@@ -412,9 +413,10 @@ Guidelines:
                 )
                 self.conversation_history.extend(collected_content)
                 # Add final assistant response
-                self.conversation_history.append(
-                    {"role": "assistant", "content": response.content}
-                )
+                if response is not None:
+                    self.conversation_history.append(
+                        {"role": "assistant", "content": response.content}
+                    )
 
         except Exception as e:
             yield StreamEvent("error", str(e))

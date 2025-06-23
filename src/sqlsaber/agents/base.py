@@ -3,14 +3,14 @@
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-from sqlsaber.database.connection import DatabaseConnection
+from sqlsaber.database.connection import BaseDatabaseConnection
 from sqlsaber.models.events import StreamEvent
 
 
 class BaseSQLAgent(ABC):
     """Abstract base class for SQL agents."""
 
-    def __init__(self, db_connection: DatabaseConnection):
+    def __init__(self, db_connection: BaseDatabaseConnection):
         self.db = db_connection
         self.conversation_history: List[Dict[str, Any]] = []
 

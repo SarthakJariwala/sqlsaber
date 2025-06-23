@@ -19,10 +19,10 @@ class DatabaseConfig:
 
     name: str
     type: str  # postgresql, mysql, sqlite
-    host: str
-    port: int
+    host: Optional[str]
+    port: Optional[int]
     database: str
-    username: str
+    username: Optional[str]
     password: Optional[str] = None
     ssl_mode: Optional[str] = None
     schema: Optional[str] = None
@@ -32,12 +32,16 @@ class DatabaseConfig:
         password = self.password or self._get_password_from_keyring()
 
         if self.type == "postgresql":
+            if not all([self.host, self.port, self.username]):
+                raise ValueError("Host, port, and username are required for PostgreSQL")
             if password:
                 encoded_password = quote_plus(password)
                 return f"postgresql://{self.username}:{encoded_password}@{self.host}:{self.port}/{self.database}"
             else:
                 return f"postgresql://{self.username}@{self.host}:{self.port}/{self.database}"
         elif self.type == "mysql":
+            if not all([self.host, self.port, self.username]):
+                raise ValueError("Host, port, and username are required for MySQL")
             if password:
                 encoded_password = quote_plus(password)
                 return f"mysql://{self.username}:{encoded_password}@{self.host}:{self.port}/{self.database}"
