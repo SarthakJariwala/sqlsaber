@@ -11,7 +11,12 @@ from joinobi.agents.streaming import (
     build_tool_result_block,
 )
 from joinobi.config.settings import Config
-from joinobi.database.connection import DatabaseConnection
+from joinobi.database.connection import (
+    BaseDatabaseConnection,
+    MySQLConnection,
+    PostgreSQLConnection,
+    SQLiteConnection,
+)
 from joinobi.database.schema import SchemaManager
 from joinobi.memory.manager import MemoryManager
 from joinobi.models.events import StreamEvent
@@ -22,7 +27,7 @@ class AnthropicSQLAgent(BaseSQLAgent):
     """SQL Agent using Anthropic SDK directly."""
 
     def __init__(
-        self, db_connection: DatabaseConnection, database_name: Optional[str] = None
+        self, db_connection: BaseDatabaseConnection, database_name: Optional[str] = None
     ):
         super().__init__(db_connection)
 
@@ -89,9 +94,21 @@ class AnthropicSQLAgent(BaseSQLAgent):
         # Build system prompt with memories if available
         self.system_prompt = self._build_system_prompt()
 
+    def _get_database_type_name(self) -> str:
+        """Get the human-readable database type name."""
+        if isinstance(self.db, PostgreSQLConnection):
+            return "PostgreSQL"
+        elif isinstance(self.db, MySQLConnection):
+            return "MySQL"
+        elif isinstance(self.db, SQLiteConnection):
+            return "SQLite"
+        else:
+            return "database"  # Fallback
+
     def _build_system_prompt(self) -> str:
         """Build system prompt with optional memory context."""
-        base_prompt = """You are a helpful SQL assistant that helps users query their PostgreSQL database.
+        db_type = self._get_database_type_name()
+        base_prompt = f"""You are a helpful SQL assistant that helps users query their {db_type} database.
 
 Your responsibilities:
 1. Understand user's natural language requests, think and convert them to SQL

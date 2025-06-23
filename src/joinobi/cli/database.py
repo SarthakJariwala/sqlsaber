@@ -2,6 +2,7 @@
 
 import asyncio
 import getpass
+from pathlib import Path
 from typing import Optional
 
 import questionary
@@ -59,10 +60,12 @@ def add_database(
 
         if type == "sqlite":
             # SQLite only needs database path
-            database = database or questionary.text("Database file path:").ask()
+            database = database or questionary.path("Database file path:").ask()
+            database = str(Path(database).expanduser())
             host = "localhost"
             port = 0
             username = "sqlite"
+            password = ""
         else:
             # PostgreSQL/MySQL need connection details
             host = host or questionary.text("Host:", default="localhost").ask()
