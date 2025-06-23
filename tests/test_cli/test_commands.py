@@ -5,8 +5,8 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from joinobi.cli.commands import app
-from joinobi.config.database import DatabaseConfig
+from sqlsaber.cli.commands import app
+from sqlsaber.config.database import DatabaseConfig
 
 
 class TestCLICommands:
@@ -20,7 +20,7 @@ class TestCLICommands:
     @pytest.fixture
     def mock_config_manager(self):
         """Mock database config manager."""
-        with patch("joinobi.cli.commands.config_manager") as mock:
+        with patch("sqlsaber.cli.commands.config_manager") as mock:
             yield mock
 
     @pytest.fixture
@@ -40,7 +40,7 @@ class TestCLICommands:
         """Test main help command."""
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
-        assert "JoinObi" in result.output
+        assert "SQLSaber" in result.output
         assert "SQL assistant for your database" in result.output
 
     def test_query_specific_database_not_found(self, runner, mock_config_manager):
@@ -51,7 +51,7 @@ class TestCLICommands:
 
         assert result.exit_code == 1
         assert "Database connection 'nonexistent' not found" in result.output
-        assert "joinobi db list" in result.output
+        assert "sqlsaber db list" in result.output
 
     def test_subcommands_registered(self, runner):
         """Test that all subcommands are properly registered."""

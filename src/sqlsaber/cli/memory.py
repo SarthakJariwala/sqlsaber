@@ -6,8 +6,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from joinobi.config.database import DatabaseConfigManager
-from joinobi.memory.manager import MemoryManager
+from sqlsaber.config.database import DatabaseConfigManager
+from sqlsaber.memory.manager import MemoryManager
 
 # Global instances for CLI commands
 console = Console()
@@ -38,7 +38,7 @@ def _get_database_name(database: Optional[str] = None) -> str:
             console.print(
                 "[bold red]Error:[/bold red] No database connections configured."
             )
-            console.print("Use 'joinobi db add <name>' to add a database connection.")
+            console.print("Use 'sqlsaber db add <name>' to add a database connection.")
             raise typer.Exit(1)
         return db_config.name
 
@@ -84,7 +84,7 @@ def list_memories(
         console.print(
             f"[yellow]No memories found for database '{database_name}'[/yellow]"
         )
-        console.print("Use 'joinobi memory add \"<content>\"' to add memories")
+        console.print("Use 'sqlsaber memory add \"<content>\"' to add memories")
         return
 
     table = Table(title=f"Memories for Database: {database_name}")

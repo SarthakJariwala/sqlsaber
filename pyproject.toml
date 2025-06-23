@@ -1,7 +1,7 @@
 [project]
-name = "joinobi"
+name = "sqlsaber"
 version = "0.1.0"
-description = "JoinObi CLI - SQL like Claude Code"
+description = "SQLSaber CLI - SQL like Claude Code"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -25,8 +25,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/joinobi"]
+packages = ["src/sqlsaber"]
 
 [project.scripts]
-jb = "joinobi.cli.commands:main"
-joinobi = "joinobi.cli.commands:main"
+sqlsaber = "sqlsaber.cli.commands:main"
+saber = "sqlsaber.cli.commands:main"
+sql = "sqlsaber.cli.commands:main"

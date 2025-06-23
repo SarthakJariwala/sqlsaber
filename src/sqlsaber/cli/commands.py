@@ -6,18 +6,18 @@ from typing import Optional
 import typer
 from rich.console import Console
 
-from joinobi.agents.anthropic import AnthropicSQLAgent
-from joinobi.cli.database import create_db_app
-from joinobi.cli.interactive import InteractiveSession
-from joinobi.cli.memory import create_memory_app
-from joinobi.cli.models import create_models_app
-from joinobi.cli.streaming import StreamingQueryHandler
-from joinobi.config.database import DatabaseConfigManager
-from joinobi.database.connection import DatabaseConnection
+from sqlsaber.agents.anthropic import AnthropicSQLAgent
+from sqlsaber.cli.database import create_db_app
+from sqlsaber.cli.interactive import InteractiveSession
+from sqlsaber.cli.memory import create_memory_app
+from sqlsaber.cli.models import create_models_app
+from sqlsaber.cli.streaming import StreamingQueryHandler
+from sqlsaber.config.database import DatabaseConfigManager
+from sqlsaber.database.connection import DatabaseConnection
 
 app = typer.Typer(
-    name="joinobi",
-    help="JoinObi - Use the agent Luke!\n\nSQL assistant for your database",
+    name="sqlsaber",
+    help="SQLSaber - Use the agent Luke!\n\nSQL assistant for your database",
     add_completion=True,
 )
 
@@ -39,9 +39,9 @@ def main_callback(
     Query your database using natural language.
 
     Examples:
-        jb query                             # Start interactive mode
-        jb query "show me all users"         # Run a single query with default database
-        jb query -d mydb "show me users"     # Run a query with specific database
+        sb query                             # Start interactive mode
+        sb query "show me all users"         # Run a single query with default database
+        sb query -d mydb "show me users"     # Run a query with specific database
     """
     pass
 
@@ -69,7 +69,7 @@ def query(
                 console.print(
                     f"[bold red]Error:[/bold red] Database connection '{database}' not found."
                 )
-                console.print("Use 'joinobi db list' to see available connections.")
+                console.print("Use 'sqlsaber db list' to see available connections.")
                 raise typer.Exit(1)
         else:
             db_config = config_manager.get_default_database()
@@ -78,7 +78,7 @@ def query(
                     "[bold red]Error:[/bold red] No database connections configured."
                 )
                 console.print(
-                    "Use 'joinobi db add <name>' to add a database connection."
+                    "Use 'sqlsaber db add <name>' to add a database connection."
                 )
                 raise typer.Exit(1)
 

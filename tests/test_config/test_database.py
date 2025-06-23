@@ -2,7 +2,7 @@
 
 import pytest
 
-from joinobi.config.database import DatabaseConfig
+from sqlsaber.config.database import DatabaseConfig
 
 
 class TestDatabaseConfig:

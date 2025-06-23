@@ -3,8 +3,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-from joinobi.database.connection import DatabaseConnection
-from joinobi.models.events import StreamEvent
+from sqlsaber.database.connection import DatabaseConnection
+from sqlsaber.models.events import StreamEvent
 
 
 class BaseSQLAgent(ABC):

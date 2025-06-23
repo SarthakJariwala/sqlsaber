@@ -1,4 +1,4 @@
-"""Configuration management for JoinObi SQL Agent."""
+"""Configuration management for SQLSaber SQL Agent."""
 
 import json
 import os
@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any
 
 import platformdirs
 
-from joinobi.config.api_keys import APIKeyManager
+from sqlsaber.config.api_keys import APIKeyManager
 
 
 class ModelConfigManager:
@@ -18,7 +18,7 @@ class ModelConfigManager:
     DEFAULT_MODEL = "anthropic:claude-sonnet-4-20250514"
 
     def __init__(self):
-        self.config_dir = Path(platformdirs.user_config_dir("joinobi", "joinobi"))
+        self.config_dir = Path(platformdirs.user_config_dir("sqlsaber", "sqlsaber"))
         self.config_file = self.config_dir / "model_config.json"
         self._ensure_config_dir()
 
@@ -75,7 +75,7 @@ class ModelConfigManager:
 
 
 class Config:
-    """Configuration class for JoinObi."""
+    """Configuration class for SQLSaber."""
 
     def __init__(self):
         self.model_config_manager = ModelConfigManager()

@@ -2,8 +2,8 @@
 
 from rich.console import Console
 
-from joinobi.agents.base import BaseSQLAgent
-from joinobi.cli.display import DisplayManager
+from sqlsaber.agents.base import BaseSQLAgent
+from sqlsaber.cli.display import DisplayManager
 
 
 class StreamingQueryHandler:

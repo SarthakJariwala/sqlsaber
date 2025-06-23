@@ -10,8 +10,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from joinobi.config.database import DatabaseConfig, DatabaseConfigManager
-from joinobi.database.connection import DatabaseConnection
+from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
+from sqlsaber.database.connection import DatabaseConnection
 
 # Global instances for CLI commands
 console = Console()
@@ -140,7 +140,7 @@ def list_databases():
 
     if not databases:
         console.print("[yellow]No database connections configured[/yellow]")
-        console.print("Use 'joinobi db add <name>' to add a database connection")
+        console.print("Use 'sqlsaber db add <name>' to add a database connection")
         return
 
     table = Table(title="Database Connections")
@@ -238,7 +238,7 @@ def test_database(
                     "[bold red]Error:[/bold red] No default database configured"
                 )
                 console.print(
-                    "Use 'joinobi db add <name>' to add a database connection"
+                    "Use 'sqlsaber db add <name>' to add a database connection"
                 )
                 raise typer.Exit(1)
 

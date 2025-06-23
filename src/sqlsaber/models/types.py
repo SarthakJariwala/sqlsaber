@@ -1,4 +1,4 @@
-"""Type definitions for JoinObi."""
+"""Type definitions for SQLSaber."""
 
 from typing import Any, Dict, List, Optional, TypedDict
 

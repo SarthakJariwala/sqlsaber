@@ -2,7 +2,7 @@
 
 import pytest
 
-from joinobi.database.connection import (
+from sqlsaber.database.connection import (
     DatabaseConnection,
     MySQLConnection,
     PostgreSQLConnection,

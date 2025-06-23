@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from joinobi.config.database import DatabaseConfig, DatabaseConfigManager
+from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
 
 
 @pytest.fixture

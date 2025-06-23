@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from joinobi.config.settings import Config, ModelConfigManager
+from sqlsaber.config.settings import Config, ModelConfigManager
 
 
 class TestModelConfigManager:
@@ -100,7 +100,7 @@ class TestConfig:
         )
 
         # Mock API key manager
-        with patch("joinobi.config.settings.APIKeyManager") as mock_api_key_manager:
+        with patch("sqlsaber.config.settings.APIKeyManager") as mock_api_key_manager:
             mock_manager = Mock()
             mock_api_key_manager.return_value = mock_manager
             mock_manager.get_api_key.return_value = "test-api-key"

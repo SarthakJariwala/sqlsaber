@@ -6,13 +6,13 @@ from typing import Any, Dict, Optional, Tuple
 
 import aiosqlite
 
-from joinobi.database.connection import (
+from sqlsaber.database.connection import (
     BaseDatabaseConnection,
     MySQLConnection,
     PostgreSQLConnection,
     SQLiteConnection,
 )
-from joinobi.models.types import SchemaInfo
+from sqlsaber.models.types import SchemaInfo
 
 
 class BaseSchemaIntrospector(ABC):

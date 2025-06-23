@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from joinobi.memory.storage import Memory, MemoryStorage
+from sqlsaber.memory.storage import Memory, MemoryStorage
 
 
 class MemoryManager:

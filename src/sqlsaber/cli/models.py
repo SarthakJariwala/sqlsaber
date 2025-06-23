@@ -9,7 +9,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from joinobi.config.settings import Config
+from sqlsaber.config.settings import Config
 
 # Global instances for CLI commands
 console = Console()

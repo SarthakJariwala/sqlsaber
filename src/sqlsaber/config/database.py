@@ -53,18 +53,18 @@ class DatabaseConfig:
     def _get_password_from_keyring(self) -> Optional[str]:
         """Get password from OS keyring."""
         try:
-            return keyring.get_password("joinobi", f"{self.name}_{self.username}")
+            return keyring.get_password("sqlsaber", f"{self.name}_{self.username}")
         except Exception:
             return None
 
     def store_password_in_keyring(self, password: str) -> None:
         """Store password in OS keyring."""
-        keyring.set_password("joinobi", f"{self.name}_{self.username}", password)
+        keyring.set_password("sqlsaber", f"{self.name}_{self.username}", password)
 
     def delete_password_from_keyring(self) -> None:
         """Delete password from OS keyring."""
         try:
-            keyring.delete_password("joinobi", f"{self.name}_{self.username}")
+            keyring.delete_password("sqlsaber", f"{self.name}_{self.username}")
         except Exception:
             pass
 
@@ -100,7 +100,7 @@ class DatabaseConfigManager:
     """Manages database configurations."""
 
     def __init__(self):
-        self.config_dir = Path(platformdirs.user_config_dir("joinobi", "joinobi"))
+        self.config_dir = Path(platformdirs.user_config_dir("sqlsaber", "sqlsaber"))
         self.config_file = self.config_dir / "database_config.json"
         self._ensure_config_dir()
 

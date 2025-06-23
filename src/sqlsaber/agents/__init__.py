@@ -1,4 +1,4 @@
-"""Agents module for JoinObi."""
+"""Agents module for SQLSaber."""
 
 from .anthropic import AnthropicSQLAgent
 from .base import BaseSQLAgent

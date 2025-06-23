@@ -1,4 +1,4 @@
-"""Database module for JoinObi."""
+"""Database module for SQLSaber."""
 
 from .connection import DatabaseConnection
 from .schema import SchemaManager

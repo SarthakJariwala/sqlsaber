@@ -1,4 +1,4 @@
-"""CLI module for JoinObi."""
+"""CLI module for SQLSaber."""
 
 from .commands import main
 

@@ -5,22 +5,22 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 from anthropic import AsyncAnthropic
 
-from joinobi.agents.base import BaseSQLAgent
-from joinobi.agents.streaming import (
+from sqlsaber.agents.base import BaseSQLAgent
+from sqlsaber.agents.streaming import (
     StreamingResponse,
     build_tool_result_block,
 )
-from joinobi.config.settings import Config
-from joinobi.database.connection import (
+from sqlsaber.config.settings import Config
+from sqlsaber.database.connection import (
     BaseDatabaseConnection,
     MySQLConnection,
     PostgreSQLConnection,
     SQLiteConnection,
 )
-from joinobi.database.schema import SchemaManager
-from joinobi.memory.manager import MemoryManager
-from joinobi.models.events import StreamEvent
-from joinobi.models.types import ToolDefinition
+from sqlsaber.database.schema import SchemaManager
+from sqlsaber.memory.manager import MemoryManager
+from sqlsaber.models.events import StreamEvent
+from sqlsaber.models.types import ToolDefinition
 
 
 class AnthropicSQLAgent(BaseSQLAgent):

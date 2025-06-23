@@ -1,4 +1,4 @@
-"""Configuration module for JoinObi."""
+"""Configuration module for SQLSaber."""
 
 from .settings import Config
 

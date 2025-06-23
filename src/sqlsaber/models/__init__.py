@@ -1,4 +1,4 @@
-"""Models module for JoinObi."""
+"""Models module for SQLSaber."""
 
 from .events import StreamEvent, SQLResponse
 from .types import ColumnInfo, ForeignKeyInfo, SchemaInfo, ToolDefinition

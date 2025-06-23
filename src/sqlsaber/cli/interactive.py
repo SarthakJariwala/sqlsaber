@@ -4,9 +4,9 @@ import questionary
 from rich.console import Console
 from rich.panel import Panel
 
-from joinobi.agents.base import BaseSQLAgent
-from joinobi.cli.display import DisplayManager
-from joinobi.cli.streaming import StreamingQueryHandler
+from sqlsaber.agents.base import BaseSQLAgent
+from sqlsaber.cli.display import DisplayManager
+from sqlsaber.cli.streaming import StreamingQueryHandler
 
 
 class InteractiveSession:
@@ -22,7 +22,7 @@ class InteractiveSession:
         """Display welcome message for interactive mode."""
         self.console.print(
             Panel.fit(
-                "[bold green]JoinObi - Use the agent Luke![/bold green]\n\n"
+                "[bold green]SQLSaber - Use the agent Luke![/bold green]\n\n"
                 "Type your queries in natural language.\n\n"
                 "Press Esc-Enter or Meta-Enter to submit your query.\n\n"
                 "Type 'exit' or 'quit' to leave.",

@@ -47,7 +47,7 @@ class MemoryStorage:
     """Handles storage and retrieval of database-specific memories."""
 
     def __init__(self):
-        self.memory_dir = Path(platformdirs.user_config_dir("joinobi")) / "memories"
+        self.memory_dir = Path(platformdirs.user_config_dir("sqlsaber")) / "memories"
         self._ensure_memory_dir()
 
     def _ensure_memory_dir(self) -> None:

@@ -1,4 +1,4 @@
-"""API Key management for JoinObi."""
+"""API Key management for SQLSaber."""
 
 import getpass
 import os
@@ -14,7 +14,7 @@ class APIKeyManager:
     """Manages API keys with cascading retrieval: env var -> keyring -> prompt."""
 
     def __init__(self):
-        self.service_prefix = "joinobi"
+        self.service_prefix = "sqlsaber"
 
     def get_api_key(self, provider: str) -> Optional[str]:
         """Get API key for the specified provider using cascading logic."""
