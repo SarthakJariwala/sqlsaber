@@ -1,20 +1,31 @@
-# SQLSaber - SQL Assistant CLI
+# SQLSaber
 
-SQLSaber is a natural language SQL assistant powered by pydantic-ai. It helps you query your PostgreSQL database using plain English instead of SQL syntax.
+> Use the agent Luke!
+
+SQLSaber is an agentic SQL assistant. Think Claude Code but for SQL.
+
+Ask your questions in natural language and it will gather the right context and answer your query by writing SQL and analyzing the results.
 
 ## Features
 
-- >  Natural language to SQL conversion
-- =
-  Automatic database schema introspection
-- =� Safe query execution (read-only by default)
-- =� Interactive REPL mode
-- =� Beautiful formatted output with syntax highlighting
+- Natural language to SQL conversion
+- 🔍 Automatic database schema introspection
+- 🛡️ Safe query execution (read-only by default)
+- 🧠 Memory management
+- 💬 Interactive REPL mode
+- 🎨 Beautiful formatted output with syntax highlighting
+- 🗄️ Support for PostgreSQL, SQLite, and MySQL
 
 ## Installation
 
 ```bash
-pip install -e .
+uv tool install sqlsaber
+```
+
+or
+
+```bash
+pipx install sqlsaber
 ```
 
 ## Configuration
@@ -24,37 +35,49 @@ pip install -e .
 Set your database connection URL:
 
 ```bash
-export DATABASE_URL="postgresql://username:password@localhost:5432/dbname"
+saber db add DB_NAME
 ```
+
+This will ask you some questions about your database connection
 
 ### AI Model Configuration
 
-SQLSaber uses OpenAI's GPT-4 by default. Set your API key:
+SQLSaber uses Sonnet-4 by default. You can change it using:
 
 ```bash
-export OPENAI_API_KEY="your-openai-api-key"
+saber models set
+
+# for more model settings run:
+saber models --help
 ```
 
-You can also use other models:
+### Memory Management
+
+You can add specific context about your database to the model using the memory feature. This is similar to how you add memory/context in Claude Code.
 
 ```bash
-# Use Claude (Anthropic)
-export SQLSABER_MODEL="anthropic:claude-3-opus-20240229"
-export ANTHROPIC_API_KEY="your-anthropic-api-key"
-
-# Use other OpenAI models
-export SQLSABER_MODEL="openai:gpt-3.5-turbo"
+saber memory add 'always convert dates to string for easier formating'
 ```
+
+View all memories
+
+```bash
+saber memory list
+```
+
+> You can also add memories in an interactive query session by starting with the `#` sign
 
 ## Usage
 
 ### Interactive Mode
 
-Start an interactive SQL session:
+Start an interactive session:
 
 ```bash
 saber query
 ```
+
+> You can also add memories in an interactive session by starting your message with the `#` sign
 
 ### Single Query
 
@@ -64,11 +87,12 @@ Execute a single natural language query:
 saber query "show me all users created this month"
 ```
 
-### Specify Database Connection
+### Database Selection
 
 Use a specific database connection:
 
 ```bash
+# Use named database from config
 saber query -d mydb "count all orders"
 ```
 
@@ -89,60 +113,38 @@ saber query "what's the total revenue by product category?"
 
 # Date filtering
 saber query "list users who haven't logged in for 30 days"
+
+# Data exploration
+saber query "show me the distribution of customer ages"
+
+# Business analytics
+saber query "which products had the highest sales growth last quarter?"
 ```
 
 ## How It Works
 
-SQLSaber uses three main tools optimized for minimal token usage:
+SQLSaber uses an intelligent three-step process optimized for minimal token usage:
 
-1. **List Tables Tool**: Quickly discovers available tables with row counts (minimal data transfer).
+### 🔍 Discovery Phase
 
-2. **Schema Introspection Tool**: Analyzes specific table structures using pattern matching to fetch only relevant schema information.
+1. **List Tables Tool**: Quickly discovers available tables with row counts
+2. **Pattern Matching**: Identifies relevant tables based on your query using SQL LIKE patterns
 
-3. **SQL Execution Tool**: Safely executes the generated SQL queries with built-in protections against destructive operations.
+### 📋 Schema Analysis
 
-The AI agent:
+3. **Smart Introspection**: Analyzes only the specific table structures needed for your query
+4. **Selective Loading**: Fetches schema information only for relevant tables
 
-- Lists available tables first (minimal tokens)
-- Identifies relevant tables based on your query
-- Introspects only the necessary schema (80-95% token reduction)
-- Generates appropriate SQL
-- Executes the query safely
-- Formats and explains the results
+### ⚡ Execution Phase
 
-### Performance Optimizations
+5. **SQL Generation**: Creates optimized SQL queries based on natural language input
+6. **Safe Execution**: Runs queries with built-in protections against destructive operations
+7. **Result Formatting**: Presents results with syntax highlighting and explanations
 
-SQLSaber includes several optimizations to handle large databases efficiently:
+## Contributing
 
-- **Lazy Schema Loading**: Only fetches schema for tables that match your query pattern
-- **Schema Caching**: Caches schema information for 15 minutes to reduce repeated database queries
-- **Incremental Discovery**: First lists tables, then fetches details only for relevant ones
-- **Pattern Matching**: Supports SQL LIKE patterns (e.g., 'user%', '%order%') for efficient filtering
+Contributions are welcome! Please feel free to open an issue to discuss your ideas or report bugs.
 
-These optimizations reduce token usage by 80-95% compared to fetching the entire schema, helping you stay within API rate limits even with large databases.
+## License
 
-## Programmatic Usage
-
-You can also use SQLSaber programmatically:
-
-```python
-import asyncio
-from sqlsaber.agent import query_database
-from sqlsaber.database import DatabaseConnection
-
-async def main():
-    db = DatabaseConnection("postgresql://localhost/mydb")
-
-    response = await query_database(
-        db,
-        "show me top 10 customers by total order value"
-    )
-
-    print(f"SQL: {response.query}")
-    print(f"Explanation: {response.explanation}")
-    print(f"Results: {response.results}")
-
-    await db.close()
-
-asyncio.run(main())
-```
+This project is licensed under the MIT License - see the LICENSE file for details.
