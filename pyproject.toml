@@ -1,7 +1,7 @@
 [project]
 name = "sqlsaber"
 version = "0.1.0"
-description = "SQLSaber CLI - SQL like Claude Code"
+description = "SQLSaber - Agentic SQL assistant like Claude Code"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
