@@ -8,10 +8,10 @@ import aiosqlite
 
 from sqlsaber.database.connection import (
     BaseDatabaseConnection,
+    CSVConnection,
     MySQLConnection,
     PostgreSQLConnection,
     SQLiteConnection,
-    CSVConnection,
 )
 from sqlsaber.models.types import SchemaInfo
 
@@ -498,20 +498,48 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
 
     async def list_tables_info(self, connection) -> Dict[str, Any]:
         """Get list of tables with basic information for SQLite."""
-        # Get tables (SQLite doesn't have easy row count access)
+        # First get the table names
         tables_query = """
             SELECT
                 'main' as table_schema,
                 name as table_name,
-                type as table_type,
-                0 as row_count
+                type as table_type
             FROM sqlite_master
             WHERE type IN ('table', 'view')
             AND name NOT LIKE 'sqlite_%'
             ORDER BY name;
         """
 
-        return await self._execute_query(connection, tables_query)
+        tables = await self._execute_query(connection, tables_query)
+
+        # Now get row counts for each table
+        result = []
+        for table in tables:
+            table_name = table["table_name"]
+            table_type = table["table_type"]
+
+            # Only count rows for tables, not views
+            if table_type.lower() == "table":
+                try:
+                    count_query = f"SELECT COUNT(*) as count FROM [{table_name}]"
+                    count_result = await self._execute_query(connection, count_query)
+                    row_count = count_result[0]["count"] if count_result else 0
+                except Exception:
+                    # If count fails (e.g., table locked), default to 0
+                    row_count = 0
+            else:
+                # For views, we don't count rows as it could be expensive
+                row_count = 0
+
+            result.append(
+                {
+                    "table_schema": table["table_schema"],
+                    "table_name": table_name,
+                    "table_type": table_type,
+                    "row_count": row_count,
+                }
+            )
+        return result
 
 
 class SchemaManager:
