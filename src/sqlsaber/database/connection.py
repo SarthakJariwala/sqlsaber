@@ -2,7 +2,8 @@
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
+import ssl
 
 import aiomysql
 import aiosqlite
@@ -42,13 +43,65 @@ class PostgreSQLConnection(BaseDatabaseConnection):
     def __init__(self, connection_string: str):
         super().__init__(connection_string)
         self._pool: Optional[asyncpg.Pool] = None
+        self._ssl_context = self._create_ssl_context()
+
+    def _create_ssl_context(self) -> Optional[ssl.SSLContext]:
+        """Create SSL context from connection string parameters."""
+        parsed = urlparse(self.connection_string)
+        if not parsed.query:
+            return None
+
+        params = parse_qs(parsed.query)
+        ssl_mode = params.get("sslmode", [None])[0]
+
+        if not ssl_mode or ssl_mode == "disable":
+            return None
+
+        # Create SSL context based on mode
+        if ssl_mode in ["require", "verify-ca", "verify-full"]:
+            ssl_context = ssl.create_default_context()
+
+            # Configure certificate verification
+            if ssl_mode == "require":
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+            elif ssl_mode == "verify-ca":
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_REQUIRED
+            elif ssl_mode == "verify-full":
+                ssl_context.check_hostname = True
+                ssl_context.verify_mode = ssl.CERT_REQUIRED
+
+            # Load certificates if provided
+            ssl_ca = params.get("sslrootcert", [None])[0]
+            ssl_cert = params.get("sslcert", [None])[0]
+            ssl_key = params.get("sslkey", [None])[0]
+
+            if ssl_ca:
+                ssl_context.load_verify_locations(ssl_ca)
+
+            if ssl_cert and ssl_key:
+                ssl_context.load_cert_chain(ssl_cert, ssl_key)
+
+            return ssl_context
+
+        return None
 
     async def get_pool(self) -> asyncpg.Pool:
         """Get or create connection pool."""
         if self._pool is None:
-            self._pool = await asyncpg.create_pool(
-                self.connection_string, min_size=1, max_size=10
-            )
+            # Create pool with SSL context if configured
+            if self._ssl_context:
+                self._pool = await asyncpg.create_pool(
+                    self.connection_string,
+                    min_size=1,
+                    max_size=10,
+                    ssl=self._ssl_context,
+                )
+            else:
+                self._pool = await asyncpg.create_pool(
+                    self.connection_string, min_size=1, max_size=10
+                )
         return self._pool
 
     async def close(self):
@@ -94,19 +147,65 @@ class MySQLConnection(BaseDatabaseConnection):
         self.user = parsed.username or ""
         self.password = parsed.password or ""
 
+        # Parse SSL parameters
+        self.ssl_params = {}
+        if parsed.query:
+            params = parse_qs(parsed.query)
+
+            ssl_mode = params.get("ssl_mode", [None])[0]
+            if ssl_mode:
+                # Map SSL modes to aiomysql SSL parameters
+                if ssl_mode.upper() == "DISABLED":
+                    self.ssl_params["ssl"] = None
+                elif ssl_mode.upper() in [
+                    "PREFERRED",
+                    "REQUIRED",
+                    "VERIFY_CA",
+                    "VERIFY_IDENTITY",
+                ]:
+                    ssl_context = ssl.create_default_context()
+
+                    if ssl_mode.upper() == "REQUIRED":
+                        ssl_context.check_hostname = False
+                        ssl_context.verify_mode = ssl.CERT_NONE
+                    elif ssl_mode.upper() == "VERIFY_CA":
+                        ssl_context.check_hostname = False
+                        ssl_context.verify_mode = ssl.CERT_REQUIRED
+                    elif ssl_mode.upper() == "VERIFY_IDENTITY":
+                        ssl_context.check_hostname = True
+                        ssl_context.verify_mode = ssl.CERT_REQUIRED
+
+                    # Load certificates if provided
+                    ssl_ca = params.get("ssl_ca", [None])[0]
+                    ssl_cert = params.get("ssl_cert", [None])[0]
+                    ssl_key = params.get("ssl_key", [None])[0]
+
+                    if ssl_ca:
+                        ssl_context.load_verify_locations(ssl_ca)
+
+                    if ssl_cert and ssl_key:
+                        ssl_context.load_cert_chain(ssl_cert, ssl_key)
+
+                    self.ssl_params["ssl"] = ssl_context
+
     async def get_pool(self) -> aiomysql.Pool:
         """Get or create connection pool."""
         if self._pool is None:
-            self._pool = await aiomysql.create_pool(
-                host=self.host,
-                port=self.port,
-                user=self.user,
-                password=self.password,
-                db=self.database,
-                minsize=1,
-                maxsize=10,
-                autocommit=False,
-            )
+            pool_kwargs = {
+                "host": self.host,
+                "port": self.port,
+                "user": self.user,
+                "password": self.password,
+                "db": self.database,
+                "minsize": 1,
+                "maxsize": 10,
+                "autocommit": False,
+            }
+
+            # Add SSL parameters if configured
+            pool_kwargs.update(self.ssl_params)
+
+            self._pool = await aiomysql.create_pool(**pool_kwargs)
         return self._pool
 
     async def close(self):

@@ -40,6 +40,20 @@ def add_database(
         None, "--database", "--db", help="Database name"
     ),
     username: Optional[str] = typer.Option(None, "--username", "-u", help="Username"),
+    ssl_mode: Optional[str] = typer.Option(
+        None,
+        "--ssl-mode",
+        help="SSL mode (disable, allow, prefer, require, verify-ca, verify-full for PostgreSQL; DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY for MySQL)",
+    ),
+    ssl_ca: Optional[str] = typer.Option(
+        None, "--ssl-ca", help="SSL CA certificate file path"
+    ),
+    ssl_cert: Optional[str] = typer.Option(
+        None, "--ssl-cert", help="SSL client certificate file path"
+    ),
+    ssl_key: Optional[str] = typer.Option(
+        None, "--ssl-key", help="SSL client private key file path"
+    ),
     interactive: bool = typer.Option(
         True, "--interactive/--no-interactive", help="Use interactive mode"
     ),
@@ -80,6 +94,63 @@ def add_database(
 
             # Ask for password
             password = getpass.getpass("Password (stored in your OS keychain): ")
+
+            # Ask for SSL configuration
+            if questionary.confirm("Configure SSL/TLS settings?", default=False).ask():
+                if type == "postgresql":
+                    ssl_mode = (
+                        ssl_mode
+                        or questionary.select(
+                            "SSL mode for PostgreSQL:",
+                            choices=[
+                                "disable",
+                                "allow",
+                                "prefer",
+                                "require",
+                                "verify-ca",
+                                "verify-full",
+                            ],
+                            default="prefer",
+                        ).ask()
+                    )
+                elif type == "mysql":
+                    ssl_mode = (
+                        ssl_mode
+                        or questionary.select(
+                            "SSL mode for MySQL:",
+                            choices=[
+                                "DISABLED",
+                                "PREFERRED",
+                                "REQUIRED",
+                                "VERIFY_CA",
+                                "VERIFY_IDENTITY",
+                            ],
+                            default="PREFERRED",
+                        ).ask()
+                    )
+
+                if ssl_mode and ssl_mode not in ["disable", "DISABLED"]:
+                    if questionary.confirm(
+                        "Specify SSL certificate files?", default=False
+                    ).ask():
+                        ssl_ca = (
+                            ssl_ca or questionary.path("SSL CA certificate file:").ask()
+                        )
+                        if questionary.confirm(
+                            "Specify client certificate?", default=False
+                        ).ask():
+                            ssl_cert = (
+                                ssl_cert
+                                or questionary.path(
+                                    "SSL client certificate file:"
+                                ).ask()
+                            )
+                            ssl_key = (
+                                ssl_key
+                                or questionary.path(
+                                    "SSL client private key file:"
+                                ).ask()
+                            )
     else:
         # Non-interactive mode - use provided values or defaults
         if type == "sqlite":
@@ -123,6 +194,10 @@ def add_database(
         port=port,
         database=database,
         username=username,
+        ssl_mode=ssl_mode,
+        ssl_ca=ssl_ca,
+        ssl_cert=ssl_cert,
+        ssl_key=ssl_key,
     )
 
     try:
@@ -157,10 +232,21 @@ def list_databases():
     table.add_column("Port", style="yellow")
     table.add_column("Database", style="blue")
     table.add_column("Username", style="white")
+    table.add_column("SSL", style="bright_green")
     table.add_column("Default", style="bold red")
 
     for db in databases:
         is_default = "✓" if db.name == default_name else ""
+
+        # Format SSL status
+        ssl_status = ""
+        if db.ssl_mode:
+            ssl_status = db.ssl_mode
+            if db.ssl_ca or db.ssl_cert:
+                ssl_status += " (certs)"
+        else:
+            ssl_status = "disabled" if db.type != "sqlite" else "N/A"
+
         table.add_row(
             db.name,
             db.type,
@@ -168,6 +254,7 @@ def list_databases():
             str(db.port) if db.port else "",
             db.database,
             db.username,
+            ssl_status,
             is_default,
         )
 

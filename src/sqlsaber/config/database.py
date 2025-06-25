@@ -25,6 +25,9 @@ class DatabaseConfig:
     username: Optional[str]
     password: Optional[str] = None
     ssl_mode: Optional[str] = None
+    ssl_ca: Optional[str] = None
+    ssl_cert: Optional[str] = None
+    ssl_key: Optional[str] = None
     schema: Optional[str] = None
 
     def to_connection_string(self) -> str:
@@ -34,21 +37,57 @@ class DatabaseConfig:
         if self.type == "postgresql":
             if not all([self.host, self.port, self.username]):
                 raise ValueError("Host, port, and username are required for PostgreSQL")
+
+            # Build base connection string
             if password:
                 encoded_password = quote_plus(password)
-                return f"postgresql://{self.username}:{encoded_password}@{self.host}:{self.port}/{self.database}"
+                base_url = f"postgresql://{self.username}:{encoded_password}@{self.host}:{self.port}/{self.database}"
             else:
-                return f"postgresql://{self.username}@{self.host}:{self.port}/{self.database}"
+                base_url = f"postgresql://{self.username}@{self.host}:{self.port}/{self.database}"
+
+            # Add SSL parameters
+            ssl_params = []
+            if self.ssl_mode:
+                ssl_params.append(f"sslmode={self.ssl_mode}")
+            if self.ssl_ca:
+                ssl_params.append(f"sslrootcert={quote_plus(self.ssl_ca)}")
+            if self.ssl_cert:
+                ssl_params.append(f"sslcert={quote_plus(self.ssl_cert)}")
+            if self.ssl_key:
+                ssl_params.append(f"sslkey={quote_plus(self.ssl_key)}")
+
+            if ssl_params:
+                return f"{base_url}?{'&'.join(ssl_params)}"
+            return base_url
+
         elif self.type == "mysql":
             if not all([self.host, self.port, self.username]):
                 raise ValueError("Host, port, and username are required for MySQL")
+
+            # Build base connection string
             if password:
                 encoded_password = quote_plus(password)
-                return f"mysql://{self.username}:{encoded_password}@{self.host}:{self.port}/{self.database}"
+                base_url = f"mysql://{self.username}:{encoded_password}@{self.host}:{self.port}/{self.database}"
             else:
-                return (
+                base_url = (
                     f"mysql://{self.username}@{self.host}:{self.port}/{self.database}"
                 )
+
+            # Add SSL parameters
+            ssl_params = []
+            if self.ssl_mode:
+                ssl_params.append(f"ssl_mode={self.ssl_mode}")
+            if self.ssl_ca:
+                ssl_params.append(f"ssl_ca={quote_plus(self.ssl_ca)}")
+            if self.ssl_cert:
+                ssl_params.append(f"ssl_cert={quote_plus(self.ssl_cert)}")
+            if self.ssl_key:
+                ssl_params.append(f"ssl_key={quote_plus(self.ssl_key)}")
+
+            if ssl_params:
+                return f"{base_url}?{'&'.join(ssl_params)}"
+            return base_url
+
         elif self.type == "sqlite":
             return f"sqlite:///{self.database}"
         else:
@@ -82,6 +121,9 @@ class DatabaseConfig:
             "database": self.database,
             "username": self.username,
             "ssl_mode": self.ssl_mode,
+            "ssl_ca": self.ssl_ca,
+            "ssl_cert": self.ssl_cert,
+            "ssl_key": self.ssl_key,
             "schema": self.schema,
         }
 
@@ -96,6 +138,9 @@ class DatabaseConfig:
             database=data["database"],
             username=data["username"],
             ssl_mode=data.get("ssl_mode"),
+            ssl_ca=data.get("ssl_ca"),
+            ssl_cert=data.get("ssl_cert"),
+            ssl_key=data.get("ssl_key"),
             schema=data.get("schema"),
         )
 

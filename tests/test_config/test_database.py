@@ -90,6 +90,9 @@ class TestDatabaseConfig:
             "database": "db",
             "schema": None,
             "ssl_mode": None,
+            "ssl_ca": None,
+            "ssl_cert": None,
+            "ssl_key": None,
         }
 
     def test_config_from_dict(self):
