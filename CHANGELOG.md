@@ -4,9 +4,11 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-06-25
+
 ### Added
 
-- Support for CSV files as a database option
+- Support for CSV files as a database option: `saber query -d mydata.csv`
 
 ### Changed
 
