@@ -75,7 +75,7 @@ def add_database(
         if type == "sqlite":
             # SQLite only needs database path
             database = database or questionary.path("Database file path:").ask()
-            database = str(Path(database).expanduser())
+            database = str(Path(database).expanduser().resolve())
             host = "localhost"
             port = 0
             username = "sqlite"

@@ -4,10 +4,12 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, parse_qs
 import ssl
+from pathlib import Path
 
 import aiomysql
 import aiosqlite
 import asyncpg
+import pandas as pd
 
 
 class BaseDatabaseConnection(ABC):
@@ -272,6 +274,131 @@ class SQLiteConnection(BaseDatabaseConnection):
                 await conn.rollback()
 
 
+class CSVConnection(BaseDatabaseConnection):
+    """CSV file connection using in-memory SQLite database."""
+
+    def __init__(self, connection_string: str):
+        super().__init__(connection_string)
+
+        # Parse CSV file path from connection string
+        self.csv_path = connection_string.replace("csv:///", "")
+
+        # CSV parsing options
+        self.delimiter = ","
+        self.encoding = "utf-8"
+        self.has_header = True
+
+        # Parse additional options from connection string
+        parsed = urlparse(connection_string)
+        if parsed.query:
+            params = parse_qs(parsed.query)
+            self.delimiter = params.get("delimiter", [","])[0]
+            self.encoding = params.get("encoding", ["utf-8"])[0]
+            self.has_header = params.get("header", ["true"])[0].lower() == "true"
+
+        # Table name derived from filename
+        self.table_name = Path(self.csv_path).stem
+
+        # Initialize connection and flag to track if CSV is loaded
+        self._conn = None
+        self._csv_loaded = False
+
+    async def get_pool(self):
+        """Get or create the in-memory database connection."""
+        if self._conn is None:
+            self._conn = await aiosqlite.connect(":memory:")
+            self._conn.row_factory = aiosqlite.Row
+            await self._load_csv_data()
+        return self._conn
+
+    async def close(self):
+        """Close the database connection."""
+        if self._conn:
+            await self._conn.close()
+            self._conn = None
+            self._csv_loaded = False
+
+    async def _load_csv_data(self):
+        """Load CSV data into the in-memory SQLite database."""
+        if self._csv_loaded or not self._conn:
+            return
+
+        try:
+            # Read CSV file using pandas
+            df = pd.read_csv(
+                self.csv_path,
+                delimiter=self.delimiter,
+                encoding=self.encoding,
+                header=0 if self.has_header else None,
+            )
+
+            # If no header, create column names
+            if not self.has_header:
+                df.columns = [f"column_{i}" for i in range(len(df.columns))]
+
+            # Create table with proper column types
+            columns_sql = []
+            for col in df.columns:
+                # Infer SQLite type from pandas dtype
+                dtype = df[col].dtype
+                if pd.api.types.is_integer_dtype(dtype):
+                    sql_type = "INTEGER"
+                elif pd.api.types.is_float_dtype(dtype):
+                    sql_type = "REAL"
+                elif pd.api.types.is_bool_dtype(dtype):
+                    sql_type = "INTEGER"  # SQLite doesn't have BOOLEAN
+                else:
+                    sql_type = "TEXT"
+
+                columns_sql.append(f'"{col}" {sql_type}')
+
+            create_table_sql = (
+                f'CREATE TABLE "{self.table_name}" ({", ".join(columns_sql)})'
+            )
+            await self._conn.execute(create_table_sql)
+
+            # Insert data row by row
+            placeholders = ", ".join(["?" for _ in df.columns])
+            insert_sql = f'INSERT INTO "{self.table_name}" VALUES ({placeholders})'
+
+            for _, row in df.iterrows():
+                # Convert pandas values to Python native types
+                values = []
+                for val in row:
+                    if pd.isna(val):
+                        values.append(None)
+                    elif isinstance(val, (pd.Timestamp, pd.Timedelta)):
+                        values.append(str(val))
+                    else:
+                        values.append(val)
+
+                await self._conn.execute(insert_sql, values)
+
+            await self._conn.commit()
+            self._csv_loaded = True
+
+        except Exception as e:
+            raise ValueError(f"Error loading CSV file '{self.csv_path}': {str(e)}")
+
+    async def execute_query(self, query: str, *args) -> List[Dict[str, Any]]:
+        """Execute a query and return results as list of dicts.
+
+        All queries run in a transaction that is rolled back at the end,
+        ensuring no changes are persisted to the database.
+        """
+        conn = await self.get_pool()
+
+        # Start transaction
+        await conn.execute("BEGIN")
+        try:
+            cursor = await conn.execute(query, args if args else ())
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            # Always rollback to ensure no changes are committed
+            await conn.rollback()
+
+
 def DatabaseConnection(connection_string: str) -> BaseDatabaseConnection:
     """Factory function to create appropriate database connection based on connection string."""
     if connection_string.startswith("postgresql://"):
@@ -280,6 +407,8 @@ def DatabaseConnection(connection_string: str) -> BaseDatabaseConnection:
         return MySQLConnection(connection_string)
     elif connection_string.startswith("sqlite:///"):
         return SQLiteConnection(connection_string)
+    elif connection_string.startswith("csv:///"):
+        return CSVConnection(connection_string)
     else:
         raise ValueError(
             f"Unsupported database type in connection string: {connection_string}"

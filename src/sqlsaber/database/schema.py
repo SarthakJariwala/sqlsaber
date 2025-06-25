@@ -11,6 +11,7 @@ from sqlsaber.database.connection import (
     MySQLConnection,
     PostgreSQLConnection,
     SQLiteConnection,
+    CSVConnection,
 )
 from sqlsaber.models.types import SchemaInfo
 
@@ -375,15 +376,30 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
 class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
     """SQLite-specific schema introspection."""
 
+    async def _execute_query(self, connection, query: str, params=()) -> list:
+        """Helper method to execute queries on both SQLite and CSV connections."""
+        # Handle both SQLite and CSV connections
+        if hasattr(connection, "database_path"):
+            # Regular SQLite connection
+            async with aiosqlite.connect(connection.database_path) as conn:
+                conn.row_factory = aiosqlite.Row
+                cursor = await conn.execute(query, params)
+                return await cursor.fetchall()
+        else:
+            # CSV connection - use the existing connection
+            conn = await connection.get_pool()
+            cursor = await conn.execute(query, params)
+            return await cursor.fetchall()
+
     async def get_tables_info(
         self, connection, table_pattern: Optional[str] = None
     ) -> Dict[str, Any]:
         """Get tables information for SQLite."""
-        where_clause = ""
+        where_conditions = ["type IN ('table', 'view')", "name NOT LIKE 'sqlite_%'"]
         params = ()
 
         if table_pattern:
-            where_clause = "WHERE name LIKE ?"
+            where_conditions.append("name LIKE ?")
             params = (table_pattern,)
 
         query = f"""
@@ -392,16 +408,11 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
                 name as table_name,
                 type as table_type
             FROM sqlite_master
-            WHERE type IN ('table', 'view')
-            AND name NOT LIKE 'sqlite_%'
-            {where_clause}
+            WHERE {" AND ".join(where_conditions)}
             ORDER BY name;
         """
 
-        async with aiosqlite.connect(connection.database_path) as conn:
-            conn.row_factory = aiosqlite.Row
-            cursor = await conn.execute(query, params)
-            return await cursor.fetchall()
+        return await self._execute_query(connection, query, params)
 
     async def get_columns_info(self, connection, tables: list) -> list:
         """Get columns information for SQLite."""
@@ -414,26 +425,22 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
 
             # Get table info using PRAGMA
             pragma_query = f"PRAGMA table_info({table_name})"
+            table_columns = await self._execute_query(connection, pragma_query)
 
-            async with aiosqlite.connect(connection.database_path) as conn:
-                conn.row_factory = aiosqlite.Row
-                cursor = await conn.execute(pragma_query)
-                table_columns = await cursor.fetchall()
-
-                for col in table_columns:
-                    columns.append(
-                        {
-                            "table_schema": "main",
-                            "table_name": table_name,
-                            "column_name": col["name"],
-                            "data_type": col["type"],
-                            "is_nullable": "YES" if not col["notnull"] else "NO",
-                            "column_default": col["dflt_value"],
-                            "character_maximum_length": None,
-                            "numeric_precision": None,
-                            "numeric_scale": None,
-                        }
-                    )
+            for col in table_columns:
+                columns.append(
+                    {
+                        "table_schema": "main",
+                        "table_name": table_name,
+                        "column_name": col["name"],
+                        "data_type": col["type"],
+                        "is_nullable": "YES" if not col["notnull"] else "NO",
+                        "column_default": col["dflt_value"],
+                        "character_maximum_length": None,
+                        "numeric_precision": None,
+                        "numeric_scale": None,
+                    }
+                )
 
         return columns
 
@@ -448,23 +455,19 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
 
             # Get foreign key info using PRAGMA
             pragma_query = f"PRAGMA foreign_key_list({table_name})"
+            table_fks = await self._execute_query(connection, pragma_query)
 
-            async with aiosqlite.connect(connection.database_path) as conn:
-                conn.row_factory = aiosqlite.Row
-                cursor = await conn.execute(pragma_query)
-                table_fks = await cursor.fetchall()
-
-                for fk in table_fks:
-                    foreign_keys.append(
-                        {
-                            "table_schema": "main",
-                            "table_name": table_name,
-                            "column_name": fk["from"],
-                            "foreign_table_schema": "main",
-                            "foreign_table_name": fk["table"],
-                            "foreign_column_name": fk["to"],
-                        }
-                    )
+            for fk in table_fks:
+                foreign_keys.append(
+                    {
+                        "table_schema": "main",
+                        "table_name": table_name,
+                        "column_name": fk["from"],
+                        "foreign_table_schema": "main",
+                        "foreign_table_name": fk["table"],
+                        "foreign_column_name": fk["to"],
+                    }
+                )
 
         return foreign_keys
 
@@ -479,21 +482,17 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
 
             # Get table info using PRAGMA to find primary keys
             pragma_query = f"PRAGMA table_info({table_name})"
+            table_columns = await self._execute_query(connection, pragma_query)
 
-            async with aiosqlite.connect(connection.database_path) as conn:
-                conn.row_factory = aiosqlite.Row
-                cursor = await conn.execute(pragma_query)
-                table_columns = await cursor.fetchall()
-
-                for col in table_columns:
-                    if col["pk"]:  # Primary key indicator
-                        primary_keys.append(
-                            {
-                                "table_schema": "main",
-                                "table_name": table_name,
-                                "column_name": col["name"],
-                            }
-                        )
+            for col in table_columns:
+                if col["pk"]:  # Primary key indicator
+                    primary_keys.append(
+                        {
+                            "table_schema": "main",
+                            "table_name": table_name,
+                            "column_name": col["name"],
+                        }
+                    )
 
         return primary_keys
 
@@ -512,10 +511,7 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
             ORDER BY name;
         """
 
-        async with aiosqlite.connect(connection.database_path) as conn:
-            conn.row_factory = aiosqlite.Row
-            cursor = await conn.execute(tables_query)
-            return await cursor.fetchall()
+        return await self._execute_query(connection, tables_query)
 
 
 class SchemaManager:
@@ -531,7 +527,7 @@ class SchemaManager:
             self.introspector = PostgreSQLSchemaIntrospector()
         elif isinstance(db_connection, MySQLConnection):
             self.introspector = MySQLSchemaIntrospector()
-        elif isinstance(db_connection, SQLiteConnection):
+        elif isinstance(db_connection, (SQLiteConnection, CSVConnection)):
             self.introspector = SQLiteSchemaIntrospector()
         else:
             raise ValueError(

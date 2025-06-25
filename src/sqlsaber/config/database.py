@@ -4,12 +4,12 @@ import json
 import os
 import platform
 import stat
-import keyring
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 from urllib.parse import quote_plus
 
+import keyring
 import platformdirs
 
 
@@ -18,7 +18,7 @@ class DatabaseConfig:
     """Database connection configuration."""
 
     name: str
-    type: str  # postgresql, mysql, sqlite
+    type: str  # postgresql, mysql, sqlite, csv
     host: Optional[str]
     port: Optional[int]
     database: str
@@ -90,6 +90,28 @@ class DatabaseConfig:
 
         elif self.type == "sqlite":
             return f"sqlite:///{self.database}"
+        elif self.type == "csv":
+            # For CSV files, database field contains the file path
+            base_url = f"csv:///{self.database}"
+
+            # Add CSV-specific parameters if they exist in schema field
+            if self.schema:
+                # Schema field can contain CSV options in JSON format
+                try:
+                    csv_options = json.loads(self.schema)
+                    params = []
+                    if "delimiter" in csv_options:
+                        params.append(f"delimiter={csv_options['delimiter']}")
+                    if "encoding" in csv_options:
+                        params.append(f"encoding={csv_options['encoding']}")
+                    if "header" in csv_options:
+                        params.append(f"header={str(csv_options['header']).lower()}")
+
+                    if params:
+                        return f"{base_url}?{'&'.join(params)}"
+                except (json.JSONDecodeError, KeyError):
+                    pass
+            return base_url
         else:
             raise ValueError(f"Unsupported database type: {self.type}")
 

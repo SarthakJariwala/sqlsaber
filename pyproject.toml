@@ -15,6 +15,7 @@ dependencies = [
     "httpx>=0.28.1",
     "aiomysql>=0.2.0",
     "aiosqlite>=0.21.0",
+    "pandas>=2.0.0",
 ]
 
 [tool.uv]

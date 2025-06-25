@@ -1,6 +1,7 @@
 """CLI command definitions and handlers."""
 
 import asyncio
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -62,15 +63,31 @@ def query(
     """Run a query against the database or start interactive mode."""
 
     async def run_session():
-        # Get database configuration
+        # Get database configuration or handle direct CSV file
         if database:
-            db_config = config_manager.get_database(database)
-            if not db_config:
-                console.print(
-                    f"[bold red]Error:[/bold red] Database connection '{database}' not found."
-                )
-                console.print("Use 'sqlsaber db list' to see available connections.")
-                raise typer.Exit(1)
+            # Check if this is a direct CSV file path
+            if database.endswith(".csv"):
+                csv_path = Path(database).expanduser().resolve()
+                if not csv_path.exists():
+                    console.print(
+                        f"[bold red]Error:[/bold red] CSV file '{database}' not found."
+                    )
+                    raise typer.Exit(1)
+                connection_string = f"csv:///{csv_path}"
+                db_name = csv_path.stem
+            else:
+                # Look up configured database connection
+                db_config = config_manager.get_database(database)
+                if not db_config:
+                    console.print(
+                        f"[bold red]Error:[/bold red] Database connection '{database}' not found."
+                    )
+                    console.print(
+                        "Use 'sqlsaber db list' to see available connections."
+                    )
+                    raise typer.Exit(1)
+                connection_string = db_config.to_connection_string()
+                db_name = db_config.name
         else:
             db_config = config_manager.get_default_database()
             if not db_config:
@@ -81,10 +98,11 @@ def query(
                     "Use 'sqlsaber db add <name>' to add a database connection."
                 )
                 raise typer.Exit(1)
+            connection_string = db_config.to_connection_string()
+            db_name = db_config.name
 
         # Create database connection
         try:
-            connection_string = db_config.to_connection_string()
             db_conn = DatabaseConnection(connection_string)
         except Exception as e:
             console.print(
@@ -93,7 +111,7 @@ def query(
             raise typer.Exit(1)
 
         # Create agent instance with database name for memory context
-        agent = AnthropicSQLAgent(db_conn, db_config.name)
+        agent = AnthropicSQLAgent(db_conn, db_name)
 
         try:
             if query_text:

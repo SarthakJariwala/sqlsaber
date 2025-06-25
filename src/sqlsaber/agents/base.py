@@ -6,6 +6,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 from sqlsaber.database.connection import (
     BaseDatabaseConnection,
+    CSVConnection,
     MySQLConnection,
     PostgreSQLConnection,
     SQLiteConnection,
@@ -41,6 +42,8 @@ class BaseSQLAgent(ABC):
             return "MySQL"
         elif isinstance(self.db, SQLiteConnection):
             return "SQLite"
+        elif isinstance(self.db, CSVConnection):
+            return "SQLite"  # we convert csv to in-memory sqlite
         else:
             return "database"  # Fallback
 
