@@ -11,13 +11,7 @@ from sqlsaber.agents.streaming import (
     build_tool_result_block,
 )
 from sqlsaber.config.settings import Config
-from sqlsaber.database.connection import (
-    BaseDatabaseConnection,
-    MySQLConnection,
-    PostgreSQLConnection,
-    SQLiteConnection,
-)
-from sqlsaber.database.schema import SchemaManager
+from sqlsaber.database.connection import BaseDatabaseConnection
 from sqlsaber.memory.manager import MemoryManager
 from sqlsaber.models.events import StreamEvent
 from sqlsaber.models.types import ToolDefinition
@@ -36,7 +30,6 @@ class AnthropicSQLAgent(BaseSQLAgent):
 
         self.client = AsyncAnthropic(api_key=config.api_key)
         self.model = config.model_name.replace("anthropic:", "")
-        self.schema_manager = SchemaManager(db_connection)
 
         self.database_name = database_name
         self.memory_manager = MemoryManager()
@@ -94,17 +87,6 @@ class AnthropicSQLAgent(BaseSQLAgent):
         # Build system prompt with memories if available
         self.system_prompt = self._build_system_prompt()
 
-    def _get_database_type_name(self) -> str:
-        """Get the human-readable database type name."""
-        if isinstance(self.db, PostgreSQLConnection):
-            return "PostgreSQL"
-        elif isinstance(self.db, MySQLConnection):
-            return "MySQL"
-        elif isinstance(self.db, SQLiteConnection):
-            return "SQLite"
-        else:
-            return "database"  # Fallback
-
     def _build_system_prompt(self) -> str:
         """Build system prompt with optional memory context."""
         db_type = self._get_database_type_name()
@@ -152,109 +134,33 @@ Guidelines:
         self.system_prompt = self._build_system_prompt()
         return memory.id
 
-    async def introspect_schema(self, table_pattern: Optional[str] = None) -> str:
-        """Introspect database schema to understand table structures."""
-        try:
-            # Pass table_pattern to get_schema_info for efficient filtering at DB level
-            schema_info = await self.schema_manager.get_schema_info(table_pattern)
-
-            # Format the schema information
-            formatted_info = {}
-            for table_name, table_info in schema_info.items():
-                formatted_info[table_name] = {
-                    "columns": {
-                        col_name: {
-                            "type": col_info["data_type"],
-                            "nullable": col_info["nullable"],
-                            "default": col_info["default"],
-                        }
-                        for col_name, col_info in table_info["columns"].items()
-                    },
-                    "primary_keys": table_info["primary_keys"],
-                    "foreign_keys": [
-                        f"{fk['column']} -> {fk['references']['table']}.{fk['references']['column']}"
-                        for fk in table_info["foreign_keys"]
-                    ],
-                }
-
-            return json.dumps(formatted_info)
-        except Exception as e:
-            return json.dumps({"error": f"Error introspecting schema: {str(e)}"})
-
-    async def list_tables(self) -> str:
-        """List all tables in the database with basic information."""
-        try:
-            tables_info = await self.schema_manager.list_tables()
-            return json.dumps(tables_info)
-        except Exception as e:
-            return json.dumps({"error": f"Error listing tables: {str(e)}"})
-
     async def execute_sql(self, query: str, limit: Optional[int] = 100) -> str:
-        """Execute a SQL query against the database."""
+        """Execute a SQL query against the database with streaming support."""
+        # Call parent implementation for core functionality
+        result = await super().execute_sql(query, limit)
+
+        # Parse result to extract data for streaming (AnthropicSQLAgent specific)
         try:
-            # Security check - only allow SELECT queries unless write is enabled
-            write_error = self._validate_write_operation(query)
-            if write_error:
-                return json.dumps(
-                    {
-                        "error": write_error,
-                    }
+            result_data = json.loads(result)
+            if result_data.get("success") and "results" in result_data:
+                # Store results for streaming
+                actual_limit = (
+                    limit if limit is not None else len(result_data["results"])
                 )
+                self._last_results = result_data["results"][:actual_limit]
+                self._last_query = query
+        except (json.JSONDecodeError, KeyError):
+            # If we can't parse the result, just continue without storing
+            pass
 
-            # Add LIMIT if not present and it's a SELECT query
-            query = self._add_limit_to_query(query, limit)
-
-            # Execute the query (wrapped in a transaction for safety)
-            results = await self.db.execute_query(query)
-
-            # Format results - but also store the actual data
-            actual_limit = limit if limit is not None else len(results)
-            self._last_results = results[:actual_limit]
-            self._last_query = query
-
-            return json.dumps(
-                {
-                    "success": True,
-                    "row_count": len(results),
-                    "results": results[:actual_limit],  # Extra safety for limit
-                    "truncated": len(results) > actual_limit,
-                }
-            )
-
-        except Exception as e:
-            error_msg = str(e)
-
-            # Provide helpful error messages
-            suggestions = []
-            if "column" in error_msg.lower() and "does not exist" in error_msg.lower():
-                suggestions.append(
-                    "Check column names using the schema introspection tool"
-                )
-            elif "table" in error_msg.lower() and "does not exist" in error_msg.lower():
-                suggestions.append(
-                    "Check table names using the schema introspection tool"
-                )
-            elif "syntax error" in error_msg.lower():
-                suggestions.append(
-                    "Review SQL syntax, especially JOIN conditions and WHERE clauses"
-                )
-
-            return json.dumps({"error": error_msg, "suggestions": suggestions})
+        return result
 
     async def process_tool_call(
         self, tool_name: str, tool_input: Dict[str, Any]
     ) -> str:
         """Process a tool call and return the result."""
-        if tool_name == "list_tables":
-            return await self.list_tables()
-        elif tool_name == "introspect_schema":
-            return await self.introspect_schema(tool_input.get("table_pattern"))
-        elif tool_name == "execute_sql":
-            return await self.execute_sql(
-                tool_input["query"], tool_input.get("limit", 100)
-            )
-        else:
-            return json.dumps({"error": f"Unknown tool: {tool_name}"})
+        # Use parent implementation for core tools
+        return await super().process_tool_call(tool_name, tool_input)
 
     async def _process_stream_events(
         self, stream, content_blocks: List[Dict], tool_use_blocks: List[Dict]
