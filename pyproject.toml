@@ -16,6 +16,7 @@ dependencies = [
     "aiomysql>=0.2.0",
     "aiosqlite>=0.21.0",
     "pandas>=2.0.0",
+    "fastmcp>=2.9.0",
 ]
 
 [tool.uv]
@@ -32,3 +33,5 @@ packages = ["src/sqlsaber"]
 sqlsaber = "sqlsaber.cli.commands:main"
 saber = "sqlsaber.cli.commands:main"
 sql = "sqlsaber.cli.commands:main"
+sqlsaber-mcp = "sqlsaber.mcp.mcp:main"
+saber-mcp = "sqlsaber.mcp.mcp:main"

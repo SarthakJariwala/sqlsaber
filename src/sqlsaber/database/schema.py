@@ -201,8 +201,8 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
                     t.table_type,
                     COALESCE(ts.approximate_row_count, 0) as row_count
                 FROM information_schema.tables t
-                LEFT JOIN table_stats ts 
-                    ON t.table_schema = ts.schemaname 
+                LEFT JOIN table_stats ts
+                    ON t.table_schema = ts.schemaname
                     AND t.table_name = ts.tablename
                 WHERE t.table_schema NOT IN ('pg_catalog', 'information_schema')
                 ORDER BY t.table_schema, t.table_name;

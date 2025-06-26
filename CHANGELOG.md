@@ -4,6 +4,13 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- MCP (Model Context Protocol) server support
+- `saber-mcp` console script for running MCP server
+- MCP tools: `get_databases()`, `list_tables()`, `introspect_schema()`, `execute_sql()`
+- Instructions and documentation for configuring MCP clients (Claude Code, etc.)
+
 ## [0.3.0] - 2025-06-25
 
 ### Added
