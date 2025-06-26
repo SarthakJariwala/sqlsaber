@@ -4,7 +4,28 @@
 
 SQLSaber is an agentic SQL assistant. Think Claude Code but for SQL.
 
-Ask your questions in natural language and it will gather the right context and answer your query by writing SQL and analyzing the results.
+Ask your questions in natural language and it will gather the right context automatically and answer your query by writing SQL and analyzing the results.
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Configuration](#configuration)
+  - [Database Connection](#database-connection)
+  - [AI Model Configuration](#ai-model-configuration)
+  - [Memory Management](#memory-management)
+- [Usage](#usage)
+  - [Interactive Mode](#interactive-mode)
+  - [Single Query](#single-query)
+  - [Database Selection](#database-selection)
+- [Examples](#examples)
+- [MCP Server Integration](#mcp-server-integration)
+  - [Starting the MCP Server](#starting-the-mcp-server)
+  - [Configuring MCP Clients](#configuring-mcp-clients)
+  - [Available MCP Tools](#available-mcp-tools)
+- [How It Works](#how-it-works)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
@@ -19,14 +40,23 @@ Ask your questions in natural language and it will gather the right context and 
 
 ## Installation
 
+### `uv`
+
 ```bash
 uv tool install sqlsaber
 ```
 
-or
+### `pipx`
 
 ```bash
 pipx install sqlsaber
+```
+
+### `brew`
+
+```bash
+brew install uv
+uv tool install sqlsaber
 ```
 
 ## Configuration
