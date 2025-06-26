@@ -4,6 +4,8 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-06-25
+
 ### Added
 
 - MCP (Model Context Protocol) server support
