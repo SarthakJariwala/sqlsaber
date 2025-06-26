@@ -131,7 +131,7 @@ SQLSaber includes an MCP (Model Context Protocol) server that allows AI agents l
 Run the MCP server using uvx:
 
 ```bash
-uvx saber-mcp
+uvx --from sqlsaber saber-mcp
 ```
 
 ### Configuring MCP Clients
@@ -141,12 +141,12 @@ uvx saber-mcp
 Add SQLSaber as an MCP server in Claude Code:
 
 ```bash
-claude mcp add -- uvx saber-mcp
+claude mcp add -- uvx --from sqlsaber saber-mcp
 ```
 
 #### Other MCP Clients
 
-For other MCP clients, configure them to run the command: `uvx saber-mcp`
+For other MCP clients, configure them to run the command: `uvx --from sqlsaber saber-mcp`
 
 ### Available MCP Tools
 
