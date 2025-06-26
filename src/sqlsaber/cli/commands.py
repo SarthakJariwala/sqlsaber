@@ -117,6 +117,9 @@ def query(
             if query_text:
                 # Single query mode with streaming
                 streaming_handler = StreamingQueryHandler(console)
+                console.print(
+                    f"[bold blue]Connected to:[/bold blue] {db_name} {agent._get_database_type_name()}\n"
+                )
                 await streaming_handler.execute_streaming_query(query_text, agent)
             else:
                 # Interactive mode

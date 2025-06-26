@@ -4,6 +4,13 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.1] - 2025-06-26
+
+### Added
+
+- Show connected database information at the start of a session
+- Update welcome message for clarity
+
 ## [0.4.0] - 2025-06-25
 
 ### Added

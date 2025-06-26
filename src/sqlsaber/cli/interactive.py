@@ -20,21 +20,24 @@ class InteractiveSession:
 
     def show_welcome_message(self):
         """Display welcome message for interactive mode."""
+        # Show database information
+        db_name = getattr(self.agent, "database_name", None) or "Unknown"
+        db_type = self.agent._get_database_type_name()
+
         self.console.print(
             Panel.fit(
                 "[bold green]SQLSaber - Use the agent Luke![/bold green]\n\n"
-                "Type your queries in natural language.\n\n"
-                "Press Esc-Enter or Meta-Enter to submit your query.\n\n"
-                "Type 'exit' or 'quit' to leave.",
+                "[bold]Your agentic SQL assistant.[/bold]\n\n\n"
+                "[dim]Use 'clear' to reset conversation, 'exit' or 'quit' to leave.[/dim]\n\n"
+                "[dim]Start a message with '#' to add something to agent's memory for this database.[/dim]",
                 border_style="green",
             )
         )
-
         self.console.print(
-            "[dim]Commands: 'clear' to reset conversation, 'exit' or 'quit' to leave[/dim]"
+            f"[bold blue]Connected to:[/bold blue] {db_name} ({db_type})\n"
         )
         self.console.print(
-            "[dim]Memory: Start a message with '#' to add it as a memory for this database[/dim]\n"
+            "[dim]Press Esc-Enter or Meta-Enter to submit your query.[/dim]\n"
         )
 
     async def run(self):
