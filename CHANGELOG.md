@@ -4,10 +4,21 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Slash command autocomplete in interactive mode
+  - Commands now use slash prefix: `/clear`, `/exit`, `/quit`
+  - Autocomplete shows when typing `/` at the start of a line
+  - Press Enter to select and execute commands
+
 ### Changed
 
 - Updated table display for better readability: limit to first 15 columns on wide tables
   - Shows warning when columns are truncated
+- Interactive commands now require slash prefix (breaking change)
+  - `clear` → `/clear`
+  - `exit` → `/exit`
+  - `quit` → `/quit`
 
 ## [0.5.0] - 2025-06-27
 

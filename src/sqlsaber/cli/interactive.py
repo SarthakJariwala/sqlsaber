@@ -1,12 +1,41 @@
 """Interactive mode handling for the CLI."""
 
 import questionary
+from prompt_toolkit.completion import Completer, Completion
 from rich.console import Console
 from rich.panel import Panel
 
 from sqlsaber.agents.base import BaseSQLAgent
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.streaming import StreamingQueryHandler
+
+
+class SlashCommandCompleter(Completer):
+    """Custom completer for slash commands."""
+
+    def get_completions(self, document, complete_event):
+        """Get completions for slash commands."""
+        # Only provide completions if the line starts with "/"
+        text = document.text
+        if text.startswith("/"):
+            # Get the partial command after the slash
+            partial_cmd = text[1:]
+
+            # Define available commands with descriptions
+            commands = [
+                ("clear", "Clear conversation history"),
+                ("exit", "Exit the interactive session"),
+                ("quit", "Exit the interactive session"),
+            ]
+
+            # Yield completions that match the partial command
+            for cmd, description in commands:
+                if cmd.startswith(partial_cmd):
+                    yield Completion(
+                        cmd,
+                        start_position=-len(partial_cmd),
+                        display_meta=description,
+                    )
 
 
 class InteractiveSession:
@@ -28,7 +57,7 @@ class InteractiveSession:
             Panel.fit(
                 "[bold green]SQLSaber - Use the agent Luke![/bold green]\n\n"
                 "[bold]Your agentic SQL assistant.[/bold]\n\n\n"
-                "[dim]Use 'clear' to reset conversation, 'exit' or 'quit' to leave.[/dim]\n\n"
+                "[dim]Use '/clear' to reset conversation, '/exit' or '/quit' to leave.[/dim]\n\n"
                 "[dim]Start a message with '#' to add something to agent's memory for this database.[/dim]",
                 border_style="green",
             )
@@ -51,12 +80,13 @@ class InteractiveSession:
                     qmark="",
                     multiline=True,
                     instruction="",
+                    completer=SlashCommandCompleter(),
                 ).ask_async()
 
-                if user_query.lower() in ["exit", "quit", "q"]:
+                if user_query in ["/exit", "/quit"]:
                     break
 
-                if user_query.lower() == "clear":
+                if user_query == "/clear":
                     self.agent.clear_history()
                     self.console.print("[green]Conversation history cleared.[/green]\n")
                     continue
@@ -91,6 +121,8 @@ class InteractiveSession:
                     self.display.show_newline()  # Empty line for readability
 
             except KeyboardInterrupt:
-                self.console.print("\n[yellow]Use 'exit' or 'quit' to leave.[/yellow]")
+                self.console.print(
+                    "\n[yellow]Use '/exit' or '/quit' to leave.[/yellow]"
+                )
             except Exception as e:
                 self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
