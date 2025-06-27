@@ -4,6 +4,13 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Updated table display for better readability: limit to first 15 columns on wide tables
+  - Shows warning when columns are truncated
+
+## [0.5.0] - 2025-06-27
+
 ### Added
 
 - Added support for plotting data from query results.

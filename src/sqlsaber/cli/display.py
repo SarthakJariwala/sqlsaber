@@ -62,12 +62,20 @@ class DisplayManager:
         )
 
         # Create table with columns from first result
-        columns = list(results[0].keys())
-        table = self._create_table(columns)
+        all_columns = list(results[0].keys())
+        display_columns = all_columns[:15]  # Limit to first 15 columns
+
+        # Show warning if columns were truncated
+        if len(all_columns) > 15:
+            self.console.print(
+                f"[yellow]Note: Showing first 15 of {len(all_columns)} columns[/yellow]"
+            )
+
+        table = self._create_table(display_columns)
 
         # Add rows (show first 20 rows)
         for row in results[:20]:
-            table.add_row(*[str(row[key]) for key in columns])
+            table.add_row(*[str(row[key]) for key in display_columns])
 
         self.console.print(table)
 
