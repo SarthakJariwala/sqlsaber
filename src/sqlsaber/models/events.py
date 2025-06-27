@@ -7,7 +7,7 @@ class StreamEvent:
     """Event emitted during streaming processing."""
 
     def __init__(self, event_type: str, data: Any = None):
-        # 'tool_use', 'text', 'query_result', 'error', 'processing'
+        # 'tool_use', 'text', 'query_result', 'plot_result', 'error', 'processing'
         self.type = event_type
         self.data = data
 

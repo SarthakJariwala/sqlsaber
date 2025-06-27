@@ -63,6 +63,11 @@ class StreamingQueryHandler:
                         self.display.show_schema_info(event.data["result"])
                         has_content = True
 
+                elif event.type == "plot_result":
+                    # Handle plot results
+                    self.display.show_plot(event.data)
+                    has_content = True
+
                 elif event.type == "processing":
                     # Show status when processing tool results
                     if explanation_started:

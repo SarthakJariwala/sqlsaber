@@ -205,3 +205,33 @@ class DisplayManager:
             self.show_error("Failed to parse schema data")
         except Exception as e:
             self.show_error(f"Error displaying schema information: {str(e)}")
+
+    def show_plot(self, plot_data: dict):
+        """Display plot information and status."""
+        try:
+            # Parse the result if it's a string
+            if isinstance(plot_data.get("result"), str):
+                result = json.loads(plot_data["result"])
+            else:
+                result = plot_data.get("result", {})
+
+            # Check if there was an error
+            if "error" in result:
+                self.show_error(f"Plot error: {result['error']}")
+                return
+
+            # If plot was successful, show plot info
+            if result.get("success") and result.get("plot_rendered"):
+                plot_info = result.get("plot_info", {})
+                self.console.print(
+                    f"\n[bold green]✓ Plot rendered:[/bold green] {plot_info.get('title', 'Plot')}"
+                )
+                self.console.print(
+                    f"[dim]  Type: {plot_info.get('type', 'unknown')}, "
+                    f"Data points: {plot_info.get('data_points', 0)}[/dim]"
+                )
+
+        except json.JSONDecodeError:
+            self.show_error("Failed to parse plot result")
+        except Exception as e:
+            self.show_error(f"Error displaying plot: {str(e)}")

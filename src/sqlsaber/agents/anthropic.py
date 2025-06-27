@@ -82,6 +82,44 @@ class AnthropicSQLAgent(BaseSQLAgent):
                     "required": ["query"],
                 },
             },
+            {
+                "name": "plot_data",
+                "description": "Create a plot of query results.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "y_values": {
+                            "type": "array",
+                            "items": {"type": ["number", "null"]},
+                            "description": "Y-axis data points (required)",
+                        },
+                        "x_values": {
+                            "type": "array",
+                            "items": {"type": ["number", "null"]},
+                            "description": "X-axis data points (optional, will use indices if not provided)",
+                        },
+                        "plot_type": {
+                            "type": "string",
+                            "enum": ["line", "scatter", "histogram"],
+                            "description": "Type of plot to create (default: line)",
+                            "default": "line",
+                        },
+                        "title": {
+                            "type": "string",
+                            "description": "Title for the plot",
+                        },
+                        "x_label": {
+                            "type": "string",
+                            "description": "Label for X-axis",
+                        },
+                        "y_label": {
+                            "type": "string",
+                            "description": "Label for Y-axis",
+                        },
+                    },
+                    "required": ["y_values"],
+                },
+            },
         ]
 
         # Build system prompt with memories if available
@@ -96,13 +134,15 @@ Your responsibilities:
 1. Understand user's natural language requests, think and convert them to SQL
 2. Use the provided tools efficiently to explore database schema
 3. Generate appropriate SQL queries
-4. Execute queries safely (only SELECT queries unless explicitly allowed)
+4. Execute queries safely - queries that modify the database are not allowed
 5. Format and explain results clearly
+6. Create visualizations when requested or when they would be helpful
 
 IMPORTANT - Schema Discovery Strategy:
 1. ALWAYS start with 'list_tables' to see available tables and row counts
 2. Based on the user's query, identify which specific tables are relevant
 3. Use 'introspect_schema' with a table_pattern to get details ONLY for relevant tables
+4. Timestamp columns must be converted to text when you write queries
 
 Guidelines:
 - Use list_tables first, then introspect_schema for specific tables only
@@ -246,6 +286,15 @@ Guidelines:
                         "tool_result",
                         {
                             "tool_name": block["name"],
+                            "result": tool_result,
+                        },
+                    )
+                elif block["name"] == "plot_data":
+                    yield StreamEvent(
+                        "plot_result",
+                        {
+                            "tool_name": block["name"],
+                            "input": block["input"],
                             "result": tool_result,
                         },
                     )

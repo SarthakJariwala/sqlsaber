@@ -4,6 +4,8 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+from uniplot import histogram, plot
+
 from sqlsaber.database.connection import (
     BaseDatabaseConnection,
     CSVConnection,
@@ -146,6 +148,15 @@ class BaseSQLAgent(ABC):
             return await self.execute_sql(
                 tool_input["query"], tool_input.get("limit", 100)
             )
+        elif tool_name == "plot_data":
+            return await self.plot_data(
+                y_values=tool_input["y_values"],
+                x_values=tool_input.get("x_values"),
+                plot_type=tool_input.get("plot_type", "line"),
+                title=tool_input.get("title"),
+                x_label=tool_input.get("x_label"),
+                y_label=tool_input.get("y_label"),
+            )
         else:
             return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
@@ -182,3 +193,84 @@ class BaseSQLAgent(ABC):
         if query_upper.startswith("SELECT") and "LIMIT" not in query_upper:
             return f"{query.rstrip(';')} LIMIT {limit};"
         return query
+
+    async def plot_data(
+        self,
+        y_values: List[float],
+        x_values: Optional[List[float]] = None,
+        plot_type: str = "line",
+        title: Optional[str] = None,
+        x_label: Optional[str] = None,
+        y_label: Optional[str] = None,
+    ) -> str:
+        """Create a terminal plot using uniplot.
+
+        Args:
+            y_values: Y-axis data points
+            x_values: X-axis data points (optional)
+            plot_type: Type of plot - "line", "scatter", or "histogram"
+            title: Plot title
+            x_label: X-axis label
+            y_label: Y-axis label
+
+        Returns:
+            JSON string with success status and plot details
+        """
+        try:
+            # Validate inputs
+            if not y_values:
+                return json.dumps({"error": "No data provided for plotting"})
+
+            # Convert to floats if needed
+            try:
+                y_values = [float(v) if v is not None else None for v in y_values]
+                if x_values:
+                    x_values = [float(v) if v is not None else None for v in x_values]
+            except (ValueError, TypeError) as e:
+                return json.dumps({"error": f"Invalid data format: {str(e)}"})
+
+            # Create the plot
+            if plot_type == "histogram":
+                # For histogram, we only need y_values
+                histogram(
+                    y_values,
+                    title=title,
+                    bins=min(20, len(set(y_values))),  # Adaptive bin count
+                )
+                plot_info = {
+                    "type": "histogram",
+                    "data_points": len(y_values),
+                    "title": title or "Histogram",
+                }
+            elif plot_type in ["line", "scatter"]:
+                # For line/scatter plots
+                plot_kwargs = {
+                    "ys": y_values,
+                    "title": title,
+                    "lines": plot_type == "line",
+                }
+
+                if x_values:
+                    plot_kwargs["xs"] = x_values
+                if x_label:
+                    plot_kwargs["x_unit"] = x_label
+                if y_label:
+                    plot_kwargs["y_unit"] = y_label
+
+                plot(**plot_kwargs)
+
+                plot_info = {
+                    "type": plot_type,
+                    "data_points": len(y_values),
+                    "title": title or f"{plot_type.capitalize()} Plot",
+                    "has_x_values": x_values is not None,
+                }
+            else:
+                return json.dumps({"error": f"Unsupported plot type: {plot_type}"})
+
+            return json.dumps(
+                {"success": True, "plot_rendered": True, "plot_info": plot_info}
+            )
+
+        except Exception as e:
+            return json.dumps({"error": f"Error creating plot: {str(e)}"})

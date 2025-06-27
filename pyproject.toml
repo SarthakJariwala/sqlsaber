@@ -17,6 +17,7 @@ dependencies = [
     "aiosqlite>=0.21.0",
     "pandas>=2.0.0",
     "fastmcp>=2.9.0",
+    "uniplot>=0.21.2",
 ]
 
 [tool.uv]

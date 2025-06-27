@@ -775,6 +775,15 @@ wheels = [
 ]
 
 [[package]]
+name = "readchar"
+version = "4.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/f8/8657b8cbb4ebeabfbdf991ac40eca8a1d1bd012011bd44ad1ed10f5cb494/readchar-4.2.1.tar.gz", hash = "sha256:91ce3faf07688de14d800592951e5575e9c7a3213738ed01d394dcc949b79adb", size = 9685 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a9/10/e4b1e0e5b6b6745c8098c275b69bc9d73e9542d5c7da4f137542b499ed44/readchar-4.2.1-py3-none-any.whl", hash = "sha256:a769305cd3994bb5fa2764aa4073452dc105a4ec39068ffe6efd3c20c60acc77", size = 9350 },
+]
+
+[[package]]
 name = "rich"
 version = "14.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -869,6 +878,7 @@ dependencies = [
     { name = "questionary" },
     { name = "rich" },
     { name = "typer" },
+    { name = "uniplot" },
 ]
 
 [package.dev-dependencies]
@@ -892,6 +902,7 @@ requires-dist = [
     { name = "questionary", specifier = ">=2.1.0" },
     { name = "rich", specifier = ">=13.7.0" },
     { name = "typer", specifier = ">=0.16.0" },
+    { name = "uniplot", specifier = ">=0.21.2" },
 ]
 
 [package.metadata.requires-dev]
@@ -969,6 +980,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/95/32/1a225d6164441be760d75c2c42e2780dc0873fe382da3e98a2e1e48361e5/tzdata-2025.2.tar.gz", hash = "sha256:b60a638fcc0daffadf82fe0f57e53d06bdec2f36c4df66280ae79bce6bd6f2b9", size = 196380 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5c/23/c7abc0ca0a1526a0774eca151daeb8de62ec457e77262b66b359c3c7679e/tzdata-2025.2-py2.py3-none-any.whl", hash = "sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8", size = 347839 },
+]
+
+[[package]]
+name = "uniplot"
+version = "0.21.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "readchar" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/87/65/b9db385152a5283c88f955710123c6539a7c79436d2de377b3449995b041/uniplot-0.21.2.tar.gz", hash = "sha256:fc350d6e0f2352822747a3426fef7f521d1b3973585ad2e2967c702dfc6e8440", size = 33412 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3a/0e/0b2e41841eb18017e7e125bc8294180d2597a4ca049641068f55355bcc69/uniplot-0.21.2-py3-none-any.whl", hash = "sha256:cae5875eac0d06fd75cbb7076ea3fa49565ef1d71140f0b9a39f7be96085536b", size = 36419 },
 ]
 
 [[package]]
