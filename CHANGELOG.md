@@ -4,6 +4,12 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added support for plotting data from query results.
+  - The agent can decide if plotting will useful and create a plot with query results.
+- Small updates to system prompt
+
 ## [0.4.1] - 2025-06-26
 
 ### Added
