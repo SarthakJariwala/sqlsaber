@@ -86,7 +86,7 @@ class BaseSQLAgent(ABC):
         except Exception as e:
             return json.dumps({"error": f"Error listing tables: {str(e)}"})
 
-    async def execute_sql(self, query: str, limit: Optional[int] = 100) -> str:
+    async def execute_sql(self, query: str, limit: Optional[int] = None) -> str:
         """Execute a SQL query against the database."""
         try:
             # Security check - only allow SELECT queries unless write is enabled

@@ -19,6 +19,7 @@ All notable changes to SQLSaber will be documented in this file.
   - `clear` → `/clear`
   - `exit` → `/exit`
   - `quit` → `/quit`
+- Removed default limit of 100. Now model will decide it.
 
 ## [0.5.0] - 2025-06-27
 

@@ -174,7 +174,7 @@ Guidelines:
         self.system_prompt = self._build_system_prompt()
         return memory.id
 
-    async def execute_sql(self, query: str, limit: Optional[int] = 100) -> str:
+    async def execute_sql(self, query: str, limit: Optional[int] = None) -> str:
         """Execute a SQL query against the database with streaming support."""
         # Call parent implementation for core functionality
         result = await super().execute_sql(query, limit)
