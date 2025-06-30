@@ -110,6 +110,14 @@ class StreamingQueryHandler:
             if explanation_started:
                 self.display.show_newline()  # Empty line for better readability
 
+            # Display the last assistant response as markdown
+            if hasattr(agent, "conversation_history") and agent.conversation_history:
+                last_message = agent.conversation_history[-1]
+                if last_message.get("role") == "assistant" and last_message.get(
+                    "content"
+                ):
+                    self.display.show_markdown_response(last_message["content"])
+
     def _stop_status(self, status):
         """Safely stop a status spinner."""
         try:

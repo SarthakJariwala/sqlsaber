@@ -4,6 +4,11 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Rich markdown display for assistant responses
+  - After streaming completes, the final response is displayed as formatted markdown
+
 ## [0.6.0] - 2025-06-30
 
 ### Added

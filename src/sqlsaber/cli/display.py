@@ -4,6 +4,7 @@ import json
 from typing import Optional
 
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.syntax import Syntax
 from rich.table import Table
 
@@ -243,3 +244,24 @@ class DisplayManager:
             self.show_error("Failed to parse plot result")
         except Exception as e:
             self.show_error(f"Error displaying plot: {str(e)}")
+
+    def show_markdown_response(self, content: list):
+        """Display the assistant's response as rich markdown."""
+        if not content:
+            return
+
+        # Extract text from content blocks
+        text_parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text", "")
+                if text:
+                    text_parts.append(text)
+
+        # Join all text parts and display as markdown
+        full_text = "".join(text_parts).strip()
+        if full_text:
+            self.console.print()  # Add spacing before markdown
+            markdown = Markdown(full_text)
+            self.console.print(markdown)
+            self.console.print()  # Add spacing after markdown
