@@ -4,6 +4,8 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-06-30
+
 ### Added
 
 - Slash command autocomplete in interactive mode
