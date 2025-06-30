@@ -1,5 +1,8 @@
 """Interactive mode handling for the CLI."""
 
+import asyncio
+from typing import Optional
+
 import questionary
 from prompt_toolkit.completion import Completer, Completion
 from rich.console import Console
@@ -46,6 +49,8 @@ class InteractiveSession:
         self.agent = agent
         self.display = DisplayManager(console)
         self.streaming_handler = StreamingQueryHandler(console)
+        self.current_task: Optional[asyncio.Task] = None
+        self.cancellation_token: Optional[asyncio.Event] = None
 
     def show_welcome_message(self):
         """Display welcome message for interactive mode."""
@@ -67,7 +72,30 @@ class InteractiveSession:
         )
         self.console.print(
             "[dim]Press Esc-Enter or Meta-Enter to submit your query.[/dim]\n"
+            "[dim]Press Ctrl+C during query execution to interrupt and return to prompt.[/dim]\n"
         )
+
+    async def _execute_query_with_cancellation(self, user_query: str):
+        """Execute a query with cancellation support."""
+        # Create cancellation token
+        self.cancellation_token = asyncio.Event()
+
+        # Create the query task
+        query_task = asyncio.create_task(
+            self.streaming_handler.execute_streaming_query(
+                user_query, self.agent, self.cancellation_token
+            )
+        )
+        self.current_task = query_task
+
+        try:
+            # Simply await the query task
+            # Ctrl+C will be handled by the KeyboardInterrupt exception in run()
+            await query_task
+
+        finally:
+            self.current_task = None
+            self.cancellation_token = None
 
     async def run(self):
         """Run the interactive session loop."""
@@ -82,6 +110,9 @@ class InteractiveSession:
                     instruction="",
                     completer=SlashCommandCompleter(),
                 ).ask_async()
+
+                if not user_query:
+                    continue
 
                 if user_query in ["/exit", "/quit"]:
                     break
@@ -115,14 +146,24 @@ class InteractiveSession:
                             )
                         continue
 
-                    await self.streaming_handler.execute_streaming_query(
-                        user_query, self.agent
-                    )
+                    # Execute query with cancellation support
+                    await self._execute_query_with_cancellation(user_query)
                     self.display.show_newline()  # Empty line for readability
 
             except KeyboardInterrupt:
-                self.console.print(
-                    "\n[yellow]Use '/exit' or '/quit' to leave.[/yellow]"
-                )
+                # Handle Ctrl+C - cancel current task if running
+                if self.current_task and not self.current_task.done():
+                    if self.cancellation_token is not None:
+                        self.cancellation_token.set()
+                    self.current_task.cancel()
+                    try:
+                        await self.current_task
+                    except asyncio.CancelledError:
+                        pass
+                    self.console.print("\n[yellow]Query interrupted[/yellow]")
+                else:
+                    self.console.print(
+                        "\n[yellow]Use '/exit' or '/quit' to leave.[/yellow]"
+                    )
             except Exception as e:
                 self.console.print(f"[bold red]Error:[/bold red] {str(e)}")

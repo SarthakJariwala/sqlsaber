@@ -1,5 +1,6 @@
 """Abstract base class for SQL agents."""
 
+import asyncio
 import json
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator, Dict, List, Optional
@@ -27,9 +28,18 @@ class BaseSQLAgent(ABC):
 
     @abstractmethod
     async def query_stream(
-        self, user_query: str, use_history: bool = True
+        self,
+        user_query: str,
+        use_history: bool = True,
+        cancellation_token: asyncio.Event | None = None,
     ) -> AsyncIterator[StreamEvent]:
-        """Process a user query and stream responses."""
+        """Process a user query and stream responses.
+
+        Args:
+            user_query: The user's query to process
+            use_history: Whether to include conversation history
+            cancellation_token: Optional event to signal cancellation
+        """
         pass
 
     def clear_history(self):

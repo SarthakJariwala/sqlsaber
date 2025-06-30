@@ -1,5 +1,7 @@
 """Streaming query handling for the CLI."""
 
+import asyncio
+
 from rich.console import Console
 
 from sqlsaber.agents.base import BaseSQLAgent
@@ -13,7 +15,12 @@ class StreamingQueryHandler:
         self.console = console
         self.display = DisplayManager(console)
 
-    async def execute_streaming_query(self, user_query: str, agent: BaseSQLAgent):
+    async def execute_streaming_query(
+        self,
+        user_query: str,
+        agent: BaseSQLAgent,
+        cancellation_token: asyncio.Event | None = None,
+    ):
         """Execute a query with streaming display."""
 
         has_content = False
@@ -24,7 +31,12 @@ class StreamingQueryHandler:
         status.start()
 
         try:
-            async for event in agent.query_stream(user_query):
+            async for event in agent.query_stream(
+                user_query, cancellation_token=cancellation_token
+            ):
+                if cancellation_token is not None and cancellation_token.is_set():
+                    break
+
                 if event.type == "tool_use":
                     # Stop any ongoing status, but don't mark has_content yet
                     self._stop_status(status)
@@ -83,6 +95,13 @@ class StreamingQueryHandler:
                         has_content = True
                     self.display.show_error(event.data)
 
+        except asyncio.CancelledError:
+            # Handle cancellation gracefully
+            self._stop_status(status)
+            if explanation_started:
+                self.display.show_newline()
+            self.console.print("[yellow]Query interrupted[/yellow]")
+            return
         finally:
             # Make sure status is stopped
             self._stop_status(status)

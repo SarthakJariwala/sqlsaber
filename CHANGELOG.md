@@ -9,7 +9,10 @@ All notable changes to SQLSaber will be documented in this file.
 - Slash command autocomplete in interactive mode
   - Commands now use slash prefix: `/clear`, `/exit`, `/quit`
   - Autocomplete shows when typing `/` at the start of a line
-  - Press Enter to select and execute commands
+  - Press Tab to select suggestion
+- Query interruption with Ctrl+C in interactive mode
+  - Press Ctrl+C during query execution to gracefully cancel ongoing operations
+  - Preserves conversation history up to the interruption point
 
 ### Changed
 

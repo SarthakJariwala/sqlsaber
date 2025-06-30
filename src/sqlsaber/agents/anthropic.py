@@ -1,7 +1,8 @@
 """Anthropic-specific SQL agent implementation."""
 
+import asyncio
 import json
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List
 
 from anthropic import AsyncAnthropic
 
@@ -21,7 +22,7 @@ class AnthropicSQLAgent(BaseSQLAgent):
     """SQL Agent using Anthropic SDK directly."""
 
     def __init__(
-        self, db_connection: BaseDatabaseConnection, database_name: Optional[str] = None
+        self, db_connection: BaseDatabaseConnection, database_name: str | None = None
     ):
         super().__init__(db_connection)
 
@@ -164,7 +165,7 @@ Guidelines:
 
         return base_prompt
 
-    def add_memory(self, content: str) -> Optional[str]:
+    def add_memory(self, content: str) -> str | None:
         """Add a memory for the current database."""
         if not self.database_name:
             return None
@@ -174,7 +175,7 @@ Guidelines:
         self.system_prompt = self._build_system_prompt()
         return memory.id
 
-    async def execute_sql(self, query: str, limit: Optional[int] = None) -> str:
+    async def execute_sql(self, query: str, limit: int | None = None) -> str:
         """Execute a SQL query against the database with streaming support."""
         # Call parent implementation for core functionality
         result = await super().execute_sql(query, limit)
@@ -203,10 +204,18 @@ Guidelines:
         return await super().process_tool_call(tool_name, tool_input)
 
     async def _process_stream_events(
-        self, stream, content_blocks: List[Dict], tool_use_blocks: List[Dict]
+        self,
+        stream,
+        content_blocks: List[Dict],
+        tool_use_blocks: List[Dict],
+        cancellation_token: asyncio.Event | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """Process stream events and yield appropriate StreamEvents."""
         async for event in stream:
+            # Only check cancellation if token is provided
+            if cancellation_token is not None and cancellation_token.is_set():
+                return
+
             if event.type == "content_block_start":
                 if hasattr(event.content_block, "type"):
                     if event.content_block.type == "tool_use":
@@ -253,11 +262,17 @@ Guidelines:
         return "stop"
 
     async def _process_tool_results(
-        self, response: StreamingResponse
+        self,
+        response: StreamingResponse,
+        cancellation_token: asyncio.Event | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """Process tool results and yield appropriate events."""
         tool_results = []
         for block in response.content:
+            # Only check cancellation if token is provided
+            if cancellation_token is not None and cancellation_token.is_set():
+                return
+
             if block.get("type") == "tool_use":
                 yield StreamEvent(
                     "tool_use",
@@ -304,7 +319,10 @@ Guidelines:
         yield StreamEvent("tool_result_data", tool_results)
 
     async def query_stream(
-        self, user_query: str, use_history: bool = True
+        self,
+        user_query: str,
+        use_history: bool = True,
+        cancellation_token: asyncio.Event | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """Process a user query and stream responses."""
         # Initialize for tracking state
@@ -322,7 +340,11 @@ Guidelines:
         try:
             # Create initial stream and get response
             response = None
-            async for event in self._create_and_process_stream(messages):
+            async for event in self._create_and_process_stream(
+                messages, cancellation_token
+            ):
+                if cancellation_token is not None and cancellation_token.is_set():
+                    return
                 if event.type == "response_ready":
                     response = event.data
                 else:
@@ -332,14 +354,21 @@ Guidelines:
 
             # Process tool calls if needed
             while response is not None and response.stop_reason == "tool_use":
+                # Check for cancellation at the start of tool cycle
+                if cancellation_token is not None and cancellation_token.is_set():
+                    return
+
                 # Add assistant's response to conversation
                 collected_content.append(
                     {"role": "assistant", "content": response.content}
                 )
 
-                # Process tool results
+                # Process tool results - DO NOT check cancellation during tool execution
+                # as this would break the tool_use -> tool_result API contract
                 tool_results = []
-                async for event in self._process_tool_results(response):
+                async for event in self._process_tool_results(
+                    response, None
+                ):  # Pass None to disable cancellation checks
                     if event.type == "tool_result_data":
                         tool_results = event.data
                     else:
@@ -347,6 +376,12 @@ Guidelines:
 
                 # Continue conversation with tool results
                 collected_content.append({"role": "user", "content": tool_results})
+                if use_history:
+                    self.conversation_history.extend(collected_content)
+
+                # Check for cancellation AFTER tool results are complete
+                if cancellation_token is not None and cancellation_token.is_set():
+                    return
 
                 # Signal that we're processing the tool results
                 yield StreamEvent("processing", "Analyzing results...")
@@ -354,8 +389,10 @@ Guidelines:
                 # Get next response
                 response = None
                 async for event in self._create_and_process_stream(
-                    messages + collected_content
+                    messages + collected_content, cancellation_token
                 ):
+                    if cancellation_token is not None and cancellation_token.is_set():
+                        return
                     if event.type == "response_ready":
                         response = event.data
                     else:
@@ -363,21 +400,19 @@ Guidelines:
 
             # Update conversation history if using history
             if use_history:
-                self.conversation_history.append(
-                    {"role": "user", "content": user_query}
-                )
-                self.conversation_history.extend(collected_content)
                 # Add final assistant response
                 if response is not None:
                     self.conversation_history.append(
                         {"role": "assistant", "content": response.content}
                     )
 
+        except asyncio.CancelledError:
+            return
         except Exception as e:
             yield StreamEvent("error", str(e))
 
     async def _create_and_process_stream(
-        self, messages: List[Dict]
+        self, messages: List[Dict], cancellation_token: asyncio.Event | None = None
     ) -> AsyncIterator[StreamEvent]:
         """Create a stream and yield events while building response."""
         stream = await self.client.messages.create(
@@ -393,8 +428,11 @@ Guidelines:
         tool_use_blocks = []
 
         async for event in self._process_stream_events(
-            stream, content_blocks, tool_use_blocks
+            stream, content_blocks, tool_use_blocks, cancellation_token
         ):
+            # Only check cancellation if token is provided
+            if cancellation_token is not None and cancellation_token.is_set():
+                return
             yield event
 
         # Finalize tool blocks and create response
