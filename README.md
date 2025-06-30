@@ -191,23 +191,24 @@ The MCP server uses your existing SQLSaber database configurations, so make sure
 
 ## How It Works
 
-SQLSaber uses an intelligent three-step process optimized for minimal token usage:
+SQLSaber uses a multi-step process to gather the right context, provide it to the model, and execute SQL queries to get the right answers:
+
+![](./sqlsaber.svg)
 
 ### 🔍 Discovery Phase
 
 1. **List Tables Tool**: Quickly discovers available tables with row counts
-2. **Pattern Matching**: Identifies relevant tables based on your query using SQL LIKE patterns
+2. **Pattern Matching**: Identifies relevant tables based on your query
 
 ### 📋 Schema Analysis
 
-3. **Smart Introspection**: Analyzes only the specific table structures needed for your query
-4. **Selective Loading**: Fetches schema information only for relevant tables
+3. **Smart Schema Introspection**: Analyzes only the specific table structures needed for your query
 
 ### ⚡ Execution Phase
 
-5. **SQL Generation**: Creates optimized SQL queries based on natural language input
-6. **Safe Execution**: Runs queries with built-in protections against destructive operations
-7. **Result Formatting**: Presents results with syntax highlighting and explanations
+4. **SQL Generation**: Creates optimized SQL queries based on natural language input
+5. **Safe Execution**: Runs read-only queries with built-in protections against destructive operations
+6. **Result Formatting**: Presents results with explanations in tables and optionally, visualizes using plots
 
 ## Contributing
 
