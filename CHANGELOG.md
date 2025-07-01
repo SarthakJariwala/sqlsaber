@@ -6,6 +6,11 @@ All notable changes to SQLSaber will be documented in this file.
 
 ### Added
 
+- Table name autocomplete with "@" prefix in interactive mode
+
+  - Type "@" followed by table name to get fuzzy matching completions
+  - Supports schema-aware completions (e.g., "@sample" matches "public.sample")
+
 - Rich markdown display for assistant responses
   - After streaming completes, the final response is displayed as formatted markdown
 

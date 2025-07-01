@@ -4,41 +4,17 @@ import asyncio
 from typing import Optional
 
 import questionary
-from prompt_toolkit.completion import Completer, Completion
 from rich.console import Console
 from rich.panel import Panel
 
 from sqlsaber.agents.base import BaseSQLAgent
+from sqlsaber.cli.completers import (
+    CompositeCompleter,
+    SlashCommandCompleter,
+    TableNameCompleter,
+)
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.streaming import StreamingQueryHandler
-
-
-class SlashCommandCompleter(Completer):
-    """Custom completer for slash commands."""
-
-    def get_completions(self, document, complete_event):
-        """Get completions for slash commands."""
-        # Only provide completions if the line starts with "/"
-        text = document.text
-        if text.startswith("/"):
-            # Get the partial command after the slash
-            partial_cmd = text[1:]
-
-            # Define available commands with descriptions
-            commands = [
-                ("clear", "Clear conversation history"),
-                ("exit", "Exit the interactive session"),
-                ("quit", "Exit the interactive session"),
-            ]
-
-            # Yield completions that match the partial command
-            for cmd, description in commands:
-                if cmd.startswith(partial_cmd):
-                    yield Completion(
-                        cmd,
-                        start_position=-len(partial_cmd),
-                        display_meta=description,
-                    )
 
 
 class InteractiveSession:
@@ -51,6 +27,7 @@ class InteractiveSession:
         self.streaming_handler = StreamingQueryHandler(console)
         self.current_task: Optional[asyncio.Task] = None
         self.cancellation_token: Optional[asyncio.Event] = None
+        self.table_completer = TableNameCompleter()
 
     def show_welcome_message(self):
         """Display welcome message for interactive mode."""
@@ -63,7 +40,8 @@ class InteractiveSession:
                 "[bold green]SQLSaber - Use the agent Luke![/bold green]\n\n"
                 "[bold]Your agentic SQL assistant.[/bold]\n\n\n"
                 "[dim]Use '/clear' to reset conversation, '/exit' or '/quit' to leave.[/dim]\n\n"
-                "[dim]Start a message with '#' to add something to agent's memory for this database.[/dim]",
+                "[dim]Start a message with '#' to add something to agent's memory for this database.[/dim]\n\n"
+                "[dim]Type '@' to get table name completions.[/dim]",
                 border_style="green",
             )
         )
@@ -74,6 +52,39 @@ class InteractiveSession:
             "[dim]Press Esc-Enter or Meta-Enter to submit your query.[/dim]\n"
             "[dim]Press Ctrl+C during query execution to interrupt and return to prompt.[/dim]\n"
         )
+
+    async def _update_table_cache(self):
+        """Update the table completer cache with fresh data."""
+        try:
+            # Use the schema manager directly which has built-in caching
+            tables_data = await self.agent.schema_manager.list_tables()
+
+            # Parse the table information
+            table_list = []
+            if isinstance(tables_data, dict) and "tables" in tables_data:
+                for table in tables_data["tables"]:
+                    if isinstance(table, dict):
+                        name = table.get("name", "")
+                        schema = table.get("schema", "")
+                        full_name = table.get("full_name", "")
+
+                        # Use full_name if available, otherwise construct it
+                        if full_name:
+                            table_name = full_name
+                        elif schema and schema != "main":
+                            table_name = f"{schema}.{name}"
+                        else:
+                            table_name = name
+
+                        # No description needed - cleaner completions
+                        table_list.append((table_name, ""))
+
+            # Update the completer cache
+            self.table_completer.update_cache(table_list)
+
+        except Exception:
+            # If there's an error, just use empty cache
+            self.table_completer.update_cache([])
 
     async def _execute_query_with_cancellation(self, user_query: str):
         """Execute a query with cancellation support."""
@@ -101,6 +112,9 @@ class InteractiveSession:
         """Run the interactive session loop."""
         self.show_welcome_message()
 
+        # Initialize table cache
+        await self._update_table_cache()
+
         while True:
             try:
                 user_query = await questionary.text(
@@ -108,7 +122,9 @@ class InteractiveSession:
                     qmark="",
                     multiline=True,
                     instruction="",
-                    completer=SlashCommandCompleter(),
+                    completer=CompositeCompleter(
+                        SlashCommandCompleter(), self.table_completer
+                    ),
                 ).ask_async()
 
                 if not user_query:

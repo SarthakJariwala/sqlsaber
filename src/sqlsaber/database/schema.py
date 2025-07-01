@@ -683,6 +683,13 @@ class SchemaManager:
 
     async def list_tables(self) -> Dict[str, Any]:
         """Get a list of all tables with basic information like row counts."""
+        # Check cache first
+        cache_key = "list_tables"
+        cached_data = self._get_cached_tables(cache_key)
+        if cached_data is not None:
+            return cached_data
+
+        # Fetch from database if not cached
         tables = await self.introspector.list_tables_info(self.db)
 
         # Format the result
@@ -699,4 +706,14 @@ class SchemaManager:
                 }
             )
 
+        # Cache the result
+        self._schema_cache[cache_key] = (time.time(), result)
         return result
+
+    def _get_cached_tables(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Get table list from cache if available and not expired."""
+        if cache_key in self._schema_cache:
+            cached_time, cached_data = self._schema_cache[cache_key]
+            if time.time() - cached_time < self.cache_ttl:
+                return cached_data
+        return None
