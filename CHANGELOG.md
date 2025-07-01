@@ -4,6 +4,8 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-07-01
+
 ### Added
 
 - Table name autocomplete with "@" prefix in interactive mode
