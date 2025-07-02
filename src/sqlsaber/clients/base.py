@@ -1,13 +1,12 @@
 """Abstract base class for LLM clients."""
 
 from abc import ABC
-from typing import Optional
 
 
 class BaseLLMClient(ABC):
     """Abstract base class for LLM API clients."""
 
-    def __init__(self, api_key: str, base_url: Optional[str] = None):
+    def __init__(self, api_key: str, base_url: str | None = None):
         """Initialize the client with API key and optional base URL.
 
         Args:

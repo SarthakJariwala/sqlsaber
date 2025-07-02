@@ -1,6 +1,6 @@
 """Exception classes for LLM client errors."""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class LLMClientError(Exception):
@@ -9,9 +9,9 @@ class LLMClientError(Exception):
     def __init__(
         self,
         message: str,
-        error_type: Optional[str] = None,
-        status_code: Optional[int] = None,
-        request_id: Optional[str] = None,
+        error_type: str | None = None,
+        status_code: int | None = None,
+        request_id: str | None = None,
     ):
         super().__init__(message)
         self.error_type = error_type
@@ -90,8 +90,8 @@ STATUS_CODE_TO_EXCEPTION = {
 
 def create_exception_from_response(
     status_code: int,
-    response_data: Dict[str, Any],
-    request_id: Optional[str] = None,
+    response_data: dict[str, Any],
+    request_id: str | None = None,
 ) -> LLMClientError:
     """Create appropriate exception from HTTP response."""
     error_data = response_data.get("error", {})

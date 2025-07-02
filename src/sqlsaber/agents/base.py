@@ -3,7 +3,7 @@
 import asyncio
 import json
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator
 
 from uniplot import histogram, plot
 
@@ -24,7 +24,7 @@ class BaseSQLAgent(ABC):
     def __init__(self, db_connection: BaseDatabaseConnection):
         self.db = db_connection
         self.schema_manager = SchemaManager(db_connection)
-        self.conversation_history: List[Dict[str, Any]] = []
+        self.conversation_history: list[dict[str, Any]] = []
 
     @abstractmethod
     async def query_stream(
@@ -59,7 +59,7 @@ class BaseSQLAgent(ABC):
         else:
             return "database"  # Fallback
 
-    async def introspect_schema(self, table_pattern: Optional[str] = None) -> str:
+    async def introspect_schema(self, table_pattern: str | None = None) -> str:
         """Introspect database schema to understand table structures."""
         try:
             # Pass table_pattern to get_schema_info for efficient filtering at DB level
@@ -96,7 +96,7 @@ class BaseSQLAgent(ABC):
         except Exception as e:
             return json.dumps({"error": f"Error listing tables: {str(e)}"})
 
-    async def execute_sql(self, query: str, limit: Optional[int] = None) -> str:
+    async def execute_sql(self, query: str, limit: int | None = None) -> str:
         """Execute a SQL query against the database."""
         try:
             # Security check - only allow SELECT queries unless write is enabled
@@ -147,7 +147,7 @@ class BaseSQLAgent(ABC):
             return json.dumps({"error": error_msg, "suggestions": suggestions})
 
     async def process_tool_call(
-        self, tool_name: str, tool_input: Dict[str, Any]
+        self, tool_name: str, tool_input: dict[str, Any]
     ) -> str:
         """Process a tool call and return the result."""
         if tool_name == "list_tables":
@@ -170,7 +170,7 @@ class BaseSQLAgent(ABC):
         else:
             return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
-    def _validate_write_operation(self, query: str) -> Optional[str]:
+    def _validate_write_operation(self, query: str) -> str | None:
         """Validate if a write operation is allowed.
 
         Returns:
@@ -206,12 +206,12 @@ class BaseSQLAgent(ABC):
 
     async def plot_data(
         self,
-        y_values: List[float],
-        x_values: Optional[List[float]] = None,
+        y_values: list[float],
+        x_values: list[float] | None = None,
         plot_type: str = "line",
-        title: Optional[str] = None,
-        x_label: Optional[str] = None,
-        y_label: Optional[str] = None,
+        title: str | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
     ) -> str:
         """Create a terminal plot using uniplot.
 

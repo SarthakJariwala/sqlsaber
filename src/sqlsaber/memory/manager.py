@@ -1,7 +1,5 @@
 """Memory manager for handling database-specific context and memories."""
 
-from typing import List, Optional
-
 from sqlsaber.memory.storage import Memory, MemoryStorage
 
 
@@ -15,7 +13,7 @@ class MemoryManager:
         """Add a new memory for the specified database."""
         return self.storage.add_memory(database_name, content)
 
-    def get_memories(self, database_name: str) -> List[Memory]:
+    def get_memories(self, database_name: str) -> list[Memory]:
         """Get all memories for the specified database."""
         return self.storage.get_memories(database_name)
 
@@ -27,7 +25,7 @@ class MemoryManager:
         """Clear all memories for the specified database."""
         return self.storage.clear_memories(database_name)
 
-    def get_memory_by_id(self, database_name: str, memory_id: str) -> Optional[Memory]:
+    def get_memory_by_id(self, database_name: str, memory_id: str) -> Memory | None:
         """Get a specific memory by ID."""
         return self.storage.get_memory_by_id(database_name, memory_id)
 
@@ -72,6 +70,6 @@ Use this context to better understand the user's needs and provide more relevant
             ],
         }
 
-    def list_databases_with_memories(self) -> List[str]:
+    def list_databases_with_memories(self) -> list[str]:
         """List all databases that have memories."""
         return self.storage.list_databases_with_memories()

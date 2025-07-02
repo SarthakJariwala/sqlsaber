@@ -1,7 +1,6 @@
 """Model management CLI commands."""
 
 import asyncio
-from typing import Dict, List
 
 import httpx
 import questionary
@@ -28,7 +27,7 @@ class ModelManager:
     DEFAULT_MODEL = "anthropic:claude-sonnet-4-20250514"
     MODELS_API_URL = "https://models.dev/api.json"
 
-    async def fetch_available_models(self) -> List[Dict]:
+    async def fetch_available_models(self) -> list[dict]:
         """Fetch available models from models.dev API."""
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:

@@ -6,7 +6,7 @@ import platform
 import stat
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import quote_plus
 
 import keyring
@@ -19,16 +19,16 @@ class DatabaseConfig:
 
     name: str
     type: str  # postgresql, mysql, sqlite, csv
-    host: Optional[str]
-    port: Optional[int]
+    host: str | None
+    port: int | None
     database: str
-    username: Optional[str]
-    password: Optional[str] = None
-    ssl_mode: Optional[str] = None
-    ssl_ca: Optional[str] = None
-    ssl_cert: Optional[str] = None
-    ssl_key: Optional[str] = None
-    schema: Optional[str] = None
+    username: str | None
+    password: str | None = None
+    ssl_mode: str | None = None
+    ssl_ca: str | None = None
+    ssl_cert: str | None = None
+    ssl_key: str | None = None
+    schema: str | None = None
 
     def to_connection_string(self) -> str:
         """Convert config to database connection string."""
@@ -115,7 +115,7 @@ class DatabaseConfig:
         else:
             raise ValueError(f"Unsupported database type: {self.type}")
 
-    def _get_password_from_keyring(self) -> Optional[str]:
+    def _get_password_from_keyring(self) -> str | None:
         """Get password from OS keyring."""
         try:
             return keyring.get_password("sqlsaber", f"{self.name}_{self.username}")
@@ -133,7 +133,7 @@ class DatabaseConfig:
         except Exception:
             pass
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "name": self.name,
@@ -150,7 +150,7 @@ class DatabaseConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "DatabaseConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "DatabaseConfig":
         """Create from dictionary."""
         return cls(
             name=data["name"],
@@ -202,7 +202,7 @@ class DatabaseConfigManager:
             # The directory/file creation should still work
             pass
 
-    def _load_config(self) -> Dict[str, Any]:
+    def _load_config(self) -> dict[str, Any]:
         """Load configuration from file."""
         if not self.config_file.exists():
             return {"default": None, "connections": {}}
@@ -213,7 +213,7 @@ class DatabaseConfigManager:
         except (json.JSONDecodeError, IOError):
             return {"default": None, "connections": {}}
 
-    def _save_config(self, config: Dict[str, Any]) -> None:
+    def _save_config(self, config: dict[str, Any]) -> None:
         """Save configuration to file."""
         with open(self.config_file, "w") as f:
             json.dump(config, f, indent=2)
@@ -222,7 +222,7 @@ class DatabaseConfigManager:
         self._set_secure_permissions(self.config_file, is_directory=False)
 
     def add_database(
-        self, db_config: DatabaseConfig, password: Optional[str] = None
+        self, db_config: DatabaseConfig, password: str | None = None
     ) -> None:
         """Add a database configuration."""
         config = self._load_config()
@@ -244,7 +244,7 @@ class DatabaseConfigManager:
 
         self._save_config(config)
 
-    def get_database(self, name: str) -> Optional[DatabaseConfig]:
+    def get_database(self, name: str) -> DatabaseConfig | None:
         """Get a database configuration by name."""
         config = self._load_config()
 
@@ -253,7 +253,7 @@ class DatabaseConfigManager:
 
         return DatabaseConfig.from_dict(config["connections"][name])
 
-    def get_default_database(self) -> Optional[DatabaseConfig]:
+    def get_default_database(self) -> DatabaseConfig | None:
         """Get the default database configuration."""
         config = self._load_config()
 
@@ -263,7 +263,7 @@ class DatabaseConfigManager:
 
         return self.get_database(default_name)
 
-    def list_databases(self) -> List[DatabaseConfig]:
+    def list_databases(self) -> list[DatabaseConfig]:
         """List all database configurations."""
         config = self._load_config()
 
@@ -313,7 +313,7 @@ class DatabaseConfigManager:
         config = self._load_config()
         return len(config["connections"]) > 0
 
-    def get_default_name(self) -> Optional[str]:
+    def get_default_name(self) -> str | None:
         """Get the name of the default database."""
         config = self._load_config()
         return config.get("default")

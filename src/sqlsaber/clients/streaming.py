@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +16,13 @@ class AnthropicStreamAdapter:
     """
 
     def __init__(self):
-        self.content_blocks: List[Dict[str, Any]] = []
-        self.tool_use_blocks: List[Dict[str, Any]] = []
+        self.content_blocks: list[dict[str, Any]] = []
+        self.tool_use_blocks: list[dict[str, Any]] = []
 
     async def process_stream(
         self,
-        raw_stream: AsyncIterator[Dict[str, Any]],
-        cancellation_token: Optional[asyncio.Event] = None,
+        raw_stream: AsyncIterator[dict[str, Any]],
+        cancellation_token: asyncio.Event | None = None,
     ) -> AsyncIterator[Any]:
         """Process raw stream events and yield adapted events.
 
@@ -43,7 +43,7 @@ class AnthropicStreamAdapter:
             if adapted_event:
                 yield adapted_event
 
-    def _adapt_event(self, raw_event: Dict[str, Any]) -> Optional[Any]:
+    def _adapt_event(self, raw_event: dict[str, Any]) -> Any | None:
         """Adapt a raw stream event to match SDK format.
 
         Args:
@@ -144,7 +144,7 @@ class AnthropicStreamAdapter:
             return "tool_use"
         return "stop"
 
-    def get_content_blocks(self) -> List[Dict[str, Any]]:
+    def get_content_blocks(self) -> list[dict[str, Any]]:
         """Get the current content blocks."""
         return self.content_blocks.copy()
 
@@ -167,7 +167,7 @@ class PingEvent(BaseStreamEvent):
 class MessageStartEvent(BaseStreamEvent):
     """Message start event."""
 
-    def __init__(self, message: Dict[str, Any]):
+    def __init__(self, message: dict[str, Any]):
         super().__init__("message_start")
         self.message = message
 
@@ -175,7 +175,7 @@ class MessageStartEvent(BaseStreamEvent):
 class ContentBlockStartEvent(BaseStreamEvent):
     """Content block start event."""
 
-    def __init__(self, index: int, content_block: Dict[str, Any]):
+    def __init__(self, index: int, content_block: dict[str, Any]):
         super().__init__("content_block_start")
         self.index = index
         self.content_block = MockContentBlock(content_block)
@@ -184,7 +184,7 @@ class ContentBlockStartEvent(BaseStreamEvent):
 class ContentBlockDeltaEvent(BaseStreamEvent):
     """Content block delta event."""
 
-    def __init__(self, index: int, delta: Dict[str, Any]):
+    def __init__(self, index: int, delta: dict[str, Any]):
         super().__init__("content_block_delta")
         self.index = index
         self.delta = MockDelta(delta)
@@ -201,7 +201,7 @@ class ContentBlockStopEvent(BaseStreamEvent):
 class MessageDeltaEvent(BaseStreamEvent):
     """Message delta event."""
 
-    def __init__(self, delta: Dict[str, Any], usage: Dict[str, Any]):
+    def __init__(self, delta: dict[str, Any], usage: dict[str, Any]):
         super().__init__("message_delta")
         self.delta = delta
         self.usage = usage
@@ -217,7 +217,7 @@ class MessageStopEvent(BaseStreamEvent):
 class ErrorEvent(BaseStreamEvent):
     """Error event."""
 
-    def __init__(self, error_data: Dict[str, Any]):
+    def __init__(self, error_data: dict[str, Any]):
         super().__init__("error")
         self.error = error_data
 
@@ -226,7 +226,7 @@ class ErrorEvent(BaseStreamEvent):
 class MockContentBlock:
     """Mock content block object that matches SDK structure."""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]):
         self.type = data.get("type")
         self.id = data.get("id")
         self.name = data.get("name")
@@ -236,7 +236,7 @@ class MockContentBlock:
 class MockDelta:
     """Mock delta object that matches SDK structure."""
 
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]):
         self.data = data
         # Set attributes based on delta type
         if data.get("type") == "text_delta":
@@ -252,6 +252,6 @@ class MockDelta:
 class StreamingResponse:
     """Response object for streaming that matches the current agent's expectations."""
 
-    def __init__(self, content: List[Dict[str, Any]], stop_reason: str):
+    def __init__(self, content: list[dict[str, Any]], stop_reason: str):
         self.content = content
         self.stop_reason = stop_reason

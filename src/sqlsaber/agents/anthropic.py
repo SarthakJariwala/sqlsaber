@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import Any, AsyncIterator, Dict, List, Union
+from typing import Any, AsyncIterator
 
 from sqlsaber.agents.base import BaseSQLAgent
 from sqlsaber.agents.streaming import (
@@ -49,7 +49,7 @@ class AnthropicSQLAgent(BaseSQLAgent):
         self._last_query = None
 
         # Define tools in the new format
-        self.tools: List[ToolDefinition] = [
+        self.tools: list[ToolDefinition] = [
             ToolDefinition(
                 name="list_tables",
                 description="Get a list of all tables in the database with row counts. Use this first to discover available tables.",
@@ -206,14 +206,14 @@ Guidelines:
         return result
 
     async def process_tool_call(
-        self, tool_name: str, tool_input: Dict[str, Any]
+        self, tool_name: str, tool_input: dict[str, Any]
     ) -> str:
         """Process a tool call and return the result."""
         # Use parent implementation for core tools
         return await super().process_tool_call(tool_name, tool_input)
 
     def _convert_user_message_to_message(
-        self, msg_content: Union[str, List[Dict[str, Any]]]
+        self, msg_content: str | list[dict[str, Any]]
     ) -> Message:
         """Convert user message content to Message object."""
         if isinstance(msg_content, str):
@@ -235,7 +235,7 @@ Guidelines:
         return Message(MessageRole.USER, str(msg_content))
 
     def _convert_assistant_message_to_message(
-        self, msg_content: Union[str, List[Dict[str, Any]]]
+        self, msg_content: str | list[dict[str, Any]]
     ) -> Message:
         """Convert assistant message content to Message object."""
         if isinstance(msg_content, str):
@@ -268,7 +268,7 @@ Guidelines:
         # Fallback to string representation
         return Message(MessageRole.ASSISTANT, str(msg_content))
 
-    def _convert_history_to_messages(self) -> List[Message]:
+    def _convert_history_to_messages(self) -> list[Message]:
         """Convert conversation history to Message objects."""
         messages = []
         for msg in self.conversation_history:
@@ -281,7 +281,7 @@ Guidelines:
         return messages
 
     def _convert_tool_results_to_message(
-        self, tool_results: List[Dict[str, Any]]
+        self, tool_results: list[dict[str, Any]]
     ) -> Message:
         """Convert tool results to a user Message object."""
         tool_result_blocks = []
@@ -292,7 +292,7 @@ Guidelines:
         return Message(MessageRole.USER, tool_result_blocks)
 
     def _convert_response_content_to_message(
-        self, content: List[Dict[str, Any]]
+        self, content: list[dict[str, Any]]
     ) -> Message:
         """Convert response content to assistant Message object."""
         content_blocks = []
@@ -316,9 +316,9 @@ Guidelines:
 
     async def _execute_and_yield_tool_results(
         self,
-        response_content: List[Dict[str, Any]],
+        response_content: list[dict[str, Any]],
         cancellation_token: asyncio.Event | None = None,
-    ) -> AsyncIterator[Union[StreamEvent, List[Dict[str, Any]]]]:
+    ) -> AsyncIterator[StreamEvent | list[dict[str, Any]]]:
         """Execute tool calls and yield appropriate stream events."""
         tool_results = []
 
@@ -377,7 +377,7 @@ Guidelines:
         self,
         stream_iterator: AsyncIterator[Any],
         cancellation_token: asyncio.Event | None = None,
-    ) -> AsyncIterator[Union[StreamEvent, Any]]:
+    ) -> AsyncIterator[StreamEvent | Any]:
         """Handle streaming events and yield stream events, return final response."""
         response = None
 
@@ -408,7 +408,7 @@ Guidelines:
 
         yield response
 
-    def _create_message_request(self, messages: List[Message]) -> CreateMessageRequest:
+    def _create_message_request(self, messages: list[Message]) -> CreateMessageRequest:
         """Create a CreateMessageRequest with standard parameters."""
         return CreateMessageRequest(
             model=self.model,

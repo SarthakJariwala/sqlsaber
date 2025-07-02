@@ -3,7 +3,6 @@
 import asyncio
 import getpass
 from pathlib import Path
-from typing import Optional
 
 import questionary
 import typer
@@ -34,24 +33,24 @@ def add_database(
         "-t",
         help="Database type (postgresql, mysql, sqlite)",
     ),
-    host: Optional[str] = typer.Option(None, "--host", "-h", help="Database host"),
-    port: Optional[int] = typer.Option(None, "--port", "-p", help="Database port"),
-    database: Optional[str] = typer.Option(
+    host: str | None = typer.Option(None, "--host", "-h", help="Database host"),
+    port: int | None = typer.Option(None, "--port", "-p", help="Database port"),
+    database: str | None = typer.Option(
         None, "--database", "--db", help="Database name"
     ),
-    username: Optional[str] = typer.Option(None, "--username", "-u", help="Username"),
-    ssl_mode: Optional[str] = typer.Option(
+    username: str | None = typer.Option(None, "--username", "-u", help="Username"),
+    ssl_mode: str | None = typer.Option(
         None,
         "--ssl-mode",
         help="SSL mode (disable, allow, prefer, require, verify-ca, verify-full for PostgreSQL; DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY for MySQL)",
     ),
-    ssl_ca: Optional[str] = typer.Option(
+    ssl_ca: str | None = typer.Option(
         None, "--ssl-ca", help="SSL CA certificate file path"
     ),
-    ssl_cert: Optional[str] = typer.Option(
+    ssl_cert: str | None = typer.Option(
         None, "--ssl-cert", help="SSL client certificate file path"
     ),
-    ssl_key: Optional[str] = typer.Option(
+    ssl_key: str | None = typer.Option(
         None, "--ssl-key", help="SSL client private key file path"
     ),
     interactive: bool = typer.Option(
@@ -310,7 +309,7 @@ def set_default_database(
 
 @db_app.command("test")
 def test_database(
-    name: Optional[str] = typer.Argument(
+    name: str | None = typer.Argument(
         None,
         help="Name of the database connection to test (uses default if not specified)",
     ),

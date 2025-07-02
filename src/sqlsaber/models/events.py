@@ -1,6 +1,6 @@
 """Event models for streaming and responses."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class StreamEvent:
@@ -17,10 +17,10 @@ class SQLResponse:
 
     def __init__(
         self,
-        query: Optional[str] = None,
+        query: str | None = None,
         explanation: str = "",
-        results: Optional[List[Dict[str, Any]]] = None,
-        error: Optional[str] = None,
+        results: list[dict[str, Any]] | None = None,
+        error: str | None = None,
     ):
         self.query = query
         self.explanation = explanation

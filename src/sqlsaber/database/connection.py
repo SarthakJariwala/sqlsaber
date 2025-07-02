@@ -1,7 +1,7 @@
 """Database connection management."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import urlparse, parse_qs
 import ssl
 from pathlib import Path
@@ -30,7 +30,7 @@ class BaseDatabaseConnection(ABC):
         pass
 
     @abstractmethod
-    async def execute_query(self, query: str, *args) -> List[Dict[str, Any]]:
+    async def execute_query(self, query: str, *args) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
         All queries run in a transaction that is rolled back at the end,
@@ -44,10 +44,10 @@ class PostgreSQLConnection(BaseDatabaseConnection):
 
     def __init__(self, connection_string: str):
         super().__init__(connection_string)
-        self._pool: Optional[asyncpg.Pool] = None
+        self._pool: asyncpg.Pool | None = None
         self._ssl_context = self._create_ssl_context()
 
-    def _create_ssl_context(self) -> Optional[ssl.SSLContext]:
+    def _create_ssl_context(self) -> ssl.SSLContext | None:
         """Create SSL context from connection string parameters."""
         parsed = urlparse(self.connection_string)
         if not parsed.query:
@@ -112,7 +112,7 @@ class PostgreSQLConnection(BaseDatabaseConnection):
             await self._pool.close()
             self._pool = None
 
-    async def execute_query(self, query: str, *args) -> List[Dict[str, Any]]:
+    async def execute_query(self, query: str, *args) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
         All queries run in a transaction that is rolled back at the end,
@@ -137,7 +137,7 @@ class MySQLConnection(BaseDatabaseConnection):
 
     def __init__(self, connection_string: str):
         super().__init__(connection_string)
-        self._pool: Optional[aiomysql.Pool] = None
+        self._pool: aiomysql.Pool | None = None
         self._parse_connection_string()
 
     def _parse_connection_string(self):
@@ -217,7 +217,7 @@ class MySQLConnection(BaseDatabaseConnection):
             await self._pool.wait_closed()
             self._pool = None
 
-    async def execute_query(self, query: str, *args) -> List[Dict[str, Any]]:
+    async def execute_query(self, query: str, *args) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
         All queries run in a transaction that is rolled back at the end,
@@ -253,7 +253,7 @@ class SQLiteConnection(BaseDatabaseConnection):
         """SQLite connections are created per query, no persistent pool to close."""
         pass
 
-    async def execute_query(self, query: str, *args) -> List[Dict[str, Any]]:
+    async def execute_query(self, query: str, *args) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
         All queries run in a transaction that is rolled back at the end,
@@ -380,7 +380,7 @@ class CSVConnection(BaseDatabaseConnection):
         except Exception as e:
             raise ValueError(f"Error loading CSV file '{self.csv_path}': {str(e)}")
 
-    async def execute_query(self, query: str, *args) -> List[Dict[str, Any]]:
+    async def execute_query(self, query: str, *args) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
         All queries run in a transaction that is rolled back at the end,

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 
 class MessageRole(str, Enum):
@@ -45,9 +45,9 @@ class ContentBlock:
     """A content block in a message."""
 
     type: ContentType
-    content: Union[str, Dict[str, Any]]
+    content: str | dict[str, Any]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary format."""
         if self.type == ContentType.TEXT:
             return {"type": "text", "text": self.content}
@@ -73,9 +73,9 @@ class Message:
     """A message in a conversation."""
 
     role: MessageRole
-    content: Union[str, List[ContentBlock]]
+    content: str | list[ContentBlock]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary format for API requests."""
         if isinstance(self.content, str):
             return {"role": self.role.value, "content": self.content}
@@ -92,9 +92,9 @@ class ToolDefinition:
 
     name: str
     description: str
-    input_schema: Dict[str, Any]
+    input_schema: dict[str, Any]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary format for API requests."""
         return {
             "name": self.name,
@@ -108,10 +108,10 @@ class ToolChoice:
     """Tool choice configuration."""
 
     type: ToolChoiceType
-    name: Optional[str] = None
+    name: str | None = None
     disable_parallel_tool_use: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary format for API requests."""
         result = {"type": self.type.value}
         if self.name:
@@ -126,16 +126,16 @@ class CreateMessageRequest:
     """Request to create a message."""
 
     model: str
-    messages: List[Message]
+    messages: list[Message]
     max_tokens: int
-    system: Optional[str] = None
-    tools: Optional[List[ToolDefinition]] = None
-    tool_choice: Optional[ToolChoice] = None
-    temperature: Optional[float] = None
+    system: str | None = None
+    tools: list[ToolDefinition] | None = None
+    tool_choice: ToolChoice | None = None
+    temperature: float | None = None
     stream: bool = False
-    stop_sequences: Optional[List[str]] = None
+    stop_sequences: list[str] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary format for API requests."""
         data = {
             "model": self.model,
@@ -174,13 +174,13 @@ class MessageResponse:
     id: str
     model: str
     role: MessageRole
-    content: List[ContentBlock]
+    content: list[ContentBlock]
     stop_reason: StopReason
-    stop_sequence: Optional[str]
+    stop_sequence: str | None
     usage: Usage
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MessageResponse":
+    def from_dict(cls, data: dict[str, Any]) -> "MessageResponse":
         """Create from API response dictionary."""
         content_blocks = []
         for block_data in data["content"]:
@@ -248,15 +248,15 @@ class ToolUseInputData(StreamEventData):
 class MessageStartData(StreamEventData):
     """Message start stream event data."""
 
-    message: Dict[str, Any]
+    message: dict[str, Any]
 
 
 @dataclass
 class MessageDeltaData(StreamEventData):
     """Message delta stream event data."""
 
-    delta: Dict[str, Any]
-    usage: Optional[Dict[str, Any]] = None
+    delta: dict[str, Any]
+    usage: dict[str, Any] | None = None
 
 
 @dataclass
@@ -264,7 +264,7 @@ class ContentBlockStartData(StreamEventData):
     """Content block start stream event data."""
 
     index: int
-    content_block: Dict[str, Any]
+    content_block: dict[str, Any]
 
 
 @dataclass
@@ -272,7 +272,7 @@ class ContentBlockDeltaData(StreamEventData):
     """Content block delta stream event data."""
 
     index: int
-    delta: Dict[str, Any]
+    delta: dict[str, Any]
 
 
 @dataclass

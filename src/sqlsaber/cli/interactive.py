@@ -1,7 +1,6 @@
 """Interactive mode handling for the CLI."""
 
 import asyncio
-from typing import Optional
 
 import questionary
 from rich.console import Console
@@ -25,8 +24,8 @@ class InteractiveSession:
         self.agent = agent
         self.display = DisplayManager(console)
         self.streaming_handler = StreamingQueryHandler(console)
-        self.current_task: Optional[asyncio.Task] = None
-        self.cancellation_token: Optional[asyncio.Event] = None
+        self.current_task: asyncio.Task | None = None
+        self.cancellation_token: asyncio.Event | None = None
         self.table_completer = TableNameCompleter()
 
     def show_welcome_message(self):

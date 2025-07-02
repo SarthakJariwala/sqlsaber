@@ -1,7 +1,6 @@
 """Display utilities for the CLI interface."""
 
 import json
-from typing import Optional
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -19,7 +18,7 @@ class DisplayManager:
         self,
         columns: list,
         header_style: str = "bold blue",
-        title: Optional[str] = None,
+        title: str | None = None,
     ) -> Table:
         """Create a Rich table with specified columns."""
         table = Table(show_header=True, header_style=header_style, title=title)

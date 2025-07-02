@@ -5,7 +5,7 @@ import os
 import platform
 import stat
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import platformdirs
 
@@ -40,7 +40,7 @@ class ModelConfigManager:
         except (OSError, PermissionError):
             pass
 
-    def _load_config(self) -> Dict[str, Any]:
+    def _load_config(self) -> dict[str, Any]:
         """Load configuration from file."""
         if not self.config_file.exists():
             return {"model": self.DEFAULT_MODEL}
@@ -55,7 +55,7 @@ class ModelConfigManager:
         except (json.JSONDecodeError, IOError):
             return {"model": self.DEFAULT_MODEL}
 
-    def _save_config(self, config: Dict[str, Any]) -> None:
+    def _save_config(self, config: dict[str, Any]) -> None:
         """Save configuration to file."""
         with open(self.config_file, "w") as f:
             json.dump(config, f, indent=2)
@@ -83,7 +83,7 @@ class Config:
         self.api_key_manager = APIKeyManager()
         self.api_key = self._get_api_key()
 
-    def _get_api_key(self) -> Optional[str]:
+    def _get_api_key(self) -> str | None:
         """Get API key for the model provider using cascading logic."""
         model = self.model_name
 

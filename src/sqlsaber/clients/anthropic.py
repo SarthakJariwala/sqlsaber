@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from typing import Any, AsyncIterator, Dict, Optional
+from typing import Any, AsyncIterator
 
 import httpx
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class AnthropicClient(BaseLLMClient):
     """Client for Anthropic's Claude API."""
 
-    def __init__(self, api_key: str, base_url: Optional[str] = None):
+    def __init__(self, api_key: str, base_url: str | None = None):
         """Initialize the Anthropic client.
 
         Args:
@@ -27,7 +27,7 @@ class AnthropicClient(BaseLLMClient):
         """
         super().__init__(api_key, base_url)
         self.base_url = base_url or "https://api.anthropic.com"
-        self.client: Optional[httpx.AsyncClient] = None
+        self.client: httpx.AsyncClient | None = None
 
     def _get_client(self) -> httpx.AsyncClient:
         """Get or create the HTTP client."""
@@ -35,23 +35,19 @@ class AnthropicClient(BaseLLMClient):
             # Configure timeouts and connection limits for reliability
             timeout = httpx.Timeout(
                 connect=10.0,  # Connection timeout
-                read=60.0,     # Read timeout for streaming
-                write=10.0,    # Write timeout
-                pool=10.0      # Pool timeout
+                read=60.0,  # Read timeout for streaming
+                write=10.0,  # Write timeout
+                pool=10.0,  # Pool timeout
             )
             limits = httpx.Limits(
-                max_keepalive_connections=20,
-                max_connections=100,
-                keepalive_expiry=30.0
+                max_keepalive_connections=20, max_connections=100, keepalive_expiry=30.0
             )
             self.client = httpx.AsyncClient(
-                timeout=timeout,
-                limits=limits,
-                follow_redirects=True
+                timeout=timeout, limits=limits, follow_redirects=True
             )
         return self.client
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         """Get the standard headers for API requests."""
         return {
             "x-api-key": self.api_key,
@@ -62,7 +58,7 @@ class AnthropicClient(BaseLLMClient):
     async def create_message_with_tools(
         self,
         request: CreateMessageRequest,
-        cancellation_token: Optional[asyncio.Event] = None,
+        cancellation_token: asyncio.Event | None = None,
     ) -> AsyncIterator[Any]:
         """Create a message with tool support and stream the response.
 
@@ -123,7 +119,7 @@ class AnthropicClient(BaseLLMClient):
                 raise LLMClientError(f"Stream processing error: {str(e)}")
             raise
 
-    def _handle_ping_event(self, event_data: str) -> Dict[str, Any]:
+    def _handle_ping_event(self, event_data: str) -> dict[str, Any]:
         """Handle ping event data.
 
         Args:
@@ -156,8 +152,8 @@ class AnthropicClient(BaseLLMClient):
             raise LLMClientError("Stream error with invalid JSON")
 
     def _parse_event_data(
-        self, event_type: Optional[str], event_data: str
-    ) -> Optional[Dict[str, Any]]:
+        self, event_type: str | None, event_data: str
+    ) -> dict[str, Any] | None:
         """Parse event data based on event type.
 
         Args:
@@ -175,8 +171,8 @@ class AnthropicClient(BaseLLMClient):
             return None
 
     def _process_sse_line(
-        self, line: str, event_type: Optional[str]
-    ) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
+        self, line: str, event_type: str | None
+    ) -> tuple[str | None, dict[str, Any] | None]:
         """Process a single SSE line.
 
         Args:
@@ -205,8 +201,8 @@ class AnthropicClient(BaseLLMClient):
     async def _process_sse_stream(
         self,
         response: httpx.Response,
-        cancellation_token: Optional[asyncio.Event] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        cancellation_token: asyncio.Event | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """Process server-sent events from the response stream.
 
         Args:
