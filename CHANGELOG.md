@@ -6,6 +6,12 @@ All notable changes to SQLSaber will be documented in this file.
 
 ### Added
 
+- Authentication management with `saber auth` command
+  - Interactive setup for API key or Claude Pro/Max subscription
+  - `saber auth setup`
+  - `saber auth status`
+  - `saber auth reset`
+  - Persistent storage of user authentication preferences
 - New `clients` module with custom Anthropic API client
   - `AnthropicClient` for direct API communication
 
