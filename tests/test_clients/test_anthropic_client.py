@@ -36,7 +36,7 @@ class TestAnthropicClient:
         client = AnthropicClient("test-key")
         assert client.api_key == "test-key"
         assert client.base_url == "https://api.anthropic.com"
-        assert client.session is None
+        assert client.client is None
 
     def test_init_with_custom_base_url(self):
         """Test client initialization with custom base URL."""
@@ -56,32 +56,32 @@ class TestAnthropicClient:
     @pytest.mark.asyncio
     async def test_close(self, client):
         """Test client cleanup."""
-        mock_session = AsyncMock()
-        mock_session.closed = False
-        client.session = mock_session
+        mock_client = AsyncMock()
+        mock_client.is_closed = False
+        client.client = mock_client
 
         await client.close()
 
-        mock_session.close.assert_called_once()
-        assert client.session is None
+        mock_client.aclose.assert_called_once()
+        assert client.client is None
 
     @pytest.mark.asyncio
     async def test_close_no_session(self, client):
-        """Test cleanup when no session exists."""
+        """Test cleanup when no client exists."""
         # Should not raise any errors
         await client.close()
 
     @pytest.mark.asyncio
     async def test_close_already_closed_session(self, client):
-        """Test cleanup when session is already closed."""
-        mock_session = AsyncMock()
-        mock_session.closed = True
-        client.session = mock_session
+        """Test cleanup when client is already closed."""
+        mock_client = AsyncMock()
+        mock_client.is_closed = True
+        client.client = mock_client
 
         await client.close()
 
-        # Should not call close on already closed session
-        mock_session.close.assert_not_called()
+        # Should not call aclose on already closed client
+        mock_client.aclose.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_context_manager(self):

@@ -5,7 +5,7 @@ import json
 import logging
 from typing import Any, AsyncIterator, Dict, Optional
 
-import aiohttp
+import httpx
 
 from .base import BaseLLMClient
 from .exceptions import LLMClientError, create_exception_from_response
@@ -27,13 +27,13 @@ class AnthropicClient(BaseLLMClient):
         """
         super().__init__(api_key, base_url)
         self.base_url = base_url or "https://api.anthropic.com"
-        self.session: Optional[aiohttp.ClientSession] = None
+        self.client: Optional[httpx.AsyncClient] = None
 
-    def _get_session(self) -> aiohttp.ClientSession:
-        """Get or create the HTTP session."""
-        if self.session is None or self.session.closed:
-            self.session = aiohttp.ClientSession()
-        return self.session
+    def _get_client(self) -> httpx.AsyncClient:
+        """Get or create the HTTP client."""
+        if self.client is None or self.client.is_closed:
+            self.client = httpx.AsyncClient()
+        return self.client
 
     def _get_headers(self) -> Dict[str, str]:
         """Get the standard headers for API requests."""
@@ -63,19 +63,21 @@ class AnthropicClient(BaseLLMClient):
         # Force streaming to be enabled
         request.stream = True
 
-        session = self._get_session()
+        client = self._get_client()
         url = f"{self.base_url}/v1/messages"
         headers = self._get_headers()
         data = request.to_dict()
 
         try:
-            async with session.post(url, headers=headers, json=data) as response:
+            async with client.stream(
+                "POST", url, headers=headers, json=data
+            ) as response:
                 request_id = response.headers.get("request-id")
 
-                if response.status != 200:
-                    response_data = await response.json()
+                if response.status_code != 200:
+                    response_data = response.json()
                     raise create_exception_from_response(
-                        response.status, response_data, request_id
+                        response.status_code, response_data, request_id
                     )
 
                 # Use stream adapter to convert raw events and track state
@@ -107,7 +109,7 @@ class AnthropicClient(BaseLLMClient):
 
     async def _process_sse_stream(
         self,
-        response: aiohttp.ClientResponse,
+        response: httpx.Response,
         cancellation_token: Optional[asyncio.Event] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """Process server-sent events from the response stream.
@@ -126,7 +128,7 @@ class AnthropicClient(BaseLLMClient):
         event_type = None
 
         try:
-            async for chunk in response.content.iter_any():
+            async for chunk in response.aiter_bytes():
                 # Check for cancellation
                 if cancellation_token is not None and cancellation_token.is_set():
                     return
@@ -181,7 +183,7 @@ class AnthropicClient(BaseLLMClient):
                             )
                             continue
 
-        except aiohttp.ClientError as e:
+        except httpx.HTTPError as e:
             raise LLMClientError(f"Network error during streaming: {str(e)}")
         except asyncio.TimeoutError:
             raise LLMClientError("Stream timeout")
@@ -189,7 +191,7 @@ class AnthropicClient(BaseLLMClient):
             raise LLMClientError(f"Unexpected error during streaming: {str(e)}")
 
     async def close(self):
-        """Close the HTTP session."""
-        if self.session and not self.session.closed:
-            await self.session.close()
-            self.session = None
+        """Close the HTTP client."""
+        if self.client and not self.client.is_closed:
+            await self.client.aclose()
+            self.client = None
