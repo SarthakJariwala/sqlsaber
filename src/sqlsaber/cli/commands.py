@@ -7,6 +7,7 @@ import typer
 from rich.console import Console
 
 from sqlsaber.agents.anthropic import AnthropicSQLAgent
+from sqlsaber.cli.auth import create_auth_app
 from sqlsaber.cli.database import create_db_app
 from sqlsaber.cli.interactive import InteractiveSession
 from sqlsaber.cli.memory import create_memory_app
@@ -134,6 +135,10 @@ def query(
     # Run the async function
     asyncio.run(run_session())
 
+
+# Add authentication management commands
+auth_app = create_auth_app()
+app.add_typer(auth_app, name="auth")
 
 # Add database management commands after main callback is defined
 db_app = create_db_app()
