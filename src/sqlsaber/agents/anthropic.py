@@ -1,25 +1,30 @@
-"""Anthropic-specific SQL agent implementation."""
+"""Anthropic-specific SQL agent implementation using the custom client."""
 
 import asyncio
 import json
 from typing import Any, AsyncIterator, Dict, List
 
-from anthropic import AsyncAnthropic
-
 from sqlsaber.agents.base import BaseSQLAgent
 from sqlsaber.agents.streaming import (
-    StreamingResponse,
     build_tool_result_block,
+)
+from sqlsaber.clients import AnthropicClient
+from sqlsaber.clients.models import (
+    ContentBlock,
+    ContentType,
+    CreateMessageRequest,
+    Message,
+    MessageRole,
+    ToolDefinition,
 )
 from sqlsaber.config.settings import Config
 from sqlsaber.database.connection import BaseDatabaseConnection
 from sqlsaber.memory.manager import MemoryManager
 from sqlsaber.models.events import StreamEvent
-from sqlsaber.models.types import ToolDefinition
 
 
 class AnthropicSQLAgent(BaseSQLAgent):
-    """SQL Agent using Anthropic SDK directly."""
+    """SQL Agent using the custom Anthropic client."""
 
     def __init__(
         self, db_connection: BaseDatabaseConnection, database_name: str | None = None
@@ -29,7 +34,7 @@ class AnthropicSQLAgent(BaseSQLAgent):
         config = Config()
         config.validate()  # This will raise ValueError if API key is missing
 
-        self.client = AsyncAnthropic(api_key=config.api_key)
+        self.client = AnthropicClient(api_key=config.api_key)
         self.model = config.model_name.replace("anthropic:", "")
 
         self.database_name = database_name
@@ -39,21 +44,21 @@ class AnthropicSQLAgent(BaseSQLAgent):
         self._last_results = None
         self._last_query = None
 
-        # Define tools in Anthropic format
+        # Define tools in the new format
         self.tools: List[ToolDefinition] = [
-            {
-                "name": "list_tables",
-                "description": "Get a list of all tables in the database with row counts. Use this first to discover available tables.",
-                "input_schema": {
+            ToolDefinition(
+                name="list_tables",
+                description="Get a list of all tables in the database with row counts. Use this first to discover available tables.",
+                input_schema={
                     "type": "object",
                     "properties": {},
                     "required": [],
                 },
-            },
-            {
-                "name": "introspect_schema",
-                "description": "Introspect database schema to understand table structures.",
-                "input_schema": {
+            ),
+            ToolDefinition(
+                name="introspect_schema",
+                description="Introspect database schema to understand table structures.",
+                input_schema={
                     "type": "object",
                     "properties": {
                         "table_pattern": {
@@ -63,11 +68,11 @@ class AnthropicSQLAgent(BaseSQLAgent):
                     },
                     "required": [],
                 },
-            },
-            {
-                "name": "execute_sql",
-                "description": "Execute a SQL query against the database.",
-                "input_schema": {
+            ),
+            ToolDefinition(
+                name="execute_sql",
+                description="Execute a SQL query against the database.",
+                input_schema={
                     "type": "object",
                     "properties": {
                         "query": {
@@ -82,11 +87,11 @@ class AnthropicSQLAgent(BaseSQLAgent):
                     },
                     "required": ["query"],
                 },
-            },
-            {
-                "name": "plot_data",
-                "description": "Create a plot of query results.",
-                "input_schema": {
+            ),
+            ToolDefinition(
+                name="plot_data",
+                description="Create a plot of query results.",
+                input_schema={
                     "type": "object",
                     "properties": {
                         "y_values": {
@@ -120,7 +125,7 @@ class AnthropicSQLAgent(BaseSQLAgent):
                     },
                     "required": ["y_values"],
                 },
-            },
+            ),
         ]
 
         # Build system prompt with memories if available
@@ -203,121 +208,6 @@ Guidelines:
         # Use parent implementation for core tools
         return await super().process_tool_call(tool_name, tool_input)
 
-    async def _process_stream_events(
-        self,
-        stream,
-        content_blocks: List[Dict],
-        tool_use_blocks: List[Dict],
-        cancellation_token: asyncio.Event | None = None,
-    ) -> AsyncIterator[StreamEvent]:
-        """Process stream events and yield appropriate StreamEvents."""
-        async for event in stream:
-            # Only check cancellation if token is provided
-            if cancellation_token is not None and cancellation_token.is_set():
-                return
-
-            if event.type == "content_block_start":
-                if hasattr(event.content_block, "type"):
-                    if event.content_block.type == "tool_use":
-                        yield StreamEvent(
-                            "tool_use",
-                            {"name": event.content_block.name, "status": "started"},
-                        )
-                        tool_use_blocks.append(
-                            {
-                                "id": event.content_block.id,
-                                "name": event.content_block.name,
-                                "input": {},
-                            }
-                        )
-                    elif event.content_block.type == "text":
-                        content_blocks.append({"type": "text", "text": ""})
-
-            elif event.type == "content_block_delta":
-                if hasattr(event.delta, "text"):
-                    yield StreamEvent("text", event.delta.text)
-                    if content_blocks and content_blocks[-1]["type"] == "text":
-                        content_blocks[-1]["text"] += event.delta.text
-                elif hasattr(event.delta, "partial_json"):
-                    if tool_use_blocks:
-                        try:
-                            current_json = tool_use_blocks[-1].get("_partial", "")
-                            current_json += event.delta.partial_json
-                            tool_use_blocks[-1]["_partial"] = current_json
-                            tool_use_blocks[-1]["input"] = json.loads(current_json)
-                        except json.JSONDecodeError:
-                            pass
-
-            elif event.type == "message_stop":
-                break
-
-    def _finalize_tool_blocks(self, tool_use_blocks: List[Dict]) -> str:
-        """Finalize tool use blocks and return stop reason."""
-        if tool_use_blocks:
-            for block in tool_use_blocks:
-                block["type"] = "tool_use"
-                if "_partial" in block:
-                    del block["_partial"]
-            return "tool_use"
-        return "stop"
-
-    async def _process_tool_results(
-        self,
-        response: StreamingResponse,
-        cancellation_token: asyncio.Event | None = None,
-    ) -> AsyncIterator[StreamEvent]:
-        """Process tool results and yield appropriate events."""
-        tool_results = []
-        for block in response.content:
-            # Only check cancellation if token is provided
-            if cancellation_token is not None and cancellation_token.is_set():
-                return
-
-            if block.get("type") == "tool_use":
-                yield StreamEvent(
-                    "tool_use",
-                    {
-                        "name": block["name"],
-                        "input": block["input"],
-                        "status": "executing",
-                    },
-                )
-
-                tool_result = await self.process_tool_call(
-                    block["name"], block["input"]
-                )
-
-                # Yield specific events based on tool type
-                if block["name"] == "execute_sql" and self._last_results:
-                    yield StreamEvent(
-                        "query_result",
-                        {
-                            "query": self._last_query,
-                            "results": self._last_results,
-                        },
-                    )
-                elif block["name"] in ["list_tables", "introspect_schema"]:
-                    yield StreamEvent(
-                        "tool_result",
-                        {
-                            "tool_name": block["name"],
-                            "result": tool_result,
-                        },
-                    )
-                elif block["name"] == "plot_data":
-                    yield StreamEvent(
-                        "plot_result",
-                        {
-                            "tool_name": block["name"],
-                            "input": block["input"],
-                            "result": tool_result,
-                        },
-                    )
-
-                tool_results.append(build_tool_result_block(block["id"], tool_result))
-
-        yield StreamEvent("tool_result_data", tool_results)
-
     async def query_stream(
         self,
         user_query: str,
@@ -330,25 +220,111 @@ Guidelines:
         self._last_query = None
 
         # Build messages with history if requested
+        messages = []
         if use_history:
-            messages = self.conversation_history + [
-                {"role": "user", "content": user_query}
-            ]
-        else:
-            messages = [{"role": "user", "content": user_query}]
+            # Convert conversation history to new format
+            for msg in self.conversation_history:
+                if msg["role"] == "user":
+                    # User content might be a string or list of tool results
+                    content = msg["content"]
+                    if isinstance(content, str):
+                        messages.append(Message(MessageRole.USER, content))
+                    else:
+                        # Handle tool results format
+                        tool_result_blocks = []
+                        if isinstance(content, list):
+                            for item in content:
+                                if (
+                                    isinstance(item, dict)
+                                    and item.get("type") == "tool_result"
+                                ):
+                                    tool_result_blocks.append(
+                                        ContentBlock(ContentType.TOOL_RESULT, item)
+                                    )
+                        if tool_result_blocks:
+                            messages.append(
+                                Message(MessageRole.USER, tool_result_blocks)
+                            )
+                        else:
+                            # Fallback to string representation
+                            messages.append(Message(MessageRole.USER, str(content)))
+
+                elif msg["role"] == "assistant":
+                    # Assistant content is typically a list of content blocks
+                    content = msg["content"]
+                    if isinstance(content, str):
+                        messages.append(Message(MessageRole.ASSISTANT, content))
+                    elif isinstance(content, list):
+                        # Convert to ContentBlock objects
+                        content_blocks = []
+                        for block in content:
+                            if isinstance(block, dict):
+                                if block.get("type") == "text":
+                                    text_content = block.get("text", "")
+                                    if text_content:  # Only add non-empty text blocks
+                                        content_blocks.append(
+                                            ContentBlock(ContentType.TEXT, text_content)
+                                        )
+                                elif block.get("type") == "tool_use":
+                                    content_blocks.append(
+                                        ContentBlock(
+                                            ContentType.TOOL_USE,
+                                            {
+                                                "id": block["id"],
+                                                "name": block["name"],
+                                                "input": block["input"],
+                                            },
+                                        )
+                                    )
+                        if content_blocks:
+                            messages.append(
+                                Message(MessageRole.ASSISTANT, content_blocks)
+                            )
+                    else:
+                        # Fallback to string representation
+                        messages.append(Message(MessageRole.ASSISTANT, str(content)))
+
+        # Add current user message
+        messages.append(Message(MessageRole.USER, user_query))
 
         try:
+            # Create request
+            request = CreateMessageRequest(
+                model=self.model,
+                messages=messages,
+                max_tokens=4096,
+                system=self.system_prompt,
+                tools=self.tools,
+                stream=True,
+            )
+
             # Create initial stream and get response
             response = None
-            async for event in self._create_and_process_stream(
-                messages, cancellation_token
+            async for event in self.client.create_message_with_tools(
+                request, cancellation_token
             ):
                 if cancellation_token is not None and cancellation_token.is_set():
                     return
-                if event.type == "response_ready":
-                    response = event.data
-                else:
-                    yield event
+
+                # Handle different event types
+                if hasattr(event, "type"):
+                    if event.type == "content_block_start":
+                        if hasattr(event.content_block, "type"):
+                            if event.content_block.type == "tool_use":
+                                yield StreamEvent(
+                                    "tool_use",
+                                    {
+                                        "name": event.content_block.name,
+                                        "status": "started",
+                                    },
+                                )
+                    elif event.type == "content_block_delta":
+                        if hasattr(event.delta, "text"):
+                            text = event.delta.text
+                            if text is not None and text:  # Only yield non-empty text
+                                yield StreamEvent("text", text)
+                elif isinstance(event, dict) and event.get("type") == "response_ready":
+                    response = event["data"]
 
             collected_content = []
 
@@ -363,16 +339,53 @@ Guidelines:
                     {"role": "assistant", "content": response.content}
                 )
 
-                # Process tool results - DO NOT check cancellation during tool execution
-                # as this would break the tool_use -> tool_result API contract
+                # Process tool results
                 tool_results = []
-                async for event in self._process_tool_results(
-                    response, None
-                ):  # Pass None to disable cancellation checks
-                    if event.type == "tool_result_data":
-                        tool_results = event.data
-                    else:
-                        yield event
+                for block in response.content:
+                    if block.get("type") == "tool_use":
+                        yield StreamEvent(
+                            "tool_use",
+                            {
+                                "name": block["name"],
+                                "input": block["input"],
+                                "status": "executing",
+                            },
+                        )
+
+                        tool_result = await self.process_tool_call(
+                            block["name"], block["input"]
+                        )
+
+                        # Yield specific events based on tool type
+                        if block["name"] == "execute_sql" and self._last_results:
+                            yield StreamEvent(
+                                "query_result",
+                                {
+                                    "query": self._last_query,
+                                    "results": self._last_results,
+                                },
+                            )
+                        elif block["name"] in ["list_tables", "introspect_schema"]:
+                            yield StreamEvent(
+                                "tool_result",
+                                {
+                                    "tool_name": block["name"],
+                                    "result": tool_result,
+                                },
+                            )
+                        elif block["name"] == "plot_data":
+                            yield StreamEvent(
+                                "plot_result",
+                                {
+                                    "tool_name": block["name"],
+                                    "input": block["input"],
+                                    "result": tool_result,
+                                },
+                            )
+
+                        tool_results.append(
+                            build_tool_result_block(block["id"], tool_result)
+                        )
 
                 # Continue conversation with tool results
                 collected_content.append({"role": "user", "content": tool_results})
@@ -386,17 +399,77 @@ Guidelines:
                 # Signal that we're processing the tool results
                 yield StreamEvent("processing", "Analyzing results...")
 
+                # Convert collected content to new message format
+                new_messages = messages.copy()
+                for content in collected_content:
+                    if content["role"] == "user":
+                        # Tool results are in the format expected by the API
+                        tool_result_blocks = []
+                        for tool_result in content["content"]:
+                            tool_result_blocks.append(
+                                ContentBlock(ContentType.TOOL_RESULT, tool_result)
+                            )
+                        new_messages.append(
+                            Message(MessageRole.USER, tool_result_blocks)
+                        )
+                    elif content["role"] == "assistant":
+                        # Convert assistant content to ContentBlock objects
+                        assistant_content = content["content"]
+                        content_blocks = []
+                        for block in assistant_content:
+                            if block.get("type") == "text":
+                                text_content = block["text"]
+                                if text_content:  # Only add non-empty text blocks
+                                    content_blocks.append(
+                                        ContentBlock(ContentType.TEXT, text_content)
+                                    )
+                            elif block.get("type") == "tool_use":
+                                content_blocks.append(
+                                    ContentBlock(
+                                        ContentType.TOOL_USE,
+                                        {
+                                            "id": block["id"],
+                                            "name": block["name"],
+                                            "input": block["input"],
+                                        },
+                                    )
+                                )
+                        new_messages.append(
+                            Message(MessageRole.ASSISTANT, content_blocks)
+                        )
+
+                # Create new request with updated messages
+                request = CreateMessageRequest(
+                    model=self.model,
+                    messages=new_messages,
+                    max_tokens=4096,
+                    system=self.system_prompt,
+                    tools=self.tools,
+                    stream=True,
+                )
+
                 # Get next response
                 response = None
-                async for event in self._create_and_process_stream(
-                    messages + collected_content, cancellation_token
+                async for event in self.client.create_message_with_tools(
+                    request, cancellation_token
                 ):
                     if cancellation_token is not None and cancellation_token.is_set():
                         return
-                    if event.type == "response_ready":
-                        response = event.data
-                    else:
-                        yield event
+
+                    # Handle events similar to above
+                    if hasattr(event, "type"):
+                        if event.type == "content_block_delta":
+                            if hasattr(event.delta, "text"):
+                                text = event.delta.text
+                                if (
+                                    text is not None and text
+                                ):  # Only yield non-empty text
+                                    yield StreamEvent("text", text)
+                    elif (
+                        isinstance(event, dict)
+                        and event.get("type") == "response_ready"
+                    ):
+                        response = event["data"]
 
             # Update conversation history if using history
             if use_history:
@@ -411,34 +484,6 @@ Guidelines:
         except Exception as e:
             yield StreamEvent("error", str(e))
 
-    async def _create_and_process_stream(
-        self, messages: List[Dict], cancellation_token: asyncio.Event | None = None
-    ) -> AsyncIterator[StreamEvent]:
-        """Create a stream and yield events while building response."""
-        stream = await self.client.messages.create(
-            model=self.model,
-            max_tokens=4096,
-            system=self.system_prompt,
-            messages=messages,
-            tools=self.tools,
-            stream=True,
-        )
-
-        content_blocks = []
-        tool_use_blocks = []
-
-        async for event in self._process_stream_events(
-            stream, content_blocks, tool_use_blocks, cancellation_token
-        ):
-            # Only check cancellation if token is provided
-            if cancellation_token is not None and cancellation_token.is_set():
-                return
-            yield event
-
-        # Finalize tool blocks and create response
-        stop_reason = self._finalize_tool_blocks(tool_use_blocks)
-        content_blocks.extend(tool_use_blocks)
-
-        yield StreamEvent(
-            "response_ready", StreamingResponse(content_blocks, stop_reason)
-        )
+    async def close(self):
+        """Close the client."""
+        await self.client.close()

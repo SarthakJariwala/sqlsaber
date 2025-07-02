@@ -128,6 +128,7 @@ def query(
 
         finally:
             # Clean up
+            await agent.close()  # Close the agent's HTTP client
             await db_conn.close()
             console.print("\n[green]Goodbye![/green]")
 
