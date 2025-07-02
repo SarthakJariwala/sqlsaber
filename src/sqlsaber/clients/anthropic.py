@@ -107,6 +107,85 @@ class AnthropicClient(BaseLLMClient):
                 raise LLMClientError(f"Stream processing error: {str(e)}")
             raise
 
+    def _handle_ping_event(self, event_data: str) -> Dict[str, Any]:
+        """Handle ping event data.
+
+        Args:
+            event_data: Raw event data string
+
+        Returns:
+            Parsed ping event
+        """
+        try:
+            return {"type": "ping", "data": json.loads(event_data)}
+        except json.JSONDecodeError:
+            return {"type": "ping", "data": {}}
+
+    def _handle_error_event(self, event_data: str) -> None:
+        """Handle error event data.
+
+        Args:
+            event_data: Raw event data string
+
+        Raises:
+            LLMClientError: Always raises with error details
+        """
+        try:
+            error_data = json.loads(event_data)
+            raise LLMClientError(
+                error_data.get("message", "Stream error"),
+                error_data.get("type", "stream_error"),
+            )
+        except json.JSONDecodeError:
+            raise LLMClientError("Stream error with invalid JSON")
+
+    def _parse_event_data(
+        self, event_type: Optional[str], event_data: str
+    ) -> Optional[Dict[str, Any]]:
+        """Parse event data based on event type.
+
+        Args:
+            event_type: Type of the event
+            event_data: Raw event data string
+
+        Returns:
+            Parsed event or None if parsing failed
+        """
+        try:
+            parsed_data = json.loads(event_data)
+            return {"type": event_type, "data": parsed_data}
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse stream data for event {event_type}: {e}")
+            return None
+
+    def _process_sse_line(
+        self, line: str, event_type: Optional[str]
+    ) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
+        """Process a single SSE line.
+
+        Args:
+            line: Line to process
+            event_type: Current event type
+
+        Returns:
+            Tuple of (new_event_type, event_to_yield)
+        """
+        if line.startswith("event: "):
+            return line[7:], None
+        elif line.startswith("data: "):
+            event_data = line[6:]
+
+            if event_type == "ping":
+                return event_type, self._handle_ping_event(event_data)
+            elif event_type == "error":
+                self._handle_error_event(event_data)
+                return event_type, None  # Never reached due to exception
+            else:
+                parsed_event = self._parse_event_data(event_type, event_data)
+                return event_type, parsed_event
+
+        return event_type, None
+
     async def _process_sse_stream(
         self,
         response: httpx.Response,
@@ -129,7 +208,6 @@ class AnthropicClient(BaseLLMClient):
 
         try:
             async for chunk in response.aiter_bytes():
-                # Check for cancellation
                 if cancellation_token is not None and cancellation_token.is_set():
                     return
 
@@ -139,7 +217,6 @@ class AnthropicClient(BaseLLMClient):
                     logger.warning(f"Failed to decode chunk: {e}")
                     continue
 
-                # Process complete lines
                 while "\n" in buffer:
                     line, buffer = buffer.split("\n", 1)
                     line = line.strip()
@@ -147,41 +224,11 @@ class AnthropicClient(BaseLLMClient):
                     if not line:
                         continue
 
-                    # Parse server-sent event format
-                    if line.startswith("event: "):
-                        event_type = line[7:]
-                    elif line.startswith("data: "):
-                        event_data = line[6:]
-
-                        # Handle special event types
-                        if event_type == "ping":
-                            try:
-                                yield {"type": "ping", "data": json.loads(event_data)}
-                            except json.JSONDecodeError:
-                                yield {"type": "ping", "data": {}}
-                            continue
-                        elif event_type == "error":
-                            try:
-                                error_data = json.loads(event_data)
-                                raise LLMClientError(
-                                    error_data.get("message", "Stream error"),
-                                    error_data.get("type", "stream_error"),
-                                )
-                            except json.JSONDecodeError:
-                                raise LLMClientError("Stream error with invalid JSON")
-
-                        # Parse JSON data
-                        try:
-                            parsed_data = json.loads(event_data)
-                            yield {
-                                "type": event_type,
-                                "data": parsed_data,
-                            }
-                        except json.JSONDecodeError as e:
-                            logger.warning(
-                                f"Failed to parse stream data for event {event_type}: {e}"
-                            )
-                            continue
+                    event_type, event_to_yield = self._process_sse_line(
+                        line, event_type
+                    )
+                    if event_to_yield is not None:
+                        yield event_to_yield
 
         except httpx.HTTPError as e:
             raise LLMClientError(f"Network error during streaming: {str(e)}")
