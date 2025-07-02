@@ -99,7 +99,7 @@ def create_exception_from_response(
     error_type = error_data.get("type")
 
     exception_class = STATUS_CODE_TO_EXCEPTION.get(status_code, LLMClientError)
-    
+
     # Handle base vs subclass constructors
     if exception_class == LLMClientError:
         return exception_class(

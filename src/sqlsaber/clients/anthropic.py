@@ -9,7 +9,7 @@ import aiohttp
 
 from .base import BaseLLMClient
 from .exceptions import LLMClientError, create_exception_from_response
-from .models import CreateMessageRequest, MessageResponse
+from .models import CreateMessageRequest
 from .streaming import AnthropicStreamAdapter, StreamingResponse
 
 logger = logging.getLogger(__name__)
@@ -42,90 +42,6 @@ class AnthropicClient(BaseLLMClient):
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
         }
-
-    async def create_message(self, request: CreateMessageRequest) -> MessageResponse:
-        """Create a message and return the response.
-
-        Args:
-            request: The message creation request
-
-        Returns:
-            The message response
-
-        Raises:
-            LLMClientError: If the request fails
-        """
-        if request.stream:
-            raise ValueError("Use create_message_stream for streaming requests")
-
-        session = self._get_session()
-        url = f"{self.base_url}/v1/messages"
-        headers = self._get_headers()
-        data = request.to_dict()
-
-        async with session.post(url, headers=headers, json=data) as response:
-            request_id = response.headers.get("request-id")
-            response_data = await response.json()
-
-            if response.status != 200:
-                raise create_exception_from_response(
-                    response.status, response_data, request_id
-                )
-
-            return MessageResponse.from_dict(response_data)
-
-    async def create_message_stream(
-        self,
-        request: CreateMessageRequest,
-        cancellation_token: Optional[asyncio.Event] = None,
-    ) -> AsyncIterator[Any]:
-        """Create a message and stream the response.
-
-        Args:
-            request: The message creation request
-            cancellation_token: Optional event to signal cancellation
-
-        Yields:
-            Stream events compatible with the current agent
-
-        Raises:
-            LLMClientError: If the request fails
-        """
-        # Force streaming to be enabled
-        request.stream = True
-
-        session = self._get_session()
-        url = f"{self.base_url}/v1/messages"
-        headers = self._get_headers()
-        data = request.to_dict()
-
-        try:
-            async with session.post(url, headers=headers, json=data) as response:
-                request_id = response.headers.get("request-id")
-
-                if response.status != 200:
-                    response_data = await response.json()
-                    raise create_exception_from_response(
-                        response.status, response_data, request_id
-                    )
-
-                # Use stream adapter to convert raw events
-                adapter = AnthropicStreamAdapter()
-                raw_stream = self._process_sse_stream(response, cancellation_token)
-
-                async for event in adapter.process_stream(
-                    raw_stream, cancellation_token
-                ):
-                    yield event
-
-        except asyncio.CancelledError:
-            # Handle cancellation gracefully
-            logger.debug("Stream cancelled")
-            return
-        except Exception as e:
-            if not isinstance(e, LLMClientError):
-                raise LLMClientError(f"Stream processing error: {str(e)}")
-            raise
 
     async def create_message_with_tools(
         self,

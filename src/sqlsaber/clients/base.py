@@ -1,10 +1,7 @@
 """Abstract base class for LLM clients."""
 
-import asyncio
-from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Dict, Optional
-
-from sqlsaber.clients.models import CreateMessageRequest, MessageResponse
+from abc import ABC
+from typing import Optional
 
 
 class BaseLLMClient(ABC):
@@ -19,41 +16,6 @@ class BaseLLMClient(ABC):
         """
         self.api_key = api_key
         self.base_url = base_url
-
-    @abstractmethod
-    async def create_message(self, request: CreateMessageRequest) -> MessageResponse:
-        """Create a message and return the response.
-
-        Args:
-            request: The message creation request
-
-        Returns:
-            The message response
-
-        Raises:
-            LLMClientError: If the request fails
-        """
-        pass
-
-    @abstractmethod
-    async def create_message_stream(
-        self,
-        request: CreateMessageRequest,
-        cancellation_token: Optional[asyncio.Event] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
-        """Create a message and stream the response.
-
-        Args:
-            request: The message creation request
-            cancellation_token: Optional event to signal cancellation
-
-        Yields:
-            Stream events as dictionaries
-
-        Raises:
-            LLMClientError: If the request fails
-        """
-        pass
 
     async def close(self):
         """Close the client and clean up resources."""
