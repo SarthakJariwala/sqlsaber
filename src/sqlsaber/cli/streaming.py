@@ -23,8 +23,6 @@ class StreamingQueryHandler:
     ):
         """Execute a query with streaming display."""
 
-        has_content = False
-        explanation_started = False
         status = self.console.status(
             "[yellow]Crunching data...[/yellow]", spinner="bouncingBall"
         )
@@ -38,15 +36,10 @@ class StreamingQueryHandler:
                     break
 
                 if event.type == "tool_use":
-                    # Stop any ongoing status, but don't mark has_content yet
                     self._stop_status(status)
 
-                    if event.data["status"] == "started":
-                        # If explanation was streaming, add newline before tool use
-                        if explanation_started:
-                            self.display.show_newline()
-                        self.display.show_tool_started(event.data["name"])
-                    elif event.data["status"] == "executing":
+                    if event.data["status"] == "executing":
+                        self.display.show_newline()
                         self.display.show_tool_executing(
                             event.data["name"], event.data["input"]
                         )
@@ -54,12 +47,6 @@ class StreamingQueryHandler:
                 elif event.type == "text":
                     # Always stop status when text streaming starts
                     self._stop_status(status)
-
-                    if not explanation_started:
-                        explanation_started = True
-                        has_content = True
-
-                    # Print text as it streams
                     self.display.show_text_stream(event.data)
 
                 elif event.type == "query_result":
@@ -70,45 +57,32 @@ class StreamingQueryHandler:
                     # Handle tool results - particularly list_tables and introspect_schema
                     if event.data.get("tool_name") == "list_tables":
                         self.display.show_table_list(event.data["result"])
-                        has_content = True
                     elif event.data.get("tool_name") == "introspect_schema":
                         self.display.show_schema_info(event.data["result"])
-                        has_content = True
 
                 elif event.type == "plot_result":
                     # Handle plot results
                     self.display.show_plot(event.data)
-                    has_content = True
 
                 elif event.type == "processing":
-                    # Show status when processing tool results
-                    if explanation_started:
-                        self.display.show_newline()  # Add newline after explanation text
+                    self.display.show_newline()  # Add newline after explanation text
                     self._stop_status(status)
                     status = self.display.show_processing(event.data)
                     status.start()
-                    has_content = True
 
                 elif event.type == "error":
-                    if not has_content:
-                        self._stop_status(status)
-                        has_content = True
+                    self._stop_status(status)
                     self.display.show_error(event.data)
 
         except asyncio.CancelledError:
             # Handle cancellation gracefully
             self._stop_status(status)
-            if explanation_started:
-                self.display.show_newline()
+            self.display.show_newline()
             self.console.print("[yellow]Query interrupted[/yellow]")
             return
         finally:
             # Make sure status is stopped
             self._stop_status(status)
-
-            # Add a newline after streaming completes if explanation was shown
-            if explanation_started:
-                self.display.show_newline()  # Empty line for better readability
 
             # Display the last assistant response as markdown
             if hasattr(agent, "conversation_history") and agent.conversation_history:

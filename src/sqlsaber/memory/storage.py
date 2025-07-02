@@ -8,7 +8,6 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import platformdirs
 
@@ -21,7 +20,7 @@ class Memory:
     content: str
     timestamp: float
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert memory to dictionary for JSON serialization."""
         return {
             "id": self.id,
@@ -30,7 +29,7 @@ class Memory:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "Memory":
+    def from_dict(cls, data: dict) -> "Memory":
         """Create Memory from dictionary."""
         return cls(
             id=data["id"],
@@ -79,7 +78,7 @@ class MemoryStorage:
         """Get the memory file path for a specific database."""
         return self.memory_dir / f"{database_name}.json"
 
-    def _load_memories(self, database_name: str) -> List[Memory]:
+    def _load_memories(self, database_name: str) -> list[Memory]:
         """Load memories for a specific database."""
         memory_file = self._get_memory_file(database_name)
 
@@ -96,7 +95,7 @@ class MemoryStorage:
         except (json.JSONDecodeError, IOError, KeyError):
             return []
 
-    def _save_memories(self, database_name: str, memories: List[Memory]) -> None:
+    def _save_memories(self, database_name: str, memories: list[Memory]) -> None:
         """Save memories for a specific database."""
         memory_file = self._get_memory_file(database_name)
 
@@ -125,7 +124,7 @@ class MemoryStorage:
 
         return memory
 
-    def get_memories(self, database_name: str) -> List[Memory]:
+    def get_memories(self, database_name: str) -> list[Memory]:
         """Get all memories for the specified database."""
         return self._load_memories(database_name)
 
@@ -152,7 +151,7 @@ class MemoryStorage:
 
         return count
 
-    def get_memory_by_id(self, database_name: str, memory_id: str) -> Optional[Memory]:
+    def get_memory_by_id(self, database_name: str, memory_id: str) -> Memory | None:
         """Get a specific memory by ID."""
         memories = self._load_memories(database_name)
         return next((m for m in memories if m.id == memory_id), None)
@@ -161,7 +160,7 @@ class MemoryStorage:
         """Check if database has any memories."""
         return len(self._load_memories(database_name)) > 0
 
-    def list_databases_with_memories(self) -> List[str]:
+    def list_databases_with_memories(self) -> list[str]:
         """List all databases that have memories."""
         databases = []
 

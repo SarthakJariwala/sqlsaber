@@ -2,7 +2,7 @@
 
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import aiosqlite
 
@@ -21,8 +21,8 @@ class BaseSchemaIntrospector(ABC):
 
     @abstractmethod
     async def get_tables_info(
-        self, connection, table_pattern: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, connection, table_pattern: str | None = None
+    ) -> dict[str, Any]:
         """Get tables information for the specific database type."""
         pass
 
@@ -42,7 +42,7 @@ class BaseSchemaIntrospector(ABC):
         pass
 
     @abstractmethod
-    async def list_tables_info(self, connection) -> Dict[str, Any]:
+    async def list_tables_info(self, connection) -> dict[str, Any]:
         """Get list of tables with basic information."""
         pass
 
@@ -51,8 +51,8 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
     """PostgreSQL-specific schema introspection."""
 
     async def get_tables_info(
-        self, connection, table_pattern: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, connection, table_pattern: str | None = None
+    ) -> dict[str, Any]:
         """Get tables information for PostgreSQL."""
         pool = await connection.get_pool()
         async with pool.acquire() as conn:
@@ -182,7 +182,7 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
             """
             return await conn.fetch(pk_query)
 
-    async def list_tables_info(self, connection) -> Dict[str, Any]:
+    async def list_tables_info(self, connection) -> dict[str, Any]:
         """Get list of tables with basic information for PostgreSQL."""
         pool = await connection.get_pool()
         async with pool.acquire() as conn:
@@ -214,8 +214,8 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
     """MySQL-specific schema introspection."""
 
     async def get_tables_info(
-        self, connection, table_pattern: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, connection, table_pattern: str | None = None
+    ) -> dict[str, Any]:
         """Get tables information for MySQL."""
         pool = await connection.get_pool()
         async with pool.acquire() as conn:
@@ -353,7 +353,7 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
                 await cursor.execute(pk_query)
                 return await cursor.fetchall()
 
-    async def list_tables_info(self, connection) -> Dict[str, Any]:
+    async def list_tables_info(self, connection) -> dict[str, Any]:
         """Get list of tables with basic information for MySQL."""
         pool = await connection.get_pool()
         async with pool.acquire() as conn:
@@ -392,8 +392,8 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
             return await cursor.fetchall()
 
     async def get_tables_info(
-        self, connection, table_pattern: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, connection, table_pattern: str | None = None
+    ) -> dict[str, Any]:
         """Get tables information for SQLite."""
         where_conditions = ["type IN ('table', 'view')", "name NOT LIKE 'sqlite_%'"]
         params = ()
@@ -496,7 +496,7 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
 
         return primary_keys
 
-    async def list_tables_info(self, connection) -> Dict[str, Any]:
+    async def list_tables_info(self, connection) -> dict[str, Any]:
         """Get list of tables with basic information for SQLite."""
         # First get the table names
         tables_query = """
@@ -548,7 +548,7 @@ class SchemaManager:
     def __init__(self, db_connection: BaseDatabaseConnection, cache_ttl: int = 900):
         self.db = db_connection
         self.cache_ttl = cache_ttl  # Default 15 minutes
-        self._schema_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+        self._schema_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
         # Select appropriate introspector based on connection type
         if isinstance(db_connection, PostgreSQLConnection):
@@ -567,8 +567,8 @@ class SchemaManager:
         self._schema_cache.clear()
 
     async def get_schema_info(
-        self, table_pattern: Optional[str] = None
-    ) -> Dict[str, SchemaInfo]:
+        self, table_pattern: str | None = None
+    ) -> dict[str, SchemaInfo]:
         """Get database schema information, optionally filtered by table pattern.
 
         Args:
@@ -587,7 +587,7 @@ class SchemaManager:
         self._schema_cache[cache_key] = (time.time(), schema_info)
         return schema_info
 
-    def _get_cached_schema(self, cache_key: str) -> Optional[Dict[str, SchemaInfo]]:
+    def _get_cached_schema(self, cache_key: str) -> dict[str, SchemaInfo] | None:
         """Get schema from cache if available and not expired."""
         if cache_key in self._schema_cache:
             cached_time, cached_data = self._schema_cache[cache_key]
@@ -596,8 +596,8 @@ class SchemaManager:
         return None
 
     async def _fetch_schema_from_db(
-        self, table_pattern: Optional[str]
-    ) -> Dict[str, SchemaInfo]:
+        self, table_pattern: str | None
+    ) -> dict[str, SchemaInfo]:
         """Fetch schema information from database."""
         # Get all schema components
         tables = await self.introspector.get_tables_info(self.db, table_pattern)
@@ -613,7 +613,7 @@ class SchemaManager:
 
         return schema_info
 
-    def _build_table_structure(self, tables: list) -> Dict[str, Dict]:
+    def _build_table_structure(self, tables: list) -> dict[str, dict]:
         """Build basic table structure from table info."""
         schema_info = {}
         for table in tables:
@@ -632,7 +632,7 @@ class SchemaManager:
         return schema_info
 
     def _add_columns_to_schema(
-        self, schema_info: Dict[str, Dict], columns: list
+        self, schema_info: dict[str, dict], columns: list
     ) -> None:
         """Add column information to schema."""
         for col in columns:
@@ -656,7 +656,7 @@ class SchemaManager:
                 schema_info[full_name]["columns"][col["column_name"]] = col_info
 
     def _add_primary_keys_to_schema(
-        self, schema_info: Dict[str, Dict], primary_keys: list
+        self, schema_info: dict[str, dict], primary_keys: list
     ) -> None:
         """Add primary key information to schema."""
         for pk in primary_keys:
@@ -665,7 +665,7 @@ class SchemaManager:
                 schema_info[full_name]["primary_keys"].append(pk["column_name"])
 
     def _add_foreign_keys_to_schema(
-        self, schema_info: Dict[str, Dict], foreign_keys: list
+        self, schema_info: dict[str, dict], foreign_keys: list
     ) -> None:
         """Add foreign key information to schema."""
         for fk in foreign_keys:
@@ -681,7 +681,7 @@ class SchemaManager:
                     }
                 )
 
-    async def list_tables(self) -> Dict[str, Any]:
+    async def list_tables(self) -> dict[str, Any]:
         """Get a list of all tables with basic information like row counts."""
         # Check cache first
         cache_key = "list_tables"
@@ -710,7 +710,7 @@ class SchemaManager:
         self._schema_cache[cache_key] = (time.time(), result)
         return result
 
-    def _get_cached_tables(self, cache_key: str) -> Optional[Dict[str, Any]]:
+    def _get_cached_tables(self, cache_key: str) -> dict[str, Any] | None:
         """Get table list from cache if available and not expired."""
         if cache_key in self._schema_cache:
             cached_time, cached_data = self._schema_cache[cache_key]

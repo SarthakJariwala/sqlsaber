@@ -1,7 +1,6 @@
 """Display utilities for the CLI interface."""
 
 import json
-from typing import Optional
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -19,7 +18,7 @@ class DisplayManager:
         self,
         columns: list,
         header_style: str = "bold blue",
-        title: Optional[str] = None,
+        title: str | None = None,
     ) -> Table:
         """Create a Rich table with specified columns."""
         table = Table(show_header=True, header_style=header_style, title=title)
@@ -32,12 +31,9 @@ class DisplayManager:
                 table.add_column(col)
         return table
 
-    def show_tool_started(self, tool_name: str):
-        """Display tool started message."""
-        self.console.print(f"\n[yellow]🔧 Using tool: {tool_name}[/yellow]")
-
     def show_tool_executing(self, tool_name: str, tool_input: dict):
         """Display tool execution details."""
+        self.console.print(f"\n[yellow]🔧 Using tool: {tool_name}[/yellow]")
         if tool_name == "list_tables":
             self.console.print("[dim]  → Discovering available tables[/dim]")
         elif tool_name == "introspect_schema":
@@ -46,12 +42,14 @@ class DisplayManager:
         elif tool_name == "execute_sql":
             query = tool_input.get("query", "")
             self.console.print("\n[bold green]Executing SQL:[/bold green]")
+            self.show_newline()
             syntax = Syntax(query, "sql")
             self.console.print(syntax)
 
     def show_text_stream(self, text: str):
         """Display streaming text."""
-        self.console.print(text, end="", markup=False)
+        if text is not None:  # Extra safety check
+            self.console.print(text, end="", markup=False)
 
     def show_query_results(self, results: list):
         """Display query results in a formatted table."""

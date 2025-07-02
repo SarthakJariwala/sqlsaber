@@ -2,7 +2,6 @@
 
 import getpass
 import os
-from typing import Optional
 
 import keyring
 from rich.console import Console
@@ -16,7 +15,7 @@ class APIKeyManager:
     def __init__(self):
         self.service_prefix = "sqlsaber"
 
-    def get_api_key(self, provider: str) -> Optional[str]:
+    def get_api_key(self, provider: str) -> str | None:
         """Get API key for the specified provider using cascading logic."""
         env_var_name = self._get_env_var_name(provider)
         service_name = self._get_service_name(provider)
@@ -57,7 +56,7 @@ class APIKeyManager:
 
     def _prompt_and_store_key(
         self, provider: str, env_var_name: str, service_name: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """Prompt user for API key and store it in keyring."""
         try:
             console.print(

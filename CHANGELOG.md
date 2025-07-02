@@ -4,6 +4,17 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- New `clients` module with custom Anthropic API client
+  - `AnthropicClient` for direct API communication
+
+### Changed
+
+- Replaced Anthropic SDK with direct API implementation using httpx
+- Modernized type annotations throughout the codebase
+- Refactored query streaming into smaller, more maintainable functions
+
 ## [0.7.0] - 2025-07-01
 
 ### Added

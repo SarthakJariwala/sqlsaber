@@ -1,6 +1,6 @@
 """Type definitions for SQLSaber."""
 
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, TypedDict
 
 
 class ColumnInfo(TypedDict):
@@ -8,17 +8,17 @@ class ColumnInfo(TypedDict):
 
     data_type: str
     nullable: bool
-    default: Optional[str]
-    max_length: Optional[int]
-    precision: Optional[int]
-    scale: Optional[int]
+    default: str | None
+    max_length: int | None
+    precision: int | None
+    scale: int | None
 
 
 class ForeignKeyInfo(TypedDict):
     """Type definition for foreign key information."""
 
     column: str
-    references: Dict[str, str]  # {"table": "schema.table", "column": "column_name"}
+    references: dict[str, str]  # {"table": "schema.table", "column": "column_name"}
 
 
 class SchemaInfo(TypedDict):
@@ -27,9 +27,9 @@ class SchemaInfo(TypedDict):
     schema: str
     name: str
     type: str
-    columns: Dict[str, ColumnInfo]
-    primary_keys: List[str]
-    foreign_keys: List[ForeignKeyInfo]
+    columns: dict[str, ColumnInfo]
+    primary_keys: list[str]
+    foreign_keys: list[ForeignKeyInfo]
 
 
 class ToolDefinition(TypedDict):
@@ -37,4 +37,4 @@ class ToolDefinition(TypedDict):
 
     name: str
     description: str
-    input_schema: Dict[str, Any]
+    input_schema: dict[str, Any]

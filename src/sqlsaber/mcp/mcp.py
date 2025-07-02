@@ -1,7 +1,6 @@
 """FastMCP server implementation for SQLSaber."""
 
 import json
-from typing import Optional
 
 from fastmcp import FastMCP
 
@@ -32,7 +31,7 @@ mcp = FastMCP(name="SQL Assistant", instructions=INSTRUCTIONS)
 config_manager = DatabaseConfigManager()
 
 
-async def _create_agent_for_database(database_name: str) -> Optional[MCPSQLAgent]:
+async def _create_agent_for_database(database_name: str) -> MCPSQLAgent | None:
     """Create a MCPSQLAgent for the specified database."""
     try:
         # Look up configured database connection
@@ -92,7 +91,7 @@ async def list_tables(database: str) -> str:
 
 
 @mcp.tool
-async def introspect_schema(database: str, table_pattern: Optional[str] = None) -> str:
+async def introspect_schema(database: str, table_pattern: str | None = None) -> str:
     """
     Introspect database schema to understand table structures. Use optional pattern to filter tables (e.g., 'public.users', 'user%', '%order%').
     """
@@ -112,7 +111,7 @@ async def introspect_schema(database: str, table_pattern: Optional[str] = None) 
 
 
 @mcp.tool
-async def execute_sql(database: str, query: str, limit: Optional[int] = 100) -> str:
+async def execute_sql(database: str, query: str, limit: int | None = 100) -> str:
     """Execute a SQL query against the specified database."""
     try:
         agent = await _create_agent_for_database(database)

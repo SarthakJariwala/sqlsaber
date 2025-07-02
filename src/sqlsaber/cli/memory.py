@@ -1,7 +1,5 @@
 """Memory management CLI commands."""
 
-from typing import Optional
-
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -22,7 +20,7 @@ memory_app = typer.Typer(
 )
 
 
-def _get_database_name(database: Optional[str] = None) -> str:
+def _get_database_name(database: str | None = None) -> str:
     """Get the database name to use, either specified or default."""
     if database:
         db_config = config_manager.get_database(database)
@@ -46,7 +44,7 @@ def _get_database_name(database: Optional[str] = None) -> str:
 @memory_app.command("add")
 def add_memory(
     content: str = typer.Argument(..., help="Memory content to add"),
-    database: Optional[str] = typer.Option(
+    database: str | None = typer.Option(
         None,
         "--database",
         "-d",
@@ -68,7 +66,7 @@ def add_memory(
 
 @memory_app.command("list")
 def list_memories(
-    database: Optional[str] = typer.Option(
+    database: str | None = typer.Option(
         None,
         "--database",
         "-d",
@@ -107,7 +105,7 @@ def list_memories(
 @memory_app.command("show")
 def show_memory(
     memory_id: str = typer.Argument(..., help="Memory ID to show"),
-    database: Optional[str] = typer.Option(
+    database: str | None = typer.Option(
         None,
         "--database",
         "-d",
@@ -135,7 +133,7 @@ def show_memory(
 @memory_app.command("remove")
 def remove_memory(
     memory_id: str = typer.Argument(..., help="Memory ID to remove"),
-    database: Optional[str] = typer.Option(
+    database: str | None = typer.Option(
         None,
         "--database",
         "-d",
@@ -170,7 +168,7 @@ def remove_memory(
 
 @memory_app.command("clear")
 def clear_memories(
-    database: Optional[str] = typer.Option(
+    database: str | None = typer.Option(
         None,
         "--database",
         "-d",
@@ -213,7 +211,7 @@ def clear_memories(
 
 @memory_app.command("summary")
 def memory_summary(
-    database: Optional[str] = typer.Option(
+    database: str | None = typer.Option(
         None,
         "--database",
         "-d",

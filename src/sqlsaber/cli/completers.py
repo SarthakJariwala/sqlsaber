@@ -1,7 +1,5 @@
 """Command line completers for the CLI interface."""
 
-from typing import List, Tuple
-
 from prompt_toolkit.completion import Completer, Completion
 
 
@@ -37,13 +35,13 @@ class TableNameCompleter(Completer):
     """Custom completer for table names."""
 
     def __init__(self):
-        self._table_cache: List[Tuple[str, str]] = []
+        self._table_cache: list[tuple[str, str]] = []
 
-    def update_cache(self, tables_data: List[Tuple[str, str]]):
+    def update_cache(self, tables_data: list[tuple[str, str]]):
         """Update the cache with fresh table data."""
         self._table_cache = tables_data
 
-    def _get_table_names(self) -> List[Tuple[str, str]]:
+    def _get_table_names(self) -> list[tuple[str, str]]:
         """Get table names from cache."""
         return self._table_cache
 

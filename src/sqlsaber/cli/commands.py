@@ -2,7 +2,6 @@
 
 import asyncio
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -29,7 +28,7 @@ config_manager = DatabaseConfigManager()
 
 @app.callback()
 def main_callback(
-    database: Optional[str] = typer.Option(
+    database: str | None = typer.Option(
         None,
         "--database",
         "-d",
@@ -49,11 +48,11 @@ def main_callback(
 
 @app.command()
 def query(
-    query_text: Optional[str] = typer.Argument(
+    query_text: str | None = typer.Argument(
         None,
         help="SQL query in natural language (if not provided, starts interactive mode)",
     ),
-    database: Optional[str] = typer.Option(
+    database: str | None = typer.Option(
         None,
         "--database",
         "-d",
@@ -128,6 +127,7 @@ def query(
 
         finally:
             # Clean up
+            await agent.close()  # Close the agent's HTTP client
             await db_conn.close()
             console.print("\n[green]Goodbye![/green]")
 
