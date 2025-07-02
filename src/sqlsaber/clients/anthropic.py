@@ -32,7 +32,23 @@ class AnthropicClient(BaseLLMClient):
     def _get_client(self) -> httpx.AsyncClient:
         """Get or create the HTTP client."""
         if self.client is None or self.client.is_closed:
-            self.client = httpx.AsyncClient()
+            # Configure timeouts and connection limits for reliability
+            timeout = httpx.Timeout(
+                connect=10.0,  # Connection timeout
+                read=60.0,     # Read timeout for streaming
+                write=10.0,    # Write timeout
+                pool=10.0      # Pool timeout
+            )
+            limits = httpx.Limits(
+                max_keepalive_connections=20,
+                max_connections=100,
+                keepalive_expiry=30.0
+            )
+            self.client = httpx.AsyncClient(
+                timeout=timeout,
+                limits=limits,
+                follow_redirects=True
+            )
         return self.client
 
     def _get_headers(self) -> Dict[str, str]:
@@ -230,8 +246,12 @@ class AnthropicClient(BaseLLMClient):
                     if event_to_yield is not None:
                         yield event_to_yield
 
-        except httpx.HTTPError as e:
+        except httpx.TimeoutException as e:
+            raise LLMClientError(f"Stream timeout error: {str(e)}")
+        except httpx.NetworkError as e:
             raise LLMClientError(f"Network error during streaming: {str(e)}")
+        except httpx.HTTPError as e:
+            raise LLMClientError(f"HTTP error during streaming: {str(e)}")
         except asyncio.TimeoutError:
             raise LLMClientError("Stream timeout")
         except Exception as e:
