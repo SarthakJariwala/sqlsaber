@@ -33,6 +33,5 @@ packages = ["src/sqlsaber"]
 [project.scripts]
 sqlsaber = "sqlsaber.cli.commands:main"
 saber = "sqlsaber.cli.commands:main"
-sql = "sqlsaber.cli.commands:main"
 sqlsaber-mcp = "sqlsaber.mcp.mcp:main"
 saber-mcp = "sqlsaber.mcp.mcp:main"
