@@ -4,6 +4,8 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2025-07-08
+
 ### Changed
 
 - Migrated from Typer to Cyclopts for CLI framework
