@@ -1,10 +1,11 @@
 """Model management CLI commands."""
 
 import asyncio
+import sys
 
 import httpx
 import questionary
-import typer
+import cyclopts
 from rich.console import Console
 from rich.table import Table
 
@@ -14,10 +15,9 @@ from sqlsaber.config.settings import Config
 console = Console()
 
 # Create the model management CLI app
-models_app = typer.Typer(
+models_app = cyclopts.App(
     name="models",
     help="Select and manage models",
-    add_completion=True,
 )
 
 
@@ -96,8 +96,8 @@ class ModelManager:
 model_manager = ModelManager()
 
 
-@models_app.command("list")
-def list_models():
+@models_app.command
+def list():
     """List available AI models."""
 
     async def fetch_and_display():
@@ -146,8 +146,8 @@ def list_models():
     asyncio.run(fetch_and_display())
 
 
-@models_app.command("set")
-def set_model():
+@models_app.command
+def set():
     """Set the AI model to use."""
 
     async def interactive_set():
@@ -156,7 +156,7 @@ def set_model():
 
         if not models:
             console.print("[red]Failed to fetch models. Cannot set model.[/red]")
-            raise typer.Exit(1)
+            sys.exit(1)
 
         # Create choices for questionary
         choices = []
@@ -190,22 +190,22 @@ def set_model():
                 console.print(f"[green]✓ Model set to: {selected_model}[/green]")
             else:
                 console.print("[red]✗ Failed to set model[/red]")
-                raise typer.Exit(1)
+                sys.exit(1)
         else:
             console.print("[yellow]Operation cancelled[/yellow]")
 
     asyncio.run(interactive_set())
 
 
-@models_app.command("current")
-def current_model():
+@models_app.command
+def current():
     """Show the currently configured model."""
     current = model_manager.get_current_model()
     console.print(f"Current model: [cyan]{current}[/cyan]")
 
 
-@models_app.command("reset")
-def reset_model():
+@models_app.command
+def reset():
     """Reset to the default model."""
 
     async def interactive_reset():
@@ -218,13 +218,13 @@ def reset_model():
                 )
             else:
                 console.print("[red]✗ Failed to reset model[/red]")
-                raise typer.Exit(1)
+                sys.exit(1)
         else:
             console.print("[yellow]Operation cancelled[/yellow]")
 
     asyncio.run(interactive_reset())
 
 
-def create_models_app() -> typer.Typer:
+def create_models_app() -> cyclopts.App:
     """Return the model management CLI app."""
     return models_app
