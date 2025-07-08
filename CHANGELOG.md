@@ -4,6 +4,15 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.0] - 2025-07-08
+
+### Added
+
+- Support for reading queries from stdin via pipe operator
+  - `echo 'show me all users' | saber` now works
+  - `cat query.txt | saber` reads query from file via stdin
+  - Allows integration with other command-line tools and scripts
+
 ## [0.9.0] - 2025-07-08
 
 ### Changed

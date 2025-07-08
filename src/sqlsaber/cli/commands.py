@@ -51,9 +51,11 @@ def meta_handler(
     Query your database using natural language.
 
     Examples:
-        saber                             # Start interactive mode
-        saber "show me all users"         # Run a single query with default database
-        saber -d mydb "show me users"     # Run a query with specific database
+        saber                                  # Start interactive mode
+        saber "show me all users"              # Run a single query with default database
+        saber -d mydb "show me users"          # Run a query with specific database
+        echo "show me all users" | saber       # Read query from stdin
+        cat query.txt | saber                  # Read query from file via stdin
     """
     # Store database in app context for commands to access
     app.meta["database"] = database
@@ -64,7 +66,7 @@ def query(
     query_text: Annotated[
         str | None,
         cyclopts.Parameter(
-            help="SQL query in natural language (if not provided, starts interactive mode)",
+            help="SQL query in natural language (if not provided, reads from stdin or starts interactive mode)",
         ),
     ] = None,
     database: Annotated[
@@ -77,11 +79,28 @@ def query(
 ):
     """Run a query against the database or start interactive mode.
 
-    When called without arguments, starts interactive mode.
+    When called without arguments:
+    - If stdin has data, reads query from stdin
+    - Otherwise, starts interactive mode
+
     When called with a query string, executes that query and exits.
+
+    Examples:
+        saber                             # Start interactive mode
+        saber "show me all users"         # Run a single query
+        echo "show me all users" | saber  # Read query from stdin
     """
 
     async def run_session():
+        # Check if query_text is None and stdin has data
+        actual_query = query_text
+        if query_text is None and not sys.stdin.isatty():
+            # Read from stdin
+            actual_query = sys.stdin.read().strip()
+            if not actual_query:
+                # If stdin was empty, fall back to interactive mode
+                actual_query = None
+
         # Get database configuration or handle direct CSV file
         if database:
             # Check if this is a direct CSV file path
@@ -119,13 +138,13 @@ def query(
         agent = AnthropicSQLAgent(db_conn, db_name)
 
         try:
-            if query_text:
+            if actual_query:
                 # Single query mode with streaming
                 streaming_handler = StreamingQueryHandler(console)
                 console.print(
                     f"[bold blue]Connected to:[/bold blue] {db_name} {agent._get_database_type_name()}\n"
                 )
-                await streaming_handler.execute_streaming_query(query_text, agent)
+                await streaming_handler.execute_streaming_query(actual_query, agent)
             else:
                 # Interactive mode
                 session = InteractiveSession(console, agent)
