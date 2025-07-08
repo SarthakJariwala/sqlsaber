@@ -18,14 +18,25 @@ logger = logging.getLogger(__name__)
 class AnthropicClient(BaseLLMClient):
     """Client for Anthropic's Claude API."""
 
-    def __init__(self, api_key: str, base_url: str | None = None):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        oauth_token: str | None = None,
+        base_url: str | None = None,
+    ):
         """Initialize the Anthropic client.
 
         Args:
             api_key: Anthropic API key
             base_url: Base URL for the API (defaults to Anthropic's API)
         """
-        super().__init__(api_key, base_url)
+        super().__init__(api_key or "", base_url)
+
+        if not api_key and not oauth_token:
+            raise ValueError("Either api_key or oauth_token must be provided")
+
+        self.oauth_token = oauth_token
+        self.use_oauth = oauth_token is not None
         self.base_url = base_url or "https://api.anthropic.com"
         self.client: httpx.AsyncClient | None = None
 
@@ -49,11 +60,25 @@ class AnthropicClient(BaseLLMClient):
 
     def _get_headers(self) -> dict[str, str]:
         """Get the standard headers for API requests."""
-        return {
-            "x-api-key": self.api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        }
+        if self.use_oauth:
+            # OAuth headers for Claude Pro authentication (matching Claude Code CLI)
+            return {
+                "Authorization": f"Bearer {self.oauth_token}",
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01",
+                "anthropic-beta": "oauth-2025-04-20",
+                "User-Agent": "ClaudeCode/1.0 (Anthropic Claude Code CLI)",
+                "Accept": "application/json",
+                "X-Client-Name": "claude-code",
+                "X-Client-Version": "1.0.0",
+            }
+        else:
+            # API key headers for standard authentication
+            return {
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            }
 
     async def create_message_with_tools(
         self,
@@ -72,7 +97,6 @@ class AnthropicClient(BaseLLMClient):
         Yields:
             Stream events and final StreamingResponse
         """
-        # Force streaming to be enabled
         request.stream = True
 
         client = self._get_client()
@@ -87,7 +111,8 @@ class AnthropicClient(BaseLLMClient):
                 request_id = response.headers.get("request-id")
 
                 if response.status_code != 200:
-                    response_data = response.json()
+                    response_content = await response.aread()
+                    response_data = json.loads(response_content.decode())
                     raise create_exception_from_response(
                         response.status_code, response_data, request_id
                     )

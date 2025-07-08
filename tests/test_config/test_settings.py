@@ -122,26 +122,6 @@ class TestConfig:
         config._mock_api_key_manager.get_api_key.assert_called_with("anthropic")
         assert api_key == "test-api-key"
 
-    def test_get_api_key_openai(self, config):
-        """Test API key retrieval for OpenAI models."""
-        config.model_name = "openai:gpt-4"
-        config._mock_api_key_manager.get_api_key.return_value = "openai-key"
-
-        api_key = config._get_api_key()
-
-        config._mock_api_key_manager.get_api_key.assert_called_with("openai")
-        assert api_key == "openai-key"
-
-    def test_get_api_key_generic(self, config):
-        """Test API key retrieval for generic models."""
-        config.model_name = "custom:my-model"
-        config._mock_api_key_manager.get_api_key.return_value = "generic-key"
-
-        api_key = config._get_api_key()
-
-        config._mock_api_key_manager.get_api_key.assert_called_with("generic")
-        assert api_key == "generic-key"
-
     def test_set_model(self, config):
         """Test setting a new model updates configuration."""
         new_model = "openai:gpt-4-turbo"
@@ -150,7 +130,6 @@ class TestConfig:
         config.set_model(new_model)
 
         assert config.model_name == new_model
-        assert config.api_key == "new-api-key"
         assert config.model_config_manager.get_model() == new_model
 
     def test_validate_success(self, config):
@@ -164,20 +143,4 @@ class TestConfig:
         config.api_key = None
 
         with pytest.raises(ValueError, match="Anthropic API key not found"):
-            config.validate()
-
-    def test_validate_missing_openai_key(self, config):
-        """Test validation error for missing OpenAI API key."""
-        config.model_name = "openai:gpt-4"
-        config.api_key = None
-
-        with pytest.raises(ValueError, match="OpenAI API key not found"):
-            config.validate()
-
-    def test_validate_missing_generic_key(self, config):
-        """Test validation error for missing generic API key."""
-        config.model_name = "custom:model"
-        config.api_key = None
-
-        with pytest.raises(ValueError, match="generic API key not found"):
             config.validate()

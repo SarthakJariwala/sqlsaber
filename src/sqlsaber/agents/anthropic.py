@@ -36,9 +36,12 @@ class AnthropicSQLAgent(BaseSQLAgent):
         super().__init__(db_connection)
 
         config = Config()
-        config.validate()  # This will raise ValueError if API key is missing
+        config.validate()  # This will raise ValueError if credentials are missing
 
-        self.client = AnthropicClient(api_key=config.api_key)
+        if config.oauth_token:
+            self.client = AnthropicClient(oauth_token=config.oauth_token)
+        else:
+            self.client = AnthropicClient(api_key=config.api_key)
         self.model = config.model_name.replace("anthropic:", "")
 
         self.database_name = database_name
@@ -137,8 +140,24 @@ class AnthropicSQLAgent(BaseSQLAgent):
 
     def _build_system_prompt(self) -> str:
         """Build system prompt with optional memory context."""
+        # For OAuth authentication, start with Claude Code identity
+        # Check if we're using OAuth by looking at the client
+        is_oauth = (
+            hasattr(self, "client")
+            and hasattr(self.client, "use_oauth")
+            and self.client.use_oauth
+        )
+
+        if is_oauth:
+            # For OAuth, keep system prompt minimal - just Claude Code identity
+            return "You are Claude Code, Anthropic's official CLI for Claude."
+        else:
+            return self._get_sql_assistant_instructions()
+
+    def _get_sql_assistant_instructions(self) -> str:
+        """Get the detailed SQL assistant instructions."""
         db_type = self._get_database_type_name()
-        base_prompt = f"""You are a helpful SQL assistant that helps users query their {db_type} database.
+        instructions = f"""You are also a helpful SQL assistant that helps users query their {db_type} database.
 
 Your responsibilities:
 1. Understand user's natural language requests, think and convert them to SQL
@@ -170,9 +189,9 @@ Guidelines:
                 self.database_name
             )
             if memory_context.strip():
-                base_prompt += memory_context
+                instructions += memory_context
 
-        return base_prompt
+        return instructions
 
     def add_memory(self, content: str) -> str | None:
         """Add a memory for the current database."""
@@ -435,6 +454,12 @@ Guidelines:
             messages = []
             if use_history:
                 messages = self._convert_history_to_messages()
+
+            # For OAuth with no history, inject SQL assistant instructions as first user message
+            is_oauth = hasattr(self.client, "use_oauth") and self.client.use_oauth
+            if is_oauth and not messages:
+                instructions = self._get_sql_assistant_instructions()
+                messages.append(Message(MessageRole.USER, instructions))
 
             # Add current user message
             messages.append(Message(MessageRole.USER, user_query))

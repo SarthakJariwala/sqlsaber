@@ -40,7 +40,7 @@ class TestAnthropicClient:
 
     def test_init_with_custom_base_url(self):
         """Test client initialization with custom base URL."""
-        client = AnthropicClient("test-key", "https://custom.api.com")
+        client = AnthropicClient(api_key="test-key", base_url="https://custom.api.com")
         assert client.base_url == "https://custom.api.com"
 
     def test_get_headers(self, client):
