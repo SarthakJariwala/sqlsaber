@@ -1,7 +1,7 @@
 """Authentication CLI commands."""
 
 import questionary
-import typer
+import cyclopts
 from rich.console import Console
 
 from sqlsaber.config.auth import AuthConfigManager, AuthMethod
@@ -12,15 +12,14 @@ console = Console()
 config_manager = AuthConfigManager()
 
 # Create the authentication management CLI app
-auth_app = typer.Typer(
+auth_app = cyclopts.App(
     name="auth",
     help="Manage authentication configuration",
-    add_completion=True,
 )
 
 
-@auth_app.command("setup")
-def setup_auth():
+@auth_app.command
+def setup():
     """Configure authentication method for SQLSaber."""
     console.print("\n[bold]SQLSaber Authentication Setup[/bold]\n")
 
@@ -79,8 +78,8 @@ def setup_auth():
     )
 
 
-@auth_app.command("status")
-def show_auth_status():
+@auth_app.command
+def status():
     """Show current authentication configuration."""
     auth_method = config_manager.get_auth_method()
 
@@ -104,8 +103,8 @@ def show_auth_status():
                 console.print("[yellow]OAuth token missing or expired[/yellow]")
 
 
-@auth_app.command("reset")
-def reset_auth():
+@auth_app.command
+def reset():
     """Reset authentication configuration."""
     if not config_manager.has_auth_configured():
         console.print("[yellow]No authentication configuration to reset.[/yellow]")
@@ -137,6 +136,6 @@ def reset_auth():
         console.print("Reset cancelled.")
 
 
-def create_auth_app() -> typer.Typer:
+def create_auth_app() -> cyclopts.App:
     """Return the authentication management CLI app."""
     return auth_app

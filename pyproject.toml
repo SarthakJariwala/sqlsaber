@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "asyncpg>=0.30.0",
-    "typer>=0.16.0",
     "rich>=13.7.0",
     "anthropic>=0.54.0",
     "keyring>=25.6.0",
@@ -18,6 +17,7 @@ dependencies = [
     "pandas>=2.0.0",
     "fastmcp>=2.9.0",
     "uniplot>=0.21.2",
+    "cyclopts>=3.22.1",
 ]
 
 [tool.uv]
@@ -33,6 +33,5 @@ packages = ["src/sqlsaber"]
 [project.scripts]
 sqlsaber = "sqlsaber.cli.commands:main"
 saber = "sqlsaber.cli.commands:main"
-sql = "sqlsaber.cli.commands:main"
 sqlsaber-mcp = "sqlsaber.mcp.mcp:main"
 saber-mcp = "sqlsaber.mcp.mcp:main"

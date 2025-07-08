@@ -2,10 +2,12 @@
 
 import asyncio
 import getpass
+import sys
 from pathlib import Path
+from typing import Annotated
 
 import questionary
-import typer
+import cyclopts
 from rich.console import Console
 from rich.table import Table
 
@@ -17,45 +19,64 @@ console = Console()
 config_manager = DatabaseConfigManager()
 
 # Create the database management CLI app
-db_app = typer.Typer(
+db_app = cyclopts.App(
     name="db",
     help="Manage database connections",
-    add_completion=True,
 )
 
 
-@db_app.command("add")
-def add_database(
-    name: str = typer.Argument(..., help="Name for the database connection"),
-    type: str = typer.Option(
-        "postgresql",
-        "--type",
-        "-t",
-        help="Database type (postgresql, mysql, sqlite)",
-    ),
-    host: str | None = typer.Option(None, "--host", "-h", help="Database host"),
-    port: int | None = typer.Option(None, "--port", "-p", help="Database port"),
-    database: str | None = typer.Option(
-        None, "--database", "--db", help="Database name"
-    ),
-    username: str | None = typer.Option(None, "--username", "-u", help="Username"),
-    ssl_mode: str | None = typer.Option(
-        None,
-        "--ssl-mode",
-        help="SSL mode (disable, allow, prefer, require, verify-ca, verify-full for PostgreSQL; DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY for MySQL)",
-    ),
-    ssl_ca: str | None = typer.Option(
-        None, "--ssl-ca", help="SSL CA certificate file path"
-    ),
-    ssl_cert: str | None = typer.Option(
-        None, "--ssl-cert", help="SSL client certificate file path"
-    ),
-    ssl_key: str | None = typer.Option(
-        None, "--ssl-key", help="SSL client private key file path"
-    ),
-    interactive: bool = typer.Option(
-        True, "--interactive/--no-interactive", help="Use interactive mode"
-    ),
+@db_app.command
+def add(
+    name: Annotated[str, cyclopts.Parameter(help="Name for the database connection")],
+    type: Annotated[
+        str,
+        cyclopts.Parameter(
+            ["--type", "-t"],
+            help="Database type (postgresql, mysql, sqlite)",
+        ),
+    ] = "postgresql",
+    host: Annotated[
+        str | None,
+        cyclopts.Parameter(["--host", "-h"], help="Database host"),
+    ] = None,
+    port: Annotated[
+        int | None,
+        cyclopts.Parameter(["--port", "-p"], help="Database port"),
+    ] = None,
+    database: Annotated[
+        str | None,
+        cyclopts.Parameter(["--database", "--db"], help="Database name"),
+    ] = None,
+    username: Annotated[
+        str | None,
+        cyclopts.Parameter(["--username", "-u"], help="Username"),
+    ] = None,
+    ssl_mode: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--ssl-mode"],
+            help="SSL mode (disable, allow, prefer, require, verify-ca, verify-full for PostgreSQL; DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY for MySQL)",
+        ),
+    ] = None,
+    ssl_ca: Annotated[
+        str | None,
+        cyclopts.Parameter(["--ssl-ca"], help="SSL CA certificate file path"),
+    ] = None,
+    ssl_cert: Annotated[
+        str | None,
+        cyclopts.Parameter(["--ssl-cert"], help="SSL client certificate file path"),
+    ] = None,
+    ssl_key: Annotated[
+        str | None,
+        cyclopts.Parameter(["--ssl-key"], help="SSL client private key file path"),
+    ] = None,
+    interactive: Annotated[
+        bool,
+        cyclopts.Parameter(
+            ["--interactive", "--no-interactive"],
+            help="Use interactive mode",
+        ),
+    ] = True,
 ):
     """Add a new database connection."""
 
@@ -157,7 +178,7 @@ def add_database(
                 console.print(
                     "[bold red]Error:[/bold red] Database file path is required for SQLite"
                 )
-                raise typer.Exit(1)
+                sys.exit(1)
             host = "localhost"
             port = 0
             username = "sqlite"
@@ -167,7 +188,7 @@ def add_database(
                 console.print(
                     "[bold red]Error:[/bold red] Host, database, and username are required"
                 )
-                raise typer.Exit(1)
+                sys.exit(1)
 
             if port is None:
                 port = 5432 if type == "postgresql" else 3306
@@ -210,11 +231,11 @@ def add_database(
 
     except Exception as e:
         console.print(f"[bold red]Error adding database:[/bold red] {e}")
-        raise typer.Exit(1)
+        sys.exit(1)
 
 
-@db_app.command("list")
-def list_databases():
+@db_app.command
+def list():
     """List all configured database connections."""
     databases = config_manager.list_databases()
     default_name = config_manager.get_default_name()
@@ -260,16 +281,18 @@ def list_databases():
     console.print(table)
 
 
-@db_app.command("remove")
-def remove_database(
-    name: str = typer.Argument(..., help="Name of the database connection to remove"),
+@db_app.command
+def remove(
+    name: Annotated[
+        str, cyclopts.Parameter(help="Name of the database connection to remove")
+    ],
 ):
     """Remove a database connection."""
     if not config_manager.get_database(name):
         console.print(
             f"[bold red]Error:[/bold red] Database connection '{name}' not found"
         )
-        raise typer.Exit(1)
+        sys.exit(1)
 
     if questionary.confirm(
         f"Are you sure you want to remove database connection '{name}'?"
@@ -282,37 +305,40 @@ def remove_database(
             console.print(
                 f"[bold red]Error:[/bold red] Failed to remove database connection '{name}'"
             )
-            raise typer.Exit(1)
+            sys.exit(1)
     else:
         console.print("Operation cancelled")
 
 
-@db_app.command("set-default")
-def set_default_database(
-    name: str = typer.Argument(
-        ..., help="Name of the database connection to set as default"
-    ),
+@db_app.command
+def set_default(
+    name: Annotated[
+        str,
+        cyclopts.Parameter(help="Name of the database connection to set as default"),
+    ],
 ):
     """Set the default database connection."""
     if not config_manager.get_database(name):
         console.print(
             f"[bold red]Error:[/bold red] Database connection '{name}' not found"
         )
-        raise typer.Exit(1)
+        sys.exit(1)
 
     if config_manager.set_default_database(name):
         console.print(f"[green]Successfully set '{name}' as default database[/green]")
     else:
         console.print(f"[bold red]Error:[/bold red] Failed to set '{name}' as default")
-        raise typer.Exit(1)
+        sys.exit(1)
 
 
-@db_app.command("test")
-def test_database(
-    name: str | None = typer.Argument(
-        None,
-        help="Name of the database connection to test (uses default if not specified)",
-    ),
+@db_app.command
+def test(
+    name: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            help="Name of the database connection to test (uses default if not specified)",
+        ),
+    ] = None,
 ):
     """Test a database connection."""
 
@@ -323,7 +349,7 @@ def test_database(
                 console.print(
                     f"[bold red]Error:[/bold red] Database connection '{name}' not found"
                 )
-                raise typer.Exit(1)
+                sys.exit(1)
         else:
             db_config = config_manager.get_default_database()
             if not db_config:
@@ -333,7 +359,7 @@ def test_database(
                 console.print(
                     "Use 'sqlsaber db add <name>' to add a database connection"
                 )
-                raise typer.Exit(1)
+                sys.exit(1)
 
         console.print(f"[blue]Testing connection to '{db_config.name}'...[/blue]")
 
@@ -351,11 +377,11 @@ def test_database(
 
         except Exception as e:
             console.print(f"[bold red]✗ Connection failed:[/bold red] {e}")
-            raise typer.Exit(1)
+            sys.exit(1)
 
     asyncio.run(test_connection())
 
 
-def create_db_app() -> typer.Typer:
+def create_db_app() -> cyclopts.App:
     """Return the database management CLI app."""
     return db_app

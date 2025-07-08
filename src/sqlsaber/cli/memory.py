@@ -1,6 +1,10 @@
 """Memory management CLI commands."""
 
-import typer
+import sys
+from typing import Annotated
+
+import cyclopts
+import questionary
 from rich.console import Console
 from rich.table import Table
 
@@ -13,10 +17,9 @@ config_manager = DatabaseConfigManager()
 memory_manager = MemoryManager()
 
 # Create the memory management CLI app
-memory_app = typer.Typer(
+memory_app = cyclopts.App(
     name="memory",
     help="Manage database-specific memories",
-    add_completion=True,
 )
 
 
@@ -28,7 +31,7 @@ def _get_database_name(database: str | None = None) -> str:
             console.print(
                 f"[bold red]Error:[/bold red] Database connection '{database}' not found."
             )
-            raise typer.Exit(1)
+            sys.exit(1)
         return database
     else:
         db_config = config_manager.get_default_database()
@@ -37,19 +40,20 @@ def _get_database_name(database: str | None = None) -> str:
                 "[bold red]Error:[/bold red] No database connections configured."
             )
             console.print("Use 'sqlsaber db add <name>' to add a database connection.")
-            raise typer.Exit(1)
+            sys.exit(1)
         return db_config.name
 
 
-@memory_app.command("add")
-def add_memory(
-    content: str = typer.Argument(..., help="Memory content to add"),
-    database: str | None = typer.Option(
-        None,
-        "--database",
-        "-d",
-        help="Database connection name (uses default if not specified)",
-    ),
+@memory_app.command
+def add(
+    content: Annotated[str, cyclopts.Parameter(help="Memory content to add")],
+    database: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--database", "-d"],
+            help="Database connection name (uses default if not specified)",
+        ),
+    ] = None,
 ):
     """Add a new memory for the specified database."""
     database_name = _get_database_name(database)
@@ -61,17 +65,18 @@ def add_memory(
         console.print(f"[dim]Content:[/dim] {memory.content}")
     except Exception as e:
         console.print(f"[bold red]Error adding memory:[/bold red] {e}")
-        raise typer.Exit(1)
+        sys.exit(1)
 
 
-@memory_app.command("list")
-def list_memories(
-    database: str | None = typer.Option(
-        None,
-        "--database",
-        "-d",
-        help="Database connection name (uses default if not specified)",
-    ),
+@memory_app.command
+def list(
+    database: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--database", "-d"],
+            help="Database connection name (uses default if not specified)",
+        ),
+    ] = None,
 ):
     """List all memories for the specified database."""
     database_name = _get_database_name(database)
@@ -102,15 +107,16 @@ def list_memories(
     console.print(f"\n[dim]Total memories: {len(memories)}[/dim]")
 
 
-@memory_app.command("show")
-def show_memory(
-    memory_id: str = typer.Argument(..., help="Memory ID to show"),
-    database: str | None = typer.Option(
-        None,
-        "--database",
-        "-d",
-        help="Database connection name (uses default if not specified)",
-    ),
+@memory_app.command
+def show(
+    memory_id: Annotated[str, cyclopts.Parameter(help="Memory ID to show")],
+    database: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--database", "-d"],
+            help="Database connection name (uses default if not specified)",
+        ),
+    ] = None,
 ):
     """Show the full content of a specific memory."""
     database_name = _get_database_name(database)
@@ -121,7 +127,7 @@ def show_memory(
         console.print(
             f"[bold red]Error:[/bold red] Memory with ID '{memory_id}' not found for database '{database_name}'"
         )
-        raise typer.Exit(1)
+        sys.exit(1)
 
     console.print(f"[bold]Memory ID:[/bold] {memory.id}")
     console.print(f"[bold]Database:[/bold] {memory.database}")
@@ -130,15 +136,16 @@ def show_memory(
     console.print(f"{memory.content}")
 
 
-@memory_app.command("remove")
-def remove_memory(
-    memory_id: str = typer.Argument(..., help="Memory ID to remove"),
-    database: str | None = typer.Option(
-        None,
-        "--database",
-        "-d",
-        help="Database connection name (uses default if not specified)",
-    ),
+@memory_app.command
+def remove(
+    memory_id: Annotated[str, cyclopts.Parameter(help="Memory ID to remove")],
+    database: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--database", "-d"],
+            help="Database connection name (uses default if not specified)",
+        ),
+    ] = None,
 ):
     """Remove a specific memory by ID."""
     database_name = _get_database_name(database)
@@ -149,7 +156,7 @@ def remove_memory(
         console.print(
             f"[bold red]Error:[/bold red] Memory with ID '{memory_id}' not found for database '{database_name}'"
         )
-        raise typer.Exit(1)
+        sys.exit(1)
 
     # Show memory content before removal
     console.print("[yellow]Removing memory:[/yellow]")
@@ -163,23 +170,25 @@ def remove_memory(
         console.print(
             f"[bold red]Error:[/bold red] Failed to remove memory '{memory_id}'"
         )
-        raise typer.Exit(1)
+        sys.exit(1)
 
 
-@memory_app.command("clear")
-def clear_memories(
-    database: str | None = typer.Option(
-        None,
-        "--database",
-        "-d",
-        help="Database connection name (uses default if not specified)",
-    ),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        "-f",
-        help="Skip confirmation prompt",
-    ),
+@memory_app.command
+def clear(
+    database: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--database", "-d"],
+            help="Database connection name (uses default if not specified)",
+        ),
+    ] = None,
+    force: Annotated[
+        bool,
+        cyclopts.Parameter(
+            ["--force", "-f"],
+            help="Skip confirmation prompt",
+        ),
+    ] = False,
 ):
     """Clear all memories for the specified database."""
     database_name = _get_database_name(database)
@@ -198,8 +207,8 @@ def clear_memories(
         console.print(
             f"[yellow]About to clear {memories_count} memories for database '{database_name}'[/yellow]"
         )
-        confirm = typer.confirm("Are you sure you want to proceed?")
-        if not confirm:
+
+        if not questionary.confirm("Are you sure you want to proceed?").ask():
             console.print("Operation cancelled")
             return
 
@@ -209,14 +218,15 @@ def clear_memories(
     )
 
 
-@memory_app.command("summary")
-def memory_summary(
-    database: str | None = typer.Option(
-        None,
-        "--database",
-        "-d",
-        help="Database connection name (uses default if not specified)",
-    ),
+@memory_app.command
+def summary(
+    database: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--database", "-d"],
+            help="Database connection name (uses default if not specified)",
+        ),
+    ] = None,
 ):
     """Show memory summary for the specified database."""
     database_name = _get_database_name(database)
@@ -232,6 +242,6 @@ def memory_summary(
             console.print(f"[dim]{memory['timestamp']}[/dim] - {memory['content']}")
 
 
-def create_memory_app() -> typer.Typer:
+def create_memory_app() -> cyclopts.App:
     """Return the memory management CLI app."""
     return memory_app
