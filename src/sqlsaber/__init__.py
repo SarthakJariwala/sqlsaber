@@ -1,3 +1,1 @@
-"""SQLSaber CLI - SQL like Claude Code."""
-
-__version__ = "0.1.0"
+"""SQLSaber CLI - Agentic SQL assistant like Claude Code but for SQL."""
