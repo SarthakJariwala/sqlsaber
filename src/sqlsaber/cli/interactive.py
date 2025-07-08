@@ -36,8 +36,15 @@ class InteractiveSession:
 
         self.console.print(
             Panel.fit(
-                "[bold green]SQLSaber - Use the agent Luke![/bold green]\n\n"
-                "[bold]Your agentic SQL assistant.[/bold]\n\n\n"
+                """
+███████  ██████  ██      ███████  █████  ██████  ███████ ██████
+██      ██    ██ ██      ██      ██   ██ ██   ██ ██      ██   ██
+███████ ██    ██ ██      ███████ ███████ ██████  █████   ██████
+     ██ ██ ▄▄ ██ ██           ██ ██   ██ ██   ██ ██      ██   ██
+███████  ██████  ███████ ███████ ██   ██ ██████  ███████ ██   ██
+            ▀▀
+"""
+                "\n\n"
                 "[dim]Use '/clear' to reset conversation, '/exit' or '/quit' to leave.[/dim]\n\n"
                 "[dim]Start a message with '#' to add something to agent's memory for this database.[/dim]\n\n"
                 "[dim]Type '@' to get table name completions.[/dim]",
