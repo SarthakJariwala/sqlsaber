@@ -1,3 +1,5 @@
+# SQLSaber Agent Guide
+
 ## Commands
 
 - **Run Python**: `uv run python`
