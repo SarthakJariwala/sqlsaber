@@ -18,6 +18,15 @@ from sqlsaber.cli.streaming import StreamingQueryHandler
 from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.database.connection import DatabaseConnection
 
+
+class CLIError(Exception):
+    """Exception raised for CLI errors that should result in exit."""
+
+    def __init__(self, message: str, exit_code: int = 1):
+        super().__init__(message)
+        self.exit_code = exit_code
+
+
 app = cyclopts.App(
     name="sqlsaber",
     help="SQLSaber - Use the agent Luke!\n\nSQL assistant for your database",
@@ -42,15 +51,15 @@ def meta_handler(
     Query your database using natural language.
 
     Examples:
-        sb query                             # Start interactive mode
-        sb query "show me all users"         # Run a single query with default database
-        sb query -d mydb "show me users"     # Run a query with specific database
+        saber                             # Start interactive mode
+        saber "show me all users"         # Run a single query with default database
+        saber -d mydb "show me users"     # Run a query with specific database
     """
     # Store database in app context for commands to access
     app.meta["database"] = database
 
 
-@app.command
+@app.default
 def query(
     query_text: Annotated[
         str | None,
@@ -66,7 +75,11 @@ def query(
         ),
     ] = None,
 ):
-    """Run a query against the database or start interactive mode."""
+    """Run a query against the database or start interactive mode.
+
+    When called without arguments, starts interactive mode.
+    When called with a query string, executes that query and exits.
+    """
 
     async def run_session():
         # Get database configuration or handle direct CSV file
@@ -75,35 +88,24 @@ def query(
             if database.endswith(".csv"):
                 csv_path = Path(database).expanduser().resolve()
                 if not csv_path.exists():
-                    console.print(
-                        f"[bold red]Error:[/bold red] CSV file '{database}' not found."
-                    )
-                    sys.exit(1)
+                    raise CLIError(f"CSV file '{database}' not found.")
                 connection_string = f"csv:///{csv_path}"
                 db_name = csv_path.stem
             else:
                 # Look up configured database connection
                 db_config = config_manager.get_database(database)
                 if not db_config:
-                    console.print(
-                        f"[bold red]Error:[/bold red] Database connection '{database}' not found."
+                    raise CLIError(
+                        f"Database connection '{database}' not found. Use 'sqlsaber db list' to see available connections."
                     )
-                    console.print(
-                        "Use 'sqlsaber db list' to see available connections."
-                    )
-                    sys.exit(1)
                 connection_string = db_config.to_connection_string()
                 db_name = db_config.name
         else:
             db_config = config_manager.get_default_database()
             if not db_config:
-                console.print(
-                    "[bold red]Error:[/bold red] No database connections configured."
+                raise CLIError(
+                    "No database connections configured. Use 'sqlsaber db add <name>' to add a database connection."
                 )
-                console.print(
-                    "Use 'sqlsaber db add <name>' to add a database connection."
-                )
-                sys.exit(1)
             connection_string = db_config.to_connection_string()
             db_name = db_config.name
 
@@ -111,10 +113,7 @@ def query(
         try:
             db_conn = DatabaseConnection(connection_string)
         except Exception as e:
-            console.print(
-                f"[bold red]Error creating database connection:[/bold red] {e}"
-            )
-            sys.exit(1)
+            raise CLIError(f"Error creating database connection: {e}")
 
         # Create agent instance with database name for memory context
         agent = AnthropicSQLAgent(db_conn, db_name)
@@ -138,8 +137,12 @@ def query(
             await db_conn.close()
             console.print("\n[green]Goodbye![/green]")
 
-    # Run the async function
-    asyncio.run(run_session())
+    # Run the async function with proper error handling
+    try:
+        asyncio.run(run_session())
+    except CLIError as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        sys.exit(e.exit_code)
 
 
 # Add authentication management commands

@@ -105,7 +105,7 @@ saber memory list
 Start an interactive session:
 
 ```bash
-saber query
+saber
 ```
 
 > You can also add memories in an interactive session by starting your message with the `#` sign
@@ -115,7 +115,7 @@ saber query
 Execute a single natural language query:
 
 ```bash
-saber query "show me all users created this month"
+saber "show me all users created this month"
 ```
 
 ### Database Selection
@@ -123,33 +123,39 @@ saber query "show me all users created this month"
 Use a specific database connection:
 
 ```bash
-# Use named database from config
-saber query -d mydb "count all orders"
+# Interactive mode with specific database
+saber -d mydb
+
+# Single query with specific database
+saber -d mydb "count all orders"
 ```
 
 ## Examples
 
 ```bash
 # Show database schema
-saber query "what tables are in my database?"
+saber "what tables are in my database?"
 
 # Count records
-saber query "how many active users do we have?"
+saber "how many active users do we have?"
 
 # Complex queries with joins
-saber query "show me orders with customer details for this week"
+saber "show me orders with customer details for this week"
 
 # Aggregations
-saber query "what's the total revenue by product category?"
+saber "what's the total revenue by product category?"
 
 # Date filtering
-saber query "list users who haven't logged in for 30 days"
+saber "list users who haven't logged in for 30 days"
 
 # Data exploration
-saber query "show me the distribution of customer ages"
+saber "show me the distribution of customer ages"
 
 # Business analytics
-saber query "which products had the highest sales growth last quarter?"
+saber "which products had the highest sales growth last quarter?"
+
+# Start interactive mode
+saber
 ```
 
 ## MCP Server Integration
