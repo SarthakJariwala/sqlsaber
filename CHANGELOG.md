@@ -4,8 +4,11 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.0] - 2025-07-07
+
 ### Added
 
+- OAuth support for Claude Pro/Max subscriptions
 - Authentication management with `saber auth` command
   - Interactive setup for API key or Claude Pro/Max subscription
   - `saber auth setup`
@@ -17,6 +20,7 @@ All notable changes to SQLSaber will be documented in this file.
 
 ### Changed
 
+- Enhanced authentication system to support both API keys and OAuth tokens
 - Replaced Anthropic SDK with direct API implementation using httpx
 - Modernized type annotations throughout the codebase
 - Refactored query streaming into smaller, more maintainable functions
