@@ -4,6 +4,7 @@ import json
 
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
@@ -244,7 +245,7 @@ class DisplayManager:
             self.show_error(f"Error displaying plot: {str(e)}")
 
     def show_markdown_response(self, content: list):
-        """Display the assistant's response as rich markdown."""
+        """Display the assistant's response as rich markdown in a panel."""
         if not content:
             return
 
@@ -256,10 +257,11 @@ class DisplayManager:
                 if text:
                     text_parts.append(text)
 
-        # Join all text parts and display as markdown
+        # Join all text parts and display as markdown in a panel
         full_text = "".join(text_parts).strip()
         if full_text:
-            self.console.print()  # Add spacing before markdown
+            self.console.print()  # Add spacing before panel
             markdown = Markdown(full_text)
-            self.console.print(markdown)
-            self.console.print()  # Add spacing after markdown
+            panel = Panel.fit(markdown, border_style="green")
+            self.console.print(panel)
+            self.console.print()  # Add spacing after panel
