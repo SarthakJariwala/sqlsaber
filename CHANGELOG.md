@@ -4,6 +4,16 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Migrated from Typer to Cyclopts for CLI framework
+  - Improved command structure and parameter handling
+  - Better support for sub-commands and help documentation
+- Made interactive mode more ergonomic
+  - `saber` now directly starts interactive mode (previously `saber query`)
+  - `saber "question"` executes a single query (previously `saber query "question"`)
+  - Removed the `query` subcommand for a cleaner interface
+
 ## [0.8.2] - 2025-07-08
 
 ## Changed
