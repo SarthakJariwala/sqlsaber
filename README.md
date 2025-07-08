@@ -118,6 +118,13 @@ Execute a single natural language query:
 saber "show me all users created this month"
 ```
 
+You can also pipe queries from stdin:
+
+```bash
+echo "show me all users created this month" | saber
+cat query.txt | saber
+```
+
 ### Database Selection
 
 Use a specific database connection:
