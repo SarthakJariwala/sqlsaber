@@ -4,6 +4,12 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.1] - 2025-07-07
+
+### Fixed
+
+- Fixed OAuth validation logic to not require API key when Claude Pro OAuth is configured
+
 ## [0.8.0] - 2025-07-07
 
 ### Added

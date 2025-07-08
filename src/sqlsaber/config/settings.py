@@ -117,10 +117,14 @@ class Config:
 
     def validate(self):
         """Validate that necessary configuration is present."""
-        if self.auth_method == AuthMethod.CLAUDE_PRO and not self.oauth_token:
-            raise ValueError(
-                "OAuth token not available. Run 'saber auth setup' to authenticate with Claude Pro."
-            )
-        else:
-            if not self.api_key:
-                raise ValueError("Anthropic API key not found.")
+        # 1. Claude-Pro flow → require OAuth token only
+        if self.auth_method == AuthMethod.CLAUDE_PRO:
+            if not self.oauth_token:
+                raise ValueError(
+                    "OAuth token not available. Run 'saber auth setup' to authenticate with Claude Pro."
+                )
+            return  # OAuth path satisfied – nothing more to check
+
+        # 2. Default / API-key flow → require API key
+        if not self.api_key:
+            raise ValueError("Anthropic API key not found.")
