@@ -4,9 +4,12 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.2] - 2025-07-08
+
 ## Changed
 
 - Updated formatting for final answer display
+- New ASCII art in interactive mode
 
 ## [0.8.1] - 2025-07-07
 
