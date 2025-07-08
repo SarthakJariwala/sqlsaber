@@ -10,6 +10,8 @@ from typing import Any
 import platformdirs
 
 from sqlsaber.config.api_keys import APIKeyManager
+from sqlsaber.config.auth import AuthConfigManager, AuthMethod
+from sqlsaber.config.oauth_flow import AnthropicOAuthFlow
 
 
 class ModelConfigManager:
@@ -81,35 +83,44 @@ class Config:
         self.model_config_manager = ModelConfigManager()
         self.model_name = self.model_config_manager.get_model()
         self.api_key_manager = APIKeyManager()
-        self.api_key = self._get_api_key()
+        self.auth_config_manager = AuthConfigManager()
+        self.oauth_flow = AnthropicOAuthFlow()
+
+        # Get authentication credentials based on configured method
+        self.auth_method = self.auth_config_manager.get_auth_method()
+        self.api_key = None
+        self.oauth_token = None
+
+        if self.auth_method == AuthMethod.CLAUDE_PRO:
+            # Try to get OAuth token and refresh if needed
+            try:
+                token = self.oauth_flow.refresh_token_if_needed()
+                if token:
+                    self.oauth_token = token.access_token
+            except Exception:
+                # OAuth token unavailable, will need to re-authenticate
+                pass
+        else:
+            # Use API key authentication (default or explicitly configured)
+            self.api_key = self._get_api_key()
 
     def _get_api_key(self) -> str | None:
         """Get API key for the model provider using cascading logic."""
         model = self.model_name
-
-        if model.startswith("openai:"):
-            return self.api_key_manager.get_api_key("openai")
-        elif model.startswith("anthropic:"):
+        if model.startswith("anthropic:"):
             return self.api_key_manager.get_api_key("anthropic")
-        else:
-            # For other providers, use generic key
-            return self.api_key_manager.get_api_key("generic")
 
     def set_model(self, model: str) -> None:
         """Set the model and update configuration."""
         self.model_config_manager.set_model(model)
         self.model_name = model
-        # Update API key for new model
-        self.api_key = self._get_api_key()
 
     def validate(self):
         """Validate that necessary configuration is present."""
-        if not self.api_key:
-            model = self.model_name
-            provider = "generic"
-            if model.startswith("openai:"):
-                provider = "OpenAI"
-            elif model.startswith("anthropic:"):
-                provider = "Anthropic"
-
-            raise ValueError(f"{provider} API key not found.")
+        if self.auth_method == AuthMethod.CLAUDE_PRO and not self.oauth_token:
+            raise ValueError(
+                "OAuth token not available. Run 'saber auth setup' to authenticate with Claude Pro."
+            )
+        else:
+            if not self.api_key:
+                raise ValueError("Anthropic API key not found.")
