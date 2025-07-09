@@ -4,6 +4,10 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Removed row counting from `list_tables` tool for all database types
+
 ## [0.10.0] - 2025-07-08
 
 ### Added

@@ -125,7 +125,6 @@ class DisplayManager:
                 {"name": "Schema", "style": "cyan"},
                 {"name": "Table Name", "style": "white"},
                 {"name": "Type", "style": "yellow"},
-                {"name": "Row Count", "justify": "right", "style": "magenta"},
             ]
             table = self._create_table(columns)
 
@@ -134,12 +133,8 @@ class DisplayManager:
                 schema = table_info.get("schema", "")
                 name = table_info.get("name", "")
                 table_type = table_info.get("type", "")
-                row_count = table_info.get("row_count", 0)
 
-                # Format row count with commas for readability
-                formatted_count = f"{row_count:,}" if row_count else "0"
-
-                table.add_row(schema, name, table_type, formatted_count)
+                table.add_row(schema, name, table_type)
 
             self.console.print(table)
 

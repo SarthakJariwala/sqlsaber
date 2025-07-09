@@ -42,7 +42,7 @@ class BaseSchemaIntrospector(ABC):
         pass
 
     @abstractmethod
-    async def list_tables_info(self, connection) -> dict[str, Any]:
+    async def list_tables_info(self, connection) -> list[dict[str, Any]]:
         """Get list of tables with basic information."""
         pass
 
@@ -182,32 +182,31 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
             """
             return await conn.fetch(pk_query)
 
-    async def list_tables_info(self, connection) -> dict[str, Any]:
+    async def list_tables_info(self, connection) -> list[dict[str, Any]]:
         """Get list of tables with basic information for PostgreSQL."""
         pool = await connection.get_pool()
         async with pool.acquire() as conn:
-            # Get tables with row counts
+            # Get tables without row counts for better performance
             tables_query = """
-                WITH table_stats AS (
-                    SELECT
-                        schemaname,
-                        relname as tablename,
-                        n_live_tup as approximate_row_count
-                    FROM pg_stat_user_tables
-                )
                 SELECT
                     t.table_schema,
                     t.table_name,
-                    t.table_type,
-                    COALESCE(ts.approximate_row_count, 0) as row_count
+                    t.table_type
                 FROM information_schema.tables t
-                LEFT JOIN table_stats ts
-                    ON t.table_schema = ts.schemaname
-                    AND t.table_name = ts.tablename
                 WHERE t.table_schema NOT IN ('pg_catalog', 'information_schema')
                 ORDER BY t.table_schema, t.table_name;
             """
-            return await conn.fetch(tables_query)
+            records = await conn.fetch(tables_query)
+
+            # Convert asyncpg.Record objects to dictionaries
+            return [
+                {
+                    "table_schema": record["table_schema"],
+                    "table_name": record["table_name"],
+                    "table_type": record["table_type"],
+                }
+                for record in records
+            ]
 
 
 class MySQLSchemaIntrospector(BaseSchemaIntrospector):
@@ -353,24 +352,33 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
                 await cursor.execute(pk_query)
                 return await cursor.fetchall()
 
-    async def list_tables_info(self, connection) -> dict[str, Any]:
+    async def list_tables_info(self, connection) -> list[dict[str, Any]]:
         """Get list of tables with basic information for MySQL."""
         pool = await connection.get_pool()
         async with pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                # Get tables with row counts
+                # Get tables without row counts for better performance
                 tables_query = """
                     SELECT
                         t.table_schema,
                         t.table_name,
-                        t.table_type,
-                        COALESCE(t.table_rows, 0) as row_count
+                        t.table_type
                     FROM information_schema.tables t
                     WHERE t.table_schema NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys')
                     ORDER BY t.table_schema, t.table_name;
                 """
                 await cursor.execute(tables_query)
-                return await cursor.fetchall()
+                rows = await cursor.fetchall()
+
+                # Convert rows to dictionaries
+                return [
+                    {
+                        "table_schema": row["table_schema"],
+                        "table_name": row["table_name"],
+                        "table_type": row["table_type"],
+                    }
+                    for row in rows
+                ]
 
 
 class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
@@ -496,9 +504,9 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
 
         return primary_keys
 
-    async def list_tables_info(self, connection) -> dict[str, Any]:
+    async def list_tables_info(self, connection) -> list[dict[str, Any]]:
         """Get list of tables with basic information for SQLite."""
-        # First get the table names
+        # Get table names without row counts for better performance
         tables_query = """
             SELECT
                 'main' as table_schema,
@@ -512,34 +520,15 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
 
         tables = await self._execute_query(connection, tables_query)
 
-        # Now get row counts for each table
-        result = []
-        for table in tables:
-            table_name = table["table_name"]
-            table_type = table["table_type"]
-
-            # Only count rows for tables, not views
-            if table_type.lower() == "table":
-                try:
-                    count_query = f"SELECT COUNT(*) as count FROM [{table_name}]"
-                    count_result = await self._execute_query(connection, count_query)
-                    row_count = count_result[0]["count"] if count_result else 0
-                except Exception:
-                    # If count fails (e.g., table locked), default to 0
-                    row_count = 0
-            else:
-                # For views, we don't count rows as it could be expensive
-                row_count = 0
-
-            result.append(
-                {
-                    "table_schema": table["table_schema"],
-                    "table_name": table_name,
-                    "table_type": table_type,
-                    "row_count": row_count,
-                }
-            )
-        return result
+        # Convert to expected format
+        return [
+            {
+                "table_schema": table["table_schema"],
+                "table_name": table["table_name"],
+                "table_type": table["table_type"],
+            }
+            for table in tables
+        ]
 
 
 class SchemaManager:
@@ -682,7 +671,7 @@ class SchemaManager:
                 )
 
     async def list_tables(self) -> dict[str, Any]:
-        """Get a list of all tables with basic information like row counts."""
+        """Get a list of all tables with basic information."""
         # Check cache first
         cache_key = "list_tables"
         cached_data = self._get_cached_tables(cache_key)
@@ -702,7 +691,6 @@ class SchemaManager:
                     "name": table["table_name"],
                     "full_name": f"{table['table_schema']}.{table['table_name']}",
                     "type": table["table_type"],
-                    "row_count": table["row_count"],
                 }
             )
 
