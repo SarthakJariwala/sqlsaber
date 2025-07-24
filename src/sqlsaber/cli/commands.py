@@ -43,7 +43,7 @@ def meta_handler(
         str | None,
         cyclopts.Parameter(
             ["--database", "-d"],
-            help="Database connection name (uses default if not specified)",
+            help="Database connection name or direct file path for CSV/SQLite files (uses default if not specified)",
         ),
     ] = None,
 ):
@@ -54,6 +54,8 @@ def meta_handler(
         saber                                  # Start interactive mode
         saber "show me all users"              # Run a single query with default database
         saber -d mydb "show me users"          # Run a query with specific database
+        saber -d data.csv "show me users"      # Run a query with ad-hoc CSV file
+        saber -d data.db "show me users"       # Run a query with ad-hoc SQLite file
         echo "show me all users" | saber       # Read query from stdin
         cat query.txt | saber                  # Read query from file via stdin
     """
@@ -73,7 +75,7 @@ def query(
         str | None,
         cyclopts.Parameter(
             ["--database", "-d"],
-            help="Database connection name (uses default if not specified)",
+            help="Database connection name or direct file path for CSV/SQLite files (uses default if not specified)",
         ),
     ] = None,
 ):
@@ -88,6 +90,8 @@ def query(
     Examples:
         saber                             # Start interactive mode
         saber "show me all users"         # Run a single query
+        saber -d data.csv "show users"    # Run a query with ad-hoc CSV file
+        saber -d data.db "show users"     # Run a query with ad-hoc SQLite file
         echo "show me all users" | saber  # Read query from stdin
     """
 
@@ -101,7 +105,7 @@ def query(
                 # If stdin was empty, fall back to interactive mode
                 actual_query = None
 
-        # Get database configuration or handle direct CSV file
+        # Get database configuration or handle direct file paths
         if database:
             # Check if this is a direct CSV file path
             if database.endswith(".csv"):
@@ -110,6 +114,13 @@ def query(
                     raise CLIError(f"CSV file '{database}' not found.")
                 connection_string = f"csv:///{csv_path}"
                 db_name = csv_path.stem
+            # Check if this is a direct SQLite file path
+            elif database.endswith((".db", ".sqlite", ".sqlite3")):
+                sqlite_path = Path(database).expanduser().resolve()
+                if not sqlite_path.exists():
+                    raise CLIError(f"SQLite file '{database}' not found.")
+                connection_string = f"sqlite:///{sqlite_path}"
+                db_name = sqlite_path.stem
             else:
                 # Look up configured database connection
                 db_config = config_manager.get_database(database)
