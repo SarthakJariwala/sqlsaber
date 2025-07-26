@@ -4,6 +4,21 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.0] - 2025-07-26
+
+### Added
+
+- Database resolver abstraction for unified connection handling
+  - Extended `-d` flag to accept PostgreSQL and MySQL connection strings (e.g., `postgresql://user:pass@host:5432/db`)
+  - Support for direct connection strings alongside existing file path and configured database support
+  - Examples: `saber -d "postgresql://user:pass@host:5432/db" "show users"`
+
+## [0.12.0] - 2025-07-23
+
+### Added
+
+- Add support for ad-hoc SQLite files via `--database`/`-d` flag
+
 ## [0.11.0] - 2025-07-09
 
 ### Changed

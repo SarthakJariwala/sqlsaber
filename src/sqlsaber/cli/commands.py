@@ -2,7 +2,6 @@
 
 import asyncio
 import sys
-from pathlib import Path
 from typing import Annotated
 
 import cyclopts
@@ -17,6 +16,7 @@ from sqlsaber.cli.models import create_models_app
 from sqlsaber.cli.streaming import StreamingQueryHandler
 from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.database.connection import DatabaseConnection
+from sqlsaber.database.resolver import DatabaseResolutionError, resolve_database
 
 
 class CLIError(Exception):
@@ -43,7 +43,7 @@ def meta_handler(
         str | None,
         cyclopts.Parameter(
             ["--database", "-d"],
-            help="Database connection name or direct file path for CSV/SQLite files (uses default if not specified)",
+            help="Database connection name, file path (CSV/SQLite), or connection string (postgresql://, mysql://) (uses default if not specified)",
         ),
     ] = None,
 ):
@@ -56,6 +56,8 @@ def meta_handler(
         saber -d mydb "show me users"          # Run a query with specific database
         saber -d data.csv "show me users"      # Run a query with ad-hoc CSV file
         saber -d data.db "show me users"       # Run a query with ad-hoc SQLite file
+        saber -d "postgresql://user:pass@host:5432/db" "show users"  # PostgreSQL connection string
+        saber -d "mysql://user:pass@host:3306/db" "show users"       # MySQL connection string
         echo "show me all users" | saber       # Read query from stdin
         cat query.txt | saber                  # Read query from file via stdin
     """
@@ -75,7 +77,7 @@ def query(
         str | None,
         cyclopts.Parameter(
             ["--database", "-d"],
-            help="Database connection name or direct file path for CSV/SQLite files (uses default if not specified)",
+            help="Database connection name, file path (CSV/SQLite), or connection string (postgresql://, mysql://) (uses default if not specified)",
         ),
     ] = None,
 ):
@@ -92,6 +94,8 @@ def query(
         saber "show me all users"         # Run a single query
         saber -d data.csv "show users"    # Run a query with ad-hoc CSV file
         saber -d data.db "show users"     # Run a query with ad-hoc SQLite file
+        saber -d "postgresql://user:pass@host:5432/db" "show users"  # PostgreSQL connection string
+        saber -d "mysql://user:pass@host:3306/db" "show users"       # MySQL connection string
         echo "show me all users" | saber  # Read query from stdin
     """
 
@@ -105,39 +109,13 @@ def query(
                 # If stdin was empty, fall back to interactive mode
                 actual_query = None
 
-        # Get database configuration or handle direct file paths
-        if database:
-            # Check if this is a direct CSV file path
-            if database.endswith(".csv"):
-                csv_path = Path(database).expanduser().resolve()
-                if not csv_path.exists():
-                    raise CLIError(f"CSV file '{database}' not found.")
-                connection_string = f"csv:///{csv_path}"
-                db_name = csv_path.stem
-            # Check if this is a direct SQLite file path
-            elif database.endswith((".db", ".sqlite", ".sqlite3")):
-                sqlite_path = Path(database).expanduser().resolve()
-                if not sqlite_path.exists():
-                    raise CLIError(f"SQLite file '{database}' not found.")
-                connection_string = f"sqlite:///{sqlite_path}"
-                db_name = sqlite_path.stem
-            else:
-                # Look up configured database connection
-                db_config = config_manager.get_database(database)
-                if not db_config:
-                    raise CLIError(
-                        f"Database connection '{database}' not found. Use 'sqlsaber db list' to see available connections."
-                    )
-                connection_string = db_config.to_connection_string()
-                db_name = db_config.name
-        else:
-            db_config = config_manager.get_default_database()
-            if not db_config:
-                raise CLIError(
-                    "No database connections configured. Use 'sqlsaber db add <name>' to add a database connection."
-                )
-            connection_string = db_config.to_connection_string()
-            db_name = db_config.name
+        # Resolve database from CLI input
+        try:
+            resolved = resolve_database(database, config_manager)
+            connection_string = resolved.connection_string
+            db_name = resolved.name
+        except DatabaseResolutionError as e:
+            raise CLIError(str(e))
 
         # Create database connection
         try:
