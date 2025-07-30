@@ -136,11 +136,15 @@ class InteractiveSession:
                 if not user_query:
                     continue
 
-                if user_query in ["/exit", "/quit"]:
+                if (
+                    user_query in ["/exit", "/quit"]
+                    or user_query.startswith("/exit")
+                    or user_query.startswith("/quit")
+                ):
                     break
 
                 if user_query == "/clear":
-                    self.agent.clear_history()
+                    await self.agent.clear_history()
                     self.console.print("[green]Conversation history cleared.[/green]\n")
                     continue
 
