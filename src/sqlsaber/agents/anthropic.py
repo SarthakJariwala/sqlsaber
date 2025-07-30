@@ -450,6 +450,16 @@ Guidelines:
         self._last_query = None
 
         try:
+            # Ensure conversation is active for persistence
+            await self._ensure_conversation()
+
+            # Store user message in conversation history and persistence
+            if use_history:
+                self.conversation_history.append(
+                    {"role": "user", "content": user_query}
+                )
+                await self._store_user_message(user_query)
+
             # Build messages with history if requested
             messages = []
             if use_history:
@@ -461,8 +471,9 @@ Guidelines:
                 instructions = self._get_sql_assistant_instructions()
                 messages.append(Message(MessageRole.USER, instructions))
 
-            # Add current user message
-            messages.append(Message(MessageRole.USER, user_query))
+            # Add current user message if not already in messages from history
+            if not use_history:
+                messages.append(Message(MessageRole.USER, user_query))
 
             # Create initial request and get response
             request = self._create_message_request(messages)
@@ -484,9 +495,12 @@ Guidelines:
                     return
 
                 # Add assistant's response to conversation
-                collected_content.append(
-                    {"role": "assistant", "content": response.content}
-                )
+                assistant_content = {"role": "assistant", "content": response.content}
+                collected_content.append(assistant_content)
+
+                # Store the assistant message immediately (not from collected_content)
+                if use_history:
+                    await self._store_assistant_message(response.content)
 
                 # Execute tools and get results
                 tool_results = []
@@ -499,9 +513,19 @@ Guidelines:
                         tool_results = event
 
                 # Continue conversation with tool results
-                collected_content.append({"role": "user", "content": tool_results})
+                tool_content = {"role": "user", "content": tool_results}
+                collected_content.append(tool_content)
+
+                # Store the tool message immediately and update history
                 if use_history:
-                    self.conversation_history.extend(collected_content)
+                    # Only add the NEW messages to history (not the accumulated ones)
+                    # collected_content has [assistant1, tool1, assistant2, tool2, ...]
+                    # We only want to add the last 2 items that were just added
+                    new_messages_for_history = collected_content[
+                        -2:
+                    ]  # Last assistant + tool pair
+                    self.conversation_history.extend(new_messages_for_history)
+                    await self._store_tool_message(tool_results)
 
                 if cancellation_token is not None and cancellation_token.is_set():
                     return
@@ -540,6 +564,10 @@ Guidelines:
                 self.conversation_history.append(
                     {"role": "assistant", "content": response.content}
                 )
+
+                # Store final assistant message in persistence (only if not tool_use)
+                if response.stop_reason != "tool_use":
+                    await self._store_assistant_message(response.content)
 
         except asyncio.CancelledError:
             return
