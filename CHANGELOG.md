@@ -4,6 +4,21 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Local conversation storage between user and agent
+  - Store conversation history persistently
+  - Track messages with proper attribution
+- Added automated test execution in CI
+  - New GitHub Actions workflow for running tests
+  - Updated code review workflow
+
+### Fixed
+
+- Fixed CLI commands test suite (#11)
+
+### CI/CD
+
 ## [0.13.0] - 2025-07-26
 
 ### Added
