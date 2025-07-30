@@ -22,8 +22,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
     database_name TEXT NOT NULL,
     started_at REAL NOT NULL,
-    ended_at REAL,
-    metadata TEXT
+    ended_at REAL
 );
 
 -- Messages table
@@ -83,14 +82,11 @@ class ConversationStorage:
             logger.warning(f"Failed to initialize conversation database: {e}")
             # Don't raise - let the system continue without persistence
 
-    async def create_conversation(
-        self, database_name: str, metadata: dict[str, Any] | None = None
-    ) -> str:
+    async def create_conversation(self, database_name: str) -> str:
         """Create a new conversation record.
 
         Args:
             database_name: Name of the database for this conversation
-            metadata: Optional metadata dictionary
 
         Returns:
             Conversation ID (UUID)
@@ -104,15 +100,10 @@ class ConversationStorage:
             async with self._lock, aiosqlite.connect(self.db_path) as db:
                 await db.execute(
                     """
-                    INSERT INTO conversations (id, database_name, started_at, metadata)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO conversations (id, database_name, started_at)
+                    VALUES (?, ?, ?)
                     """,
-                    (
-                        conversation_id,
-                        database_name,
-                        started_at,
-                        json.dumps(metadata) if metadata else None,
-                    ),
+                    (conversation_id, database_name, started_at),
                 )
                 await db.commit()
 
@@ -215,28 +206,18 @@ class ConversationStorage:
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 async with db.execute(
-                    "SELECT id, database_name, started_at, ended_at, metadata FROM conversations WHERE id = ?",
+                    "SELECT id, database_name, started_at, ended_at FROM conversations WHERE id = ?",
                     (conversation_id,),
                 ) as cursor:
                     row = await cursor.fetchone()
                     if not row:
                         return None
 
-                    metadata = None
-                    if row[4]:
-                        try:
-                            metadata = json.loads(row[4])
-                        except json.JSONDecodeError:
-                            logger.warning(
-                                f"Invalid metadata JSON for conversation {conversation_id}"
-                            )
-
                     return Conversation(
                         id=row[0],
                         database_name=row[1],
                         started_at=row[2],
                         ended_at=row[3],
-                        metadata=metadata,
                     )
 
         except Exception as e:
@@ -303,7 +284,7 @@ class ConversationStorage:
 
         try:
             query = """
-                SELECT id, database_name, started_at, ended_at, metadata
+                SELECT id, database_name, started_at, ended_at
                 FROM conversations
             """
             params = []
@@ -319,19 +300,11 @@ class ConversationStorage:
                 async with db.execute(query, params) as cursor:
                     conversations = []
                     async for row in cursor:
-                        metadata = None
-                        if row[4]:
-                            try:
-                                metadata = json.loads(row[4])
-                            except json.JSONDecodeError:
-                                pass
-
                         conversation = Conversation(
                             id=row[0],
                             database_name=row[1],
                             started_at=row[2],
                             ended_at=row[3],
-                            metadata=metadata,
                         )
                         conversations.append(conversation)
 

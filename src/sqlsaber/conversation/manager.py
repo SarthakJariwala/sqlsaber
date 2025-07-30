@@ -17,25 +17,19 @@ class ConversationManager:
         """Initialize conversation manager."""
         self._storage = ConversationStorage()
 
-    async def start_conversation(
-        self, database_name: str, metadata: dict[str, Any] | None = None
-    ) -> str:
+    async def start_conversation(self, database_name: str) -> str:
         """Start a new conversation.
 
         Args:
             database_name: Name of the database for this conversation
-            metadata: Optional metadata dictionary
 
         Returns:
             Conversation ID
         """
         try:
-            return await self._storage.create_conversation(database_name, metadata)
+            return await self._storage.create_conversation(database_name)
         except Exception as e:
             logger.warning(f"Failed to start conversation: {e}")
-            # Return a temporary ID to allow in-memory operation
-            import uuid
-
             return str(uuid.uuid4())
 
     async def add_user_message(
@@ -57,8 +51,6 @@ class ConversationManager:
             )
         except Exception as e:
             logger.warning(f"Failed to add user message: {e}")
-            import uuid
-
             return str(uuid.uuid4())
 
     async def add_assistant_message(
@@ -83,7 +75,6 @@ class ConversationManager:
             )
         except Exception as e:
             logger.warning(f"Failed to add assistant message: {e}")
-
             return str(uuid.uuid4())
 
     async def add_tool_message(
@@ -108,8 +99,6 @@ class ConversationManager:
             )
         except Exception as e:
             logger.warning(f"Failed to add tool message: {e}")
-            import uuid
-
             return str(uuid.uuid4())
 
     async def end_conversation(self, conversation_id: str) -> bool:

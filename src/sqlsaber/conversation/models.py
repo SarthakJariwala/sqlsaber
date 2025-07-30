@@ -14,7 +14,6 @@ class Conversation:
     database_name: str
     started_at: float
     ended_at: float | None = None
-    metadata: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -23,7 +22,6 @@ class Conversation:
             "database_name": self.database_name,
             "started_at": self.started_at,
             "ended_at": self.ended_at,
-            "metadata": self.metadata,
         }
 
     @classmethod
@@ -34,7 +32,6 @@ class Conversation:
             database_name=data["database_name"],
             started_at=data["started_at"],
             ended_at=data.get("ended_at"),
-            metadata=data.get("metadata"),
         )
 
     def formatted_start_time(self) -> str:
