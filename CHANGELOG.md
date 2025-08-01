@@ -4,6 +4,8 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.14.0] - 2025-08-01
+
 ### Added
 
 - Local conversation storage between user and agent
