@@ -1,6 +1,5 @@
 """Database schema introspection utilities."""
 
-import time
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -532,12 +531,10 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
 
 
 class SchemaManager:
-    """Manages database schema introspection with caching."""
+    """Manages database schema introspection."""
 
-    def __init__(self, db_connection: BaseDatabaseConnection, cache_ttl: int = 900):
+    def __init__(self, db_connection: BaseDatabaseConnection):
         self.db = db_connection
-        self.cache_ttl = cache_ttl  # Default 15 minutes
-        self._schema_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
         # Select appropriate introspector based on connection type
         if isinstance(db_connection, PostgreSQLConnection):
@@ -551,10 +548,6 @@ class SchemaManager:
                 f"Unsupported database connection type: {type(db_connection)}"
             )
 
-    def clear_schema_cache(self):
-        """Clear the schema cache."""
-        self._schema_cache.clear()
-
     async def get_schema_info(
         self, table_pattern: str | None = None
     ) -> dict[str, SchemaInfo]:
@@ -563,31 +556,6 @@ class SchemaManager:
         Args:
             table_pattern: Optional SQL LIKE pattern to filter tables (e.g., 'public.user%')
         """
-        # Check cache first
-        cache_key = f"schema:{table_pattern or 'all'}"
-        cached_data = self._get_cached_schema(cache_key)
-        if cached_data is not None:
-            return cached_data
-
-        # Fetch from database if not cached
-        schema_info = await self._fetch_schema_from_db(table_pattern)
-
-        # Cache the result
-        self._schema_cache[cache_key] = (time.time(), schema_info)
-        return schema_info
-
-    def _get_cached_schema(self, cache_key: str) -> dict[str, SchemaInfo] | None:
-        """Get schema from cache if available and not expired."""
-        if cache_key in self._schema_cache:
-            cached_time, cached_data = self._schema_cache[cache_key]
-            if time.time() - cached_time < self.cache_ttl:
-                return cached_data
-        return None
-
-    async def _fetch_schema_from_db(
-        self, table_pattern: str | None
-    ) -> dict[str, SchemaInfo]:
-        """Fetch schema information from database."""
         # Get all schema components
         tables = await self.introspector.get_tables_info(self.db, table_pattern)
         columns = await self.introspector.get_columns_info(self.db, tables)
@@ -672,13 +640,6 @@ class SchemaManager:
 
     async def list_tables(self) -> dict[str, Any]:
         """Get a list of all tables with basic information."""
-        # Check cache first
-        cache_key = "list_tables"
-        cached_data = self._get_cached_tables(cache_key)
-        if cached_data is not None:
-            return cached_data
-
-        # Fetch from database if not cached
         tables = await self.introspector.list_tables_info(self.db)
 
         # Format the result
@@ -694,14 +655,4 @@ class SchemaManager:
                 }
             )
 
-        # Cache the result
-        self._schema_cache[cache_key] = (time.time(), result)
         return result
-
-    def _get_cached_tables(self, cache_key: str) -> dict[str, Any] | None:
-        """Get table list from cache if available and not expired."""
-        if cache_key in self._schema_cache:
-            cached_time, cached_data = self._schema_cache[cache_key]
-            if time.time() - cached_time < self.cache_ttl:
-                return cached_data
-        return None

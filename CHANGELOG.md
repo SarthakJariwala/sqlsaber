@@ -17,7 +17,11 @@ All notable changes to SQLSaber will be documented in this file.
 
 - Fixed CLI commands test suite (#11)
 
-### CI/CD
+### Changed
+
+- Removed schema caching from SchemaManager
+  - Simplified schema introspection by removing cache logic
+  - Direct database queries for schema information
 
 ## [0.13.0] - 2025-07-26
 
