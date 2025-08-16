@@ -7,25 +7,17 @@ from fastmcp import FastMCP
 from sqlsaber.agents.mcp import MCPSQLAgent
 from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.database.connection import DatabaseConnection
+from sqlsaber.tools import SQLTool, tool_registry
+from sqlsaber.tools.instructions import InstructionBuilder
 
-INSTRUCTIONS = """
-This server provides helpful resources and tools that will help you address users queries on their database.
+# Initialize the instruction builder
+instruction_builder = InstructionBuilder(tool_registry)
 
-- Get all databases using `get_databases()`
-- Call `list_tables()` to get a list of all tables in the database with row counts. Use this first to discover available tables.
-- Call `introspect_schema()` to introspect database schema to understand table structures.
-- Call `execute_sql()` to execute SQL queries against the database and retrieve results.
+# Generate dynamic instructions
+DYNAMIC_INSTRUCTIONS = instruction_builder.build_mcp_instructions()
 
-Guidelines:
-- Use list_tables first, then introspect_schema for specific tables only
-- Use table patterns like 'sample%' or '%experiment%' to filter related tables
-- Use proper JOIN syntax and avoid cartesian products
-- Include appropriate WHERE clauses to limit results
-- Handle errors gracefully and suggest fixes
-"""
-
-# Create the FastMCP server instance
-mcp = FastMCP(name="SQL Assistant", instructions=INSTRUCTIONS)
+# Create the FastMCP server instance with dynamic instructions
+mcp = FastMCP(name="SQL Assistant", instructions=DYNAMIC_INSTRUCTIONS)
 
 # Initialize the database config manager
 config_manager = DatabaseConfigManager()
@@ -70,30 +62,16 @@ def get_databases() -> dict:
     return {"databases": databases, "count": len(databases)}
 
 
-@mcp.tool
-async def list_tables(database: str) -> str:
-    """
-    Get a list of all tables in the database with row counts. Use this first to discover available tables.
-    """
-    try:
-        agent = await _create_agent_for_database(database)
-        if not agent:
-            return json.dumps(
-                {"error": f"Database '{database}' not found or could not connect"}
-            )
+async def _execute_with_connection(tool_name: str, database: str, **kwargs) -> str:
+    """Execute a SQL tool with database connection management.
 
-        result = await agent.list_tables()
-        await agent.db.close()
-        return result
+    Args:
+        tool_name: Name of the tool to execute
+        database: Database name to connect to
+        **kwargs: Tool-specific parameters
 
-    except Exception as e:
-        return json.dumps({"error": f"Error listing tables: {str(e)}"})
-
-
-@mcp.tool
-async def introspect_schema(database: str, table_pattern: str | None = None) -> str:
-    """
-    Introspect database schema to understand table structures. Use optional pattern to filter tables (e.g., 'public.users', 'user%', '%order%').
+    Returns:
+        JSON string with the tool's output
     """
     try:
         agent = await _create_agent_for_database(database)
@@ -102,30 +80,44 @@ async def introspect_schema(database: str, table_pattern: str | None = None) -> 
                 {"error": f"Database '{database}' not found or could not connect"}
             )
 
-        result = await agent.introspect_schema(table_pattern)
+        # Get the tool and set up connection
+        tool = tool_registry.get_tool(tool_name)
+        if isinstance(tool, SQLTool):
+            tool.set_connection(agent.db)
+
+        # Execute the tool
+        result = await tool.execute(**kwargs)
         await agent.db.close()
         return result
 
     except Exception as e:
-        return json.dumps({"error": f"Error introspecting schema: {str(e)}"})
+        return json.dumps({"error": f"Error in {tool_name}: {str(e)}"})
+
+
+# SQL Tool Wrappers with explicit signatures
 
 
 @mcp.tool
-async def execute_sql(database: str, query: str, limit: int | None = 100) -> str:
-    """Execute a SQL query against the specified database."""
-    try:
-        agent = await _create_agent_for_database(database)
-        if not agent:
-            return json.dumps(
-                {"error": f"Database '{database}' not found or could not connect"}
-            )
+async def list_tables(database: str) -> str:
+    """Get a list of all tables in the database with row counts. Use this first to discover available tables."""
+    return await _execute_with_connection("list_tables", database)
 
-        result = await agent.execute_sql(query, limit)
-        await agent.db.close()
-        return result
 
-    except Exception as e:
-        return json.dumps({"error": f"Error executing SQL: {str(e)}"})
+@mcp.tool
+async def introspect_schema(database: str, table_pattern: str = None) -> str:
+    """Introspect database schema to understand table structures."""
+    kwargs = {}
+    if table_pattern is not None:
+        kwargs["table_pattern"] = table_pattern
+    return await _execute_with_connection("introspect_schema", database, **kwargs)
+
+
+@mcp.tool
+async def execute_sql(database: str, query: str, limit: int = 100) -> str:
+    """Execute a SQL query against the database."""
+    return await _execute_with_connection(
+        "execute_sql", database, query=query, limit=limit
+    )
 
 
 def main():
