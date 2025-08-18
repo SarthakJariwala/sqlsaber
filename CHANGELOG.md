@@ -4,6 +4,8 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.0] - 2025-08-18
+
 ### Added
 
 - Tool abstraction system with centralized registry (new `Tool` base class, `ToolRegistry`, decorators)
