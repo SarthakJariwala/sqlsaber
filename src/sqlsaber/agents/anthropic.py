@@ -21,6 +21,8 @@ from sqlsaber.config.settings import Config
 from sqlsaber.database.connection import BaseDatabaseConnection
 from sqlsaber.memory.manager import MemoryManager
 from sqlsaber.models.events import StreamEvent
+from sqlsaber.tools import tool_registry
+from sqlsaber.tools.instructions import InstructionBuilder
 
 
 class AnthropicSQLAgent(BaseSQLAgent):
@@ -51,89 +53,11 @@ class AnthropicSQLAgent(BaseSQLAgent):
         self._last_results = None
         self._last_query = None
 
-        # Define tools in the new format
-        self.tools: list[ToolDefinition] = [
-            ToolDefinition(
-                name="list_tables",
-                description="Get a list of all tables in the database with row counts. Use this first to discover available tables.",
-                input_schema={
-                    "type": "object",
-                    "properties": {},
-                    "required": [],
-                },
-            ),
-            ToolDefinition(
-                name="introspect_schema",
-                description="Introspect database schema to understand table structures.",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "table_pattern": {
-                            "type": "string",
-                            "description": "Optional pattern to filter tables (e.g., 'public.users', 'user%', '%order%')",
-                        }
-                    },
-                    "required": [],
-                },
-            ),
-            ToolDefinition(
-                name="execute_sql",
-                description="Execute a SQL query against the database.",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "SQL query to execute",
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "description": f"Maximum number of rows to return (default: {AnthropicSQLAgent.DEFAULT_SQL_LIMIT})",
-                            "default": AnthropicSQLAgent.DEFAULT_SQL_LIMIT,
-                        },
-                    },
-                    "required": ["query"],
-                },
-            ),
-            ToolDefinition(
-                name="plot_data",
-                description="Create a plot of query results.",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "y_values": {
-                            "type": "array",
-                            "items": {"type": ["number", "null"]},
-                            "description": "Y-axis data points (required)",
-                        },
-                        "x_values": {
-                            "type": "array",
-                            "items": {"type": ["number", "null"]},
-                            "description": "X-axis data points (optional, will use indices if not provided)",
-                        },
-                        "plot_type": {
-                            "type": "string",
-                            "enum": ["line", "scatter", "histogram"],
-                            "description": "Type of plot to create (default: line)",
-                            "default": "line",
-                        },
-                        "title": {
-                            "type": "string",
-                            "description": "Title for the plot",
-                        },
-                        "x_label": {
-                            "type": "string",
-                            "description": "Label for X-axis",
-                        },
-                        "y_label": {
-                            "type": "string",
-                            "description": "Label for Y-axis",
-                        },
-                    },
-                    "required": ["y_values"],
-                },
-            ),
-        ]
+        # Get tool definitions from registry
+        self.tools: list[ToolDefinition] = tool_registry.get_tool_definitions()
+
+        # Initialize instruction builder
+        self.instruction_builder = InstructionBuilder(tool_registry)
 
         # Build system prompt with memories if available
         self.system_prompt = self._build_system_prompt()
@@ -157,31 +81,9 @@ class AnthropicSQLAgent(BaseSQLAgent):
     def _get_sql_assistant_instructions(self) -> str:
         """Get the detailed SQL assistant instructions."""
         db_type = self._get_database_type_name()
-        instructions = f"""You are also a helpful SQL assistant that helps users query their {db_type} database.
 
-Your responsibilities:
-1. Understand user's natural language requests, think and convert them to SQL
-2. Use the provided tools efficiently to explore database schema
-3. Generate appropriate SQL queries
-4. Execute queries safely - queries that modify the database are not allowed
-5. Format and explain results clearly
-6. Create visualizations when requested or when they would be helpful
-
-IMPORTANT - Schema Discovery Strategy:
-1. ALWAYS start with 'list_tables' to see available tables and row counts
-2. Based on the user's query, identify which specific tables are relevant
-3. Use 'introspect_schema' with a table_pattern to get details ONLY for relevant tables
-4. Timestamp columns must be converted to text when you write queries
-
-Guidelines:
-- Use list_tables first, then introspect_schema for specific tables only
-- Use table patterns like 'sample%' or '%experiment%' to filter related tables
-- Use proper JOIN syntax and avoid cartesian products
-- Include appropriate WHERE clauses to limit results
-- Explain what the query does in simple terms
-- Handle errors gracefully and suggest fixes
-- Be security conscious - use parameterized queries when needed
-"""
+        # Build dynamic instructions from available tools
+        instructions = self.instruction_builder.build_instructions(db_type=db_type)
 
         # Add memory context if database name is available
         if self.database_name:
@@ -189,7 +91,7 @@ Guidelines:
                 self.database_name
             )
             if memory_context.strip():
-                instructions += memory_context
+                instructions += "\n\n" + memory_context
 
         return instructions
 
@@ -199,16 +101,19 @@ Guidelines:
             return None
 
         memory = self.memory_manager.add_memory(self.database_name, content)
-        # Rebuild system prompt with new memory
+        # Rebuild system prompt with new memory (includes dynamic instructions)
         self.system_prompt = self._build_system_prompt()
         return memory.id
 
-    async def execute_sql(self, query: str, limit: int | None = None) -> str:
-        """Execute a SQL query against the database with streaming support."""
-        # Call parent implementation for core functionality
-        result = await super().execute_sql(query, limit)
+    async def _execute_sql_with_tracking(
+        self, query: str, limit: int | None = None
+    ) -> str:
+        """Execute SQL and track results for streaming."""
+        # Get the execute_sql tool and run it
+        tool = tool_registry.get_tool("execute_sql")
+        result = await tool.execute(query=query, limit=limit)
 
-        # Parse result to extract data for streaming (AnthropicSQLAgent specific)
+        # Parse result to extract data for streaming
         try:
             result_data = json.loads(result)
             if result_data.get("success") and "results" in result_data:
@@ -228,7 +133,14 @@ Guidelines:
         self, tool_name: str, tool_input: dict[str, Any]
     ) -> str:
         """Process a tool call and return the result."""
-        # Use parent implementation for core tools
+        # Special handling for execute_sql to track results
+        if tool_name == "execute_sql":
+            return await self._execute_sql_with_tracking(
+                tool_input.get("query", ""),
+                tool_input.get("limit", self.DEFAULT_SQL_LIMIT),
+            )
+
+        # Use parent implementation for all other tools
         return await super().process_tool_call(tool_name, tool_input)
 
     def _convert_user_message_to_message(

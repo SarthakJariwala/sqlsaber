@@ -4,6 +4,18 @@ All notable changes to SQLSaber will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Tool abstraction system with centralized registry (new `Tool` base class, `ToolRegistry`, decorators)
+- Dynamic instruction generation system (`InstructionBuilder`)
+- Comprehensive test suite for the tools module
+
+### Changed
+
+- Refactored agents to use centralized tool registry instead of hardcoded tools
+- Enhanced MCP server with dynamic tool registration
+- Moved core SQL functionality to dedicated tool classes
+
 ## [0.14.0] - 2025-08-01
 
 ### Added
