@@ -1,0 +1,95 @@
+---
+import Layout from "../components/Layout.astro";
+import Hero from "../components/Hero.svelte";
+import FeatureSection from "../components/FeatureSection.svelte";
+import { Button } from "$lib/components/ui/button";
+---
+
+<Layout>
+  <!-- Hero Section -->
+  <Hero client:load />
+
+  <!-- Just Ask Section -->
+  <FeatureSection
+    client:load
+    title="Just ask"
+    description=""
+    features={[
+      "Use natural language",
+      "Database-aware conversations",
+      "No SQL knowledge required",
+      "Instant results in beautiful tables",
+    ]}
+    className="bg-gray-50"
+    codeExample={"saber 'what is our revenue this quarter?'"}
+  />
+
+  <!-- Smart by Design Section -->
+  <FeatureSection
+    client:load
+    title="Smart by design"
+    description="<p>SQLsaber understands your database automatically.</p> <p>It reads your schema, remembers your preferences, and writes SQL that answers your question.</p>"
+    features={[
+      "Automatic schema discovery",
+      "Learns your database patterns",
+      "Memory of past conversations",
+      "Optimized query generation",
+    ]}
+    reversed={true}
+    codeExample={"saber 'what is our revenue this quarter?' <pre><br>🔧 Using tool: list_tables<br>→ Discovering available tables<br><br>🔧 Using tool: introspect_schema<br>→ Examining schema for: revenue%<br><br>🔧 Using tool: execute_sql<br>→ Generating SQL and executing<br><br><br>→ Running analysis on results</pre>"}
+  />
+
+  <!-- Built for Real Work Section -->
+  <FeatureSection
+    client:load
+    title="Integrates with your setup"
+    description="<p>SQLSaber works with what you already have and fits into your existing workflow.</p>"
+    features={[
+      "PostgreSQL, MySQL, SQLite support",
+      "Interactive REPL for back-and-forth conversations",
+      "Human feedback system for database-specific quirks",
+      "MCP integration for Claude Code and other AI tools",
+    ]}
+    className="bg-gray-50"
+  />
+
+  <!-- Installation Section -->
+  <section class="py-20 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-4xl mx-auto text-center">
+      <h2 class="text-4xl font-bold text-gray-900 mb-6">Get Started Now</h2>
+
+      <div
+        class="bg-gray-50 border rounded p-6 text-left max-w-2xl mx-auto mb-12"
+      >
+        <div class="text-gray-300 font-mono">
+          <div class="text-gray-400 mb-2"># Install SQLsaber</div>
+          <div class="text-gray-900">$ uv tool install sqlsaber</div>
+          <br />
+          <div class="text-gray-400 mb-2"># Add your database</div>
+          <div class="text-gray-900">$ saber db add mydb</div>
+          <br />
+          <div class="text-gray-400 mb-2"># Start asking questions</div>
+          <div class="text-gray-900">
+            $ saber "what's our revenue this quarter?"
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <Button
+          class="bg-black hover:bg-gray-800"
+          href="https://github.com/SarthakJariwala/sqlsaber"
+        >
+          Get Started Now
+        </Button>
+        <Button
+          variant="outline"
+          class="border-gray-300 text-gray-700 hover:bg-gray-50"
+          href="https://github.com/SarthakJariwala/sqlsaber?tab=readme-ov-file#configuration"
+        >
+          View Documentation
+        </Button>
+      </div>
+    </div>
+  </section>
+</Layout>
