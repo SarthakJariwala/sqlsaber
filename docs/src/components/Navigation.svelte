@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import { slide } from "svelte/transition";
   
   let mobileMenuOpen = $state(false);
 </script>
@@ -70,4 +71,42 @@
       </div>
     </div>
   </div>
+
+  <!-- Mobile menu panel -->
+  {#if mobileMenuOpen}
+    <div
+      class="md:hidden bg-white/95 backdrop-blur-sm border-b border-gray-100"
+      transition:slide={{ duration: 200 }}
+    >
+      <div class="px-4 py-3 space-y-3">
+        <!-- Mobile Navigation Links -->
+        <div class="space-y-2">
+          <a
+            href="https://github.com/SarthakJariwala/sqlsaber?tab=readme-ov-file#configuration"
+            class="block px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"
+            onclick={() => mobileMenuOpen = false}
+          >
+            docs
+          </a>
+        </div>
+        
+        <!-- Mobile CTA Buttons -->
+        <div class="pt-2 space-y-2 border-t border-gray-100">
+          <Button
+            variant="ghost"
+            class="w-full justify-start text-gray-600 hover:text-gray-900"
+            href="https://github.com/SarthakJariwala/sqlsaber"
+          >
+            GitHub
+          </Button>
+          <Button
+            class="w-full bg-black text-white"
+            href="https://github.com/SarthakJariwala/sqlsaber"
+          >
+            Get Started
+          </Button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </header>
