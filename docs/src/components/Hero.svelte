@@ -28,7 +28,7 @@
       <Button
         size="lg"
         class="bg-black text-white hover:bg-gray-800 px-8 py-4 text-lg font-medium"
-        href="/docs"
+        href="https://github.com/SarthakJariwala/sqlsaber?tab=readme-ov-file#configuration"
       >
         Get started
       </Button>
