@@ -35,5 +35,6 @@ This is the documentation website for SQLSaber, built with:
 - Use `$lib/*` path aliases for importing from `src/lib/`
 - Follow shadcn-svelte component patterns for UI consistency. If needed, feel free to add new shadcn-svelte components.
 - Astro pages use `.astro` extension, components use `.svelte` unless you create Astro components
+- When using Svelte, exclusively use Svelte 5 syntax only
 - Follow Astro 5 best practices for splitting pages and components wherever appropriate
 - CSS-in-JS via Tailwind classes, global styles in `src/lib/styles/app.css`
