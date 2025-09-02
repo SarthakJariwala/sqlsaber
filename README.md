@@ -1,21 +1,12 @@
-# SQLSaber
+# SQLsaber
+
+> SQLsaber is an open-source agentic SQL assistant. Think Claude Code but for SQL.
 
 ![demo](./sqlsaber.gif)
 
-```
-███████  ██████  ██      ███████  █████  ██████  ███████ ██████
-██      ██    ██ ██      ██      ██   ██ ██   ██ ██      ██   ██
-███████ ██    ██ ██      ███████ ███████ ██████  █████   ██████
-     ██ ██ ▄▄ ██ ██           ██ ██   ██ ██   ██ ██      ██   ██
-███████  ██████  ███████ ███████ ██   ██ ██████  ███████ ██   ██
-            ▀▀
-```
+Stop fighting your database.
 
-> Use the agent Luke!
-
-SQLSaber is an agentic SQL assistant. Think Claude Code but for SQL.
-
-Ask your questions in natural language and it will gather the right context automatically and answer your query by writing SQL and analyzing the results.
+Ask your questions in natural language and `sqlsaber` will gather the right context automatically and answer your query by writing SQL and analyzing the results.
 
 ## Table of Contents
 
@@ -40,14 +31,13 @@ Ask your questions in natural language and it will gather the right context auto
 
 ## Features
 
-- Natural language to SQL conversion
 - 🔍 Automatic database schema introspection
 - 🛡️ Safe query execution (read-only by default)
 - 🧠 Memory management
 - 💬 Interactive REPL mode
-- 🎨 Beautiful formatted output with syntax highlighting
 - 🗄️ Support for PostgreSQL, SQLite, and MySQL
 - 🔌 MCP (Model Context Protocol) server support
+- 🎨 Beautiful formatted output
 
 ## Installation
 
@@ -146,34 +136,21 @@ saber -d mydb
 
 # Single query with specific database
 saber -d mydb "count all orders"
+
+# You can also pass a connection string
+saber -d "postgresql://user:password@localhost:5432/mydb" "count all orders"
 ```
 
 ## Examples
 
 ```bash
-# Show database schema
-saber "what tables are in my database?"
-
-# Count records
-saber "how many active users do we have?"
-
-# Complex queries with joins
-saber "show me orders with customer details for this week"
-
-# Aggregations
-saber "what's the total revenue by product category?"
-
-# Date filtering
-saber "list users who haven't logged in for 30 days"
-
-# Data exploration
-saber "show me the distribution of customer ages"
-
-# Business analytics
-saber "which products had the highest sales growth last quarter?"
-
 # Start interactive mode
 saber
+
+# Non-interactive mode
+saber "show me orders with customer details for this week"
+
+saber "which products had the highest sales growth last quarter?"
 ```
 
 ## MCP Server Integration
@@ -195,7 +172,7 @@ uvx --from sqlsaber saber-mcp
 Add SQLSaber as an MCP server in Claude Code:
 
 ```bash
-claude mcp add -- uvx --from sqlsaber saber-mcp
+claude mcp add sqlsaber -- uvx --from sqlsaber saber-mcp
 ```
 
 #### Other MCP Clients
@@ -215,7 +192,7 @@ The MCP server uses your existing SQLSaber database configurations, so make sure
 
 ## How It Works
 
-SQLSaber uses a multi-step process to gather the right context, provide it to the model, and execute SQL queries to get the right answers:
+SQLsaber uses a multi-step agentic process to gather the right context and execute SQL queries to answer your questions:
 
 ![](./sqlsaber.svg)
 
@@ -236,7 +213,9 @@ SQLSaber uses a multi-step process to gather the right context, provide it to th
 
 ## Contributing
 
-Contributions are welcome! Please feel free to open an issue to discuss your ideas or report bugs.
+If you like the project, starring the repo is a great way to show your support!
+
+Other contributions are welcome! Please feel free to open an issue to discuss your ideas or report bugs.
 
 ## License
 
