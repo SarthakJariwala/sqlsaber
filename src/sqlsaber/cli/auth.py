@@ -1,11 +1,16 @@
 """Authentication CLI commands."""
 
-import questionary
+import os
+
 import cyclopts
+import keyring
+import questionary
 from rich.console import Console
 
+from sqlsaber.config.api_keys import APIKeyManager
 from sqlsaber.config.auth import AuthConfigManager, AuthMethod
 from sqlsaber.config.oauth_flow import AnthropicOAuthFlow
+from sqlsaber.config.oauth_tokens import OAuthTokenManager
 
 # Global instances for CLI commands
 console = Console()
@@ -20,58 +25,66 @@ auth_app = cyclopts.App(
 
 @auth_app.command
 def setup():
-    """Configure authentication method for SQLSaber."""
-    console.print("\n[bold]SQLSaber Authentication Setup[/bold]\n")
+    """Configure authentication for SQLsaber (API keys and Anthropic OAuth)."""
+    console.print("\n[bold]SQLsaber Authentication Setup[/bold]\n")
 
-    # Use questionary for selection
-    auth_choice = questionary.select(
-        "Choose your authentication method:",
+    provider = questionary.select(
+        "Select provider to configure:",
         choices=[
-            questionary.Choice(
-                title="Anthropic API Key",
-                value=AuthMethod.API_KEY,
-                description="You can create one by visiting https://console.anthropic.com",
-            ),
-            questionary.Choice(
-                title="Claude Pro or Max Subscription",
-                value=AuthMethod.CLAUDE_PRO,
-                description="This does not require creating an API Key, but requires a subscription at https://claude.ai",
-            ),
+            "anthropic",
+            "openai",
+            "google",
+            "groq",
+            "mistral",
+            "cohere",
+            "huggingface",
         ],
     ).ask()
 
-    if auth_choice is None:
+    if provider is None:
         console.print("[yellow]Setup cancelled.[/yellow]")
         return
 
-    # Handle auth method setup
-    if auth_choice == AuthMethod.API_KEY:
-        console.print("\nTo configure your API key, you can either:")
-        console.print("• Set the ANTHROPIC_API_KEY environment variable")
-        console.print(
-            "• Let SQLsaber prompt you for the key when needed (stored securely)"
-        )
+    if provider == "anthropic":
+        # Let user choose API key or OAuth
+        method_choice = questionary.select(
+            "Select Anthropic authentication method:",
+            choices=[
+                {"name": "API key", "value": AuthMethod.API_KEY},
+                {"name": "Claude Pro/Max (OAuth)", "value": AuthMethod.CLAUDE_PRO},
+            ],
+        ).ask()
 
-        config_manager.set_auth_method(auth_choice)
-        console.print("\n[bold green]Authentication method saved![/bold green]")
-
-    elif auth_choice == AuthMethod.CLAUDE_PRO:
-        oauth_flow = AnthropicOAuthFlow()
-        try:
-            success = oauth_flow.authenticate()
-            if success:
-                config_manager.set_auth_method(auth_choice)
+        if method_choice == AuthMethod.CLAUDE_PRO:
+            flow = AnthropicOAuthFlow()
+            if flow.authenticate():
+                config_manager.set_auth_method(AuthMethod.CLAUDE_PRO)
                 console.print(
-                    "\n[bold green]Authentication setup complete![/bold green]"
+                    "\n[bold green]✓ Anthropic OAuth configured successfully![/bold green]"
                 )
             else:
-                console.print(
-                    "\n[yellow]OAuth authentication failed. Please try again.[/yellow]"
-                )
-                return
-        except Exception as e:
-            console.print(f"\n[red]Authentication setup failed: {str(e)}[/red]")
+                console.print("\n[red]✗ Anthropic OAuth setup failed.[/red]")
+            console.print(
+                "You can change this anytime by running [cyan]saber auth setup[/cyan] again."
+            )
             return
+
+    # API key flow (all providers + Anthropic when selected above)
+    api_key_manager = APIKeyManager()
+    env_var = api_key_manager._get_env_var_name(provider)
+    console.print("\nTo configure your API key, you can either:")
+    console.print(f"• Set the {env_var} environment variable")
+    console.print("• Let SQLsaber prompt you for the key when needed (stored securely)")
+
+    # Fetch/store key (cascades env -> keyring -> prompt)
+    api_key = api_key_manager.get_api_key(provider)
+    if api_key:
+        config_manager.set_auth_method(AuthMethod.API_KEY)
+        console.print(
+            f"\n[bold green]✓ {provider.title()} API key configured successfully![/bold green]"
+        )
+    else:
+        console.print("\n[yellow]No API key configured.[/yellow]")
 
     console.print(
         "You can change this anytime by running [cyan]saber auth setup[/cyan] again."
@@ -80,7 +93,7 @@ def setup():
 
 @auth_app.command
 def status():
-    """Show current authentication configuration."""
+    """Show current authentication configuration and provider key status."""
     auth_method = config_manager.get_auth_method()
 
     console.print("\n[bold blue]Authentication Status[/bold blue]")
@@ -88,19 +101,40 @@ def status():
     if auth_method is None:
         console.print("[yellow]No authentication method configured[/yellow]")
         console.print("Run [cyan]saber auth setup[/cyan] to configure authentication.")
-    else:
-        if auth_method == AuthMethod.API_KEY:
-            console.print("[green]✓ API Key authentication configured[/green]")
-            console.print("Using Anthropic API key for authentication")
-        elif auth_method == AuthMethod.CLAUDE_PRO:
-            console.print("[green]✓ Claude Pro/Max subscription configured[/green]")
+        return
 
-            # Check OAuth token status
-            oauth_flow = AnthropicOAuthFlow()
-            if oauth_flow.has_valid_authentication():
-                console.print("OAuth token is valid and ready to use")
-            else:
-                console.print("[yellow]OAuth token missing or expired[/yellow]")
+    # Show configured method summary
+    if auth_method == AuthMethod.CLAUDE_PRO:
+        console.print("[green]✓ Anthropic Claude Pro/Max (OAuth) configured[/green]\n")
+    else:
+        console.print("[green]✓ API Key authentication configured[/green]\n")
+
+    # Show per-provider status without prompting
+    api_key_manager = APIKeyManager()
+    providers = [
+        "anthropic",
+        "openai",
+        "google",
+        "groq",
+        "mistral",
+        "cohere",
+        "huggingface",
+    ]
+    for provider in providers:
+        if provider == "anthropic":
+            # Include OAuth status
+            if OAuthTokenManager().has_oauth_token("anthropic"):
+                console.print("> anthropic (oauth): [green]configured[/green]")
+        env_var = api_key_manager._get_env_var_name(provider)
+        service = api_key_manager._get_service_name(provider)
+        from_env = bool(os.getenv(env_var))
+        from_keyring = bool(keyring.get_password(service, provider))
+        if from_env:
+            console.print(f"> {provider}: configured via {env_var}")
+        elif from_keyring:
+            console.print(f"> {provider}: [green]configured[/green]")
+        else:
+            console.print(f"> {provider}: [yellow]not configured[/yellow]")
 
 
 @auth_app.command
@@ -112,17 +146,20 @@ def reset():
 
     current_method = config_manager.get_auth_method()
     method_name = (
-        "API Key" if current_method == AuthMethod.API_KEY else "Claude Pro/Max"
+        "API Key"
+        if current_method == AuthMethod.API_KEY
+        else "Claude Pro/Max (OAuth)"
+        if current_method == AuthMethod.CLAUDE_PRO
+        else "Unknown"
     )
 
     if questionary.confirm(
         f"Are you sure you want to reset the current authentication method ({method_name})?",
         default=False,
     ).ask():
-        # If Claude Pro, also remove OAuth tokens
+        # If OAuth, remove stored token
         if current_method == AuthMethod.CLAUDE_PRO:
-            oauth_flow = AnthropicOAuthFlow()
-            oauth_flow.remove_authentication()
+            OAuthTokenManager().remove_oauth_token("anthropic")
 
         # Clear the auth config by setting it to None
         config = config_manager._load_config()

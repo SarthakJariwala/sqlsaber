@@ -1,8 +1,23 @@
 # Changelog
 
-All notable changes to SQLSaber will be documented in this file.
+All notable changes to SQLsaber will be documented in this file.
 
 ## [Unreleased]
+
+### Added
+
+- Migrated to Pydantic-AI agent runtime with model-agnostic interfaces
+- Added multi-provider model support: Anthropic, OpenAI, Google, Groq, Mistral, Cohere, Hugging Face
+
+### Changed
+
+- Reworked agents to use new pydantic-ai-based agent implementation
+- Updated CLI modules and settings to integrate provider selection and authentication
+
+### Removed
+
+- Deprecated custom `clients` module and Anthropic-specific client code
+- Removed legacy streaming and events modules and related tests
 
 ## [0.15.0] - 2025-08-18
 

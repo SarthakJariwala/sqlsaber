@@ -1,9 +1,8 @@
 """Base class for SQLSaber tools."""
 
 from abc import ABC, abstractmethod
+from types import SimpleNamespace
 from typing import Any
-
-from sqlsaber.clients.models import ToolDefinition
 
 from .enums import ToolCategory, WorkflowPosition
 
@@ -45,9 +44,12 @@ class Tool(ABC):
         """
         pass
 
-    def to_definition(self) -> ToolDefinition:
-        """Convert this tool to a ToolDefinition."""
-        return ToolDefinition(
+    def to_definition(self):
+        """Convert this tool to a ToolDefinition-like object with attributes.
+
+        Tests expect attribute access (definition.name), so return a SimpleNamespace.
+        """
+        return SimpleNamespace(
             name=self.name,
             description=self.description,
             input_schema=self.input_schema,

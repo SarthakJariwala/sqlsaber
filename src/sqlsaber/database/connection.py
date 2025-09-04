@@ -1,10 +1,10 @@
 """Database connection management."""
 
-from abc import ABC, abstractmethod
-from typing import Any
-from urllib.parse import urlparse, parse_qs
 import ssl
+from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import aiomysql
 import aiosqlite

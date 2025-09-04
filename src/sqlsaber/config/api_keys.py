@@ -30,9 +30,7 @@ class APIKeyManager:
         try:
             api_key = keyring.get_password(service_name, provider)
             if api_key:
-                console.print(
-                    f"Using stored {provider} API key from keyring", style="dim"
-                )
+                console.print(f"Using stored {provider} API key", style="dim")
                 return api_key
         except Exception as e:
             # Keyring access failed, continue to prompt
@@ -43,12 +41,16 @@ class APIKeyManager:
 
     def _get_env_var_name(self, provider: str) -> str:
         """Get the expected environment variable name for a provider."""
-        if provider == "openai":
-            return "OPENAI_API_KEY"
-        elif provider == "anthropic":
-            return "ANTHROPIC_API_KEY"
-        else:
-            return "AI_API_KEY"
+        mapping = {
+            "openai": "OPENAI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "google": "GOOGLE_API_KEY",
+            "groq": "GROQ_API_KEY",
+            "mistral": "MISTRAL_API_KEY",
+            "cohere": "COHERE_API_KEY",
+            "huggingface": "HUGGINGFACE_API_KEY",
+        }
+        return mapping.get(provider, "AI_API_KEY")
 
     def _get_service_name(self, provider: str) -> str:
         """Get the keyring service name for a provider."""
@@ -60,7 +62,7 @@ class APIKeyManager:
         """Prompt user for API key and store it in keyring."""
         try:
             console.print(
-                f"\n{provider.title()} API key not found in environment or keyring."
+                f"\n{provider.title()} API key not found in environment or your OS's credentials store."
             )
             console.print("You can either:")
             console.print(f"  1. Set the {env_var_name} environment variable")
@@ -85,7 +87,8 @@ class APIKeyManager:
                 console.print("API key stored securely for future use", style="green")
             except Exception as e:
                 console.print(
-                    f"Warning: Could not store API key in keyring: {e}", style="yellow"
+                    f"Warning: Could not store API key in your operating system's credentials store: {e}",
+                    style="yellow",
                 )
                 console.print(
                     "You may need to enter it again next time", style="yellow"

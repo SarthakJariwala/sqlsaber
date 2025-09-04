@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 from typing import Annotated
 
-import questionary
 import cyclopts
+import questionary
 from rich.console import Console
 from rich.table import Table
 

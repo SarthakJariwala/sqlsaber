@@ -2,7 +2,6 @@
 
 import pytest
 
-from sqlsaber.clients.models import ToolDefinition
 from sqlsaber.tools.base import Tool
 from sqlsaber.tools.enums import ToolCategory, WorkflowPosition
 
@@ -50,7 +49,6 @@ class TestBaseTool:
         tool = MockTool()
         definition = tool.to_definition()
 
-        assert isinstance(definition, ToolDefinition)
         assert definition.name == "mock_tool"
         assert definition.description == "A mock tool for testing"
         assert definition.input_schema == tool.input_schema

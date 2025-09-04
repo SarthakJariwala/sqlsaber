@@ -3,7 +3,6 @@
 import json
 from unittest.mock import Mock, patch
 
-from sqlsaber.clients.anthropic import AnthropicClient
 from sqlsaber.config.oauth_flow import AnthropicOAuthFlow
 from sqlsaber.config.oauth_tokens import OAuthToken, OAuthTokenManager
 
@@ -153,27 +152,3 @@ class TestAnthropicOAuthFlow:
 
         flow = AnthropicOAuthFlow()
         assert flow.has_valid_authentication() is False
-
-
-class TestAnthropicClientOAuth:
-    """Test OAuth integration with AnthropicClient."""
-
-    def test_oauth_headers(self):
-        """Test OAuth headers match Claude Code CLI specification."""
-        client = AnthropicClient(oauth_token="test-oauth-token")
-        headers = client._get_headers()
-
-        # Required OAuth headers
-        assert headers["Authorization"] == "Bearer test-oauth-token"
-        assert headers["anthropic-version"] == "2023-06-01"
-        assert headers["anthropic-beta"] == "oauth-2025-04-20"
-        assert headers["Content-Type"] == "application/json"
-
-        # Claude Code CLI headers
-        assert headers["User-Agent"] == "ClaudeCode/1.0 (Anthropic Claude Code CLI)"
-        assert headers["Accept"] == "application/json"
-        assert headers["X-Client-Name"] == "claude-code"
-        assert headers["X-Client-Version"] == "1.0.0"
-
-        # Should not have API key header
-        assert "x-api-key" not in headers
