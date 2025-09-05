@@ -4,6 +4,8 @@ All notable changes to SQLsaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.0] - 2025-09-04
+
 ### Added
 
 - Migrated to Pydantic-AI agent runtime with model-agnostic interfaces
