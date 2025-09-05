@@ -6,6 +6,8 @@ import os
 import keyring
 from rich.console import Console
 
+from sqlsaber.config import providers
+
 console = Console()
 
 
@@ -41,16 +43,9 @@ class APIKeyManager:
 
     def _get_env_var_name(self, provider: str) -> str:
         """Get the expected environment variable name for a provider."""
-        mapping = {
-            "openai": "OPENAI_API_KEY",
-            "anthropic": "ANTHROPIC_API_KEY",
-            "google": "GOOGLE_API_KEY",
-            "groq": "GROQ_API_KEY",
-            "mistral": "MISTRAL_API_KEY",
-            "cohere": "COHERE_API_KEY",
-            "huggingface": "HUGGINGFACE_API_KEY",
-        }
-        return mapping.get(provider, "AI_API_KEY")
+        # Normalize aliases to canonical provider keys
+        key = providers.canonical(provider) or provider
+        return providers.env_var_name(key)
 
     def _get_service_name(self, provider: str) -> str:
         """Get the keyring service name for a provider."""

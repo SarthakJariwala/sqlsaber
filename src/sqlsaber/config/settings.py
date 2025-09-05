@@ -9,6 +9,7 @@ from typing import Any
 
 import platformdirs
 
+from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
 from sqlsaber.config.auth import AuthConfigManager, AuthMethod
 from sqlsaber.config.oauth_flow import AnthropicOAuthFlow
@@ -100,18 +101,9 @@ class Config:
     def _get_api_key(self) -> str | None:
         """Get API key for the model provider using cascading logic."""
         model = self.model_name or ""
-        provider = model.split(":", 1)[0] if ":" in model else model
-        supported = {
-            "anthropic",
-            "openai",
-            "google",
-            "groq",
-            "mistral",
-            "cohere",
-            "huggingface",
-        }
-        if provider in supported:
-            return self.api_key_manager.get_api_key(provider)
+        prov = providers.provider_from_model(model)
+        if prov in set(providers.all_keys()):
+            return self.api_key_manager.get_api_key(prov)  # type: ignore[arg-type]
         return None
 
     def set_model(self, model: str) -> None:
@@ -140,29 +132,19 @@ class Config:
         Also ensure provider env var is set from keyring if needed for API-key flows.
         """
         model = self.model_name or ""
-        provider = model.split(":", 1)[0] if ":" in model else model
-        env_map = {
-            "anthropic": "ANTHROPIC_API_KEY",
-            "openai": "OPENAI_API_KEY",
-            "google": "GOOGLE_API_KEY",
-            "groq": "GROQ_API_KEY",
-            "mistral": "MISTRAL_API_KEY",
-            "cohere": "COHERE_API_KEY",
-            "huggingface": "HUGGINGFACE_API_KEY",
-        }
-        env_var = env_map.get(provider)
+        provider_key = providers.provider_from_model(model)
+        env_var = providers.env_var_name(provider_key or "") if provider_key else None
         if env_var:
             # Anthropic special-case: allow OAuth in lieu of API key only when explicitly configured
             if (
-                provider == "anthropic"
+                provider_key == "anthropic"
                 and self.auth_method == AuthMethod.CLAUDE_PRO
                 and self.oauth_token
             ):
                 return
             # If we don't have a key resolved from env/keyring, raise
             if not self.api_key:
-                prov_name = provider.capitalize()
-                raise ValueError(f"{prov_name} API key not found.")
+                raise ValueError(f"{provider_key.capitalize()} API key not found.")
             # Hydrate env var for downstream SDKs if missing
             if not os.getenv(env_var):
                 os.environ[env_var] = self.api_key

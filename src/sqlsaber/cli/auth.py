@@ -7,6 +7,7 @@ import keyring
 import questionary
 from rich.console import Console
 
+from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
 from sqlsaber.config.auth import AuthConfigManager, AuthMethod
 from sqlsaber.config.oauth_flow import AnthropicOAuthFlow
@@ -30,15 +31,7 @@ def setup():
 
     provider = questionary.select(
         "Select provider to configure:",
-        choices=[
-            "anthropic",
-            "openai",
-            "google",
-            "groq",
-            "mistral",
-            "cohere",
-            "huggingface",
-        ],
+        choices=providers.all_keys(),
     ).ask()
 
     if provider is None:
@@ -111,16 +104,7 @@ def status():
 
     # Show per-provider status without prompting
     api_key_manager = APIKeyManager()
-    providers = [
-        "anthropic",
-        "openai",
-        "google",
-        "groq",
-        "mistral",
-        "cohere",
-        "huggingface",
-    ]
-    for provider in providers:
+    for provider in providers.all_keys():
         if provider == "anthropic":
             # Include OAuth status
             if OAuthTokenManager().has_oauth_token("anthropic"):
@@ -145,15 +129,7 @@ def reset():
     # Choose provider to reset (mirrors setup)
     provider = questionary.select(
         "Select provider to reset:",
-        choices=[
-            "anthropic",
-            "openai",
-            "google",
-            "groq",
-            "mistral",
-            "cohere",
-            "huggingface",
-        ],
+        choices=providers.all_keys(),
     ).ask()
 
     if provider is None:
@@ -166,11 +142,15 @@ def reset():
     # Determine what exists in keyring
     api_key_present = bool(keyring.get_password(service, provider))
     oauth_present = (
-        OAuthTokenManager().has_oauth_token("anthropic") if provider == "anthropic" else False
+        OAuthTokenManager().has_oauth_token("anthropic")
+        if provider == "anthropic"
+        else False
     )
 
     if not api_key_present and not oauth_present:
-        console.print(f"[yellow]No stored credentials found for {provider}. Nothing to reset.[/yellow]")
+        console.print(
+            f"[yellow]No stored credentials found for {provider}. Nothing to reset.[/yellow]"
+        )
         return
 
     # Build confirmation message
@@ -218,7 +198,9 @@ def reset():
                 console.print("Global auth method unset.", style="green")
 
     console.print("\n[bold green]✓ Reset complete.[/bold green]")
-    console.print("Environment variables are not modified by this command.", style="dim")
+    console.print(
+        "Environment variables are not modified by this command.", style="dim"
+    )
 
 
 def create_auth_app() -> cyclopts.App:
