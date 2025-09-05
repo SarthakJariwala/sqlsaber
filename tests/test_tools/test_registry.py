@@ -127,21 +127,6 @@ class TestToolRegistry:
         assert any(tool.name == "test_tool_1" for tool in all_tools)
         assert any(tool.name == "test_tool_2" for tool in all_tools)
 
-    def test_get_tool_definitions(self):
-        """Test getting tool definitions."""
-        registry = ToolRegistry()
-        registry.register(MockTestTool1)
-        registry.register(MockTestTool2)
-
-        definitions = registry.get_tool_definitions()
-        assert len(definitions) == 2
-
-        # Check definitions have correct structure
-        for definition in definitions:
-            assert hasattr(definition, "name")
-            assert hasattr(definition, "description")
-            assert hasattr(definition, "input_schema")
-
     def test_singleton_pattern(self):
         """Test that tools are singletons within registry."""
         registry = ToolRegistry()

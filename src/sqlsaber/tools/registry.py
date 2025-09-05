@@ -101,18 +101,6 @@ class ToolRegistry:
         names = self.list_tools(category)
         return [self.get_tool(name) for name in names]
 
-    def get_tool_definitions(self, category: str | ToolCategory | None = None) -> list:
-        """Get tool definitions for all tools.
-
-        Args:
-            category: Optional category to filter by (string or ToolCategory enum)
-
-        Returns:
-            List of ToolDefinition objects
-        """
-        tools = self.get_all_tools(category)
-        return [tool.to_definition() for tool in tools]
-
 
 # Global registry instance
 tool_registry = ToolRegistry()

@@ -44,15 +44,6 @@ class TestBaseTool:
         assert tool.get_workflow_position() == WorkflowPosition.OTHER
         assert "message" in tool.input_schema["properties"]
 
-    def test_to_definition(self):
-        """Test converting tool to ToolDefinition."""
-        tool = MockTool()
-        definition = tool.to_definition()
-
-        assert definition.name == "mock_tool"
-        assert definition.description == "A mock tool for testing"
-        assert definition.input_schema == tool.input_schema
-
     @pytest.mark.asyncio
     async def test_execute(self):
         """Test tool execution."""
