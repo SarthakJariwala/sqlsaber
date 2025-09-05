@@ -84,47 +84,85 @@ class Config:
         self.model_name = self.model_config_manager.get_model()
         self.api_key_manager = APIKeyManager()
         self.auth_config_manager = AuthConfigManager()
-        self.oauth_flow = AnthropicOAuthFlow()
 
-        # Get authentication credentials based on configured method
+        # Authentication method (API key or Anthropic OAuth)
         self.auth_method = self.auth_config_manager.get_auth_method()
-        self.api_key = None
-        self.oauth_token = None
 
-        if self.auth_method == AuthMethod.CLAUDE_PRO:
-            # Try to get OAuth token and refresh if needed
-            try:
-                token = self.oauth_flow.refresh_token_if_needed()
-                if token:
-                    self.oauth_token = token.access_token
-            except Exception:
-                # OAuth token unavailable, will need to re-authenticate
-                pass
+        # Optional Anthropic OAuth access token (only relevant for provider=='anthropic')
+        if self.auth_method == AuthMethod.CLAUDE_PRO and self.model_name.startswith(
+            "anthropic"
+        ):
+            self.oauth_token = self.get_oauth_access_token()
         else:
-            # Use API key authentication (default or explicitly configured)
             self.api_key = self._get_api_key()
+            # self.oauth_token = None
 
     def _get_api_key(self) -> str | None:
         """Get API key for the model provider using cascading logic."""
-        model = self.model_name
-        if model.startswith("anthropic:"):
-            return self.api_key_manager.get_api_key("anthropic")
+        model = self.model_name or ""
+        provider = model.split(":", 1)[0] if ":" in model else model
+        supported = {
+            "anthropic",
+            "openai",
+            "google",
+            "groq",
+            "mistral",
+            "cohere",
+            "huggingface",
+        }
+        if provider in supported:
+            return self.api_key_manager.get_api_key(provider)
+        return None
 
     def set_model(self, model: str) -> None:
         """Set the model and update configuration."""
         self.model_config_manager.set_model(model)
         self.model_name = model
 
-    def validate(self):
-        """Validate that necessary configuration is present."""
-        # 1. Claude-Pro flow → require OAuth token only
-        if self.auth_method == AuthMethod.CLAUDE_PRO:
-            if not self.oauth_token:
-                raise ValueError(
-                    "OAuth token not available. Run 'saber auth setup' to authenticate with Claude Pro."
-                )
-            return  # OAuth path satisfied – nothing more to check
+    def get_oauth_access_token(self) -> str | None:
+        """Return a valid Anthropic OAuth access token if configured, else None.
 
-        # 2. Default / API-key flow → require API key
-        if not self.api_key:
-            raise ValueError("Anthropic API key not found.")
+        Uses the stored refresh token (if present) to refresh as needed.
+        Only relevant when provider is 'anthropic'.
+        """
+        if not self.model_name.startswith("anthropic"):
+            return None
+        try:
+            flow = AnthropicOAuthFlow()
+            token = flow.refresh_token_if_needed()
+            return token.access_token if token else None
+        except Exception:
+            return None
+
+    def validate(self):
+        """Validate that necessary configuration is present.
+
+        Also ensure provider env var is set from keyring if needed for API-key flows.
+        """
+        model = self.model_name or ""
+        provider = model.split(":", 1)[0] if ":" in model else model
+        env_map = {
+            "anthropic": "ANTHROPIC_API_KEY",
+            "openai": "OPENAI_API_KEY",
+            "google": "GOOGLE_API_KEY",
+            "groq": "GROQ_API_KEY",
+            "mistral": "MISTRAL_API_KEY",
+            "cohere": "COHERE_API_KEY",
+            "huggingface": "HUGGINGFACE_API_KEY",
+        }
+        env_var = env_map.get(provider)
+        if env_var:
+            # Anthropic special-case: allow OAuth in lieu of API key only when explicitly configured
+            if (
+                provider == "anthropic"
+                and self.auth_method == AuthMethod.CLAUDE_PRO
+                and self.oauth_token
+            ):
+                return
+            # If we don't have a key resolved from env/keyring, raise
+            if not self.api_key:
+                prov_name = provider.capitalize()
+                raise ValueError(f"{prov_name} API key not found.")
+            # Hydrate env var for downstream SDKs if missing
+            if not os.getenv(env_var):
+                os.environ[env_var] = self.api_key

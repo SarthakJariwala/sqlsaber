@@ -3,10 +3,10 @@
 import asyncio
 
 import questionary
+from pydantic_ai import Agent
 from rich.console import Console
 from rich.panel import Panel
 
-from sqlsaber.agents.base import BaseSQLAgent
 from sqlsaber.cli.completers import (
     CompositeCompleter,
     SlashCommandCompleter,
@@ -14,25 +14,44 @@ from sqlsaber.cli.completers import (
 )
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.streaming import StreamingQueryHandler
+from sqlsaber.database.schema import SchemaManager
 
 
 class InteractiveSession:
     """Manages interactive CLI sessions."""
 
-    def __init__(self, console: Console, agent: BaseSQLAgent):
+    def __init__(self, console: Console, agent: Agent, db_conn, database_name: str):
         self.console = console
         self.agent = agent
+        self.db_conn = db_conn
+        self.database_name = database_name
         self.display = DisplayManager(console)
         self.streaming_handler = StreamingQueryHandler(console)
         self.current_task: asyncio.Task | None = None
         self.cancellation_token: asyncio.Event | None = None
         self.table_completer = TableNameCompleter()
+        self.message_history: list | None = []
 
     def show_welcome_message(self):
         """Display welcome message for interactive mode."""
         # Show database information
-        db_name = getattr(self.agent, "database_name", None) or "Unknown"
-        db_type = self.agent._get_database_type_name()
+        db_name = self.database_name or "Unknown"
+        from sqlsaber.database.connection import (
+            CSVConnection,
+            MySQLConnection,
+            PostgreSQLConnection,
+            SQLiteConnection,
+        )
+
+        db_type = (
+            "PostgreSQL"
+            if isinstance(self.db_conn, PostgreSQLConnection)
+            else "MySQL"
+            if isinstance(self.db_conn, MySQLConnection)
+            else "SQLite"
+            if isinstance(self.db_conn, (SQLiteConnection, CSVConnection))
+            else "database"
+        )
 
         self.console.print(
             Panel.fit(
@@ -44,26 +63,27 @@ class InteractiveSession:
 ███████  ██████  ███████ ███████ ██   ██ ██████  ███████ ██   ██
             ▀▀
 """
-                "\n\n"
-                "[dim]Use '/clear' to reset conversation, '/exit' or '/quit' to leave.[/dim]\n\n"
-                "[dim]Start a message with '#' to add something to agent's memory for this database.[/dim]\n\n"
-                "[dim]Type '@' to get table name completions.[/dim]",
-                border_style="green",
             )
         )
         self.console.print(
-            f"[bold blue]Connected to:[/bold blue] {db_name} ({db_type})\n"
+            "\n",
+            "[dim] ≥ Use '/clear' to reset conversation",
+            "[dim] ≥ Use '/exit' or '/quit' to leave[/dim]",
+            "[dim] ≥ Use 'Ctrl+C' to interrupt and return to prompt\n\n",
+            "[dim] ≥ Start message with '#' to add something to agent's memory for this database",
+            "[dim] ≥ Type '@' to get table name completions",
+            "[dim] ≥ Press 'Esc-Enter' or 'Meta-Enter' to submit your question",
+            sep="\n",
         )
+
         self.console.print(
-            "[dim]Press Esc-Enter or Meta-Enter to submit your query.[/dim]\n"
-            "[dim]Press Ctrl+C during query execution to interrupt and return to prompt.[/dim]\n"
+            f"[bold blue]\n\nConnected to:[/bold blue] {db_name} ({db_type})\n"
         )
 
     async def _update_table_cache(self):
         """Update the table completer cache with fresh data."""
         try:
-            # Use the schema manager directly which has built-in caching
-            tables_data = await self.agent.schema_manager.list_tables()
+            tables_data = await SchemaManager(self.db_conn).list_tables()
 
             # Parse the table information
             table_list = []
@@ -100,16 +120,20 @@ class InteractiveSession:
         # Create the query task
         query_task = asyncio.create_task(
             self.streaming_handler.execute_streaming_query(
-                user_query, self.agent, self.cancellation_token
+                user_query, self.agent, self.cancellation_token, self.message_history
             )
         )
         self.current_task = query_task
 
         try:
-            # Simply await the query task
-            # Ctrl+C will be handled by the KeyboardInterrupt exception in run()
-            await query_task
-
+            run_result = await query_task
+            # Persist message history from this run using pydantic-ai API
+            if run_result is not None:
+                try:
+                    # Use all_messages() so the system prompt and all prior turns are preserved
+                    self.message_history = run_result.all_messages()
+                except Exception:
+                    pass
         finally:
             self.current_task = None
             self.cancellation_token = None
@@ -144,7 +168,8 @@ class InteractiveSession:
                     break
 
                 if user_query == "/clear":
-                    await self.agent.clear_history()
+                    # Reset local history (pydantic-ai call will receive empty history on next run)
+                    self.message_history = []
                     self.console.print("[green]Conversation history cleared.[/green]\n")
                     continue
 
@@ -153,18 +178,28 @@ class InteractiveSession:
                     if memory_text.startswith("#"):
                         memory_content = memory_text[1:].strip()  # Remove # and trim
                         if memory_content:
-                            # Add memory
-                            memory_id = self.agent.add_memory(memory_content)
-                            if memory_id:
-                                self.console.print(
-                                    f"[green]✓ Memory added:[/green] {memory_content}"
+                            # Add memory via the agent's memory manager
+                            try:
+                                mm = getattr(
+                                    self.agent, "_sqlsaber_memory_manager", None
                                 )
+                                if mm and self.database_name:
+                                    memory = mm.add_memory(
+                                        self.database_name, memory_content
+                                    )
+                                    self.console.print(
+                                        f"[green]✓ Memory added:[/green] {memory_content}"
+                                    )
+                                    self.console.print(
+                                        f"[dim]Memory ID: {memory.id}[/dim]\n"
+                                    )
+                                else:
+                                    self.console.print(
+                                        "[yellow]Could not add memory (no database context)[/yellow]\n"
+                                    )
+                            except Exception:
                                 self.console.print(
-                                    f"[dim]Memory ID: {memory_id}[/dim]\n"
-                                )
-                            else:
-                                self.console.print(
-                                    "[yellow]Could not add memory (no database context)[/yellow]\n"
+                                    "[yellow]Could not add memory[/yellow]\n"
                                 )
                         else:
                             self.console.print(

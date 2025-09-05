@@ -3,9 +3,9 @@
 import asyncio
 import sys
 
+import cyclopts
 import httpx
 import questionary
-import cyclopts
 from rich.console import Console
 from rich.table import Table
 
@@ -26,49 +26,82 @@ class ModelManager:
 
     DEFAULT_MODEL = "anthropic:claude-sonnet-4-20250514"
     MODELS_API_URL = "https://models.dev/api.json"
+    SUPPORTED_PROVIDERS = [
+        "anthropic",
+        "openai",
+        "google",
+        "groq",
+        "mistral",
+        "cohere",
+        "huggingface",
+    ]
 
-    async def fetch_available_models(self) -> list[dict]:
-        """Fetch available models from models.dev API."""
+    async def fetch_available_models(
+        self, providers: list[str] | None = None
+    ) -> list[dict]:
+        """Fetch available models across providers from models.dev API.
+
+        Returns list of dicts with keys: id (provider:model_id), provider, name, description, context_length, knowledge.
+        """
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(self.MODELS_API_URL)
                 response.raise_for_status()
                 data = response.json()
 
-                # Filter for Anthropic models only
-                anthropic_models = []
-                anthropic_data = data.get("anthropic", {})
+                providers = providers or self.SUPPORTED_PROVIDERS
+                results: list[dict] = []
 
-                if "models" in anthropic_data:
-                    for model_id, model_info in anthropic_data["models"].items():
-                        # Convert to our format (anthropic:model-name)
-                        formatted_id = f"anthropic:{model_id}"
-
-                        # Extract cost information for display
-                        cost_info = model_info.get("cost", {})
+                for provider in providers:
+                    prov_data = data.get(provider, {})
+                    models_obj = (
+                        prov_data.get("models") or prov_data.get("Models") or {}
+                    )
+                    if not isinstance(models_obj, dict):
+                        continue
+                    for model_id, model_info in models_obj.items():
+                        formatted_id = f"{provider}:{model_id}"
+                        # cost
+                        cost_info = (
+                            model_info.get("cost", {})
+                            if isinstance(model_info, dict)
+                            else {}
+                        )
                         cost_display = ""
-                        if cost_info:
+                        if isinstance(cost_info, dict) and cost_info:
                             input_cost = cost_info.get("input", 0)
                             output_cost = cost_info.get("output", 0)
                             cost_display = f"${input_cost}/{output_cost} per 1M tokens"
+                        # context
+                        limit_info = (
+                            model_info.get("limit", {})
+                            if isinstance(model_info, dict)
+                            else {}
+                        )
+                        context_length = (
+                            limit_info.get("context", 0)
+                            if isinstance(limit_info, dict)
+                            else 0
+                        )
 
-                        # Extract context length
-                        limit_info = model_info.get("limit", {})
-                        context_length = limit_info.get("context", 0)
-
-                        anthropic_models.append(
+                        results.append(
                             {
                                 "id": formatted_id,
-                                "name": model_info.get("name", model_id),
+                                "provider": provider,
+                                "name": model_info.get("name", model_id)
+                                if isinstance(model_info, dict)
+                                else model_id,
                                 "description": cost_display,
                                 "context_length": context_length,
-                                "knowledge": model_info.get("knowledge", ""),
+                                "knowledge": model_info.get("knowledge", "")
+                                if isinstance(model_info, dict)
+                                else "",
                             }
                         )
 
-                # Sort by name for better display
-                anthropic_models.sort(key=lambda x: x["name"])
-                return anthropic_models
+                # Sort by provider then by name
+                results.sort(key=lambda x: (x["provider"], x["name"]))
+                return results
         except Exception as e:
             console.print(f"[red]Error fetching models: {e}[/red]")
             return []
@@ -110,7 +143,8 @@ def list():
             )
             return
 
-        table = Table(title="Available Anthropic Models")
+        table = Table(title="Available Models")
+        table.add_column("Provider", style="magenta")
         table.add_column("ID", style="cyan")
         table.add_column("Name", style="green")
         table.add_column("Description", style="white")
@@ -133,6 +167,7 @@ def list():
             )
 
             table.add_row(
+                model.get("provider", "-"),
                 model["id"],
                 model["name"],
                 description,
@@ -161,8 +196,9 @@ def set():
         # Create choices for questionary
         choices = []
         for model in models:
-            # Format: "ID - Name (Description)"
-            choice_text = f"{model['id']} - {model['name']}"
+            # Format: "[provider] ID - Name (Description)"
+            prov = model.get("provider", "?")
+            choice_text = f"[{prov}] {model['id']} - {model['name']}"
             if model["description"]:
                 choice_text += f" ({model['description'][:50]}{'...' if len(model['description']) > 50 else ''})"
 
@@ -179,7 +215,6 @@ def set():
         selected_model = await questionary.select(
             "Select a model:",
             choices=choices,
-            use_shortcuts=True,
             use_search_filter=True,
             use_jk_keys=False,  # Disable j/k keys when using search filter
             default=choices[default_index] if choices else None,

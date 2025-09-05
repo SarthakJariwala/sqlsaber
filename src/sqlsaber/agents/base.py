@@ -14,7 +14,6 @@ from sqlsaber.database.connection import (
     SQLiteConnection,
 )
 from sqlsaber.database.schema import SchemaManager
-from sqlsaber.models.events import StreamEvent
 from sqlsaber.tools import SQLTool, tool_registry
 
 
@@ -40,7 +39,7 @@ class BaseSQLAgent(ABC):
         user_query: str,
         use_history: bool = True,
         cancellation_token: asyncio.Event | None = None,
-    ) -> AsyncIterator[StreamEvent]:
+    ) -> AsyncIterator:
         """Process a user query and stream responses.
 
         Args:

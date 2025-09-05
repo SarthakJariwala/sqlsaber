@@ -1,9 +1,7 @@
 """Agents module for SQLSaber."""
 
-from .anthropic import AnthropicSQLAgent
-from .base import BaseSQLAgent
+from .pydantic_ai_agent import build_sqlsaber_agent
 
 __all__ = [
-    "BaseSQLAgent",
-    "AnthropicSQLAgent",
+    "build_sqlsaber_agent",
 ]

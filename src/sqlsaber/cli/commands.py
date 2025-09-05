@@ -7,7 +7,7 @@ from typing import Annotated
 import cyclopts
 from rich.console import Console
 
-from sqlsaber.agents.anthropic import AnthropicSQLAgent
+from sqlsaber.agents import build_sqlsaber_agent
 from sqlsaber.cli.auth import create_auth_app
 from sqlsaber.cli.database import create_db_app
 from sqlsaber.cli.interactive import InteractiveSession
@@ -15,7 +15,13 @@ from sqlsaber.cli.memory import create_memory_app
 from sqlsaber.cli.models import create_models_app
 from sqlsaber.cli.streaming import StreamingQueryHandler
 from sqlsaber.config.database import DatabaseConfigManager
-from sqlsaber.database.connection import DatabaseConnection
+from sqlsaber.database.connection import (
+    CSVConnection,
+    DatabaseConnection,
+    MySQLConnection,
+    PostgreSQLConnection,
+    SQLiteConnection,
+)
 from sqlsaber.database.resolver import DatabaseResolutionError, resolve_database
 
 
@@ -123,25 +129,34 @@ def query(
         except Exception as e:
             raise CLIError(f"Error creating database connection: {e}")
 
-        # Create agent instance with database name for memory context
-        agent = AnthropicSQLAgent(db_conn, db_name)
+        # Create pydantic-ai agent instance with database name for memory context
+        agent = build_sqlsaber_agent(db_conn, db_name)
 
         try:
             if actual_query:
                 # Single query mode with streaming
                 streaming_handler = StreamingQueryHandler(console)
+                # Compute DB type for the greeting line
+                db_type = (
+                    "PostgreSQL"
+                    if isinstance(db_conn, PostgreSQLConnection)
+                    else "MySQL"
+                    if isinstance(db_conn, MySQLConnection)
+                    else "SQLite"
+                    if isinstance(db_conn, (SQLiteConnection, CSVConnection))
+                    else "database"
+                )
                 console.print(
-                    f"[bold blue]Connected to:[/bold blue] {db_name} {agent._get_database_type_name()}\n"
+                    f"[bold blue]Connected to:[/bold blue] {db_name} ({db_type})\n"
                 )
                 await streaming_handler.execute_streaming_query(actual_query, agent)
             else:
                 # Interactive mode
-                session = InteractiveSession(console, agent)
+                session = InteractiveSession(console, agent, db_conn, db_name)
                 await session.run()
 
         finally:
             # Clean up
-            await agent.close()  # Close the agent's HTTP client
             await db_conn.close()
             console.print("\n[green]Goodbye![/green]")
 
