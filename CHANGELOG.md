@@ -8,6 +8,7 @@ All notable changes to SQLsaber will be documented in this file.
 
 - Migrated to Pydantic-AI agent runtime with model-agnostic interfaces
 - Added multi-provider model support: Anthropic, OpenAI, Google, Groq, Mistral, Cohere, Hugging Face
+- Provider registry tests to ensure invariants and alias normalization
 
 ### Changed
 
@@ -17,6 +18,8 @@ All notable changes to SQLsaber will be documented in this file.
   - Removes API keys from OS credential store for the selected provider
   - For Anthropic, also detects and removes OAuth tokens
   - Offers optional prompt to unset global auth method when Anthropic OAuth is removed
+- Centralized provider definitions in `sqlsaber.config.providers` and refactored CLI, config, and agent code to use the registry (single source of truth)
+- Normalized provider aliases (e.g., `google-gla` → `google`) for consistent behavior across modules
 
 ### Removed
 

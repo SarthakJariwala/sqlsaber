@@ -11,6 +11,7 @@ from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google import GoogleProvider
 
+from sqlsaber.config import providers
 from sqlsaber.config.settings import Config
 from sqlsaber.database.connection import (
     BaseDatabaseConnection,
@@ -51,14 +52,13 @@ def build_sqlsaber_agent(
         cfg.model_name.split(":", 1)[1] if ":" in cfg.model_name else cfg.model_name
     )
 
-    if cfg.model_name.startswith("google") or cfg.model_name.startswith("google-gla"):
+    provider = providers.provider_from_model(cfg.model_name) or ""
+    if provider == "google":
         model_obj = GoogleModel(
             model_name_only, provider=GoogleProvider(api_key=cfg.api_key)
         )
         agent = Agent(model_obj, name="sqlsaber")
-    elif cfg.model_name.startswith("anthropic") and bool(
-        getattr(cfg, "oauth_token", None)
-    ):
+    elif provider == "anthropic" and bool(getattr(cfg, "oauth_token", None)):
         # Build custom httpx client to inject OAuth headers for Anthropic
         async def add_oauth_headers(request: httpx.Request) -> None:  # type: ignore[override]
             # Remove API-key header if present and add OAuth headers
@@ -86,9 +86,7 @@ def build_sqlsaber_agent(
     memory_manager = MemoryManager()
     instruction_builder = InstructionBuilder(tool_registry)
 
-    is_oauth = cfg.model_name.startswith("anthropic") and bool(
-        getattr(cfg, "oauth_token", None)
-    )
+    is_oauth = provider == "anthropic" and bool(getattr(cfg, "oauth_token", None))
 
     if not is_oauth:
 

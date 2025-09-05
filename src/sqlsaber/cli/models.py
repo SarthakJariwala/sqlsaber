@@ -9,6 +9,7 @@ import questionary
 from rich.console import Console
 from rich.table import Table
 
+from sqlsaber.config import providers
 from sqlsaber.config.settings import Config
 
 # Global instances for CLI commands
@@ -26,15 +27,8 @@ class ModelManager:
 
     DEFAULT_MODEL = "anthropic:claude-sonnet-4-20250514"
     MODELS_API_URL = "https://models.dev/api.json"
-    SUPPORTED_PROVIDERS = [
-        "anthropic",
-        "openai",
-        "google",
-        "groq",
-        "mistral",
-        "cohere",
-        "huggingface",
-    ]
+    # Providers come from central registry
+    SUPPORTED_PROVIDERS = providers.all_keys()
 
     async def fetch_available_models(
         self, providers: list[str] | None = None
