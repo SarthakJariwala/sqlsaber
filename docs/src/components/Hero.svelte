@@ -44,8 +44,8 @@
 
     <!-- Quick demo -->
     <script
-      src="https://asciinema.org/a/E9xin8aNt7eBOM5t433wfoDBO.js"
-      id="asciicast-E9xin8aNt7eBOM5t433wfoDBO"
+      src="https://asciinema.org/a/738039.js"
+      id="asciicast-738039"
       async
     ></script>
   </div>
