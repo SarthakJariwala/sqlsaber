@@ -36,7 +36,7 @@ class TestCLICommands:
         app(["--help"])
 
         captured = capsys.readouterr()
-        assert "SQLSaber" in captured.out
+        assert "SQLsaber" in captured.out
         assert "SQL assistant for your database" in captured.out
 
     def test_query_specific_database_not_found(self, capsys, mock_config_manager):
