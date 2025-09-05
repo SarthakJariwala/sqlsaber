@@ -139,38 +139,86 @@ def status():
 
 @auth_app.command
 def reset():
-    """Reset authentication configuration."""
-    if not config_manager.has_auth_configured():
-        console.print("[yellow]No authentication configuration to reset.[/yellow]")
+    """Reset credentials for a selected provider (API key and/or OAuth)."""
+    console.print("\n[bold]SQLsaber Authentication Reset[/bold]\n")
+
+    # Choose provider to reset (mirrors setup)
+    provider = questionary.select(
+        "Select provider to reset:",
+        choices=[
+            "anthropic",
+            "openai",
+            "google",
+            "groq",
+            "mistral",
+            "cohere",
+            "huggingface",
+        ],
+    ).ask()
+
+    if provider is None:
+        console.print("[yellow]Reset cancelled.[/yellow]")
         return
 
-    current_method = config_manager.get_auth_method()
-    method_name = (
-        "API Key"
-        if current_method == AuthMethod.API_KEY
-        else "Claude Pro/Max (OAuth)"
-        if current_method == AuthMethod.CLAUDE_PRO
-        else "Unknown"
+    api_key_manager = APIKeyManager()
+    service = api_key_manager._get_service_name(provider)
+
+    # Determine what exists in keyring
+    api_key_present = bool(keyring.get_password(service, provider))
+    oauth_present = (
+        OAuthTokenManager().has_oauth_token("anthropic") if provider == "anthropic" else False
     )
 
-    if questionary.confirm(
-        f"Are you sure you want to reset the current authentication method ({method_name})?",
-        default=False,
-    ).ask():
-        # If OAuth, remove stored token
-        if current_method == AuthMethod.CLAUDE_PRO:
-            OAuthTokenManager().remove_oauth_token("anthropic")
+    if not api_key_present and not oauth_present:
+        console.print(f"[yellow]No stored credentials found for {provider}. Nothing to reset.[/yellow]")
+        return
 
-        # Clear the auth config by setting it to None
-        config = config_manager._load_config()
-        config["auth_method"] = None
-        config_manager._save_config(config)
-        console.print("[green]Authentication configuration reset.[/green]")
-        console.print(
-            "Run [cyan]saber auth setup[/cyan] to configure authentication again."
-        )
-    else:
+    # Build confirmation message
+    to_remove: list[str] = []
+    if oauth_present:
+        to_remove.append("Anthropic OAuth token")
+    if api_key_present:
+        to_remove.append(f"{provider.title()} API key")
+
+    summary = ", ".join(to_remove)
+    confirmed = questionary.confirm(
+        f"Remove the following for {provider}: {summary}?",
+        default=False,
+    ).ask()
+
+    if not confirmed:
         console.print("Reset cancelled.")
+        return
+
+    # Perform deletions
+    if oauth_present:
+        OAuthTokenManager().remove_oauth_token("anthropic")
+    if api_key_present:
+        try:
+            keyring.delete_password(service, provider)
+            console.print(f"Removed {provider} API key from keyring", style="green")
+        except keyring.errors.PasswordDeleteError:
+            # Already absent; treat as success
+            pass
+        except Exception as e:
+            console.print(f"Warning: Could not remove API key: {e}", style="yellow")
+
+    # Optionally clear global auth method if removing Anthropic OAuth configuration
+    if provider == "anthropic" and oauth_present:
+        current_method = config_manager.get_auth_method()
+        if current_method == AuthMethod.CLAUDE_PRO:
+            also_clear = questionary.confirm(
+                "Anthropic OAuth was removed. Also unset the global auth method?",
+                default=False,
+            ).ask()
+            if also_clear:
+                config = config_manager._load_config()
+                config["auth_method"] = None
+                config_manager._save_config(config)
+                console.print("Global auth method unset.", style="green")
+
+    console.print("\n[bold green]✓ Reset complete.[/bold green]")
+    console.print("Environment variables are not modified by this command.", style="dim")
 
 
 def create_auth_app() -> cyclopts.App:
