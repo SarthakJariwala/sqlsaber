@@ -4,6 +4,13 @@ All notable changes to SQLsaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.1] - 2025-09-04
+
+### Added
+
+- Compile python byte code during installation
+- Updated CLI help string
+
 ## [0.16.0] - 2025-09-04
 
 ### Added

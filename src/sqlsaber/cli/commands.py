@@ -35,7 +35,7 @@ class CLIError(Exception):
 
 app = cyclopts.App(
     name="sqlsaber",
-    help="SQLSaber - Use the agent Luke!\n\nSQL assistant for your database",
+    help="SQLsaber - Open-source agentic SQL assistant for your database",
 )
 
 
