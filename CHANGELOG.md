@@ -13,6 +13,10 @@ All notable changes to SQLsaber will be documented in this file.
 
 - Reworked agents to use new pydantic-ai-based agent implementation
 - Updated CLI modules and settings to integrate provider selection and authentication
+- `saber auth reset` now mirrors setup by prompting for a provider, then selectively removing stored credentials for that provider
+  - Removes API keys from OS credential store for the selected provider
+  - For Anthropic, also detects and removes OAuth tokens
+  - Offers optional prompt to unset global auth method when Anthropic OAuth is removed
 
 ### Removed
 
