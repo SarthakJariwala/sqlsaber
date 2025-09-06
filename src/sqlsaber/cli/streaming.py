@@ -72,10 +72,6 @@ class StreamingQueryHandler:
                     except json.JSONDecodeError:
                         # If not JSON, ignore here
                         pass
-                elif tool_name == "plot_data":
-                    self.display.show_plot(
-                        {"tool_name": tool_name, "result": content, "input": {}}
-                    )
 
     async def execute_streaming_query(
         self,

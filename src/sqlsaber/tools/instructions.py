@@ -69,8 +69,7 @@ Your responsibilities:
 2. Use the provided tools efficiently to explore database schema
 3. Generate appropriate SQL queries
 4. Execute queries safely - queries that modify the database are not allowed
-5. Format and explain results clearly
-6. Create visualizations when requested or when they would be helpful"""
+5. Format and explain results clearly"""
 
     def _sort_tools_by_workflow(self, tools: list[Tool]) -> list[Tool]:
         """Sort tools by priority and workflow position."""
@@ -79,14 +78,13 @@ Your responsibilities:
             WorkflowPosition.DISCOVERY: 1,
             WorkflowPosition.ANALYSIS: 2,
             WorkflowPosition.EXECUTION: 3,
-            WorkflowPosition.VISUALIZATION: 4,
-            WorkflowPosition.OTHER: 5,
+            WorkflowPosition.OTHER: 4,
         }
 
         return sorted(
             tools,
             key=lambda tool: (
-                position_order.get(tool.get_workflow_position(), 5),
+                position_order.get(tool.get_workflow_position(), 4),
                 tool.get_priority(),
                 tool.name,
             ),
@@ -145,19 +143,6 @@ Your responsibilities:
                     )
                 step += 1
 
-        # Add visualization tools
-        if WorkflowPosition.VISUALIZATION in workflow_groups:
-            viz_tools = workflow_groups[WorkflowPosition.VISUALIZATION]
-            for tool in viz_tools:
-                usage = tool.get_usage_instructions()
-                if usage:
-                    instructions.append(f"{step}. {usage}")
-                else:
-                    instructions.append(
-                        f"{step}. Use '{tool.name}' when creating visualizations"
-                    )
-                step += 1
-
         return "\n".join(instructions) if len(instructions) > 1 else ""
 
     def _build_tool_guidelines(self, sorted_tools: list[Tool]) -> str:
@@ -193,11 +178,6 @@ Your responsibilities:
                     "- Timestamp columns must be converted to text when you write queries",
                     "- Use table patterns like 'sample%' or '%experiment%' to filter related tables",
                 ]
-            )
-
-        if ToolCategory.VISUALIZATION in categories:
-            guidelines.append(
-                "- Create visualizations when they would enhance understanding of the data"
             )
 
         return "\n".join(guidelines)

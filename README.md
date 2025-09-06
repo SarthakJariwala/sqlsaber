@@ -209,7 +209,7 @@ SQLsaber uses a multi-step agentic process to gather the right context and execu
 
 4. **SQL Generation**: Creates optimized SQL queries based on natural language input
 5. **Safe Execution**: Runs read-only queries with built-in protections against destructive operations
-6. **Result Formatting**: Presents results with explanations in tables and optionally, visualizes using plots
+6. **Result Formatting**: Presents results with explanations in tables
 
 ## Contributing
 

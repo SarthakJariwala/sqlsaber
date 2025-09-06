@@ -4,6 +4,12 @@ All notable changes to SQLsaber will be documented in this file.
 
 ## [Unreleased]
 
+### Removed
+
+- Removed visualization tools and plotting capabilities
+  - Removed PlotDataTool and uniplot dependency
+  - Cleaned up visualization-related code from CLI, registry, and instructions
+
 ## [0.16.1] - 2025-09-04
 
 ### Added
