@@ -1,7 +1,7 @@
 """Database schema introspection utilities."""
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, TypedDict
 
 import aiosqlite
 
@@ -12,7 +12,35 @@ from sqlsaber.database.connection import (
     PostgreSQLConnection,
     SQLiteConnection,
 )
-from sqlsaber.models.types import SchemaInfo
+
+
+class ColumnInfo(TypedDict):
+    """Type definition for column information."""
+
+    data_type: str
+    nullable: bool
+    default: str | None
+    max_length: int | None
+    precision: int | None
+    scale: int | None
+
+
+class ForeignKeyInfo(TypedDict):
+    """Type definition for foreign key information."""
+
+    column: str
+    references: dict[str, str]  # {"table": "schema.table", "column": "column_name"}
+
+
+class SchemaInfo(TypedDict):
+    """Type definition for schema information."""
+
+    schema: str
+    name: str
+    type: str
+    columns: dict[str, ColumnInfo]
+    primary_keys: list[str]
+    foreign_keys: list[ForeignKeyInfo]
 
 
 class BaseSchemaIntrospector(ABC):
