@@ -68,38 +68,6 @@ class MockAnalysisTool(Tool):
         return '{"result": "analysis"}'
 
 
-class MockVisualizationTool(Tool):
-    """Mock visualization tool for testing."""
-
-    @property
-    def name(self) -> str:
-        return "mock_visualization"
-
-    @property
-    def description(self) -> str:
-        return "Mock visualization tool for testing"
-
-    @property
-    def input_schema(self) -> dict:
-        return {"type": "object", "properties": {}}
-
-    @property
-    def category(self) -> ToolCategory:
-        return ToolCategory.VISUALIZATION
-
-    def get_usage_instructions(self) -> str | None:
-        return "Use this tool to create charts"
-
-    def get_priority(self) -> int:
-        return 40
-
-    def get_workflow_position(self) -> WorkflowPosition:
-        return WorkflowPosition.VISUALIZATION
-
-    async def execute(self, **kwargs) -> str:
-        return '{"result": "visualization"}'
-
-
 class TestInstructionBuilder:
     """Test the InstructionBuilder class."""
 
@@ -125,7 +93,6 @@ class TestInstructionBuilder:
         registry = ToolRegistry()
         registry.register(MockDiscoveryTool)
         registry.register(MockAnalysisTool)
-        registry.register(MockVisualizationTool)
 
         builder = InstructionBuilder(registry)
         instructions = builder.build_instructions("PostgreSQL")
@@ -139,13 +106,9 @@ class TestInstructionBuilder:
         assert "Use this tool first to discover things" in instructions
         assert "Use this tool to analyze data" in instructions
 
-        # Should include visualization tools
-        assert "Use this tool to create charts" in instructions
-
     def test_sort_tools_by_workflow(self):
         """Test tool sorting by workflow position and priority."""
         registry = ToolRegistry()
-        registry.register(MockVisualizationTool)  # visualization, priority 40
         registry.register(MockDiscoveryTool)  # discovery, priority 10
         registry.register(MockAnalysisTool)  # analysis, priority 20
 
@@ -156,7 +119,6 @@ class TestInstructionBuilder:
         # Should be sorted by workflow position first, then priority
         assert sorted_tools[0].name == "mock_discovery"  # discovery, 10
         assert sorted_tools[1].name == "mock_analysis"  # analysis, 20
-        assert sorted_tools[2].name == "mock_visualization"  # visualization, 40
 
     def test_build_mcp_instructions(self):
         """Test building MCP-specific instructions."""
@@ -182,7 +144,6 @@ class TestInstructionBuilder:
         registry = ToolRegistry()
 
         # Register in reverse order to test sorting
-        registry.register(MockVisualizationTool)
         registry.register(MockAnalysisTool)
         registry.register(MockDiscoveryTool)
 
@@ -212,7 +173,6 @@ class TestInstructionBuilder:
         registry = ToolRegistry()
         registry.register(MockDiscoveryTool)  # sql category
         registry.register(MockAnalysisTool)  # sql category
-        registry.register(MockVisualizationTool)  # visualization category
 
         builder = InstructionBuilder(registry)
 
@@ -222,15 +182,6 @@ class TestInstructionBuilder:
         )
         assert "Use this tool first to discover things" in sql_instructions
         assert "Use this tool to analyze data" in sql_instructions
-        assert "Use this tool to create charts" not in sql_instructions
-
-        # Filter for visualization tools only
-        viz_instructions = builder.build_instructions(
-            "PostgreSQL", category=ToolCategory.VISUALIZATION
-        )
-        assert "Use this tool first to discover things" not in viz_instructions
-        assert "Use this tool to analyze data" not in viz_instructions
-        assert "Use this tool to create charts" in viz_instructions
 
     def test_base_instructions_flag(self):
         """Test the include_base_instructions flag."""

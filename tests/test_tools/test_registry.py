@@ -41,7 +41,7 @@ class MockTestTool2(Tool):
 
     @property
     def category(self) -> ToolCategory:
-        return ToolCategory.VISUALIZATION  # Using a real enum value for testing
+        return ToolCategory.SQL  # Using a real enum value for testing
 
     async def execute(self, **kwargs) -> str:
         return '{"result": "test2"}'
@@ -107,9 +107,9 @@ class TestToolRegistry:
         assert len(general_tools) == 1
         assert "test_tool_1" in general_tools
 
-        viz_tools = registry.list_tools(category=ToolCategory.VISUALIZATION)
-        assert len(viz_tools) == 1
-        assert "test_tool_2" in viz_tools
+        sql_tools = registry.list_tools(category=ToolCategory.SQL)
+        assert len(sql_tools) == 1
+        assert "test_tool_2" in sql_tools
 
         # Test backward compatibility with strings
         general_tools_str = registry.list_tools(category="general")

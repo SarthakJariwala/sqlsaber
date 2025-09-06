@@ -8,7 +8,6 @@ class ToolCategory(Enum):
 
     GENERAL = "general"
     SQL = "sql"
-    VISUALIZATION = "visualization"
 
 
 class WorkflowPosition(Enum):
@@ -17,5 +16,4 @@ class WorkflowPosition(Enum):
     DISCOVERY = "discovery"
     ANALYSIS = "analysis"
     EXECUTION = "execution"
-    VISUALIZATION = "visualization"
     OTHER = "other"
