@@ -1,0 +1,110 @@
+---
+title: Open-source SQL Agent
+description: Stop fighting your database. Let SQLsaber help you.
+template: splash
+hero:
+  tagline: Stop fighting your database. Gather the right context automatically and get insights with a collaborative SQL agent.
+  image:
+    file: ../../assets/sqlsaber-hero.svg
+  actions:
+    - text: Get started
+      link: /guides/example/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/SarthakJariwala/sqlsaber
+      icon: external
+      variant: minimal
+---
+
+import {
+  LinkButton,
+  Icon,
+  Code,
+  Card,
+  CardGrid,
+} from "@astrojs/starlight/components";
+
+<script
+  src="https://asciinema.org/a/738039.js"
+  id="asciicast-738039"
+  async="true"
+></script>
+
+<CardGrid>
+  <Card title="Just ask" icon="comment-alt">
+    <p class="text-lg text-muted-foreground">
+      Use natural language to have database-aware conversations using SQLsaber.
+    </p>
+    <p class="text-lg text-muted-foreground">
+      SQLsaber is collaborative SQL agent for experts as well as novices.
+    </p>
+  </Card>
+  <Card title="Smart by design" icon="starlight">
+    <p class="text-lg text-muted-foreground">
+      SQLsaber understands your database automatically.
+    </p>
+    <p class="text-lg text-muted-foreground">
+      It reads your schema, remembers your preferences, and writes SQL that
+      answers your question.
+    </p>
+  </Card>
+</CardGrid>
+
+<Card title="Integrates with your setup" icon="laptop">
+  <p class="text-lg text-muted-foreground">
+    SQLsaber works with what you already have and fits into your existing
+    workflow.
+  </p>
+  <li class="flex items-center gap-3">
+    <Icon name="seti:db" />
+    <span>PostgreSQL, MySQL, SQLite, CSV support</span>
+  </li>
+  <li class="flex items-center gap-3">
+    <Icon name="forward-slash" />
+    <span>MCP integration for Claude Code and other AI tools</span>
+  </li>
+  <li class="flex items-center gap-3">
+    <Icon name="sun" />
+    <span>Anthropic, OpenAI, and many more models</span>
+  </li>
+  <li class="flex items-center gap-3">
+    <Icon name="seti:shell" />
+    <span>Interactive REPL for back-and-forth conversations</span>
+  </li>
+  <li class="flex items-center gap-3">
+    <Icon name="star" />
+    <span>Human feedback system for database-specific quirks</span>
+  </li>
+
+</Card>
+
+<script
+  src="https://asciinema.org/a/YITbKtH4mPn8LLTr6QEUh7e8f.js"
+  id="asciicast-YITbKtH4mPn8LLTr6QEUh7e8f"
+  async="true"
+></script>
+
+{/* Section: Get Started Now */}
+
+<section class="mx-auto max-w-screen-lg px-4 sm:px-6 lg:px-8 py-16 text-center">
+  <h2 class="font-sans text-4xl md:text-5xl tracking-normal">
+    Get Started Now
+  </h2>
+  <div class="mt-10 text-left mx-auto max-w-3xl">
+    <Code
+      code={`# Install SQLsaber
+$ uv tool install sqlsaber
+\n# Add your database
+$ saber db add mydb
+\n# Start asking questions
+$ saber "what's our revenue this quarter?"`}
+      lang="bash"
+    />
+  </div>
+  <div class="mt-10 flex flex-wrap items-center justify-center gap-4">
+    <LinkButton href="/guides/example/">Get Started Now</LinkButton>
+    <LinkButton href="/" variant="secondary">
+      View Documentation
+    </LinkButton>
+  </div>
+</section>
