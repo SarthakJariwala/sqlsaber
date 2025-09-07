@@ -1,10 +1,12 @@
+/* Fonts (must be first to satisfy PostCSS import order) */
 @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
-@import "tailwindcss";
 
-@import "tw-animate-css";
+@layer base, starlight, theme, components, utilities;
+@import '@astrojs/starlight-tailwind';
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
 
-@custom-variant dark (&:is(.dark *));
-
+/* Theme tokens (light) */
 :root {
   --background: oklch(1.0000 0 0);
   --foreground: oklch(0.1448 0 0);
@@ -54,7 +56,13 @@
   --spacing: 0.25rem;
 }
 
-.dark {
+/* Dark mode tokens — support common selectors used by Starlight and Tailwind */
+:root.dark,
+html.dark,
+:root[data-theme="dark"],
+html[data-theme="dark"],
+body.dark,
+body[data-theme="dark"] {
   --background: oklch(0.1448 0 0);
   --foreground: oklch(0.9851 0 0);
   --card: oklch(0.2134 0 0);
@@ -101,6 +109,7 @@
   --shadow-2xl: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
 }
 
+/* Map tokens into Tailwind theme so utilities like bg-background work */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -135,6 +144,19 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
+  /* Accent scale for Starlight (use your accent tone across the scale) */
+  --color-accent-50: var(--accent);
+  --color-accent-100: var(--accent);
+  --color-accent-200: var(--accent);
+  --color-accent-300: var(--accent);
+  --color-accent-400: var(--accent);
+  --color-accent-500: var(--accent);
+  --color-accent-600: var(--accent);
+  --color-accent-700: var(--accent);
+  --color-accent-800: var(--accent);
+  --color-accent-900: var(--accent);
+  --color-accent-950: var(--accent);
+
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
@@ -154,11 +176,34 @@
   --shadow-2xl: var(--shadow-2xl);
 }
 
+/* Base rules */
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground; }
+  /* Square buttons & form controls to match theme radius */
+  button,
+  [role="button"],
+  a[role="button"],
+  .btn,
+  .Button,
+  .link-button,
+  .sl-button,
+  input,
+  select,
+  textarea {
+    border-radius: var(--radius);
   }
-  body {
-    @apply bg-background text-foreground;
+}
+
+/* Link contrast: use accent-foreground (dark in light mode, light in dark mode) */
+@layer theme {
+  a:not([role="button"]):not(.sl-button):not(.link-button) {
+    color: var(--accent-foreground);
+  }
+  a:not([role="button"]):not(.sl-button):not(.link-button):visited {
+    color: var(--accent-foreground);
+  }
+  a:not([role="button"]):not(.sl-button):not(.link-button):hover {
+    color: var(--primary);
   }
 }
