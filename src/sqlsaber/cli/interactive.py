@@ -14,13 +14,29 @@ from sqlsaber.cli.completers import (
 )
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.streaming import StreamingQueryHandler
+from sqlsaber.database.connection import (
+    CSVConnection,
+    MySQLConnection,
+    PostgreSQLConnection,
+    SQLiteConnection,
+)
 from sqlsaber.database.schema import SchemaManager
+from sqlsaber.threads import ThreadStorage
 
 
 class InteractiveSession:
     """Manages interactive CLI sessions."""
 
-    def __init__(self, console: Console, agent: Agent, db_conn, database_name: str):
+    def __init__(
+        self,
+        console: Console,
+        agent: Agent,
+        db_conn,
+        database_name: str,
+        *,
+        initial_thread_id: str | None = None,
+        initial_history: list | None = None,
+    ):
         self.console = console
         self.agent = agent
         self.db_conn = db_conn
@@ -30,19 +46,16 @@ class InteractiveSession:
         self.current_task: asyncio.Task | None = None
         self.cancellation_token: asyncio.Event | None = None
         self.table_completer = TableNameCompleter()
-        self.message_history: list | None = []
+        self.message_history: list | None = initial_history or []
+        # Conversation Thread persistence
+        self._threads = ThreadStorage()
+        self._thread_id: str | None = initial_thread_id
+        self.first_message = not self._thread_id
 
     def show_welcome_message(self):
         """Display welcome message for interactive mode."""
         # Show database information
         db_name = self.database_name or "Unknown"
-        from sqlsaber.database.connection import (
-            CSVConnection,
-            MySQLConnection,
-            PostgreSQLConnection,
-            SQLiteConnection,
-        )
-
         db_type = (
             "PostgreSQL"
             if isinstance(self.db_conn, PostgreSQLConnection)
@@ -53,32 +66,36 @@ class InteractiveSession:
             else "database"
         )
 
-        self.console.print(
-            Panel.fit(
-                """
+        if self.first_message:
+            self.console.print(
+                Panel.fit(
+                    """
 ███████  ██████  ██      ███████  █████  ██████  ███████ ██████
 ██      ██    ██ ██      ██      ██   ██ ██   ██ ██      ██   ██
 ███████ ██    ██ ██      ███████ ███████ ██████  █████   ██████
      ██ ██ ▄▄ ██ ██           ██ ██   ██ ██   ██ ██      ██   ██
 ███████  ██████  ███████ ███████ ██   ██ ██████  ███████ ██   ██
             ▀▀
-"""
+    """
+                )
             )
-        )
-        self.console.print(
-            "\n",
-            "[dim] ≥ Use '/clear' to reset conversation",
-            "[dim] ≥ Use '/exit' or '/quit' to leave[/dim]",
-            "[dim] ≥ Use 'Ctrl+C' to interrupt and return to prompt\n\n",
-            "[dim] ≥ Start message with '#' to add something to agent's memory for this database",
-            "[dim] ≥ Type '@' to get table name completions",
-            "[dim] ≥ Press 'Esc-Enter' or 'Meta-Enter' to submit your question",
-            sep="\n",
-        )
+            self.console.print(
+                "\n",
+                "[dim] > Use '/clear' to reset conversation",
+                "[dim] > Use '/exit' or '/quit' to leave[/dim]",
+                "[dim] > Use 'Ctrl+C' to interrupt and return to prompt\n\n",
+                "[dim] > Start message with '#' to add something to agent's memory for this database",
+                "[dim] > Type '@' to get table name completions",
+                "[dim] > Press 'Esc-Enter' or 'Meta-Enter' to submit your question",
+                sep="\n",
+            )
 
         self.console.print(
             f"[bold blue]\n\nConnected to:[/bold blue] {db_name} ({db_type})\n"
         )
+        # If resuming a thread, show a notice
+        if self._thread_id:
+            self.console.print(f"[dim]Resuming thread:[/dim] {self._thread_id}\n")
 
     async def _update_table_cache(self):
         """Update the table completer cache with fresh data."""
@@ -132,8 +149,29 @@ class InteractiveSession:
                 try:
                     # Use all_messages() so the system prompt and all prior turns are preserved
                     self.message_history = run_result.all_messages()
+
+                    # Extract title (first user prompt) and model name
+                    if not self._thread_id:
+                        title = user_query
+                        model_name = self.agent.model.model_name
+
+                    # Persist snapshot to thread storage (create or overwrite)
+                    self._thread_id = await self._threads.save_snapshot(
+                        messages_json=run_result.all_messages_json(),
+                        database_name=self.database_name,
+                        thread_id=self._thread_id,
+                    )
+                    # Save metadata separately (only if its the first message)
+                    if self.first_message:
+                        await self._threads.save_metadata(
+                            thread_id=self._thread_id,
+                            title=title,
+                            model_name=model_name,
+                        )
                 except Exception:
                     pass
+                finally:
+                    await self._threads.prune_threads()
         finally:
             self.current_task = None
             self.cancellation_token = None
@@ -165,12 +203,26 @@ class InteractiveSession:
                     or user_query.startswith("/exit")
                     or user_query.startswith("/quit")
                 ):
+                    # Print resume hint if there is an active thread
+                    if self._thread_id:
+                        await self._threads.end_thread(self._thread_id)
+                        self.console.print(
+                            f"[dim]You can continue this thread using:[/dim] saber threads resume {self._thread_id}"
+                        )
                     break
 
                 if user_query == "/clear":
                     # Reset local history (pydantic-ai call will receive empty history on next run)
                     self.message_history = []
+                    # End current thread (if any) so the next turn creates a fresh one
+                    try:
+                        if self._thread_id:
+                            await self._threads.end_thread(self._thread_id)
+                    except Exception:
+                        pass
                     self.console.print("[green]Conversation history cleared.[/green]\n")
+                    # Do not print resume hint when clearing; a new thread will be created on next turn
+                    self._thread_id = None
                     continue
 
                 if memory_text := user_query.strip():

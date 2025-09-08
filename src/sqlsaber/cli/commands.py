@@ -14,6 +14,7 @@ from sqlsaber.cli.interactive import InteractiveSession
 from sqlsaber.cli.memory import create_memory_app
 from sqlsaber.cli.models import create_models_app
 from sqlsaber.cli.streaming import StreamingQueryHandler
+from sqlsaber.cli.threads import create_threads_app
 from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.database.connection import (
     CSVConnection,
@@ -23,6 +24,7 @@ from sqlsaber.database.connection import (
     SQLiteConnection,
 )
 from sqlsaber.database.resolver import DatabaseResolutionError, resolve_database
+from sqlsaber.threads import ThreadStorage
 
 
 class CLIError(Exception):
@@ -149,7 +151,33 @@ def query(
                 console.print(
                     f"[bold blue]Connected to:[/bold blue] {db_name} ({db_type})\n"
                 )
-                await streaming_handler.execute_streaming_query(actual_query, agent)
+                run = await streaming_handler.execute_streaming_query(
+                    actual_query, agent
+                )
+                # Persist non-interactive run as a thread snapshot so it can be resumed later
+                try:
+                    if run is not None:
+                        threads = ThreadStorage()
+                        # Extract title and model name
+                        title = actual_query
+                        model_name: str | None = agent.model.model_name
+
+                        thread_id = await threads.save_snapshot(
+                            messages_json=run.all_messages_json(),
+                            database_name=db_name,
+                        )
+                        await threads.save_metadata(
+                            thread_id=thread_id, title=title, model_name=model_name
+                        )
+                        await threads.end_thread(thread_id)
+                        console.print(
+                            f"[dim]You can continue this thread using:[/dim] saber threads resume {thread_id}"
+                        )
+                except Exception:
+                    # best-effort persistence; don't fail the CLI on storage errors
+                    pass
+                finally:
+                    await threads.prune_threads()
             else:
                 # Interactive mode
                 session = InteractiveSession(console, agent, db_conn, db_name)
@@ -183,6 +211,10 @@ app.command(memory_app, name="memory")
 # Add model management commands
 models_app = create_models_app()
 app.command(models_app, name="models")
+
+# Add threads management commands
+threads_app = create_threads_app()
+app.command(threads_app, name="threads")
 
 
 def main():

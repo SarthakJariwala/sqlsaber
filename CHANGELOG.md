@@ -4,6 +4,17 @@ All notable changes to SQLsaber will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Conversation threads system for storing, displaying, and resuming conversations
+  - Automatic thread creation for both interactive and non-interactive sessions
+  - `saber threads list` - List all conversation threads with filtering options
+  - `saber threads show THREAD_ID` - Display full transcript of a conversation thread
+  - `saber threads resume THREAD_ID` - Continue a previous conversation in interactive mode
+  - `saber threads prune` - Clean up old threads based on age
+  - Thread persistence with metadata (title, model, database, last activity)
+  - Seamless resumption of conversation context and history
+
 ### Removed
 
 - Removed visualization tools and plotting capabilities
