@@ -19,6 +19,7 @@ Ask your questions in natural language and `sqlsaber` will gather the right cont
 - [Usage](#usage)
   - [Interactive Mode](#interactive-mode)
   - [Single Query](#single-query)
+  - [Resume Past Conversation](#resume-past-conversation)
   - [Database Selection](#database-selection)
 - [Examples](#examples)
 - [MCP Server Integration](#mcp-server-integration)
@@ -35,6 +36,7 @@ Ask your questions in natural language and `sqlsaber` will gather the right cont
 - 🛡️ Safe query execution (read-only by default)
 - 🧠 Memory management
 - 💬 Interactive REPL mode
+- 🧵 Conversation threads (store, display, and resume conversations)
 - 🗄️ Support for PostgreSQL, SQLite, and MySQL
 - 🔌 MCP (Model Context Protocol) server support
 - 🎨 Beautiful formatted output
@@ -124,6 +126,14 @@ You can also pipe queries from stdin:
 ```bash
 echo "show me all users created this month" | saber
 cat query.txt | saber
+```
+
+### Resume Past Conversation
+
+Continue a previous conversation thread:
+
+```bash
+saber threads resume THREAD_ID
 ```
 
 ### Database Selection
