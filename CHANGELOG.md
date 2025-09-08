@@ -1,8 +1,14 @@
 # Changelog
 
-All notable changes to SQLsaber will be documented in this file.
+All notable changes to SQLsaber will be documented here.
 
 ## [Unreleased]
+
+## [0.18.0] - 2025-09-08
+
+### Changed
+
+- Improved CLI startup time
 
 ## [0.17.0] - 2025-09-08
 

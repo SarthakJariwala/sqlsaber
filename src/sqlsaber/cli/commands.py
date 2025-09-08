@@ -7,24 +7,8 @@ from typing import Annotated
 import cyclopts
 from rich.console import Console
 
-from sqlsaber.agents import build_sqlsaber_agent
-from sqlsaber.cli.auth import create_auth_app
-from sqlsaber.cli.database import create_db_app
-from sqlsaber.cli.interactive import InteractiveSession
-from sqlsaber.cli.memory import create_memory_app
-from sqlsaber.cli.models import create_models_app
-from sqlsaber.cli.streaming import StreamingQueryHandler
-from sqlsaber.cli.threads import create_threads_app
+# Lazy imports - only import what's needed for CLI parsing
 from sqlsaber.config.database import DatabaseConfigManager
-from sqlsaber.database.connection import (
-    CSVConnection,
-    DatabaseConnection,
-    MySQLConnection,
-    PostgreSQLConnection,
-    SQLiteConnection,
-)
-from sqlsaber.database.resolver import DatabaseResolutionError, resolve_database
-from sqlsaber.threads import ThreadStorage
 
 
 class CLIError(Exception):
@@ -108,6 +92,21 @@ def query(
     """
 
     async def run_session():
+        # Import heavy dependencies only when actually running a query
+        # This is only done to speed up startup time
+        from sqlsaber.agents import build_sqlsaber_agent
+        from sqlsaber.cli.interactive import InteractiveSession
+        from sqlsaber.cli.streaming import StreamingQueryHandler
+        from sqlsaber.database.connection import (
+            CSVConnection,
+            DatabaseConnection,
+            MySQLConnection,
+            PostgreSQLConnection,
+            SQLiteConnection,
+        )
+        from sqlsaber.database.resolver import DatabaseResolutionError, resolve_database
+        from sqlsaber.threads import ThreadStorage
+
         # Check if query_text is None and stdin has data
         actual_query = query_text
         if query_text is None and not sys.stdin.isatty():
@@ -196,25 +195,45 @@ def query(
         sys.exit(e.exit_code)
 
 
-# Add authentication management commands
-auth_app = create_auth_app()
-app.command(auth_app, name="auth")
+# Use lazy imports for fast CLI startup time
+@app.command(name="auth")
+def auth(*args, **kwargs):
+    """Manage authentication configuration."""
+    from sqlsaber.cli.auth import create_auth_app
 
-# Add database management commands after main callback is defined
-db_app = create_db_app()
-app.command(db_app, name="db")
+    return create_auth_app()(*args, **kwargs)
 
-# Add memory management commands
-memory_app = create_memory_app()
-app.command(memory_app, name="memory")
 
-# Add model management commands
-models_app = create_models_app()
-app.command(models_app, name="models")
+@app.command(name="db")
+def db(*args, **kwargs):
+    """Manage database connections."""
+    from sqlsaber.cli.database import create_db_app
 
-# Add threads management commands
-threads_app = create_threads_app()
-app.command(threads_app, name="threads")
+    return create_db_app()(*args, **kwargs)
+
+
+@app.command(name="memory")
+def memory(*args, **kwargs):
+    """Manage database-specific memories."""
+    from sqlsaber.cli.memory import create_memory_app
+
+    return create_memory_app()(*args, **kwargs)
+
+
+@app.command(name="models")
+def models(*args, **kwargs):
+    """Select and manage models."""
+    from sqlsaber.cli.models import create_models_app
+
+    return create_models_app()(*args, **kwargs)
+
+
+@app.command(name="threads")
+def threads(*args, **kwargs):
+    """Manage SQLsaber threads."""
+    from sqlsaber.cli.threads import create_threads_app
+
+    return create_threads_app()(*args, **kwargs)
 
 
 def main():
