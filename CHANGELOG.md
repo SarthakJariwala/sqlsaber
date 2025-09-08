@@ -4,6 +4,8 @@ All notable changes to SQLsaber will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.0] - 2025-09-08
+
 ### Added
 
 - Conversation threads system for storing, displaying, and resuming conversations
