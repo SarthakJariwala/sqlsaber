@@ -9,7 +9,6 @@ from urllib.parse import parse_qs, urlparse
 import aiomysql
 import aiosqlite
 import asyncpg
-import pandas as pd
 
 
 class BaseDatabaseConnection(ABC):
@@ -324,6 +323,10 @@ class CSVConnection(BaseDatabaseConnection):
             return
 
         try:
+            # Import pandas only when needed for CSV operations
+            # This improves CLI load times
+            import pandas as pd
+
             # Read CSV file using pandas
             df = pd.read_csv(
                 self.csv_path,
