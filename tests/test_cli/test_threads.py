@@ -17,9 +17,9 @@ from rich.console import Console
 from sqlsaber.cli.threads import (
     _human_readable,
     _render_transcript,
-    config_manager,
     create_threads_app,
 )
+from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.threads.storage import Thread, ThreadStorage
 
 
@@ -220,7 +220,7 @@ class TestThreadsCLI:
             ),
         ]
 
-        with patch("sqlsaber.cli.threads.DisplayManager") as mock_dm_class:
+        with patch("sqlsaber.cli.display.DisplayManager") as mock_dm_class:
             mock_dm = MagicMock()
             mock_dm_class.return_value = mock_dm
 
@@ -253,7 +253,7 @@ class TestThreadsCLI:
             ),
         ]
 
-        with patch("sqlsaber.cli.threads.DisplayManager") as mock_dm_class:
+        with patch("sqlsaber.cli.display.DisplayManager") as mock_dm_class:
             mock_dm = MagicMock()
             mock_dm_class.return_value = mock_dm
 
@@ -307,10 +307,14 @@ class TestThreadsCLI:
 
             with (
                 patch("sqlsaber.cli.threads.ThreadStorage", return_value=store),
-                patch("sqlsaber.cli.threads.resolve_database") as mock_resolve,
-                patch("sqlsaber.cli.threads.DatabaseConnection") as mock_db_conn_class,
-                patch("sqlsaber.cli.threads.build_sqlsaber_agent") as mock_build_agent,
-                patch("sqlsaber.cli.threads.InteractiveSession") as mock_session_class,
+                patch("sqlsaber.database.resolver") as mock_resolve,
+                patch("sqlsaber.database.DatabaseConnection") as mock_db_conn_class,
+                patch(
+                    "sqlsaber.agents.pydantic_ai_agent.build_sqlsaber_agent"
+                ) as mock_build_agent,
+                patch(
+                    "sqlsaber.cli.interactive.InteractiveSession"
+                ) as mock_session_class,
             ):
                 # Mock database resolution
                 mock_resolved = MagicMock()
@@ -333,7 +337,7 @@ class TestThreadsCLI:
                 assert resolved_thread == thread
 
                 db_selector = resolved_thread.database_name
-                resolved = mock_resolve(db_selector, config_manager)
+                resolved = mock_resolve(db_selector, DatabaseConfigManager())
                 assert resolved.name == "prod_db"
 
         await mock_resume_run()

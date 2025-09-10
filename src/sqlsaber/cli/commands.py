@@ -7,6 +7,12 @@ from typing import Annotated
 import cyclopts
 from rich.console import Console
 
+from sqlsaber.cli.auth import create_auth_app
+from sqlsaber.cli.database import create_db_app
+from sqlsaber.cli.memory import create_memory_app
+from sqlsaber.cli.models import create_models_app
+from sqlsaber.cli.threads import create_threads_app
+
 # Lazy imports - only import what's needed for CLI parsing
 from sqlsaber.config.database import DatabaseConfigManager
 
@@ -24,6 +30,11 @@ app = cyclopts.App(
     help="SQLsaber - Open-source agentic SQL assistant for your database",
 )
 
+app.command(create_auth_app(), name="auth")
+app.command(create_db_app(), name="db")
+app.command(create_memory_app(), name="memory")
+app.command(create_models_app(), name="models")
+app.command(create_threads_app(), name="threads")
 
 console = Console()
 config_manager = DatabaseConfigManager()
@@ -193,47 +204,6 @@ def query(
     except CLIError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         sys.exit(e.exit_code)
-
-
-# Use lazy imports for fast CLI startup time
-@app.command(name="auth")
-def auth(*args, **kwargs):
-    """Manage authentication configuration."""
-    from sqlsaber.cli.auth import create_auth_app
-
-    return create_auth_app()(*args, **kwargs)
-
-
-@app.command(name="db")
-def db(*args, **kwargs):
-    """Manage database connections."""
-    from sqlsaber.cli.database import create_db_app
-
-    return create_db_app()(*args, **kwargs)
-
-
-@app.command(name="memory")
-def memory(*args, **kwargs):
-    """Manage database-specific memories."""
-    from sqlsaber.cli.memory import create_memory_app
-
-    return create_memory_app()(*args, **kwargs)
-
-
-@app.command(name="models")
-def models(*args, **kwargs):
-    """Select and manage models."""
-    from sqlsaber.cli.models import create_models_app
-
-    return create_models_app()(*args, **kwargs)
-
-
-@app.command(name="threads")
-def threads(*args, **kwargs):
-    """Manage SQLsaber threads."""
-    from sqlsaber.cli.threads import create_threads_app
-
-    return create_threads_app()(*args, **kwargs)
 
 
 def main():

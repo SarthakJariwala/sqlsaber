@@ -12,17 +12,10 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from sqlsaber.agents import build_sqlsaber_agent
-from sqlsaber.cli.display import DisplayManager
-from sqlsaber.cli.interactive import InteractiveSession
-from sqlsaber.config.database import DatabaseConfigManager
-from sqlsaber.database.connection import DatabaseConnection
-from sqlsaber.database.resolver import DatabaseResolutionError, resolve_database
 from sqlsaber.threads import ThreadStorage
 
 # Globals consistent with other CLI modules
 console = Console()
-config_manager = DatabaseConfigManager()
 
 
 threads_app = cyclopts.App(
@@ -41,6 +34,9 @@ def _render_transcript(
     console: Console, all_msgs: list[ModelMessage], last_n: int | None = None
 ) -> None:
     """Render conversation turns from ModelMessage[] using DisplayManager."""
+    # Lazy import to avoid pulling UI helpers at startup
+    from sqlsaber.cli.display import DisplayManager
+
     dm = DisplayManager(console)
 
     # Locate indices of user prompts
@@ -237,6 +233,16 @@ def resume(
     store = ThreadStorage()
 
     async def _run() -> None:
+        # Lazy imports to avoid heavy modules at CLI startup
+        from sqlsaber.agents import build_sqlsaber_agent
+        from sqlsaber.cli.interactive import InteractiveSession
+        from sqlsaber.config.database import DatabaseConfigManager
+        from sqlsaber.database.connection import DatabaseConnection
+        from sqlsaber.database.resolver import (
+            DatabaseResolutionError,
+            resolve_database,
+        )
+
         thread = await store.get_thread(thread_id)
         if not thread:
             console.print(f"[red]Thread not found:[/red] {thread_id}")
@@ -248,6 +254,7 @@ def resume(
             )
             return
         try:
+            config_manager = DatabaseConfigManager()
             resolved = resolve_database(db_selector, config_manager)
             connection_string = resolved.connection_string
             db_name = resolved.name
