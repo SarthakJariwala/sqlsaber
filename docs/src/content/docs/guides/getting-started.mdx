@@ -3,8 +3,7 @@ title: Getting Started
 description: Your first steps with SQLsaber
 ---
 
-import { Aside } from '@astrojs/starlight/components';
-
+import { Aside } from "@astrojs/starlight/components";
 
 Welcome to SQLsaber! This guide will walk you through setting up SQLsaber and running your first query.
 
@@ -27,15 +26,18 @@ saber auth setup
 ```
 
 This will prompt you to:
+
 - Choose a provider (We recommend Anthropic)
 - Enter your API key
 
 <Aside type="tip">
-If you have a Claude Pro or Max subscription, you can use it with SQLsaber. It is one of the most cost-effective options.
+  If you have a Claude Pro or Max subscription, you can use it with SQLsaber. It
+  is one of the most cost-effective options.
 </Aside>
 
 <Aside type="note">
-    If you choose a provider other than Anthropic, please select the appropriate model for the provider by running `saber models set`.
+  If you choose a provider other than Anthropic, please select the appropriate
+  model for the provider by running `saber models set`.
 </Aside>
 
 #### 2. Add Your Database
@@ -47,10 +49,11 @@ saber db add my-database
 ```
 
 This interactive command will ask you for:
+
 - Database type
-    - PostgreSQL
-    - MySQL
-    - SQLite
+  - PostgreSQL
+  - MySQL
+  - SQLite
 - Connection details (host, port, database name, username)
 - SSL configuration (if needed)
 
@@ -63,6 +66,7 @@ curl -L -o legislators.db https://github.com/SarthakJariwala/sqlsaber/raw/refs/h
 # Add it to SQLsaber
 saber db add legislators --type sqlite --database ./legislators.db
 ```
+
 </Aside>
 
 #### 3. Your First Query
@@ -82,14 +86,15 @@ Try asking a question:
 ```
 
 SQLsaber will:
+
 1. Analyze your database schema
 2. Generate appropriate SQL
 3. Execute the query
 4. Present the results and analysis
 
 <script
-  src="https://asciinema.org/a/739273.js"
-  id="asciicast-739273"
+  src="https://asciinema.org/a/739399.js"
+  id="asciicast-739399"
   async="true"
 ></script>
 
@@ -142,18 +147,21 @@ Now that you have SQLsaber running, explore these features:
 #### Common Issues
 
 **"No database connections configured"**
+
 ```bash
 saber db list  # Check configured databases
 saber db add my-db  # Add a new database
 ```
 
 **"Authentication not configured"**
+
 ```bash
 saber auth status  # Check auth status
 saber auth setup   # Set up authentication
 ```
 
 **"Database connection failed"**
+
 ```bash
 saber db test my-database  # Test the connection
 ```

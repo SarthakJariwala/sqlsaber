@@ -3,7 +3,7 @@ title: Running Queries
 description: Learn different ways to query your data with SQLsaber
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 SQLsaber offers multiple ways to query your database using natural language. This guide covers all the different query modes and their use cases.
 
@@ -16,8 +16,8 @@ saber
 ```
 
 <script
-  src="https://asciinema.org/a/739273.js"
-  id="asciicast-739273"
+  src="https://asciinema.org/a/739399.js"
+  id="asciicast-739399"
   async="true"
 ></script>
 
@@ -30,6 +30,7 @@ saber "How many orders were placed last week?"
 ```
 
 Useful for:
+
 - Shell scripting
 - Quick checks
 - Automated reporting
@@ -50,6 +51,7 @@ curl -s https://api.example.com/query | saber
 ```
 
 Useful for:
+
 - Shell scripting
 - Batch processing
 - Integration with other tools
@@ -82,6 +84,7 @@ Type `@` followed by a table name to get autocomplete suggestions:
 ```
 
 Supports schema-aware completions:
+
 ```
 > @pub[TAB] → @public.customers
 ```
