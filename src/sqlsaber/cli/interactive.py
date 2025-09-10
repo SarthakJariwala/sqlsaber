@@ -1,8 +1,12 @@
 """Interactive mode handling for the CLI."""
 
 import asyncio
+from pathlib import Path
 
-import questionary
+import platformdirs
+from prompt_toolkit import PromptSession
+from prompt_toolkit.history import FileHistory
+from prompt_toolkit.styles import Style
 from pydantic_ai import Agent
 from rich.console import Console
 from rich.panel import Panel
@@ -22,6 +26,23 @@ from sqlsaber.database.connection import (
 )
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.threads import ThreadStorage
+
+
+def bottom_toolbar():
+    return [
+        (
+            "class:bottom-toolbar",
+            " Use 'Esc-Enter' or 'Meta-Enter' to submit.",
+        )
+    ]
+
+
+style = Style.from_dict(
+    {
+        "frame.border": "#ebbcba",
+        "bottom-toolbar": "#ebbcba bg:#21202e",
+    }
+)
 
 
 class InteractiveSession:
@@ -82,7 +103,7 @@ class InteractiveSession:
             self.console.print(
                 "\n",
                 "[dim] > Use '/clear' to reset conversation",
-                "[dim] > Use '/exit' or '/quit' to leave[/dim]",
+                "[dim] > Use 'Ctrl+D', '/exit' or '/quit' to leave[/dim]",
                 "[dim] > Use 'Ctrl+C' to interrupt and return to prompt\n\n",
                 "[dim] > Start message with '#' to add something to agent's memory for this database",
                 "[dim] > Type '@' to get table name completions",
@@ -137,7 +158,10 @@ class InteractiveSession:
         # Create the query task
         query_task = asyncio.create_task(
             self.streaming_handler.execute_streaming_query(
-                user_query, self.agent, self.cancellation_token, self.message_history
+                user_query,
+                self.agent,
+                self.cancellation_token,
+                self.message_history,
             )
         )
         self.current_task = query_task
@@ -183,17 +207,26 @@ class InteractiveSession:
         # Initialize table cache
         await self._update_table_cache()
 
+        session = PromptSession(
+            history=FileHistory(
+                Path(platformdirs.user_config_dir("sqlsaber")) / "history"
+            )
+        )
+
         while True:
             try:
-                user_query = await questionary.text(
-                    ">",
-                    qmark="",
+                # with patch_stdout():
+                user_query = await session.prompt_async(
+                    "",
                     multiline=True,
-                    instruction="",
+                    mouse_support=True,
                     completer=CompositeCompleter(
                         SlashCommandCompleter(), self.table_completer
                     ),
-                ).ask_async()
+                    show_frame=True,
+                    bottom_toolbar=bottom_toolbar,
+                    style=style,
+                )
 
                 if not user_query:
                     continue
@@ -276,7 +309,10 @@ class InteractiveSession:
                     self.console.print("\n[yellow]Query interrupted[/yellow]")
                 else:
                     self.console.print(
-                        "\n[yellow]Use '/exit' or '/quit' to leave.[/yellow]"
+                        "\n[yellow]Press Ctrl+D to exit. Or use '/exit' or '/quit' slash command.[/yellow]"
                     )
+            except EOFError:
+                # Exit when Ctrl+D is pressed
+                break
             except Exception as e:
                 self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
