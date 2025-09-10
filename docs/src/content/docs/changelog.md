@@ -7,13 +7,15 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+---
+
+### v0.20.0 - 2025-09-10
+
 #### Fixed
 
 - Subcommand help visibility for nested apps
 - Removed mouse support for user prompt
   - Enabling mouse support disables terminal scrolling when user prompt is focused
-
----
 
 ### v0.19.0 - 2025-09-09
 
