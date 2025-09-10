@@ -9,6 +9,17 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.19.0 - 2025-09-09
+
+#### Added
+
+- Notable improvements to user prompt interface
+  - Ctrl+D to exit the application without having to use "/exit" or "/quit" slash command
+  - Display multiline input submission info as bottom toolbar
+  - Pressing up and down arrow keys now help navigate through prior user prompts
+  - Visual improvements to user prompt area
+  - Added mouse support - users can now click around text to edit
+
 ### v0.18.0 - 2025-09-08
 
 #### Changed
@@ -181,7 +192,6 @@ All notable changes to SQLsaber will be documented here.
 #### Added
 
 - Table name autocomplete with "@" prefix in interactive mode
-
   - Type "@" followed by table name to get fuzzy matching completions
   - Supports schema-aware completions (e.g., "@sample" matches "public.sample")
 
