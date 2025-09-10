@@ -1,0 +1,78 @@
+---
+title: Models
+description: Configure and select AI models for SQLsaber
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+SQLsaber supports many LLM models across different providers.
+
+This guide covers model selection, configuration, and recommendations for the best SQL query generation.
+
+### Default Model
+
+SQLsaber uses **Claude Sonnet 4** by default, which provides excellent SQL generation capabilities with good speed and accuracy.
+
+### Recommended Models
+
+While SQLsaber supports a lot of models, we recommend the following for best results:
+
+- Claude Sonnet 4, 3.7, 3.5
+- Claude Opus 4, 4.1
+- GPT-5
+- Gemini 2.5 Pro
+
+<Aside type="tip">
+Consider using one of the recommended models for best results.
+</Aside>
+
+### Model Management
+
+#### List Available Models
+
+```bash
+saber models list
+```
+
+#### Set Your Default Model
+
+Change the default model:
+
+```bash
+saber models set
+```
+
+This interactive command lets you:
+1. Choose from configured providers
+2. Select a specific model
+3. Set it as your default
+
+<Aside type="tip">
+    This list is long - type to search and filter the list.
+</Aside>
+
+#### Reset to Default
+
+Return to the original default (Claude Sonnet 4):
+
+```bash
+saber models reset
+```
+
+### Getting Help
+
+Check your current model and available options:
+
+```bash
+saber models current
+saber models --help
+```
+
+### What's Next?
+
+After configuring your models:
+
+1. [Learn different ways to query your data](/guides/queries)
+2. [Set up memory for better context](/guides/memory)
+3. [Manage conversation threads](/guides/threads)
+4. [Explore the command reference](/reference/commands)

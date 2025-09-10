@@ -1,0 +1,144 @@
+---
+title: Running Queries
+description: Learn different ways to query your data with SQLsaber
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+SQLsaber offers multiple ways to query your database using natural language. This guide covers all the different query modes and their use cases.
+
+### Interactive Mode
+
+Ideal for back and forth conversations about your data.
+
+```bash
+saber
+```
+
+<script
+  src="https://asciinema.org/a/739273.js"
+  id="asciicast-739273"
+  async="true"
+></script>
+
+### Single Query Mode
+
+Run a one-off query without entering interactive mode:
+
+```bash
+saber "How many orders were placed last week?"
+```
+
+Useful for:
+- Shell scripting
+- Quick checks
+- Automated reporting
+
+### Stdin Mode
+
+Pipe queries from other commands or files:
+
+```bash
+# From echo
+echo "Count all active customers from last week" | saber
+
+# From file
+cat query.txt | saber
+
+# From other commands
+curl -s https://api.example.com/query | saber
+```
+
+Useful for:
+- Shell scripting
+- Batch processing
+- Integration with other tools
+- Automation
+
+### Features
+
+#### Slash Commands
+
+Special commands in interactive mode:
+
+- `/clear` - Clear conversation history
+- `/exit` or `/quit` - Exit SQLsaber
+
+```
+> /clear
+Conversation history cleared.
+
+> /exit
+Goodbye!
+```
+
+#### Table Autocomplete
+
+Type `@` followed by a table name to get autocomplete suggestions:
+
+```
+> Show me all records from @cus[TAB]
+> Show me all records from @customers
+```
+
+Supports schema-aware completions:
+```
+> @pub[TAB] → @public.customers
+```
+
+### Database Selection
+
+#### Using Default
+
+If you have a default database configured:
+
+```bash
+saber "Show me sales data"
+```
+
+#### Specifying Database by Name
+
+Use a configured database connection:
+
+```bash
+saber -d prod-db "What's our revenue this month?"
+```
+
+#### Using Files Directly
+
+Work with SQLite or CSV files directly:
+
+```bash
+# SQLite file
+saber -d "./data/sales.db" "Top selling products"
+
+# CSV file
+saber -d "./customers.csv" "How many customers per state?"
+```
+
+#### Connection Strings
+
+Use connection strings for temporary connections:
+
+```bash
+saber -d "postgresql://user:pass@host:5432/db" "Count all users"
+```
+
+### Connection Issues
+
+```bash
+# Test the connection
+saber db test my-database
+
+# Check database list
+saber db list
+```
+
+### What's Next?
+
+Now that you know how to query effectively:
+
+1. [Set up memory](/guides/memory) for better context
+2. [Learn about conversation threads](/guides/threads)
+3. [Explore the command reference](/reference/commands)
+4. [Configure advanced database settings](/guides/database-setup)

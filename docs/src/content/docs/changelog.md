@@ -1,18 +1,23 @@
-# Changelog
+---
+title: Changelog
+description: Release history and notable changes to SQLsaber
+---
 
 All notable changes to SQLsaber will be documented here.
 
-## [Unreleased]
+### Unreleased
 
-## [0.18.0] - 2025-09-08
+---
 
-### Changed
+### v0.18.0 - 2025-09-08
+
+#### Changed
 
 - Improved CLI startup time
 
-## [0.17.0] - 2025-09-08
+### v0.17.0 - 2025-09-08
 
-### Added
+#### Added
 
 - Conversation threads system for storing, displaying, and resuming conversations
   - Automatic thread creation for both interactive and non-interactive sessions
@@ -23,28 +28,28 @@ All notable changes to SQLsaber will be documented here.
   - Thread persistence with metadata (title, model, database, last activity)
   - Seamless resumption of conversation context and history
 
-### Removed
+#### Removed
 
 - Removed visualization tools and plotting capabilities
   - Removed PlotDataTool and uniplot dependency
   - Cleaned up visualization-related code from CLI, registry, and instructions
 
-## [0.16.1] - 2025-09-04
+### v0.16.1 - 2025-09-04
 
-### Added
+#### Added
 
 - Compile python byte code during installation
 - Updated CLI help string
 
-## [0.16.0] - 2025-09-04
+### v0.16.0 - 2025-09-04
 
-### Added
+#### Added
 
 - Migrated to Pydantic-AI agent runtime with model-agnostic interfaces
 - Added multi-provider model support: Anthropic, OpenAI, Google, Groq, Mistral, Cohere, Hugging Face
 - Provider registry tests to ensure invariants and alias normalization
 
-### Changed
+#### Changed
 
 - Reworked agents to use new pydantic-ai-based agent implementation
 - Updated CLI modules and settings to integrate provider selection and authentication
@@ -55,28 +60,28 @@ All notable changes to SQLsaber will be documented here.
 - Centralized provider definitions in `sqlsaber.config.providers` and refactored CLI, config, and agent code to use the registry (single source of truth)
 - Normalized provider aliases (e.g., `google-gla` → `google`) for consistent behavior across modules
 
-### Removed
+#### Removed
 
 - Deprecated custom `clients` module and Anthropic-specific client code
 - Removed legacy streaming and events modules and related tests
 
-## [0.15.0] - 2025-08-18
+### v0.15.0 - 2025-08-18
 
-### Added
+#### Added
 
 - Tool abstraction system with centralized registry (new `Tool` base class, `ToolRegistry`, decorators)
 - Dynamic instruction generation system (`InstructionBuilder`)
 - Comprehensive test suite for the tools module
 
-### Changed
+#### Changed
 
 - Refactored agents to use centralized tool registry instead of hardcoded tools
 - Enhanced MCP server with dynamic tool registration
 - Moved core SQL functionality to dedicated tool classes
 
-## [0.14.0] - 2025-08-01
+### v0.14.0 - 2025-08-01
 
-### Added
+#### Added
 
 - Local conversation storage between user and agent
   - Store conversation history persistently
@@ -85,49 +90,49 @@ All notable changes to SQLsaber will be documented here.
   - New GitHub Actions workflow for running tests
   - Updated code review workflow
 
-### Fixed
+#### Fixed
 
 - Fixed CLI commands test suite (#11)
 
-### Changed
+#### Changed
 
 - Removed schema caching from SchemaManager
   - Simplified schema introspection by removing cache logic
   - Direct database queries for schema information
 
-## [0.13.0] - 2025-07-26
+### v0.13.0 - 2025-07-26
 
-### Added
+#### Added
 
 - Database resolver abstraction for unified connection handling
   - Extended `-d` flag to accept PostgreSQL and MySQL connection strings (e.g., `postgresql://user:pass@host:5432/db`)
   - Support for direct connection strings alongside existing file path and configured database support
   - Examples: `saber -d "postgresql://user:pass@host:5432/db" "show users"`
 
-## [0.12.0] - 2025-07-23
+### v0.12.0 - 2025-07-23
 
-### Added
+#### Added
 
 - Add support for ad-hoc SQLite files via `--database`/`-d` flag
 
-## [0.11.0] - 2025-07-09
+### v0.11.0 - 2025-07-09
 
-### Changed
+#### Changed
 
 - Removed row counting from `list_tables` tool for all database types
 
-## [0.10.0] - 2025-07-08
+### v0.10.0 - 2025-07-08
 
-### Added
+#### Added
 
 - Support for reading queries from stdin via pipe operator
   - `echo 'show me all users' | saber` now works
   - `cat query.txt | saber` reads query from file via stdin
   - Allows integration with other command-line tools and scripts
 
-## [0.9.0] - 2025-07-08
+### v0.9.0 - 2025-07-08
 
-### Changed
+#### Changed
 
 - Migrated from Typer to Cyclopts for CLI framework
   - Improved command structure and parameter handling
@@ -137,22 +142,22 @@ All notable changes to SQLsaber will be documented here.
   - `saber "question"` executes a single query (previously `saber query "question"`)
   - Removed the `query` subcommand for a cleaner interface
 
-## [0.8.2] - 2025-07-08
+### v0.8.2 - 2025-07-08
 
-## Changed
+#### Changed
 
 - Updated formatting for final answer display
 - New ASCII art in interactive mode
 
-## [0.8.1] - 2025-07-07
+### v0.8.1 - 2025-07-07
 
-### Fixed
+#### Fixed
 
 - Fixed OAuth validation logic to not require API key when Claude Pro OAuth is configured
 
-## [0.8.0] - 2025-07-07
+### v0.8.0 - 2025-07-07
 
-### Added
+#### Added
 
 - OAuth support for Claude Pro/Max subscriptions
 - Authentication management with `saber auth` command
@@ -164,16 +169,16 @@ All notable changes to SQLsaber will be documented here.
 - New `clients` module with custom Anthropic API client
   - `AnthropicClient` for direct API communication
 
-### Changed
+#### Changed
 
 - Enhanced authentication system to support both API keys and OAuth tokens
 - Replaced Anthropic SDK with direct API implementation using httpx
 - Modernized type annotations throughout the codebase
 - Refactored query streaming into smaller, more maintainable functions
 
-## [0.7.0] - 2025-07-01
+### v0.7.0 - 2025-07-01
 
-### Added
+#### Added
 
 - Table name autocomplete with "@" prefix in interactive mode
 
@@ -183,9 +188,9 @@ All notable changes to SQLsaber will be documented here.
 - Rich markdown display for assistant responses
   - After streaming completes, the final response is displayed as formatted markdown
 
-## [0.6.0] - 2025-06-30
+### v0.6.0 - 2025-06-30
 
-### Added
+#### Added
 
 - Slash command autocomplete in interactive mode
   - Commands now use slash prefix: `/clear`, `/exit`, `/quit`
@@ -195,7 +200,7 @@ All notable changes to SQLsaber will be documented here.
   - Press Ctrl+C during query execution to gracefully cancel ongoing operations
   - Preserves conversation history up to the interruption point
 
-### Changed
+#### Changed
 
 - Updated table display for better readability: limit to first 15 columns on wide tables
   - Shows warning when columns are truncated
@@ -205,47 +210,47 @@ All notable changes to SQLsaber will be documented here.
   - `quit` → `/quit`
 - Removed default limit of 100. Now model will decide it.
 
-## [0.5.0] - 2025-06-27
+### v0.5.0 - 2025-06-27
 
-### Added
+#### Added
 
 - Added support for plotting data from query results.
   - The agent can decide if plotting will useful and create a plot with query results.
 - Small updates to system prompt
 
-## [0.4.1] - 2025-06-26
+### v0.4.1 - 2025-06-26
 
-### Added
+#### Added
 
 - Show connected database information at the start of a session
 - Update welcome message for clarity
 
-## [0.4.0] - 2025-06-25
+### v0.4.0 - 2025-06-25
 
-### Added
+#### Added
 
 - MCP (Model Context Protocol) server support
 - `saber-mcp` console script for running MCP server
 - MCP tools: `get_databases()`, `list_tables()`, `introspect_schema()`, `execute_sql()`
 - Instructions and documentation for configuring MCP clients (Claude Code, etc.)
 
-## [0.3.0] - 2025-06-25
+### v0.3.0 - 2025-06-25
 
-### Added
+#### Added
 
 - Support for CSV files as a database option: `saber query -d mydata.csv`
 
-### Changed
+#### Changed
 
 - Extracted tools to BaseSQLAgent for better inheritance across SQLAgents
 
-### Fixed
+#### Fixed
 
 - Fixed getting row counts for SQLite
 
-## [0.2.0] - 2025-06-24
+### v0.2.0 - 2025-06-24
 
-### Added
+#### Added
 
 - SSL support for database connections during configuration
 - Memory feature similar to Claude Code
@@ -256,7 +261,7 @@ All notable changes to SQLsaber will be documented here.
 - Interactive questionary for all user interactions
 - Test suite implementation
 
-### Changed
+#### Changed
 
 - Package renamed from original name to sqlsaber
 - Better configuration handling
@@ -266,20 +271,20 @@ All notable changes to SQLsaber will be documented here.
 - Extracted table display functionality
 - Refactored and cleaned up codebase structure
 
-### Fixed
+#### Fixed
 
 - Fixed list_tables tool functionality
 - Fixed introspect schema tool
 - Fixed minor type checking errors
 - Check before adding new database to prevent duplicates
 
-### Removed
+#### Removed
 
 - Removed write support completely for security
 
-## [0.1.0] - 2025-06-19
+### v0.1.0 - 2025-06-19
 
-### Added
+#### Added
 
 - First working version of SQLSaber
 - Streaming tool response and status messages

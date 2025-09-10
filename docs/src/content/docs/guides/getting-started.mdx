@@ -1,0 +1,161 @@
+---
+title: Getting Started
+description: Your first steps with SQLsaber
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+
+Welcome to SQLsaber! This guide will walk you through setting up SQLsaber and running your first query.
+
+Before you begin, make sure you have:
+
+1. [Installed SQLsaber](/installation)
+2. Access to a database (PostgreSQL, MySQL, or SQLite)
+3. An API key from a supported AI provider (Anthropic, OpenAI, Google, etc.)
+
+### Quick Setup
+
+#### 1. Set Up Authentication
+
+First, configure your AI provider.
+
+SQLsaber uses Claude Sonnet 4 as the model by default, but supports models from [multiple providers](/guides/models).
+
+```bash
+saber auth setup
+```
+
+This will prompt you to:
+- Choose a provider (We recommend Anthropic)
+- Enter your API key
+
+<Aside type="tip">
+If you have a Claude Pro or Max subscription, you can use it with SQLsaber. It is one of the most cost-effective options.
+</Aside>
+
+<Aside type="note">
+    If you choose a provider other than Anthropic, please select the appropriate model for the provider by running `saber models set`.
+</Aside>
+
+#### 2. Add Your Database
+
+Add a database connection:
+
+```bash
+saber db add my-database
+```
+
+This interactive command will ask you for:
+- Database type
+    - PostgreSQL
+    - MySQL
+    - SQLite
+- Connection details (host, port, database name, username)
+- SSL configuration (if needed)
+
+<Aside type="note">
+If you don't have a database handy, you can use a sample `legislators` SQLite database from SQLsaber repository:
+
+```bash
+curl -L -o legislators.db https://github.com/SarthakJariwala/sqlsaber/raw/refs/heads/main/legislators.db
+
+# Add it to SQLsaber
+saber db add legislators --type sqlite --database ./legislators.db
+```
+</Aside>
+
+#### 3. Your First Query
+
+Now you're ready to ask your first question!
+
+Start SQLsaber in interactive mode:
+
+```bash
+saber
+```
+
+Try asking a question:
+
+```
+> How many VPs have become presidents via election in 20th century?
+```
+
+SQLsaber will:
+1. Analyze your database schema
+2. Generate appropriate SQL
+3. Execute the query
+4. Present the results and analysis
+
+<script
+  src="https://asciinema.org/a/739273.js"
+  id="asciicast-739273"
+  async="true"
+></script>
+
+### Interactive Mode
+
+In interactive mode, you have access to several helpful features:
+
+- Slash Commands
+  - `/clear` - Clear the conversation history
+  - `/exit` or `/quit` - Exit SQLsaber
+
+- Table Name Autocomplete
+  - Type `@` followed by a table name to get autocomplete suggestions:
+
+### Non-Interactive Mode
+
+You can also run single queries without entering interactive mode:
+
+```bash
+# Direct query
+saber "How many users are there?"
+
+# Using a specific database
+saber -d my-database "Show me the latest orders"
+
+# Reading from stdin
+echo "Count all products by category" | saber
+
+# Send output to a file
+saber "Show me the latest orders" > latest_orders.md
+```
+
+### Next Steps
+
+Now that you have SQLsaber running, explore these features:
+
+- **[Set up memory](/guides/memory)** - Add context about your database for better results
+- **[Manage conversation threads](/guides/threads)** - Resume your conversations
+- **[Configure different models](/guides/models)** - Try different AI models
+- **[Advanced database setup](/guides/database-setup)** - Configure SSL, connection strings, and more
+
+### Getting Help
+
+- Use `saber --help` to see all available commands
+- Check the [command reference](/reference/commands) for detailed documentation
+- Visit our [GitHub repository](https://github.com/SarthakJariwala/sqlsaber) for issues and contributions
+
+### Troubleshooting
+
+#### Common Issues
+
+**"No database connections configured"**
+```bash
+saber db list  # Check configured databases
+saber db add my-db  # Add a new database
+```
+
+**"Authentication not configured"**
+```bash
+saber auth status  # Check auth status
+saber auth setup   # Set up authentication
+```
+
+**"Database connection failed"**
+```bash
+saber db test my-database  # Test the connection
+```
+
+For more troubleshooting help, see our [installation guide](/installation).

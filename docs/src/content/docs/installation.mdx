@@ -1,0 +1,72 @@
+---
+title: Installation
+description: How to install and upgrade SQLsaber
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+> SQLsaber is an open-source agentic SQL assistant that helps you interact with your databases using natural language.
+
+It autonomously fetches the right context, writes appropriate SQL queries, and provides insights based on the resulting data.
+
+
+### `uv` (Recommended)
+
+```bash
+uv tool install sqlsaber
+```
+
+<Aside type="note">
+If you don't have [uv](https://docs.astral.sh/uv/) installed, you can install it first using:
+
+```bash
+# On macOS and Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# On Windows
+winget install --id=astral-sh.uv  -e
+```
+</Aside>
+
+### `pipx`
+
+```bash
+pipx install sqlsaber
+```
+
+### Homebrew
+
+For `homebrew` or `linuxbrew` users, you can use Homebrew to install both `uv` and `sqlsaber`.
+
+```bash
+brew install uv
+uv tool install sqlsaber
+```
+
+### Verify Installation
+
+After installation, verify that SQLsaber is working:
+
+```bash
+saber --version
+```
+
+You should see the current version of SQLsaber displayed.
+
+### Upgrading SQLsaber
+
+```bash
+# using uv
+uv tool upgrade sqlsaber
+
+# using pipx
+pipx upgrade sqlsaber
+```
+
+### What's Next?
+
+After installation, you'll want to:
+
+1. [Set up your first database connection](/guides/database-setup)
+2. [Configure authentication for AI providers](/guides/authentication)
+3. [Start with the getting started guide](/guides/getting-started)
