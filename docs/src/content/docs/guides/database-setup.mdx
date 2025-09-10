@@ -1,0 +1,151 @@
+---
+title: Database Setup
+description: Configure database connections in SQLsaber
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+SQLsaber supports PostgreSQL, MySQL, and SQLite databases as well as CSV files. This guide covers all the ways to configure database connections.
+
+### Supported Database Types
+
+- **PostgreSQL** - Full support with SSL
+- **MySQL** - Full support with SSL
+- **SQLite** - Local database files
+- **CSV** - Local CSV files
+
+### Adding Database
+
+```bash
+saber db add my-database
+```
+
+This will prompt you for all necessary connection details.
+
+### Connection Strings
+
+SQLsaber supports direct connection strings for PostgreSQL and MySQL.
+
+```bash
+saber -d "postgresql://user:password@localhost:5432/database"
+
+saber -d "mysql://user:password@localhost:3306/database"
+```
+
+### Files
+
+#### SQLite
+
+```bash
+# Use SQLite file directly
+saber -d "./data/sales.db" "Show me total sales by month"
+
+# Relative paths work too
+saber -d "~/Documents/mydata.db" "Count all records"
+```
+
+#### CSV
+
+SQLsaber can also analyze CSV files directly.
+
+```bash
+saber -d "./customers.csv" "How many customers are from each state?"
+```
+
+<Aside type="note">
+For CSV files, first row should contain column headers. SQLsaber will infer data types automatically.
+</Aside>
+
+### Managing Connections
+
+#### List All Connections
+
+```bash
+saber db list
+```
+
+#### Set Default Database
+
+If you have multiple databases, set one as default:
+
+```bash
+saber db set-default my-database
+```
+
+<Aside type="note">
+By default, SQLsaber will set the first added connection as default.
+</Aside>
+
+#### Test Connections
+
+Verify that a database connection works:
+
+```bash
+saber db test my-database
+```
+
+#### Remove Connections
+
+```bash
+saber db remove my-database
+```
+
+### Security
+
+#### Read-only Access
+
+> **If you are using SQLsaber with a production database, we recommend setting up a read-only role for your database and using those credentials to setup connection in SQLsaber.**
+
+While SQLsaber ensures, via checks before executing queries, that only read queries are executed and in our testing have observed that LLMs follow the system prompt of only generating read queries, there is no guarantee that this is fool-proof.
+
+<Aside type="tip">
+If you have a read-replica of your production database, consider using those credentials to setup connection.
+
+In addition to the read-only role, this will provide additional layer of security and ensure no data modifying queries are executed.
+</Aside>
+
+<Aside type="note">
+For development setups, this isn't required but is a good practice if you wish to ensure with absolute certainty that no data modifying queries are ever executed.
+</Aside>
+
+#### Password Storage
+
+SQLsaber stores database passwords securely using your operating system's credentials store.
+
+#### SSL Certificates
+
+Store SSL certificates in a secure location and use absolute paths when configuring connections.
+
+### Troubleshooting
+
+Always test new connections after adding them.
+
+```bash
+# Test the connection
+saber db test my-database
+
+# If connection fails, check the details
+saber db list
+
+# Update connection if needed
+saber db remove my-database
+saber db add my-database  # Start over with correct details
+```
+
+### Getting Help
+
+Use the help commands for more information:
+
+```bash
+saber db --help
+saber db add --help
+```
+
+### What's Next?
+
+After setting up your database connections:
+
+1. [Configure authentication](/guides/authentication) for AI providers
+2. [Start querying your data](/guides/getting-started)
+3. [Set up memory](/guides/memory) for better context
+4. [Manage conversation threads](/guides/threads)

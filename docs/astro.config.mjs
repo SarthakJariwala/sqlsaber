@@ -19,15 +19,34 @@ export default defineConfig({
 			],
 			sidebar: [
 				{
-					label: "Guides",
+					label: "Getting Started",
 					items: [
-						// Each item here is one entry in the navigation menu.
-						{ label: "Example Guide", slug: "guides/example" },
+						{ label: "Installation", slug: "installation" },
+						{ label: "Quick Start", slug: "guides/getting-started" },
+					],
+				},
+				{
+					label: "Guides", 
+					items: [
+						{ label: "Database Setup", slug: "guides/database-setup" },
+						{ label: "Authentication", slug: "guides/authentication" },
+						{ label: "Models", slug: "guides/models" },
+						{ label: "Running Queries", slug: "guides/queries" },
+						{ label: "Conversation Threads", slug: "guides/threads" },
+						{ label: "Memory Management", slug: "guides/memory" },
 					],
 				},
 				{
 					label: "Reference",
-					autogenerate: { directory: "reference" },
+					items: [
+						{ label: "Commands", slug: "reference/commands" },
+					],
+				},
+				{
+					label: "Project",
+					items: [
+						{ label: "Changelog", slug: "changelog" },
+					],
 				},
 			],
 		}),

@@ -1,0 +1,127 @@
+---
+title: Memory Management
+description: Add context and memories to improve SQLsaber's responses
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+SQLsaber allows you to provide persistent context about your database, business rules, and preferences to the model via its memory system.
+
+This helps the LLMs generate better queries and more relevant insights.
+
+Memory entries are database-specific, persistent and flexible. They are available across all conversations and automatically included.
+
+<Aside type="note">
+If you are familiar with `CLAUDE.md` or `AGENTS.md` file, this is exactly like that.
+</Aside>
+
+### Adding Memory
+
+#### Via Command Line
+
+Add memory entries using the CLI:
+
+```bash
+# Add memory for default database
+saber memory add "Customer churn is calculated as customers lost / total customers at start of period"
+
+# Add memory for specific database
+saber memory add -d prod-db "Revenue is recognized when orders are shipped, not when placed"
+
+# Add multiple types of context
+saber memory add "Always format dates as YYYY-MM-DD for reports"
+saber memory add "Fiscal year runs from April 1 to March 31"
+```
+
+#### In Interactive Sessions
+
+To add memory directly during conversations, start the message with `#` sign.
+
+```
+> # Our conversion rate is calculated as purchases / unique visitors
+
+✓ Memory added
+```
+
+<Aside type="tip">
+Any nuance or context that you think would help the model write better queries and generate more accurate insights can be included in memory.
+
+A few examples:
+- Business rules
+- Data formatting preferences
+- Domain knowledge
+- Query preferences
+- Data quality rules
+</Aside>
+
+
+### List All Memories
+
+View all memory entries for your default database:
+
+```bash
+saber memory list
+```
+
+For a specific database:
+
+```bash
+saber memory list -d prod-db
+```
+
+### Remove Memory
+
+Delete specific memory entries:
+
+```bash
+# Remove by memory ID (from list output)
+saber memory remove a1b2c3d4-e5f6-7890-abcd-ef1234567890
+```
+
+### Clear All Memory
+
+Remove all memory entries for a database:
+
+```bash
+# Clear default database memory
+saber memory clear
+
+# Clear specific database memory
+saber memory clear -d prod-db
+
+# Confirmation will be requested for safety
+```
+
+### Be Specific and Clear
+
+**Good memory entries:**
+```bash
+saber memory add "Exclude test accounts (user_id < 1000) from all customer metrics as they skew results"
+saber memory add "Use shipped_date not order_date for revenue recognition per accounting rules"
+```
+
+**Avoid vague entries:**
+```bash
+# Too vague
+saber memory add "Calculate things properly"
+saber memory add "Use the right formula"
+```
+
+### Getting Help
+
+Check memory commands and options:
+
+```bash
+saber memory --help
+saber memory add --help
+saber memory list --help
+```
+
+### What's Next?
+
+With memory configured:
+
+1. [Learn advanced querying techniques](/guides/queries)
+2. [Manage conversation threads](/guides/threads) with consistent context
+3. [Explore different models](/guides/models) and see how they use memory
+4. [Review the command reference](/reference/commands) for all memory options

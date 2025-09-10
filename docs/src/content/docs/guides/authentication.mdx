@@ -1,0 +1,135 @@
+---
+title: Authentication
+description: Configure LLM provider authentication for SQLsaber
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+SQLsaber supports multiple LLM providers.
+
+### Providers
+
+SQLsaber supports the following LLM providers and authentication methods:
+
+- **Anthropic** - API key or Claude Pro/Max subscription
+- **OpenAI** - API key
+- **Google** - API key
+- **Groq** - API key
+- **Mistral** - API key
+- **Cohere** - API key
+- **Hugging Face** - API key
+
+<Aside type="note">
+    API keys and OAuth tokens securely using your operating system's credentials store.
+</Aside>
+
+### Quick Setup
+
+The fastest way to configure authentication:
+
+```bash
+saber auth setup
+```
+
+This interactive command will:
+1. Let you choose your AI provider
+2. Guide you through the authentication process
+3. Securely store your credentials
+
+#### Anthropic
+
+SQLsaber uses Claude Sonnet 4 by default and supports two authentication methods:
+
+##### Claude Pro/Max subscription (Recommended)
+
+> If you have a Claude Pro or Max subscription, you can use it with SQLsaber:
+
+1. Run the setup:
+   ```bash
+   saber auth setup
+   ```
+2. Choose "Anthropic" as your provider
+3. Select "Claude Pro/Max (OAuth)" as the authentication method
+4. Follow the browser-based OAuth flow
+
+##### API Key
+
+1. Get an API key from [Anthropic Console](https://console.anthropic.com/)
+2. Run the setup:
+   ```bash
+   saber auth setup
+   ```
+3. Choose "Anthropic" as your provider
+4. Select "API key" as the authentication method
+5. Enter your API key when prompted
+
+<Aside type="note">
+Follow the same steps for setting up other providers.
+</Aside>
+
+
+### Managing Authentication
+
+#### Check Authentication Status
+
+See which providers are configured:
+
+```bash
+saber auth status
+```
+
+This shows:
+- Currently configured providers
+- Authentication methods (API key vs OAuth)
+
+#### Reset Authentication
+
+To remove stored credentials for a provider:
+
+```bash
+saber auth reset
+```
+
+This will:
+1. Ask you to select which provider to reset
+2. Remove API keys from your OS credentials store
+
+### Multiple Providers
+
+You can configure multiple providers and switch between them when selecting models. Each provider's credentials are stored securely and independently.
+
+### Environment Variables
+
+You can also use environment variables for setting API keys.
+
+Example:
+```bash
+# Anthropic
+export ANTHROPIC_API_KEY="your-api-key"
+
+# OpenAI
+export OPENAI_API_KEY="your-api-key"
+
+# Google
+export GOOGLE_API_KEY="your-api-key"
+```
+
+Environment variables take precedence over stored credentials.
+
+### Getting Help
+
+Check authentication status and configuration:
+
+```bash
+saber auth status
+saber auth --help
+```
+
+### What's Next?
+
+After setting up authentication:
+
+1. [Configure your preferred models](/guides/models)
+2. [Set up database connections](/guides/database-setup)
+3. [Start querying your data](/guides/getting-started)
+4. [Learn about different query modes](/guides/queries)
