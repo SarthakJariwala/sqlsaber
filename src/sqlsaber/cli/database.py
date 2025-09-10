@@ -12,7 +12,6 @@ from rich.console import Console
 from rich.table import Table
 
 from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
-from sqlsaber.database.connection import DatabaseConnection
 
 # Global instances for CLI commands
 console = Console()
@@ -343,6 +342,9 @@ def test(
     """Test a database connection."""
 
     async def test_connection():
+        # Lazy import to keep CLI startup fast
+        from sqlsaber.database.connection import DatabaseConnection
+
         if name:
             db_config = config_manager.get_database(name)
             if not db_config:

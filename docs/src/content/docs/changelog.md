@@ -7,6 +7,10 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+#### Fixed
+
+- Subcommand help visibility for nested apps
+
 ---
 
 ### v0.19.0 - 2025-09-09
