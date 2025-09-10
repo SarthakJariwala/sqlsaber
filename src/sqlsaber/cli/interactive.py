@@ -6,6 +6,7 @@ from pathlib import Path
 import platformdirs
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
+from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
 from pydantic_ai import Agent
 from rich.console import Console
@@ -118,6 +119,15 @@ class InteractiveSession:
         if self._thread_id:
             self.console.print(f"[dim]Resuming thread:[/dim] {self._thread_id}\n")
 
+    async def _end_thread_and_display_resume_hint(self):
+        """End thread and display command to resume thread"""
+        # Print resume hint if there is an active thread
+        if self._thread_id:
+            await self._threads.end_thread(self._thread_id)
+            self.console.print(
+                f"[dim]You can continue this thread using:[/dim] saber threads resume {self._thread_id}"
+            )
+
     async def _update_table_cache(self):
         """Update the table completer cache with fresh data."""
         try:
@@ -215,33 +225,27 @@ class InteractiveSession:
 
         while True:
             try:
-                # with patch_stdout():
-                user_query = await session.prompt_async(
-                    "",
-                    multiline=True,
-                    mouse_support=True,
-                    completer=CompositeCompleter(
-                        SlashCommandCompleter(), self.table_completer
-                    ),
-                    show_frame=True,
-                    bottom_toolbar=bottom_toolbar,
-                    style=style,
-                )
+                with patch_stdout():
+                    user_query = await session.prompt_async(
+                        "",
+                        multiline=True,
+                        completer=CompositeCompleter(
+                            SlashCommandCompleter(), self.table_completer
+                        ),
+                        show_frame=True,
+                        bottom_toolbar=bottom_toolbar,
+                        style=style,
+                    )
 
                 if not user_query:
                     continue
 
                 if (
-                    user_query in ["/exit", "/quit"]
+                    user_query in ["/exit", "/quit", "exit", "quit"]
                     or user_query.startswith("/exit")
                     or user_query.startswith("/quit")
                 ):
-                    # Print resume hint if there is an active thread
-                    if self._thread_id:
-                        await self._threads.end_thread(self._thread_id)
-                        self.console.print(
-                            f"[dim]You can continue this thread using:[/dim] saber threads resume {self._thread_id}"
-                        )
+                    await self._end_thread_and_display_resume_hint()
                     break
 
                 if user_query == "/clear":
@@ -313,6 +317,7 @@ class InteractiveSession:
                     )
             except EOFError:
                 # Exit when Ctrl+D is pressed
+                await self._end_thread_and_display_resume_hint()
                 break
             except Exception as e:
                 self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
