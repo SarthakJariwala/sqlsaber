@@ -7,6 +7,10 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+#### Changed
+
+- Use Responses API for OpenAI models
+
 ---
 
 ### v0.20.0 - 2025-09-10
