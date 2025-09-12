@@ -8,8 +8,10 @@ import httpx
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.google import GoogleModel
+from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google import GoogleProvider
+from pydantic_ai.providers.openai import OpenAIProvider
 
 from sqlsaber.config import providers
 from sqlsaber.config.settings import Config
@@ -57,6 +59,11 @@ def build_sqlsaber_agent(
         model_obj = GoogleModel(
             model_name_only, provider=GoogleProvider(api_key=cfg.api_key)
         )
+        agent = Agent(model_obj, name="sqlsaber")
+    elif provider == "openai":
+        # Use explicit OpenAI provider to enable Responses API
+        provider_obj = OpenAIProvider(api_key=cfg.api_key, responses_enabled=True)
+        model_obj = OpenAIModel(model_name_only, provider=provider_obj)
         agent = Agent(model_obj, name="sqlsaber")
     elif provider == "anthropic" and bool(getattr(cfg, "oauth_token", None)):
         # Build custom httpx client to inject OAuth headers for Anthropic
