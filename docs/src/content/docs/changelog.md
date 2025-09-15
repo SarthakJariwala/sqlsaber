@@ -7,10 +7,12 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+### v0.21.0 - 2025-09-15
+
 #### Changed
 
 - Use Responses API for OpenAI models
-- Use rich live display while streaming response
+- Stream markdown while streaming response from models
 
 ---
 
