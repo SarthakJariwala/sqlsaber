@@ -10,6 +10,7 @@ All notable changes to SQLsaber will be documented here.
 #### Changed
 
 - Use Responses API for OpenAI models
+- Use rich live display while streaming response
 
 ---
 

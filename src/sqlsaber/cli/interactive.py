@@ -2,6 +2,7 @@
 
 import asyncio
 from pathlib import Path
+from textwrap import dedent
 
 import platformdirs
 from prompt_toolkit import PromptSession
@@ -10,6 +11,7 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
 from pydantic_ai import Agent
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.panel import Panel
 
 from sqlsaber.cli.completers import (
@@ -102,14 +104,14 @@ class InteractiveSession:
                 )
             )
             self.console.print(
-                "\n",
-                "[dim] > Use '/clear' to reset conversation",
-                "[dim] > Use 'Ctrl+D', '/exit' or '/quit' to leave[/dim]",
-                "[dim] > Use 'Ctrl+C' to interrupt and return to prompt\n\n",
-                "[dim] > Start message with '#' to add something to agent's memory for this database",
-                "[dim] > Type '@' to get table name completions",
-                "[dim] > Press 'Esc-Enter' or 'Meta-Enter' to submit your question",
-                sep="\n",
+                Markdown(
+                    dedent("""
+                    - Use `/` for slash commands
+                    - Type `@` to get table name completions
+                    - Start message with `#` to add something to agent's memory
+                    - Use `Ctrl+C` to interrupt and `Ctrl+D` to exit
+                    """)
+                )
             )
 
         self.console.print(
