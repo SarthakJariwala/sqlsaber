@@ -7,6 +7,14 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+#### Added
+
+- Query timeout protection to prevent runaway queries
+  - 30-second timeout applied to all database operations by default
+  - Both client-side and server-side timeout enforcement where supported (PostgreSQL, MySQL)
+  - Per-query timeout override parameter for edge cases
+  - Automatic rollback of transactions when queries timeout
+
 ### v0.21.0 - 2025-09-15
 
 #### Changed
