@@ -7,6 +7,8 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+### v0.22.0 - 2025-09-15
+
 #### Added
 
 - Query timeout protection to prevent runaway queries
