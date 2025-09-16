@@ -1,5 +1,6 @@
 """Database connection management."""
 
+import asyncio
 import ssl
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -9,6 +10,17 @@ from urllib.parse import parse_qs, urlparse
 import aiomysql
 import aiosqlite
 import asyncpg
+
+# Default query timeout to prevent runaway queries
+DEFAULT_QUERY_TIMEOUT = 30.0  # seconds
+
+
+class QueryTimeoutError(RuntimeError):
+    """Exception raised when a query exceeds its timeout."""
+
+    def __init__(self, seconds: float):
+        self.timeout = seconds
+        super().__init__(f"Query exceeded timeout of {seconds}s")
 
 
 class BaseDatabaseConnection(ABC):
@@ -29,11 +41,18 @@ class BaseDatabaseConnection(ABC):
         pass
 
     @abstractmethod
-    async def execute_query(self, query: str, *args) -> list[dict[str, Any]]:
+    async def execute_query(
+        self, query: str, *args, timeout: float | None = None
+    ) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
         All queries run in a transaction that is rolled back at the end,
         ensuring no changes are persisted to the database.
+
+        Args:
+            query: SQL query to execute
+            *args: Query parameters
+            timeout: Query timeout in seconds (overrides default_timeout)
         """
         pass
 
@@ -111,21 +130,40 @@ class PostgreSQLConnection(BaseDatabaseConnection):
             await self._pool.close()
             self._pool = None
 
-    async def execute_query(self, query: str, *args) -> list[dict[str, Any]]:
+    async def execute_query(
+        self, query: str, *args, timeout: float | None = None
+    ) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
         All queries run in a transaction that is rolled back at the end,
         ensuring no changes are persisted to the database.
         """
+        effective_timeout = timeout or DEFAULT_QUERY_TIMEOUT
         pool = await self.get_pool()
+
         async with pool.acquire() as conn:
             # Start a transaction that we'll always rollback
             transaction = conn.transaction()
             await transaction.start()
 
             try:
-                rows = await conn.fetch(query, *args)
+                # Set server-side timeout if specified
+                if effective_timeout:
+                    await conn.execute(
+                        f"SET LOCAL statement_timeout = {int(effective_timeout * 1000)}"
+                    )
+
+                # Execute query with client-side timeout
+                if effective_timeout:
+                    rows = await asyncio.wait_for(
+                        conn.fetch(query, *args), timeout=effective_timeout
+                    )
+                else:
+                    rows = await conn.fetch(query, *args)
+
                 return [dict(row) for row in rows]
+            except asyncio.TimeoutError as exc:
+                raise QueryTimeoutError(effective_timeout or 0) from exc
             finally:
                 # Always rollback to ensure no changes are committed
                 await transaction.rollback()
@@ -216,21 +254,44 @@ class MySQLConnection(BaseDatabaseConnection):
             await self._pool.wait_closed()
             self._pool = None
 
-    async def execute_query(self, query: str, *args) -> list[dict[str, Any]]:
+    async def execute_query(
+        self, query: str, *args, timeout: float | None = None
+    ) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
         All queries run in a transaction that is rolled back at the end,
         ensuring no changes are persisted to the database.
         """
+        effective_timeout = timeout or DEFAULT_QUERY_TIMEOUT
         pool = await self.get_pool()
+
         async with pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cursor:
                 # Start transaction
                 await conn.begin()
                 try:
-                    await cursor.execute(query, args if args else None)
-                    rows = await cursor.fetchall()
+                    # Set server-side timeout if specified
+                    if effective_timeout:
+                        await cursor.execute(
+                            f"SET SESSION MAX_EXECUTION_TIME = {int(effective_timeout * 1000)}"
+                        )
+
+                    # Execute query with client-side timeout
+                    if effective_timeout:
+                        await asyncio.wait_for(
+                            cursor.execute(query, args if args else None),
+                            timeout=effective_timeout,
+                        )
+                        rows = await asyncio.wait_for(
+                            cursor.fetchall(), timeout=effective_timeout
+                        )
+                    else:
+                        await cursor.execute(query, args if args else None)
+                        rows = await cursor.fetchall()
+
                     return [dict(row) for row in rows]
+                except asyncio.TimeoutError as exc:
+                    raise QueryTimeoutError(effective_timeout or 0) from exc
                 finally:
                     # Always rollback to ensure no changes are committed
                     await conn.rollback()
@@ -252,12 +313,16 @@ class SQLiteConnection(BaseDatabaseConnection):
         """SQLite connections are created per query, no persistent pool to close."""
         pass
 
-    async def execute_query(self, query: str, *args) -> list[dict[str, Any]]:
+    async def execute_query(
+        self, query: str, *args, timeout: float | None = None
+    ) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
         All queries run in a transaction that is rolled back at the end,
         ensuring no changes are persisted to the database.
         """
+        effective_timeout = timeout or DEFAULT_QUERY_TIMEOUT
+
         async with aiosqlite.connect(self.database_path) as conn:
             # Enable row factory for dict-like access
             conn.row_factory = aiosqlite.Row
@@ -265,9 +330,22 @@ class SQLiteConnection(BaseDatabaseConnection):
             # Start transaction
             await conn.execute("BEGIN")
             try:
-                cursor = await conn.execute(query, args if args else ())
-                rows = await cursor.fetchall()
+                # Execute query with client-side timeout (SQLite has no server-side timeout)
+                if effective_timeout:
+                    cursor = await asyncio.wait_for(
+                        conn.execute(query, args if args else ()),
+                        timeout=effective_timeout,
+                    )
+                    rows = await asyncio.wait_for(
+                        cursor.fetchall(), timeout=effective_timeout
+                    )
+                else:
+                    cursor = await conn.execute(query, args if args else ())
+                    rows = await cursor.fetchall()
+
                 return [dict(row) for row in rows]
+            except asyncio.TimeoutError as exc:
+                raise QueryTimeoutError(effective_timeout or 0) from exc
             finally:
                 # Always rollback to ensure no changes are committed
                 await conn.rollback()
@@ -383,20 +461,35 @@ class CSVConnection(BaseDatabaseConnection):
         except Exception as e:
             raise ValueError(f"Error loading CSV file '{self.csv_path}': {str(e)}")
 
-    async def execute_query(self, query: str, *args) -> list[dict[str, Any]]:
+    async def execute_query(
+        self, query: str, *args, timeout: float | None = None
+    ) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
         All queries run in a transaction that is rolled back at the end,
         ensuring no changes are persisted to the database.
         """
+        effective_timeout = timeout or DEFAULT_QUERY_TIMEOUT
         conn = await self.get_pool()
 
         # Start transaction
         await conn.execute("BEGIN")
         try:
-            cursor = await conn.execute(query, args if args else ())
-            rows = await cursor.fetchall()
+            # Execute query with client-side timeout (CSV uses in-memory SQLite)
+            if effective_timeout:
+                cursor = await asyncio.wait_for(
+                    conn.execute(query, args if args else ()), timeout=effective_timeout
+                )
+                rows = await asyncio.wait_for(
+                    cursor.fetchall(), timeout=effective_timeout
+                )
+            else:
+                cursor = await conn.execute(query, args if args else ())
+                rows = await cursor.fetchall()
+
             return [dict(row) for row in rows]
+        except asyncio.TimeoutError as exc:
+            raise QueryTimeoutError(effective_timeout or 0) from exc
         finally:
             # Always rollback to ensure no changes are committed
             await conn.rollback()
