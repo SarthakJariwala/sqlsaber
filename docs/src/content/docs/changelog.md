@@ -12,6 +12,7 @@ All notable changes to SQLsaber will be documented here.
 #### Added
 
 - Smoother markdown streaming and prevent duplicate messages
+- SQL execution errors now display in interactive sessions instead of being silently dropped
 
 ### v0.22.0 - 2025-09-15
 

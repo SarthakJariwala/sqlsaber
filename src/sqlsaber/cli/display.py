@@ -256,6 +256,15 @@ class DisplayManager:
         """Display error message."""
         self.console.print(f"\n[bold red]Error:[/bold red] {error_message}")
 
+    def show_sql_error(self, error_message: str, suggestions: list[str] | None = None):
+        """Display SQL-specific error with optional suggestions."""
+        self.show_newline()
+        self.console.print(f"[bold red]SQL error:[/bold red] {error_message}")
+        if suggestions:
+            self.console.print("[yellow]Hints:[/yellow]")
+            for suggestion in suggestions:
+                self.console.print(f"  • {suggestion}")
+
     def show_processing(self, message: str):
         """Display processing message."""
         self.console.print()  # Add newline
