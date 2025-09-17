@@ -138,6 +138,12 @@ class IntrospectSchemaTool(SQLTool):
                         f"{fk['column']} -> {fk['references']['table']}.{fk['references']['column']}"
                         for fk in table_info["foreign_keys"]
                     ],
+                    "indexes": [
+                        f"{idx['name']} ({', '.join(idx['columns'])})"
+                        + (" UNIQUE" if idx["unique"] else "")
+                        + (f" [{idx['type']}]" if idx["type"] else "")
+                        for idx in table_info["indexes"]
+                    ],
                 }
 
             return json.dumps(formatted_info)

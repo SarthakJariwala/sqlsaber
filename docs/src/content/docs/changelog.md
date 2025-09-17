@@ -7,6 +7,10 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+#### Added
+
+- Index information is now included in `introspect_schema` tool output alongside columns, primary keys, and foreign keys
+
 ### v0.23.0 - 2025-09-16
 
 #### Added
