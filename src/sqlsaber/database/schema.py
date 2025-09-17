@@ -32,6 +32,15 @@ class ForeignKeyInfo(TypedDict):
     references: dict[str, str]  # {"table": "schema.table", "column": "column_name"}
 
 
+class IndexInfo(TypedDict):
+    """Type definition for index information."""
+
+    name: str
+    columns: list[str]  # ordered
+    unique: bool
+    type: str | None  # btree, gin, FULLTEXT, etc. None if unknown
+
+
 class SchemaInfo(TypedDict):
     """Type definition for schema information."""
 
@@ -41,6 +50,7 @@ class SchemaInfo(TypedDict):
     columns: dict[str, ColumnInfo]
     primary_keys: list[str]
     foreign_keys: list[ForeignKeyInfo]
+    indexes: list[IndexInfo]
 
 
 class BaseSchemaIntrospector(ABC):
@@ -66,6 +76,11 @@ class BaseSchemaIntrospector(ABC):
     @abstractmethod
     async def get_primary_keys_info(self, connection, tables: list) -> list:
         """Get primary keys information for the specific database type."""
+        pass
+
+    @abstractmethod
+    async def get_indexes_info(self, connection, tables: list) -> list:
+        """Get indexes information for the specific database type."""
         pass
 
     @abstractmethod
@@ -208,6 +223,43 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
                 ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position;
             """
             return await conn.fetch(pk_query)
+
+    async def get_indexes_info(self, connection, tables: list) -> list:
+        """Get indexes information for PostgreSQL."""
+        if not tables:
+            return []
+
+        pool = await connection.get_pool()
+        async with pool.acquire() as conn:
+            # Build proper table filters
+            idx_table_filters = []
+            for table in tables:
+                idx_table_filters.append(
+                    f"(ns.nspname = '{table['table_schema']}' AND t.relname = '{table['table_name']}')"
+                )
+
+            idx_query = f"""
+                SELECT
+                    ns.nspname      AS table_schema,
+                    t.relname       AS table_name,
+                    i.relname       AS index_name,
+                    ix.indisunique  AS is_unique,
+                    am.amname       AS index_type,
+                    array_agg(a.attname ORDER BY ord.ordinality) AS column_names
+                FROM pg_class t
+                JOIN pg_namespace ns     ON ns.oid = t.relnamespace
+                JOIN pg_index    ix      ON ix.indrelid = t.oid
+                JOIN pg_class    i       ON i.oid  = ix.indexrelid
+                JOIN pg_am       am      ON am.oid = i.relam
+                JOIN LATERAL unnest(ix.indkey) WITH ORDINALITY AS ord(attnum, ordinality)
+                     ON TRUE
+                JOIN pg_attribute a      ON a.attrelid = t.oid AND a.attnum = ord.attnum
+                WHERE ns.nspname NOT IN ('pg_catalog', 'information_schema')
+                  AND ({" OR ".join(idx_table_filters)})
+                GROUP BY table_schema, table_name, index_name, is_unique, index_type
+                ORDER BY table_schema, table_name, index_name;
+            """
+            return await conn.fetch(idx_query)
 
     async def list_tables_info(self, connection) -> list[dict[str, Any]]:
         """Get list of tables with basic information for PostgreSQL."""
@@ -379,6 +431,37 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
                 await cursor.execute(pk_query)
                 return await cursor.fetchall()
 
+    async def get_indexes_info(self, connection, tables: list) -> list:
+        """Get indexes information for MySQL."""
+        if not tables:
+            return []
+
+        pool = await connection.get_pool()
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                # Build proper table filters
+                idx_table_filters = []
+                for table in tables:
+                    idx_table_filters.append(
+                        f"(TABLE_SCHEMA = '{table['table_schema']}' AND TABLE_NAME = '{table['table_name']}')"
+                    )
+
+                idx_query = f"""
+                    SELECT
+                        TABLE_SCHEMA   AS table_schema,
+                        TABLE_NAME     AS table_name,
+                        INDEX_NAME     AS index_name,
+                        (NON_UNIQUE = 0) AS is_unique,
+                        INDEX_TYPE     AS index_type,
+                        GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS column_names
+                    FROM INFORMATION_SCHEMA.STATISTICS
+                    WHERE ({" OR ".join(idx_table_filters)})
+                    GROUP BY table_schema, table_name, index_name, is_unique, index_type
+                    ORDER BY table_schema, table_name, index_name;
+                """
+                await cursor.execute(idx_query)
+                return await cursor.fetchall()
+
     async def list_tables_info(self, connection) -> list[dict[str, Any]]:
         """Get list of tables with basic information for MySQL."""
         pool = await connection.get_pool()
@@ -531,6 +614,47 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
 
         return primary_keys
 
+    async def get_indexes_info(self, connection, tables: list) -> list:
+        """Get indexes information for SQLite."""
+        if not tables:
+            return []
+
+        indexes = []
+        for table in tables:
+            table_name = table["table_name"]
+
+            # Get index list using PRAGMA
+            pragma_query = f"PRAGMA index_list({table_name})"
+            table_indexes = await self._execute_query(connection, pragma_query)
+
+            for idx in table_indexes:
+                idx_name = idx["name"]
+                unique = bool(idx["unique"])
+
+                # Skip auto-generated primary key indexes
+                if idx_name.startswith("sqlite_autoindex_"):
+                    continue
+
+                # Get index columns using PRAGMA
+                pragma_info_query = f"PRAGMA index_info({idx_name})"
+                idx_cols = await self._execute_query(connection, pragma_info_query)
+                columns = [
+                    c["name"] for c in sorted(idx_cols, key=lambda r: r["seqno"])
+                ]
+
+                indexes.append(
+                    {
+                        "table_schema": "main",
+                        "table_name": table_name,
+                        "index_name": idx_name,
+                        "is_unique": unique,
+                        "index_type": None,  # SQLite only has B-tree currently
+                        "column_names": columns,
+                    }
+                )
+
+        return indexes
+
     async def list_tables_info(self, connection) -> list[dict[str, Any]]:
         """Get list of tables with basic information for SQLite."""
         # Get table names without row counts for better performance
@@ -589,12 +713,14 @@ class SchemaManager:
         columns = await self.introspector.get_columns_info(self.db, tables)
         foreign_keys = await self.introspector.get_foreign_keys_info(self.db, tables)
         primary_keys = await self.introspector.get_primary_keys_info(self.db, tables)
+        indexes = await self.introspector.get_indexes_info(self.db, tables)
 
         # Build schema structure
         schema_info = self._build_table_structure(tables)
         self._add_columns_to_schema(schema_info, columns)
         self._add_primary_keys_to_schema(schema_info, primary_keys)
         self._add_foreign_keys_to_schema(schema_info, foreign_keys)
+        self._add_indexes_to_schema(schema_info, indexes)
 
         return schema_info
 
@@ -613,6 +739,7 @@ class SchemaManager:
                 "columns": {},
                 "primary_keys": [],
                 "foreign_keys": [],
+                "indexes": [],
             }
         return schema_info
 
@@ -663,6 +790,31 @@ class SchemaManager:
                             "table": f"{fk['foreign_table_schema']}.{fk['foreign_table_name']}",
                             "column": fk["foreign_column_name"],
                         },
+                    }
+                )
+
+    def _add_indexes_to_schema(
+        self, schema_info: dict[str, dict], indexes: list
+    ) -> None:
+        """Add index information to schema."""
+        for idx in indexes:
+            full_name = f"{idx['table_schema']}.{idx['table_name']}"
+            if full_name in schema_info:
+                # Handle different column name formats from different databases
+                if isinstance(idx["column_names"], list):
+                    columns = idx["column_names"]
+                else:
+                    # MySQL returns comma-separated string
+                    columns = (
+                        idx["column_names"].split(",") if idx["column_names"] else []
+                    )
+
+                schema_info[full_name]["indexes"].append(
+                    {
+                        "name": idx["index_name"],
+                        "columns": columns,
+                        "unique": idx["is_unique"],
+                        "type": idx.get("index_type"),
                     }
                 )
 

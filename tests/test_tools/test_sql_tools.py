@@ -60,6 +60,7 @@ class MockSchemaManager:
                 },
                 "primary_keys": ["id"],
                 "foreign_keys": [],
+                "indexes": [],
             }
         }
         if table_pattern and table_pattern in schema:

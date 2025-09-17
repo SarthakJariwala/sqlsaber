@@ -385,6 +385,13 @@ class DisplayManager:
                     for fk in foreign_keys:
                         self.console.print(f"  • {fk}")
 
+                # Show indexes
+                indexes = table_info.get("indexes", [])
+                if indexes:
+                    self.console.print("[bold blue]Indexes:[/bold blue]")
+                    for idx in indexes:
+                        self.console.print(f"  • {idx}")
+
         except json.JSONDecodeError:
             self.show_error("Failed to parse schema data")
         except Exception as e:
