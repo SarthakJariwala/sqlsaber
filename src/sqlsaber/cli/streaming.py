@@ -114,8 +114,14 @@ class StreamingQueryHandler:
                         pass
             elif isinstance(content, dict):
                 data = content
-            if isinstance(data, dict) and data.get("success") and data.get("results"):
-                self.display.show_query_results(data["results"])  # type: ignore[arg-type]
+
+            if isinstance(data, dict):
+                if data.get("success") and data.get("results"):
+                    self.display.show_query_results(data["results"])  # type: ignore[arg-type]
+                elif "error" in data:
+                    self.display.show_sql_error(
+                        data.get("error"), data.get("suggestions")
+                    )
         # Add a blank line after tool output to separate from next segment
         self.display.show_newline()
         # Show status while agent sends a follow-up request to the model
