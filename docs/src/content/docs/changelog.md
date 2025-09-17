@@ -7,6 +7,12 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+### v0.23.0 - 2025-09-16
+
+#### Added
+
+- Smoother markdown streaming and prevent duplicate messages
+
 ### v0.22.0 - 2025-09-15
 
 #### Added

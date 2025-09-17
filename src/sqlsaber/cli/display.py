@@ -93,12 +93,15 @@ class LiveMarkdownRenderer:
         """Finalize and stop the current Live segment, if any."""
         if self._live is None:
             return
-        if self._buffer:
-            self._live.update(Markdown(self._buffer))
+        # Persist the *final* render exactly once, then shut Live down.
+        buf = self._buffer
         self._live.stop()
         self._live = None
         self._buffer = ""
         self._current_kind = None
+        # Print the complete markdown to scroll-back for permanent reference
+        if buf:
+            self.console.print(Markdown(buf))
 
     def end_if_active(self) -> None:
         self.end()
@@ -154,10 +157,12 @@ class LiveMarkdownRenderer:
         if self._live is not None:
             self.end()
         self._buffer = initial_markdown or ""
+        # NOTE: Use transient=True so the live widget disappears on exit,
+        # giving a clean transition to the final printed result.
         live = Live(
             Markdown(self._buffer),
             console=self.console,
-            vertical_overflow="visible",
+            transient=True,
             refresh_per_second=12,
         )
         self._live = live
