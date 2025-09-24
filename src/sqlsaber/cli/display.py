@@ -198,22 +198,32 @@ class DisplayManager:
         # Normalized leading blank line before tool headers
         self.show_newline()
         if tool_name == "list_tables":
-            self.console.print(
-                "[dim bold]:gear: Discovering available tables[/dim bold]"
-            )
+            if self.console.is_terminal:
+                self.console.print(
+                    "[dim bold]:gear: Discovering available tables[/dim bold]"
+                )
+            else:
+                self.console.print("**Discovering available tables**\n")
         elif tool_name == "introspect_schema":
             pattern = tool_input.get("table_pattern", "all tables")
-            self.console.print(
-                f"[dim bold]:gear: Examining schema for: {pattern}[/dim bold]"
-            )
+            if self.console.is_terminal:
+                self.console.print(
+                    f"[dim bold]:gear: Examining schema for: {pattern}[/dim bold]"
+                )
+            else:
+                self.console.print(f"**Examining schema for:** {pattern}\n")
         elif tool_name == "execute_sql":
             # For streaming, we render SQL via LiveMarkdownRenderer; keep Syntax
             # rendering for threads show/resume. Controlled by include_sql flag.
             query = tool_input.get("query", "")
-            self.console.print("[dim bold]:gear: Executing SQL:[/dim bold]")
-            self.show_newline()
-            syntax = Syntax(query, "sql", background_color="default", word_wrap=True)
-            self.console.print(syntax)
+            if self.console.is_terminal:
+                self.console.print("[dim bold]:gear: Executing SQL:[/dim bold]")
+                self.show_newline()
+                syntax = Syntax(query, "sql", background_color="default", word_wrap=True)
+                self.console.print(syntax)
+            else:
+                self.console.print("**Executing SQL:**\n")
+                self.console.print(f"```sql\n{query}\n```\n")
 
     def show_text_stream(self, text: str):
         """Display streaming text."""
@@ -225,9 +235,12 @@ class DisplayManager:
         if not results:
             return
 
-        self.console.print(
-            f"\n[bold magenta]Results ({len(results)} rows):[/bold magenta]"
-        )
+        if self.console.is_terminal:
+            self.console.print(
+                f"\n[bold magenta]Results ({len(results)} rows):[/bold magenta]"
+            )
+        else:
+            self.console.print(f"\n**Results ({len(results)} rows):**\n")
 
         # Create table with columns from first result
         all_columns = list(results[0].keys())
@@ -235,9 +248,14 @@ class DisplayManager:
 
         # Show warning if columns were truncated
         if len(all_columns) > 15:
-            self.console.print(
-                f"[yellow]Note: Showing first 15 of {len(all_columns)} columns[/yellow]"
-            )
+            if self.console.is_terminal:
+                self.console.print(
+                    f"[yellow]Note: Showing first 15 of {len(all_columns)} columns[/yellow]"
+                )
+            else:
+                self.console.print(
+                    f"*Note: Showing first 15 of {len(all_columns)} columns*\n"
+                )
 
         table = self._create_table(display_columns)
 
@@ -248,9 +266,14 @@ class DisplayManager:
         self.console.print(table)
 
         if len(results) > 20:
-            self.console.print(
-                f"[yellow]... and {len(results) - 20} more rows[/yellow]"
-            )
+            if self.console.is_terminal:
+                self.console.print(
+                    f"[yellow]... and {len(results) - 20} more rows[/yellow]"
+                )
+            else:
+                self.console.print(
+                    f"*... and {len(results) - 20} more rows*\n"
+                )
 
     def show_error(self, error_message: str):
         """Display error message."""
