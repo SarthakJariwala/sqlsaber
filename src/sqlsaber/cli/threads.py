@@ -38,6 +38,8 @@ def _render_transcript(
     from sqlsaber.cli.display import DisplayManager
 
     dm = DisplayManager(console)
+    # Check if output is being redirected (for clean markdown export)
+    is_redirected = not console.is_terminal
 
     # Locate indices of user prompts
     user_indices: list[int] = []
@@ -78,11 +80,17 @@ def _render_transcript(
                                 parts.append(str(seg))
                     text = "\n".join([s for s in parts if s]) or None
                 if text:
-                    console.print(
-                        Panel.fit(Markdown(text), title="User", border_style="cyan")
-                    )
+                    if is_redirected:
+                        console.print(f"**User:**\n\n{text}\n")
+                    else:
+                        console.print(
+                            Panel.fit(Markdown(text), title="User", border_style="cyan")
+                        )
                     return
-        console.print(Panel.fit("(no content)", title="User", border_style="cyan"))
+        if is_redirected:
+            console.print("**User:** (no content)\n")
+        else:
+            console.print(Panel.fit("(no content)", title="User", border_style="cyan"))
 
     def _render_response(message: ModelMessage) -> None:
         for part in getattr(message, "parts", []):
@@ -90,11 +98,14 @@ def _render_transcript(
             if kind == "text":
                 text = getattr(part, "content", "")
                 if isinstance(text, str) and text.strip():
-                    console.print(
-                        Panel.fit(
-                            Markdown(text), title="Assistant", border_style="green"
+                    if is_redirected:
+                        console.print(f"**Assistant:**\n\n{text}\n")
+                    else:
+                        console.print(
+                            Panel.fit(
+                                Markdown(text), title="Assistant", border_style="green"
+                            )
                         )
-                    )
             elif kind in ("tool-call", "builtin-tool-call"):
                 name = getattr(part, "tool_name", "tool")
                 args = getattr(part, "args", None)
@@ -136,6 +147,20 @@ def _render_transcript(
                                 data.get("error"), data.get("suggestions")
                             )
                         else:
+                            if is_redirected:
+                                console.print(f"**Tool result ({name}):**\n\n{content_str}\n")
+                            else:
+                                console.print(
+                                    Panel.fit(
+                                        content_str,
+                                        title=f"Tool result: {name}",
+                                        border_style="yellow",
+                                    )
+                                )
+                    except Exception:
+                        if is_redirected:
+                            console.print(f"**Tool result ({name}):**\n\n{content_str}\n")
+                        else:
                             console.print(
                                 Panel.fit(
                                     content_str,
@@ -143,7 +168,10 @@ def _render_transcript(
                                     border_style="yellow",
                                 )
                             )
-                    except Exception:
+                else:
+                    if is_redirected:
+                        console.print(f"**Tool result ({name}):**\n\n{content_str}\n")
+                    else:
                         console.print(
                             Panel.fit(
                                 content_str,
@@ -151,14 +179,6 @@ def _render_transcript(
                                 border_style="yellow",
                             )
                         )
-                else:
-                    console.print(
-                        Panel.fit(
-                            content_str,
-                            title=f"Tool result: {name}",
-                            border_style="yellow",
-                        )
-                    )
         # Thinking parts omitted
 
     for start_idx, end_idx in slices or [(0, len(all_msgs))]:
@@ -270,7 +290,10 @@ def resume(
         try:
             agent = build_sqlsaber_agent(db_conn, db_name)
             history = await store.get_thread_messages(thread_id)
-            console.print(Panel.fit(f"Thread: {thread.id}", border_style="blue"))
+            if console.is_terminal:
+                console.print(Panel.fit(f"Thread: {thread.id}", border_style="blue"))
+            else:
+                console.print(f"# Thread: {thread.id}\n")
             _render_transcript(console, history, None)
             session = InteractiveSession(
                 console=console,
