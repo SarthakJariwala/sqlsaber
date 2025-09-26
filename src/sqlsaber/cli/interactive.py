@@ -23,6 +23,7 @@ from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.streaming import StreamingQueryHandler
 from sqlsaber.database.connection import (
     CSVConnection,
+    DuckDBConnection,
     MySQLConnection,
     PostgreSQLConnection,
     SQLiteConnection,
@@ -87,6 +88,8 @@ class InteractiveSession:
             if isinstance(self.db_conn, MySQLConnection)
             else "SQLite"
             if isinstance(self.db_conn, (SQLiteConnection, CSVConnection))
+            else "DuckDB"
+            if isinstance(self.db_conn, DuckDBConnection)
             else "database"
         )
 
