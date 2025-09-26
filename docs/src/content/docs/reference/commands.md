@@ -10,6 +10,7 @@ This is a comprehensive reference for all SQLsaber commands and their options.
 The main SQLsaber command for running queries.
 
 **Usage:**
+
 ```bash
 # Interactive mode (default)
 saber
@@ -25,10 +26,12 @@ saber -d "postgresql://user:pass@host:5432/db" "User statistics for 2024"
 ```
 
 **Parameters:**
+
 - `QUERY-TEXT` - SQL query in natural language (optional, starts interactive mode if not provided)
-- `-d, --database` - Database connection name, file path (CSV/SQLite), or connection string
+- `-d, --database` - Database connection name, file path (CSV/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://)
 
 **Global Options:**
+
 - `--help, -h` - Display help message
 - `--version` - Show version information
 
@@ -43,6 +46,7 @@ Manage authentication configuration for AI providers.
 Configure authentication for SQLsaber (API keys and OAuth).
 
 **Usage:**
+
 ```bash
 saber auth setup
 ```
@@ -52,11 +56,13 @@ saber auth setup
 Check current authentication configuration.
 
 **Usage:**
+
 ```bash
 saber auth status
 ```
 
 **Output shows:**
+
 - Configured providers
 - Authentication methods (API key vs OAuth)
 
@@ -65,6 +71,7 @@ saber auth status
 Remove stored credentials for a provider.
 
 **Usage:**
+
 ```bash
 saber auth reset
 ```
@@ -80,15 +87,18 @@ Manage database connections.
 Add a new database connection.
 
 **Usage:**
+
 ```bash
 saber db add my-database [OPTIONS]
 ```
 
 **Parameters:**
+
 - `NAME` - Name for the database connection (required)
 
 **Options:**
-- `-t, --type` - Database type: `postgresql`, `mysql`, `sqlite` (default: postgresql)
+
+- `-t, --type` - Database type: `postgresql`, `mysql`, `sqlite`, `duckdb` (default: postgresql)
 - `-h, --host` - Database host
 - `-p, --port` - Database port
 - `--database, --db` - Database name
@@ -101,7 +111,8 @@ saber db add my-database [OPTIONS]
 
 **SSL Modes:**
 
-*PostgreSQL:*
+_PostgreSQL:_
+
 - `disable` - No SSL
 - `allow` - Try SSL, fallback to non-SSL
 - `prefer` - Try SSL first (default)
@@ -109,24 +120,26 @@ saber db add my-database [OPTIONS]
 - `verify-ca` - Require SSL and verify certificate
 - `verify-full` - Require SSL, verify certificate and hostname
 
-*MySQL:*
+_MySQL:_
+
 - `DISABLED` - No SSL
 - `PREFERRED` - Try SSL first (default)
 - `REQUIRED` - Require SSL
 - `VERIFY_CA` - Require SSL and verify certificate
 - `VERIFY_IDENTITY` - Require SSL, verify certificate and hostname
 
-
 #### `saber db list`
 
 List all configured database connections.
 
 **Usage:**
+
 ```bash
 saber db list
 ```
 
 **Output shows:**
+
 - Database names
 - Connection details (host, port, database)
 - Default database indicator
@@ -136,6 +149,7 @@ saber db list
 Set a database as the default connection.
 
 **Usage:**
+
 ```bash
 saber db set-default my-database
 ```
@@ -145,11 +159,13 @@ saber db set-default my-database
 Test a database connection.
 
 **Usage:**
+
 ```bash
 saber db test my-database
 ```
 
 **Output:**
+
 - Connection success/failure
 - Error details if connection fails
 
@@ -158,6 +174,7 @@ saber db test my-database
 Remove a database connection.
 
 **Usage:**
+
 ```bash
 saber db remove my-database
 ```
@@ -175,17 +192,21 @@ Manage database-specific memories and context.
 Add a new memory entry.
 
 **Usage:**
+
 ```bash
 saber memory add "Memory content here" [OPTIONS]
 ```
 
 **Parameters:**
+
 - `CONTENT` - Memory content to add (required)
 
 **Options:**
+
 - `-d, --database` - Database connection name (uses default if not specified)
 
 **Examples:**
+
 ```bash
 # Add memory to default database
 saber memory add "Active customers are those who made a purchase in the last 90 days"
@@ -205,14 +226,17 @@ saber memory add "Always format dates as YYYY-MM-DD for reports"
 List all memory entries for a database.
 
 **Usage:**
+
 ```bash
 saber memory list [OPTIONS]
 ```
 
 **Options:**
+
 - `-d, --database` - Database connection name (uses default if not specified)
 
 **Output shows:**
+
 - Memory ID
 - Memory content
 - Creation timestamp
@@ -222,11 +246,13 @@ saber memory list [OPTIONS]
 Remove a specific memory entry.
 
 **Usage:**
+
 ```bash
 saber memory remove a1b2c3d4
 ```
 
 **Parameters:**
+
 - `ID` - Memory ID from `saber memory list` output
 
 #### `saber memory clear`
@@ -234,11 +260,13 @@ saber memory remove a1b2c3d4
 Remove all memory entries for a database.
 
 **Usage:**
+
 ```bash
 saber memory clear [OPTIONS]
 ```
 
 **Options:**
+
 - `-d, --database` - Database connection name (uses default if not specified)
 
 **Confirmation required** - Will prompt before deletion.
@@ -254,6 +282,7 @@ Manage LLM models from different providers.
 List all available models for configured providers.
 
 **Usage:**
+
 ```bash
 saber models list
 ```
@@ -263,6 +292,7 @@ saber models list
 Set the default model.
 
 **Usage:**
+
 ```bash
 saber models set
 ```
@@ -272,6 +302,7 @@ saber models set
 Reset to the default model (Claude Sonnet 4).
 
 **Usage:**
+
 ```bash
 saber models reset
 ```
@@ -287,28 +318,32 @@ Manage conversation threads.
 List conversation threads.
 
 **Usage:**
+
 ```bash
 saber threads list [OPTIONS]
 ```
 
 **Options:**
+
 - `-d, --database` - Filter by database name
 - `-n, --limit` - Maximum threads to return (default: 50)
-
 
 #### `saber threads show`
 
 Show complete thread transcript.
 
 **Usage:**
+
 ```bash
 saber threads show a1b2c3d4
 ```
 
 **Parameters:**
+
 - `THREAD_ID` - Thread ID from `saber threads list`
 
 **Output shows:**
+
 - Thread metadata (database, model, timestamps)
 - Complete conversation history
 - SQL queries and results
@@ -319,17 +354,21 @@ saber threads show a1b2c3d4
 Resume an existing conversation thread.
 
 **Usage:**
+
 ```bash
 saber threads resume a1b2c3d4 [OPTIONS]
 ```
 
 **Parameters:**
+
 - `THREAD_ID` - Thread ID to resume
 
 **Options:**
+
 - `-d, --database` - Use different database than original thread
 
 **Features:**
+
 - Loads full conversation context
 - Uses same model as original thread
 - Connects to original database
@@ -340,21 +379,23 @@ saber threads resume a1b2c3d4 [OPTIONS]
 Clean up old conversation threads.
 
 **Usage:**
+
 ```bash
 saber threads prune
 ```
 
 ---
 
-
 ### Interactive Mode
 
 When in interactive mode (`saber` with no arguments), you have access to a few additional features:
 
 #### Slash Commands
+
 - `/clear` - Clear conversation history
 - `/exit` - Exit SQLsaber
 - `/quit` - Exit SQLsaber (alias for `/exit`)
 
 #### Autocomplete
+
 - **Table names** - Type `@table_name[TAB]` for completions

@@ -5,13 +5,14 @@ description: Configure database connections in SQLsaber
 
 import { Aside } from '@astrojs/starlight/components';
 
-SQLsaber supports PostgreSQL, MySQL, and SQLite databases as well as CSV files. This guide covers all the ways to configure database connections.
+SQLsaber supports PostgreSQL, MySQL, SQLite, DuckDB, and CSV data sources. This guide covers all the ways to configure database connections.
 
 ### Supported Database Types
 
 - **PostgreSQL** - Full support with SSL
 - **MySQL** - Full support with SSL
 - **SQLite** - Local database files
+- **DuckDB** - Local DuckDB files or in-memory analytics
 - **CSV** - Local CSV files
 
 ### Adding Database
@@ -24,12 +25,14 @@ This will prompt you for all necessary connection details.
 
 ### Connection Strings
 
-SQLsaber supports direct connection strings for PostgreSQL and MySQL.
+SQLsaber supports direct connection strings for PostgreSQL and MySQL, plus file URIs for SQLite and DuckDB.
 
 ```bash
 saber -d "postgresql://user:password@localhost:5432/database"
 
 saber -d "mysql://user:password@localhost:3306/database"
+
+saber -d "duckdb:///path/to/data.duckdb"
 ```
 
 ### Files
@@ -42,6 +45,16 @@ saber -d "./data/sales.db" "Show me total sales by month"
 
 # Relative paths work too
 saber -d "~/Documents/mydata.db" "Count all records"
+```
+
+#### DuckDB
+
+```bash
+# Query a DuckDB file
+saber -d "./warehouse/data.duckdb" "Show the latest partition"
+
+# Use an absolute path
+saber -d "duckdb:///Users/me/analytics.duckdb" "Describe orders"
 ```
 
 #### CSV

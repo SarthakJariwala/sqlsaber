@@ -18,7 +18,7 @@ class DatabaseConfig:
     """Database connection configuration."""
 
     name: str
-    type: str  # postgresql, mysql, sqlite, csv
+    type: str  # postgresql, mysql, sqlite, duckdb, csv
     host: str | None
     port: int | None
     database: str
@@ -90,6 +90,8 @@ class DatabaseConfig:
 
         elif self.type == "sqlite":
             return f"sqlite:///{self.database}"
+        elif self.type == "duckdb":
+            return f"duckdb:///{self.database}"
         elif self.type == "csv":
             # For CSV files, database field contains the file path
             base_url = f"csv:///{self.database}"

@@ -23,7 +23,7 @@ class ResolvedDatabase:
     connection_string: str  # Canonical connection string for DatabaseConnection factory
 
 
-SUPPORTED_SCHEMES = {"postgresql", "mysql", "sqlite", "csv"}
+SUPPORTED_SCHEMES = {"postgresql", "mysql", "sqlite", "duckdb", "csv"}
 
 
 def _is_connection_string(s: str) -> bool:
@@ -67,8 +67,8 @@ def resolve_database(
         scheme = urlparse(spec).scheme
         if scheme in {"postgresql", "mysql"}:
             db_name = urlparse(spec).path.lstrip("/") or "database"
-        elif scheme in {"sqlite", "csv"}:
-            db_name = Path(urlparse(spec).path).stem
+        elif scheme in {"sqlite", "duckdb", "csv"}:
+            db_name = Path(urlparse(spec).path).stem or "database"
         else:  # should not happen because of SUPPORTED_SCHEMES
             db_name = "database"
         return ResolvedDatabase(name=db_name, connection_string=spec)
@@ -83,6 +83,10 @@ def resolve_database(
         if not path.exists():
             raise DatabaseResolutionError(f"SQLite file '{spec}' not found.")
         return ResolvedDatabase(name=path.stem, connection_string=f"sqlite:///{path}")
+    if path.suffix.lower() in {".duckdb", ".ddb"}:
+        if not path.exists():
+            raise DatabaseResolutionError(f"DuckDB file '{spec}' not found.")
+        return ResolvedDatabase(name=path.stem, connection_string=f"duckdb:///{path}")
 
     # 3. Must be a configured name
     db_cfg: DatabaseConfig | None = config_mgr.get_database(spec)

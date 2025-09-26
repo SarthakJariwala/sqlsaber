@@ -4,6 +4,7 @@ import pytest
 
 from sqlsaber.database.connection import (
     DatabaseConnection,
+    DuckDBConnection,
     MySQLConnection,
     PostgreSQLConnection,
     SQLiteConnection,
@@ -34,6 +35,14 @@ class TestDatabaseConnectionFactory:
         assert isinstance(conn, SQLiteConnection)
         assert conn.connection_string == conn_string
         assert conn.database_path == "path/to/db.sqlite"
+
+    def test_duckdb_connection(self):
+        """Test creating a DuckDB connection."""
+        conn_string = "duckdb:///path/to/data.duckdb"
+        conn = DatabaseConnection(conn_string)
+        assert isinstance(conn, DuckDBConnection)
+        assert conn.connection_string == conn_string
+        assert conn.database_path == "path/to/data.duckdb"
 
     def test_unsupported_database(self):
         """Test error for unsupported database type."""

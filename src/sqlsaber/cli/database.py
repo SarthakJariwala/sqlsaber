@@ -31,7 +31,7 @@ def add(
         str,
         cyclopts.Parameter(
             ["--type", "-t"],
-            help="Database type (postgresql, mysql, sqlite)",
+            help="Database type (postgresql, mysql, sqlite, duckdb)",
         ),
     ] = "postgresql",
     host: Annotated[
@@ -87,17 +87,17 @@ def add(
         if not type or type == "postgresql":
             type = questionary.select(
                 "Database type:",
-                choices=["postgresql", "mysql", "sqlite"],
+                choices=["postgresql", "mysql", "sqlite", "duckdb"],
                 default="postgresql",
             ).ask()
 
-        if type == "sqlite":
-            # SQLite only needs database path
+        if type in {"sqlite", "duckdb"}:
+            # SQLite/DuckDB only need database file path
             database = database or questionary.path("Database file path:").ask()
             database = str(Path(database).expanduser().resolve())
             host = "localhost"
             port = 0
-            username = "sqlite"
+            username = type
             password = ""
         else:
             # PostgreSQL/MySQL need connection details
@@ -182,6 +182,17 @@ def add(
             port = 0
             username = "sqlite"
             password = ""
+        elif type == "duckdb":
+            if not database:
+                console.print(
+                    "[bold red]Error:[/bold red] Database file path is required for DuckDB"
+                )
+                sys.exit(1)
+            database = str(Path(database).expanduser().resolve())
+            host = "localhost"
+            port = 0
+            username = "duckdb"
+            password = ""
         else:
             if not all([host, database, username]):
                 console.print(
@@ -264,7 +275,7 @@ def list():
             if db.ssl_ca or db.ssl_cert:
                 ssl_status += " (certs)"
         else:
-            ssl_status = "disabled" if db.type != "sqlite" else "N/A"
+            ssl_status = "disabled" if db.type not in {"sqlite", "duckdb"} else "N/A"
 
         table.add_row(
             db.name,

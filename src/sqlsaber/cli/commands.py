@@ -46,7 +46,7 @@ def meta_handler(
         str | None,
         cyclopts.Parameter(
             ["--database", "-d"],
-            help="Database connection name, file path (CSV/SQLite), or connection string (postgresql://, mysql://) (uses default if not specified)",
+            help="Database connection name, file path (CSV/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://) (uses default if not specified)",
         ),
     ] = None,
 ):
@@ -59,8 +59,10 @@ def meta_handler(
         saber -d mydb "show me users"          # Run a query with specific database
         saber -d data.csv "show me users"      # Run a query with ad-hoc CSV file
         saber -d data.db "show me users"       # Run a query with ad-hoc SQLite file
+        saber -d data.duckdb "show me users"   # Run a query with ad-hoc DuckDB file
         saber -d "postgresql://user:pass@host:5432/db" "show users"  # PostgreSQL connection string
         saber -d "mysql://user:pass@host:3306/db" "show users"       # MySQL connection string
+        saber -d "duckdb:///data.duckdb" "show users"                 # DuckDB connection string
         echo "show me all users" | saber       # Read query from stdin
         cat query.txt | saber                  # Read query from file via stdin
     """
@@ -80,7 +82,7 @@ def query(
         str | None,
         cyclopts.Parameter(
             ["--database", "-d"],
-            help="Database connection name, file path (CSV/SQLite), or connection string (postgresql://, mysql://) (uses default if not specified)",
+            help="Database connection name, file path (CSV/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://) (uses default if not specified)",
         ),
     ] = None,
 ):
@@ -97,8 +99,10 @@ def query(
         saber "show me all users"         # Run a single query
         saber -d data.csv "show users"    # Run a query with ad-hoc CSV file
         saber -d data.db "show users"     # Run a query with ad-hoc SQLite file
+        saber -d data.duckdb "show users" # Run a query with ad-hoc DuckDB file
         saber -d "postgresql://user:pass@host:5432/db" "show users"  # PostgreSQL connection string
         saber -d "mysql://user:pass@host:3306/db" "show users"       # MySQL connection string
+        saber -d "duckdb:///data.duckdb" "show users"                 # DuckDB connection string
         echo "show me all users" | saber  # Read query from stdin
     """
 
@@ -111,6 +115,7 @@ def query(
         from sqlsaber.database.connection import (
             CSVConnection,
             DatabaseConnection,
+            DuckDBConnection,
             MySQLConnection,
             PostgreSQLConnection,
             SQLiteConnection,
@@ -149,15 +154,18 @@ def query(
                 # Single query mode with streaming
                 streaming_handler = StreamingQueryHandler(console)
                 # Compute DB type for the greeting line
-                db_type = (
-                    "PostgreSQL"
-                    if isinstance(db_conn, PostgreSQLConnection)
-                    else "MySQL"
-                    if isinstance(db_conn, MySQLConnection)
-                    else "SQLite"
-                    if isinstance(db_conn, (SQLiteConnection, CSVConnection))
-                    else "database"
-                )
+                if isinstance(db_conn, PostgreSQLConnection):
+                    db_type = "PostgreSQL"
+                elif isinstance(db_conn, MySQLConnection):
+                    db_type = "MySQL"
+                elif isinstance(db_conn, DuckDBConnection):
+                    db_type = "DuckDB"
+                elif isinstance(db_conn, SQLiteConnection):
+                    db_type = "SQLite"
+                elif isinstance(db_conn, CSVConnection):
+                    db_type = "CSV"
+                else:
+                    db_type = "database"
                 console.print(
                     f"[bold blue]Connected to:[/bold blue] {db_name} ({db_type})\n"
                 )

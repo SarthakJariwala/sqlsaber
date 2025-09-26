@@ -53,6 +53,21 @@ class TestDatabaseConfig:
         expected = "sqlite:////path/to/database.db"
         assert config.to_connection_string() == expected
 
+    def test_duckdb_connection_string(self):
+        """Test DuckDB connection string generation."""
+        config = DatabaseConfig(
+            name="duckdb_db",
+            type="duckdb",
+            host="localhost",
+            port=None,
+            username=None,
+            password=None,
+            database="/path/to/data.duckdb",
+        )
+
+        expected = "duckdb:////path/to/data.duckdb"
+        assert config.to_connection_string() == expected
+
     def test_invalid_database_type(self):
         """Test error for invalid database type."""
         config = DatabaseConfig(
@@ -203,18 +218,28 @@ class TestDatabaseConfigManager:
             DatabaseConfig(
                 "db3", "sqlite", "localhost", None, "/tmp/db.sqlite", None, None
             ),
+            DatabaseConfig(
+                "db4",
+                "duckdb",
+                "localhost",
+                None,
+                "/tmp/data.duckdb",
+                None,
+                None,
+            ),
         ]
 
         for config in configs:
             db_manager.add_database(config)
 
         databases = db_manager.list_databases()
-        assert len(databases) >= 3  # May have more from other tests
+        assert len(databases) >= 4  # May have more from other tests
 
         names = [db.name for db in databases]
         assert "db1" in names
         assert "db2" in names
         assert "db3" in names
+        assert "db4" in names
 
     def test_set_default_database(self, db_manager):
         """Test setting and getting default database."""
