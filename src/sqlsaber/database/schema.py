@@ -1,13 +1,16 @@
 """Database schema introspection utilities."""
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, TypedDict
 
 import aiosqlite
+import duckdb
 
 from sqlsaber.database.connection import (
     BaseDatabaseConnection,
     CSVConnection,
+    DuckDBConnection,
     MySQLConnection,
     PostgreSQLConnection,
     SQLiteConnection,
@@ -682,6 +685,214 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
         ]
 
 
+class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
+    """DuckDB-specific schema introspection."""
+
+    async def _execute_query(
+        self, connection: DuckDBConnection, query: str, params: tuple[Any, ...] = ()
+    ) -> list[dict[str, Any]]:
+        """Run a DuckDB query on a thread and return list of dictionaries."""
+
+        def run_query() -> list[dict[str, Any]]:
+            conn = duckdb.connect(connection.database_path)
+            try:
+                cursor = conn.execute(query, params)
+                if cursor.description is None:
+                    return []
+
+                columns = [col[0] for col in cursor.description]
+                rows = cursor.fetchall()
+                return [dict(zip(columns, row)) for row in rows]
+            finally:
+                conn.close()
+
+        return await asyncio.to_thread(run_query)
+
+    async def get_tables_info(
+        self, connection, table_pattern: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Get tables information for DuckDB."""
+        where_conditions = [
+            "table_schema NOT IN ('information_schema', 'pg_catalog', 'duckdb_catalog')"
+        ]
+        params: list[Any] = []
+
+        if table_pattern:
+            if "." in table_pattern:
+                schema_pattern, table_name_pattern = table_pattern.split(".", 1)
+                where_conditions.append(
+                    "(table_schema LIKE ? AND table_name LIKE ?)"
+                )
+                params.extend([schema_pattern, table_name_pattern])
+            else:
+                where_conditions.append(
+                    "(table_name LIKE ? OR table_schema || '.' || table_name LIKE ?)"
+                )
+                params.extend([table_pattern, table_pattern])
+
+        query = f"""
+            SELECT
+                table_schema,
+                table_name,
+                table_type
+            FROM information_schema.tables
+            WHERE {" AND ".join(where_conditions)}
+            ORDER BY table_schema, table_name;
+        """
+
+        return await self._execute_query(connection, query, tuple(params))
+
+    async def get_columns_info(self, connection, tables: list) -> list[dict[str, Any]]:
+        """Get columns information for DuckDB."""
+        if not tables:
+            return []
+
+        table_filters = []
+        for table in tables:
+            table_filters.append(
+                "(table_schema = ? AND table_name = ?)"
+            )
+
+        params: list[Any] = []
+        for table in tables:
+            params.extend([table["table_schema"], table["table_name"]])
+
+        query = f"""
+            SELECT
+                table_schema,
+                table_name,
+                column_name,
+                data_type,
+                is_nullable,
+                column_default,
+                character_maximum_length,
+                numeric_precision,
+                numeric_scale
+            FROM information_schema.columns
+            WHERE {" OR ".join(table_filters)}
+            ORDER BY table_schema, table_name, ordinal_position;
+        """
+
+        return await self._execute_query(connection, query, tuple(params))
+
+    async def get_foreign_keys_info(self, connection, tables: list) -> list[dict[str, Any]]:
+        """Get foreign keys information for DuckDB."""
+        if not tables:
+            return []
+
+        table_filters = []
+        params: list[Any] = []
+        for table in tables:
+            table_filters.append("(kcu.table_schema = ? AND kcu.table_name = ?)")
+            params.extend([table["table_schema"], table["table_name"]])
+
+        query = f"""
+            SELECT
+                kcu.table_schema,
+                kcu.table_name,
+                kcu.column_name,
+                ccu.table_schema AS foreign_table_schema,
+                ccu.table_name AS foreign_table_name,
+                ccu.column_name AS foreign_column_name
+            FROM information_schema.referential_constraints AS rc
+            JOIN information_schema.key_column_usage AS kcu
+                ON rc.constraint_schema = kcu.constraint_schema
+                AND rc.constraint_name = kcu.constraint_name
+            JOIN information_schema.key_column_usage AS ccu
+                ON rc.unique_constraint_schema = ccu.constraint_schema
+                AND rc.unique_constraint_name = ccu.constraint_name
+                AND ccu.ordinal_position = kcu.position_in_unique_constraint
+            WHERE {" OR ".join(table_filters)}
+            ORDER BY kcu.table_schema, kcu.table_name, kcu.ordinal_position;
+        """
+
+        return await self._execute_query(connection, query, tuple(params))
+
+    async def get_primary_keys_info(self, connection, tables: list) -> list[dict[str, Any]]:
+        """Get primary keys information for DuckDB."""
+        if not tables:
+            return []
+
+        table_filters = []
+        params: list[Any] = []
+        for table in tables:
+            table_filters.append("(tc.table_schema = ? AND tc.table_name = ?)")
+            params.extend([table["table_schema"], table["table_name"]])
+
+        query = f"""
+            SELECT
+                tc.table_schema,
+                tc.table_name,
+                kcu.column_name
+            FROM information_schema.table_constraints AS tc
+            JOIN information_schema.key_column_usage AS kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.constraint_schema = kcu.constraint_schema
+            WHERE tc.constraint_type = 'PRIMARY KEY'
+                AND ({" OR ".join(table_filters)})
+            ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position;
+        """
+
+        return await self._execute_query(connection, query, tuple(params))
+
+    async def get_indexes_info(self, connection, tables: list) -> list[dict[str, Any]]:
+        """Get indexes information for DuckDB."""
+        if not tables:
+            return []
+
+        indexes: list[dict[str, Any]] = []
+        for table in tables:
+            schema = table["table_schema"]
+            table_name = table["table_name"]
+            query = """
+                SELECT
+                    schema_name,
+                    table_name,
+                    index_name,
+                    sql
+                FROM duckdb_indexes()
+                WHERE schema_name = ? AND table_name = ?;
+            """
+            rows = await self._execute_query(connection, query, (schema, table_name))
+
+            for row in rows:
+                sql_text = (row.get("sql") or "").strip()
+                upper_sql = sql_text.upper()
+                unique = "UNIQUE" in upper_sql.split("(")[0]
+
+                columns: list[str] = []
+                if "(" in sql_text and ")" in sql_text:
+                    column_section = sql_text[sql_text.find("(") + 1 : sql_text.rfind(")")]
+                    columns = [col.strip().strip('"') for col in column_section.split(",") if col.strip()]
+
+                indexes.append(
+                    {
+                        "table_schema": row.get("schema_name") or schema or "main",
+                        "table_name": row.get("table_name") or table_name,
+                        "index_name": row.get("index_name"),
+                        "is_unique": unique,
+                        "index_type": None,
+                        "column_names": columns,
+                    }
+                )
+
+        return indexes
+
+    async def list_tables_info(self, connection) -> list[dict[str, Any]]:
+        """Get list of tables with basic information for DuckDB."""
+        query = """
+            SELECT
+                table_schema,
+                table_name,
+                table_type
+            FROM information_schema.tables
+            WHERE table_schema NOT IN ('information_schema', 'pg_catalog', 'duckdb_catalog')
+            ORDER BY table_schema, table_name;
+        """
+
+        return await self._execute_query(connection, query)
+
+
 class SchemaManager:
     """Manages database schema introspection."""
 
@@ -695,6 +906,8 @@ class SchemaManager:
             self.introspector = MySQLSchemaIntrospector()
         elif isinstance(db_connection, (SQLiteConnection, CSVConnection)):
             self.introspector = SQLiteSchemaIntrospector()
+        elif isinstance(db_connection, DuckDBConnection):
+            self.introspector = DuckDBSchemaIntrospector()
         else:
             raise ValueError(
                 f"Unsupported database connection type: {type(db_connection)}"

@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 import aiomysql
 import aiosqlite
 import asyncpg
+import duckdb
 
 # Default query timeout to prevent runaway queries
 DEFAULT_QUERY_TIMEOUT = 30.0  # seconds
@@ -495,6 +496,70 @@ class CSVConnection(BaseDatabaseConnection):
             await conn.rollback()
 
 
+class DuckDBConnection(BaseDatabaseConnection):
+    """DuckDB database connection using duckdb Python API."""
+
+    def __init__(self, connection_string: str):
+        super().__init__(connection_string)
+        if connection_string.startswith("duckdb:///"):
+            db_path = connection_string.replace("duckdb:///", "", 1)
+        elif connection_string.startswith("duckdb://"):
+            db_path = connection_string.replace("duckdb://", "", 1)
+        else:
+            db_path = connection_string
+
+        self.database_path = db_path or ":memory:"
+
+    async def get_pool(self):
+        """DuckDB creates connections per query, return database path."""
+        return self.database_path
+
+    async def close(self):
+        """DuckDB connections are created per query, no persistent pool to close."""
+        pass
+
+    async def execute_query(
+        self, query: str, *args, timeout: float | None = None
+    ) -> list[dict[str, Any]]:
+        """Execute a query and return results as list of dicts.
+
+        All queries run in a transaction that is rolled back at the end,
+        ensuring no changes are persisted to the database.
+        """
+        effective_timeout = timeout or DEFAULT_QUERY_TIMEOUT
+
+        def _run_query() -> list[dict[str, Any]]:
+            conn = duckdb.connect(self.database_path)
+            try:
+                conn.execute("BEGIN TRANSACTION")
+                if args:
+                    conn.execute(query, args)
+                else:
+                    conn.execute(query)
+
+                if conn.description is None:
+                    rows: list[dict[str, Any]] = []
+                else:
+                    columns = [col[0] for col in conn.description]
+                    data = conn.fetchall()
+                    rows = [dict(zip(columns, row)) for row in data]
+
+                conn.execute("ROLLBACK")
+                return rows
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
+            finally:
+                conn.close()
+
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(_run_query), timeout=effective_timeout
+            )
+        except asyncio.TimeoutError as exc:
+            raise QueryTimeoutError(effective_timeout or 0) from exc
+
+
 def DatabaseConnection(connection_string: str) -> BaseDatabaseConnection:
     """Factory function to create appropriate database connection based on connection string."""
     if connection_string.startswith("postgresql://"):
@@ -503,6 +568,8 @@ def DatabaseConnection(connection_string: str) -> BaseDatabaseConnection:
         return MySQLConnection(connection_string)
     elif connection_string.startswith("sqlite:///"):
         return SQLiteConnection(connection_string)
+    elif connection_string.startswith("duckdb://"):
+        return DuckDBConnection(connection_string)
     elif connection_string.startswith("csv:///"):
         return CSVConnection(connection_string)
     else:

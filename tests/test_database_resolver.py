@@ -1,9 +1,11 @@
 """Tests for database resolver functionality."""
 
-import pytest
 from unittest.mock import Mock, patch
-from sqlsaber.database.resolver import resolve_database, DatabaseResolutionError
+
+import pytest
+
 from sqlsaber.config.database import DatabaseConfig
+from sqlsaber.database.resolver import DatabaseResolutionError, resolve_database
 
 
 class TestDatabaseResolver:
@@ -33,6 +35,11 @@ class TestDatabaseResolver:
         assert result.name == "data"
         assert result.connection_string == "csv:///data.csv"
 
+        # DuckDB connection string
+        result = resolve_database("duckdb:///path/to/data.duckdb", config_mgr)
+        assert result.name == "data"
+        assert result.connection_string == "duckdb:///path/to/data.duckdb"
+
     @patch("pathlib.Path.exists")
     def test_resolve_file_paths(self, mock_exists):
         """Test that file paths are resolved correctly."""
@@ -51,6 +58,12 @@ class TestDatabaseResolver:
         assert result.connection_string.startswith("sqlite:///")
         assert result.connection_string.endswith("test.db")
 
+        # DuckDB file
+        result = resolve_database("data.duckdb", config_mgr)
+        assert result.name == "data"
+        assert result.connection_string.startswith("duckdb:///")
+        assert result.connection_string.endswith("data.duckdb")
+
     @patch("pathlib.Path.exists")
     def test_file_not_found_error(self, mock_exists):
         """Test that missing files raise appropriate errors."""
@@ -66,6 +79,11 @@ class TestDatabaseResolver:
             DatabaseResolutionError, match="SQLite file 'missing.db' not found"
         ):
             resolve_database("missing.db", config_mgr)
+
+        with pytest.raises(
+            DatabaseResolutionError, match="DuckDB file 'missing.duckdb' not found"
+        ):
+            resolve_database("missing.duckdb", config_mgr)
 
     def test_resolve_configured_database(self):
         """Test that configured database names are resolved."""
@@ -124,3 +142,7 @@ class TestDatabaseResolver:
         # PostgreSQL with no path at all
         result = resolve_database("postgresql://user:pass@host:5432", config_mgr)
         assert result.name == "database"  # fallback name
+
+        # DuckDB without explicit database
+        result = resolve_database("duckdb://", config_mgr)
+        assert result.name == "database"

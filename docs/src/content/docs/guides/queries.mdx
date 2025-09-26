@@ -109,11 +109,14 @@ saber -d prod-db "What's our revenue this month?"
 
 #### Using Files Directly
 
-Work with SQLite or CSV files directly:
+Work with SQLite, DuckDB, or CSV files directly:
 
 ```bash
 # SQLite file
 saber -d "./data/sales.db" "Top selling products"
+
+# DuckDB file
+saber -d "./data/warehouse.duckdb" "Latest partitions"
 
 # CSV file
 saber -d "./customers.csv" "How many customers per state?"

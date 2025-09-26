@@ -37,7 +37,7 @@ Ask your questions in natural language and `sqlsaber` will gather the right cont
 - 🧠 Memory management
 - 💬 Interactive REPL mode
 - 🧵 Conversation threads (store, display, and resume conversations)
-- 🗄️ Support for PostgreSQL, SQLite, and MySQL
+- 🗄️ Support for PostgreSQL, MySQL, SQLite, and DuckDB
 - 🔌 MCP (Model Context Protocol) server support
 - 🎨 Beautiful formatted output
 
@@ -149,6 +149,7 @@ saber -d mydb "count all orders"
 
 # You can also pass a connection string
 saber -d "postgresql://user:password@localhost:5432/mydb" "count all orders"
+saber -d "duckdb:///path/to/data.duckdb" "top customers"
 ```
 
 ## Examples
