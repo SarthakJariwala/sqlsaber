@@ -6,7 +6,7 @@ from fastmcp import FastMCP
 
 from sqlsaber.agents.mcp import MCPSQLAgent
 from sqlsaber.config.database import DatabaseConfigManager
-from sqlsaber.database.connection import DatabaseConnection
+from sqlsaber.database import DatabaseConnection
 from sqlsaber.tools import SQLTool, tool_registry
 from sqlsaber.tools.instructions import InstructionBuilder
 

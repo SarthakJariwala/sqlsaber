@@ -148,7 +148,9 @@ def _render_transcript(
                             )
                         else:
                             if is_redirected:
-                                console.print(f"**Tool result ({name}):**\n\n{content_str}\n")
+                                console.print(
+                                    f"**Tool result ({name}):**\n\n{content_str}\n"
+                                )
                             else:
                                 console.print(
                                     Panel.fit(
@@ -159,7 +161,9 @@ def _render_transcript(
                                 )
                     except Exception:
                         if is_redirected:
-                            console.print(f"**Tool result ({name}):**\n\n{content_str}\n")
+                            console.print(
+                                f"**Tool result ({name}):**\n\n{content_str}\n"
+                            )
                         else:
                             console.print(
                                 Panel.fit(
@@ -261,7 +265,7 @@ def resume(
         from sqlsaber.agents import build_sqlsaber_agent
         from sqlsaber.cli.interactive import InteractiveSession
         from sqlsaber.config.database import DatabaseConfigManager
-        from sqlsaber.database.connection import DatabaseConnection
+        from sqlsaber.database import DatabaseConnection
         from sqlsaber.database.resolver import (
             DatabaseResolutionError,
             resolve_database,

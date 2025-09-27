@@ -2,7 +2,7 @@
 
 import pytest
 
-from sqlsaber.database.connection import (
+from sqlsaber.database import (
     DatabaseConnection,
     DuckDBConnection,
     MySQLConnection,

@@ -3,7 +3,7 @@
 import json
 from typing import Any
 
-from sqlsaber.database.connection import BaseDatabaseConnection
+from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.schema import SchemaManager
 
 from .base import Tool

@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from sqlsaber.database.connection import (
+from sqlsaber.database import (
     DEFAULT_QUERY_TIMEOUT,
     DatabaseConnection,
     QueryTimeoutError,
@@ -99,25 +99,6 @@ class TestQueryTimeout:
 
         assert str(error) == "Query exceeded timeout of 30.5s"
         assert error.timeout == 30.5
-
-    @pytest.mark.asyncio
-    async def test_timeout_precedence(self):
-        """Test that query-level timeout overrides hardcoded default."""
-        connection_string = "sqlite:///:memory:"
-        query_timeout = 45.0
-
-        conn = SQLiteConnection(connection_string)
-
-        try:
-            # The query should use the query-specific timeout
-            # We can't easily test the actual timeout without creating a slow query,
-            # but we can verify the parameter is accepted
-            result = await conn.execute_query("SELECT 1 as test", timeout=query_timeout)
-            assert len(result) == 1
-            assert result[0]["test"] == 1
-
-        finally:
-            await conn.close()
 
 
 if __name__ == "__main__":

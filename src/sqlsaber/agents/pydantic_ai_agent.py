@@ -14,7 +14,7 @@ from pydantic_ai.providers.google import GoogleProvider
 
 from sqlsaber.config import providers
 from sqlsaber.config.settings import Config
-from sqlsaber.database.connection import (
+from sqlsaber.database import (
     BaseDatabaseConnection,
     CSVConnection,
     DuckDBConnection,

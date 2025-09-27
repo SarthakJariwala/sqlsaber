@@ -3,7 +3,7 @@
 from typing import AsyncIterator
 
 from sqlsaber.agents.base import BaseSQLAgent
-from sqlsaber.database.connection import BaseDatabaseConnection
+from sqlsaber.database import BaseDatabaseConnection
 
 
 class MCPSQLAgent(BaseSQLAgent):

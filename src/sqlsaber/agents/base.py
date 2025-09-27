@@ -5,7 +5,7 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator
 
-from sqlsaber.database.connection import (
+from sqlsaber.database import (
     BaseDatabaseConnection,
     CSVConnection,
     DuckDBConnection,

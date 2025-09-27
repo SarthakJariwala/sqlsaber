@@ -219,7 +219,9 @@ class DisplayManager:
             if self.console.is_terminal:
                 self.console.print("[dim bold]:gear: Executing SQL:[/dim bold]")
                 self.show_newline()
-                syntax = Syntax(query, "sql", background_color="default", word_wrap=True)
+                syntax = Syntax(
+                    query, "sql", background_color="default", word_wrap=True
+                )
                 self.console.print(syntax)
             else:
                 self.console.print("**Executing SQL:**\n")
@@ -271,9 +273,7 @@ class DisplayManager:
                     f"[yellow]... and {len(results) - 20} more rows[/yellow]"
                 )
             else:
-                self.console.print(
-                    f"*... and {len(results) - 20} more rows*\n"
-                )
+                self.console.print(f"*... and {len(results) - 20} more rows*\n")
 
     def show_error(self, error_message: str):
         """Display error message."""
