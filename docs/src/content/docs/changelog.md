@@ -7,6 +7,14 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+### v0.25.0 - 2025-09-26
+
+#### Added
+
+- DuckDB support for efficient CSV and data file analysis
+  - Added `duckdb` provider to database options
+  - Enhanced CSV processing capabilities using DuckDB's optimized engine
+
 ### v0.24.0 - 2025-09-24
 
 #### Added
