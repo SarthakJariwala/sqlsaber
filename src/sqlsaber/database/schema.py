@@ -689,20 +689,31 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
     """DuckDB-specific schema introspection."""
 
     async def _execute_query(
-        self, connection: DuckDBConnection, query: str, params: tuple[Any, ...] = ()
+        self,
+        connection: DuckDBConnection | CSVConnection,
+        query: str,
+        params: tuple[Any, ...] = (),
     ) -> list[dict[str, Any]]:
         """Run a DuckDB query on a thread and return list of dictionaries."""
+
+        params_tuple = tuple(params)
+
+        def fetch_rows(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
+            cursor = conn.execute(query, params_tuple)
+            if cursor.description is None:
+                return []
+
+            columns = [col[0] for col in cursor.description]
+            rows = conn.fetchall()
+            return [dict(zip(columns, row)) for row in rows]
+
+        if isinstance(connection, CSVConnection):
+            return await connection.execute_query(query, *params_tuple)
 
         def run_query() -> list[dict[str, Any]]:
             conn = duckdb.connect(connection.database_path)
             try:
-                cursor = conn.execute(query, params)
-                if cursor.description is None:
-                    return []
-
-                columns = [col[0] for col in cursor.description]
-                rows = cursor.fetchall()
-                return [dict(zip(columns, row)) for row in rows]
+                return fetch_rows(conn)
             finally:
                 conn.close()
 
@@ -904,9 +915,9 @@ class SchemaManager:
             self.introspector = PostgreSQLSchemaIntrospector()
         elif isinstance(db_connection, MySQLConnection):
             self.introspector = MySQLSchemaIntrospector()
-        elif isinstance(db_connection, (SQLiteConnection, CSVConnection)):
+        elif isinstance(db_connection, SQLiteConnection):
             self.introspector = SQLiteSchemaIntrospector()
-        elif isinstance(db_connection, DuckDBConnection):
+        elif isinstance(db_connection, (DuckDBConnection, CSVConnection)):
             self.introspector = DuckDBSchemaIntrospector()
         else:
             raise ValueError(

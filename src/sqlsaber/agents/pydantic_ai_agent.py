@@ -17,6 +17,7 @@ from sqlsaber.config.settings import Config
 from sqlsaber.database.connection import (
     BaseDatabaseConnection,
     CSVConnection,
+    DuckDBConnection,
     MySQLConnection,
     PostgreSQLConnection,
     SQLiteConnection,
@@ -169,7 +170,9 @@ def _get_database_type_name(db: BaseDatabaseConnection) -> str:
         return "MySQL"
     elif isinstance(db, SQLiteConnection):
         return "SQLite"
+    elif isinstance(db, DuckDBConnection):
+        return "DuckDB"
     elif isinstance(db, CSVConnection):
-        return "SQLite"
+        return "DuckDB"
     else:
         return "database"

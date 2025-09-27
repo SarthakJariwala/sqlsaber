@@ -15,7 +15,6 @@ dependencies = [
     "aiomysql>=0.2.0",
     "aiosqlite>=0.21.0",
     "duckdb>=0.9.2",
-    "pandas>=2.0.0",
     "fastmcp>=2.9.0",
     "cyclopts>=3.22.1",
     "prompt-toolkit>3.0.51",

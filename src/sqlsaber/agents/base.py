@@ -8,6 +8,7 @@ from typing import Any, AsyncIterator
 from sqlsaber.database.connection import (
     BaseDatabaseConnection,
     CSVConnection,
+    DuckDBConnection,
     MySQLConnection,
     PostgreSQLConnection,
     SQLiteConnection,
@@ -51,7 +52,9 @@ class BaseSQLAgent(ABC):
         elif isinstance(self.db, SQLiteConnection):
             return "SQLite"
         elif isinstance(self.db, CSVConnection):
-            return "SQLite"  # we convert csv to in-memory sqlite
+            return "DuckDB"
+        elif isinstance(self.db, DuckDBConnection):
+            return "DuckDB"
         else:
             return "database"  # Fallback
 

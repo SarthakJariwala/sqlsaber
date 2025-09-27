@@ -163,7 +163,7 @@ def query(
                 elif isinstance(db_conn, SQLiteConnection):
                     db_type = "SQLite"
                 elif isinstance(db_conn, CSVConnection):
-                    db_type = "CSV"
+                    db_type = "DuckDB"
                 else:
                     db_type = "database"
                 console.print(
