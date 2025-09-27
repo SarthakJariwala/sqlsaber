@@ -86,10 +86,12 @@ class InteractiveSession:
             if isinstance(self.db_conn, PostgreSQLConnection)
             else "MySQL"
             if isinstance(self.db_conn, MySQLConnection)
-            else "SQLite"
-            if isinstance(self.db_conn, (SQLiteConnection, CSVConnection))
             else "DuckDB"
             if isinstance(self.db_conn, DuckDBConnection)
+            else "DuckDB"
+            if isinstance(self.db_conn, CSVConnection)
+            else "SQLite"
+            if isinstance(self.db_conn, SQLiteConnection)
             else "database"
         )
 
