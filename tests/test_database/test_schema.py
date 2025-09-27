@@ -3,7 +3,7 @@
 import duckdb
 import pytest
 
-from sqlsaber.database.connection import DuckDBConnection
+from sqlsaber.database import DuckDBConnection
 from sqlsaber.database.schema import (
     DuckDBSchemaIntrospector,
     SchemaManager,

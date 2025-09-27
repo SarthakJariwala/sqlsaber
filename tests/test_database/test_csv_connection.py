@@ -2,7 +2,7 @@
 
 import pytest
 
-from sqlsaber.database.connection import CSVConnection
+from sqlsaber.database import CSVConnection
 from sqlsaber.database.schema import SchemaManager
 
 
@@ -14,9 +14,7 @@ async def test_csv_connection_reads_csv(tmp_path):
     conn = CSVConnection(f"csv:///{csv_path}")
     try:
         table_name = csv_path.stem
-        rows = await conn.execute_query(
-            f'SELECT * FROM "{table_name}" ORDER BY a'
-        )
+        rows = await conn.execute_query(f'SELECT * FROM "{table_name}" ORDER BY a')
         assert rows == [{"a": 1, "b": 2}, {"a": 3, "b": 4}]
 
         schema_manager = SchemaManager(conn)

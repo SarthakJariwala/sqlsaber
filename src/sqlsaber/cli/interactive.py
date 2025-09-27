@@ -21,7 +21,7 @@ from sqlsaber.cli.completers import (
 )
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.streaming import StreamingQueryHandler
-from sqlsaber.database.connection import (
+from sqlsaber.database import (
     CSVConnection,
     DuckDBConnection,
     MySQLConnection,

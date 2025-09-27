@@ -354,7 +354,7 @@ def test(
 
     async def test_connection():
         # Lazy import to keep CLI startup fast
-        from sqlsaber.database.connection import DatabaseConnection
+        from sqlsaber.database import DatabaseConnection
 
         if name:
             db_config = config_manager.get_database(name)

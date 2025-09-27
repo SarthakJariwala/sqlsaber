@@ -112,7 +112,7 @@ def query(
         from sqlsaber.agents import build_sqlsaber_agent
         from sqlsaber.cli.interactive import InteractiveSession
         from sqlsaber.cli.streaming import StreamingQueryHandler
-        from sqlsaber.database.connection import (
+        from sqlsaber.database import (
             CSVConnection,
             DatabaseConnection,
             DuckDBConnection,

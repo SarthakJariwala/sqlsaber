@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from sqlsaber.database.connection import SQLiteConnection
+from sqlsaber.database import SQLiteConnection
 from sqlsaber.tools.enums import ToolCategory
 from sqlsaber.tools.sql_tools import (
     ExecuteSQLTool,
