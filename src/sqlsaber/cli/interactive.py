@@ -3,13 +3,13 @@
 import asyncio
 from pathlib import Path
 from textwrap import dedent
+from typing import TYPE_CHECKING
 
 import platformdirs
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
-from pydantic_ai import Agent
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -30,6 +30,9 @@ from sqlsaber.database import (
 )
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.threads import ThreadStorage
+
+if TYPE_CHECKING:
+    from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 
 
 def bottom_toolbar():
@@ -55,7 +58,7 @@ class InteractiveSession:
     def __init__(
         self,
         console: Console,
-        agent: Agent,
+        sqlsaber_agent: "SQLSaberAgent",
         db_conn,
         database_name: str,
         *,
@@ -63,7 +66,7 @@ class InteractiveSession:
         initial_history: list | None = None,
     ):
         self.console = console
-        self.agent = agent
+        self.sqlsaber_agent = sqlsaber_agent
         self.db_conn = db_conn
         self.database_name = database_name
         self.display = DisplayManager(console)
@@ -176,7 +179,7 @@ class InteractiveSession:
         query_task = asyncio.create_task(
             self.streaming_handler.execute_streaming_query(
                 user_query,
-                self.agent,
+                self.sqlsaber_agent,
                 self.cancellation_token,
                 self.message_history,
             )
@@ -191,11 +194,6 @@ class InteractiveSession:
                     # Use all_messages() so the system prompt and all prior turns are preserved
                     self.message_history = run_result.all_messages()
 
-                    # Extract title (first user prompt) and model name
-                    if not self._thread_id:
-                        title = user_query
-                        model_name = self.agent.model.model_name
-
                     # Persist snapshot to thread storage (create or overwrite)
                     self._thread_id = await self._threads.save_snapshot(
                         messages_json=run_result.all_messages_json(),
@@ -206,8 +204,8 @@ class InteractiveSession:
                     if self.first_message:
                         await self._threads.save_metadata(
                             thread_id=self._thread_id,
-                            title=title,
-                            model_name=model_name,
+                            title=user_query,
+                            model_name=self.sqlsaber_agent.agent.model.model_name,
                         )
                 except Exception:
                     pass
@@ -276,9 +274,7 @@ class InteractiveSession:
                         if memory_content:
                             # Add memory via the agent's memory manager
                             try:
-                                mm = getattr(
-                                    self.agent, "_sqlsaber_memory_manager", None
-                                )
+                                mm = self.sqlsaber_agent.memory_manager
                                 if mm and self.database_name:
                                     memory = mm.add_memory(
                                         self.database_name, memory_content

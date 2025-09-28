@@ -109,16 +109,11 @@ def query(
     async def run_session():
         # Import heavy dependencies only when actually running a query
         # This is only done to speed up startup time
-        from sqlsaber.agents import build_sqlsaber_agent
+        from sqlsaber.agents import SQLSaberAgent
         from sqlsaber.cli.interactive import InteractiveSession
         from sqlsaber.cli.streaming import StreamingQueryHandler
         from sqlsaber.database import (
-            CSVConnection,
             DatabaseConnection,
-            DuckDBConnection,
-            MySQLConnection,
-            PostgreSQLConnection,
-            SQLiteConnection,
         )
         from sqlsaber.database.resolver import DatabaseResolutionError, resolve_database
         from sqlsaber.threads import ThreadStorage
@@ -147,45 +142,32 @@ def query(
             raise CLIError(f"Error creating database connection: {e}")
 
         # Create pydantic-ai agent instance with database name for memory context
-        agent = build_sqlsaber_agent(db_conn, db_name)
+        sqlsaber_agent = SQLSaberAgent(db_conn, db_name)
 
         try:
             if actual_query:
                 # Single query mode with streaming
                 streaming_handler = StreamingQueryHandler(console)
-                # Compute DB type for the greeting line
-                if isinstance(db_conn, PostgreSQLConnection):
-                    db_type = "PostgreSQL"
-                elif isinstance(db_conn, MySQLConnection):
-                    db_type = "MySQL"
-                elif isinstance(db_conn, DuckDBConnection):
-                    db_type = "DuckDB"
-                elif isinstance(db_conn, SQLiteConnection):
-                    db_type = "SQLite"
-                elif isinstance(db_conn, CSVConnection):
-                    db_type = "DuckDB"
-                else:
-                    db_type = "database"
+                db_type = sqlsaber_agent.db_type
                 console.print(
                     f"[bold blue]Connected to:[/bold blue] {db_name} ({db_type})\n"
                 )
                 run = await streaming_handler.execute_streaming_query(
-                    actual_query, agent
+                    actual_query, sqlsaber_agent
                 )
                 # Persist non-interactive run as a thread snapshot so it can be resumed later
                 try:
                     if run is not None:
                         threads = ThreadStorage()
-                        # Extract title and model name
-                        title = actual_query
-                        model_name: str | None = agent.model.model_name
 
                         thread_id = await threads.save_snapshot(
                             messages_json=run.all_messages_json(),
                             database_name=db_name,
                         )
                         await threads.save_metadata(
-                            thread_id=thread_id, title=title, model_name=model_name
+                            thread_id=thread_id,
+                            title=actual_query,
+                            model_name=sqlsaber_agent.agent.model.model_name,
                         )
                         await threads.end_thread(thread_id)
                         console.print(
@@ -198,7 +180,7 @@ def query(
                     await threads.prune_threads()
             else:
                 # Interactive mode
-                session = InteractiveSession(console, agent, db_conn, db_name)
+                session = InteractiveSession(console, sqlsaber_agent, db_conn, db_name)
                 await session.run()
 
         finally:

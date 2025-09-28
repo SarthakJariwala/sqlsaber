@@ -28,47 +28,80 @@ from sqlsaber.tools.registry import tool_registry
 from sqlsaber.tools.sql_tools import SQLTool
 
 
-def build_sqlsaber_agent(
-    db_connection: BaseDatabaseConnection,
-    database_name: str | None,
-) -> Agent:
-    """Create and configure a pydantic-ai Agent for SQLSaber.
+class SQLSaberAgent:
+    """Pydantic-AI Agent wrapper for SQLSaber with enhanced state management."""
 
-    - Registers function tools that delegate to the existing tool registry
-    - Attaches dynamic system prompt built from InstructionBuilder + MemoryManager
-    - Ensures SQL tools have the active DB connection
-    """
-    # Ensure SQL tools receive the active connection
-    for tool_name in tool_registry.list_tools(category="sql"):
-        tool = tool_registry.get_tool(tool_name)
-        if isinstance(tool, SQLTool):
-            tool.set_connection(db_connection)
+    def __init__(
+        self,
+        db_connection: BaseDatabaseConnection,
+        database_name: str | None = None,
+        memory_manager: MemoryManager | None = None,
+    ):
+        self.db_connection = db_connection
+        self.database_name = database_name
+        self.config = Config()
+        self.memory_manager = memory_manager or MemoryManager()
+        self.instruction_builder = InstructionBuilder(tool_registry)
+        self.db_type = self._get_database_type_name()
 
-    cfg = Config()
-    # Ensure provider env var is hydrated from keyring for current provider (Config.validate handles it)
-    cfg.validate()
+        # Configure SQL tools with the database connection
+        self._configure_sql_tools()
 
-    # Build model/agent. For some providers (e.g., google), construct provider model explicitly to
-    # allow arbitrary model IDs even if not in pydantic-ai's KnownModelName.
-    model_name_only = (
-        cfg.model_name.split(":", 1)[1] if ":" in cfg.model_name else cfg.model_name
-    )
+        # Create the pydantic-ai agent
+        self.agent = self._build_agent()
 
-    provider = providers.provider_from_model(cfg.model_name) or ""
-    if provider == "google":
-        model_obj = GoogleModel(
-            model_name_only, provider=GoogleProvider(api_key=cfg.api_key)
+    def _configure_sql_tools(self) -> None:
+        """Ensure SQL tools receive the active database connection."""
+        for tool_name in tool_registry.list_tools(category="sql"):
+            tool = tool_registry.get_tool(tool_name)
+            if isinstance(tool, SQLTool):
+                tool.set_connection(self.db_connection)
+
+    def _build_agent(self) -> Agent:
+        """Create and configure the pydantic-ai Agent."""
+        self.config.validate()
+
+        model_name_only = (
+            self.config.model_name.split(":", 1)[1]
+            if ":" in self.config.model_name
+            else self.config.model_name
         )
-        agent = Agent(model_obj, name="sqlsaber")
-    elif provider == "anthropic" and bool(getattr(cfg, "oauth_token", None)):
-        # Build custom httpx client to inject OAuth headers for Anthropic
+
+        provider = providers.provider_from_model(self.config.model_name) or ""
+        self.is_oauth = provider == "anthropic" and bool(
+            getattr(self.config, "oauth_token", None)
+        )
+
+        agent = self._create_agent_for_provider(provider, model_name_only)
+        self._setup_system_prompt(agent)
+        self._register_tools(agent)
+
+        return agent
+
+    def _create_agent_for_provider(self, provider: str, model_name: str) -> Agent:
+        """Create the agent based on the provider type."""
+        if provider == "google":
+            model_obj = GoogleModel(
+                model_name, provider=GoogleProvider(api_key=self.config.api_key)
+            )
+            return Agent(model_obj, name="sqlsaber")
+        elif provider == "anthropic" and self.is_oauth:
+            return self._create_oauth_anthropic_agent(model_name)
+        elif provider == "openai":
+            model_obj = OpenAIResponsesModel(model_name)
+            return Agent(model_obj, name="sqlsaber")
+        else:
+            return Agent(self.config.model_name, name="sqlsaber")
+
+    def _create_oauth_anthropic_agent(self, model_name: str) -> Agent:
+        """Create an Anthropic agent with OAuth configuration."""
+
         async def add_oauth_headers(request: httpx.Request) -> None:  # type: ignore[override]
-            # Remove API-key header if present and add OAuth headers
             if "x-api-key" in request.headers:
                 del request.headers["x-api-key"]
             request.headers.update(
                 {
-                    "Authorization": f"Bearer {cfg.oauth_token}",
+                    "Authorization": f"Bearer {self.config.oauth_token}",
                     "anthropic-version": "2023-06-01",
                     "anthropic-beta": "oauth-2025-04-20",
                     "User-Agent": "ClaudeCode/1.0 (Anthropic Claude Code CLI)",
@@ -79,100 +112,84 @@ def build_sqlsaber_agent(
 
         http_client = httpx.AsyncClient(event_hooks={"request": [add_oauth_headers]})
         provider_obj = AnthropicProvider(api_key="placeholder", http_client=http_client)
-        model_obj = AnthropicModel(model_name_only, provider=provider_obj)
-        agent = Agent(model_obj, name="sqlsaber")
-    elif provider == "openai":
-        # Use OpenAI Responses Model for structured output capabilities
-        model_obj = OpenAIResponsesModel(model_name_only)
-        agent = Agent(model_obj, name="sqlsaber")
-    else:
-        agent = Agent(cfg.model_name, name="sqlsaber")
+        model_obj = AnthropicModel(model_name, provider=provider_obj)
+        return Agent(model_obj, name="sqlsaber")
 
-    # Memory + dynamic system prompt
-    memory_manager = MemoryManager()
-    instruction_builder = InstructionBuilder(tool_registry)
+    def _setup_system_prompt(self, agent: Agent) -> None:
+        """Set up the dynamic system prompt for the agent."""
+        if not self.is_oauth:
 
-    is_oauth = provider == "anthropic" and bool(getattr(cfg, "oauth_token", None))
+            @agent.system_prompt(dynamic=True)
+            async def sqlsaber_system_prompt(ctx: RunContext) -> str:
+                instructions = self.instruction_builder.build_instructions(
+                    db_type=self.db_type
+                )
 
-    if not is_oauth:
-
-        @agent.system_prompt(dynamic=True)
-        async def sqlsaber_system_prompt(ctx: RunContext) -> str:
-            db_type = _get_database_type_name(db_connection)
-            instructions = instruction_builder.build_instructions(db_type=db_type)
-
-            # Add memory context if available
-            if database_name:
-                mem = memory_manager.format_memories_for_prompt(database_name)
-            else:
+                # Add memory context if available
                 mem = ""
+                if self.database_name:
+                    mem = self.memory_manager.format_memories_for_prompt(
+                        self.database_name
+                    )
 
-            parts = [p for p in (instructions, mem) if p and p.strip()]
-            return "\n\n".join(parts) if parts else ""
-    else:
+                parts = [p for p in (instructions, mem) if p and p.strip()]
+                return "\n\n".join(parts) if parts else ""
+        else:
 
-        @agent.system_prompt(dynamic=True)
-        async def sqlsaber_system_prompt(ctx: RunContext) -> str:
-            # Minimal system prompt in OAuth mode to match Claude Code identity
-            return "You are Claude Code, Anthropic's official CLI for Claude."
+            @agent.system_prompt(dynamic=True)
+            async def sqlsaber_system_prompt(ctx: RunContext) -> str:
+                return "You are Claude Code, Anthropic's official CLI for Claude."
 
-    # Expose helpers and context on agent instance
-    agent._sqlsaber_memory_manager = memory_manager  # type: ignore[attr-defined]
-    agent._sqlsaber_database_name = database_name  # type: ignore[attr-defined]
-    agent._sqlsaber_instruction_builder = instruction_builder  # type: ignore[attr-defined]
-    agent._sqlsaber_db_type = _get_database_type_name(db_connection)  # type: ignore[attr-defined]
-    agent._sqlsaber_is_oauth = is_oauth  # type: ignore[attr-defined]
+    def _register_tools(self, agent: Agent) -> None:
+        """Register all the SQL tools with the agent."""
 
-    # Tool wrappers that invoke the registered tools
-    @agent.tool(name="list_tables")
-    async def list_tables(ctx: RunContext) -> str:
-        """
-        Get a list of all tables in the database with row counts.
-        Use this first to discover available tables.
-        """
-        tool = tool_registry.get_tool("list_tables")
-        return await tool.execute()
+        @agent.tool(name="list_tables")
+        async def list_tables(ctx: RunContext) -> str:
+            """
+            Get a list of all tables in the database with row counts.
+            Use this first to discover available tables.
+            """
+            tool = tool_registry.get_tool("list_tables")
+            return await tool.execute()
 
-    @agent.tool(name="introspect_schema")
-    async def introspect_schema(
-        ctx: RunContext, table_pattern: str | None = None
-    ) -> str:
-        """
-        Introspect database schema to understand table structures.
+        @agent.tool(name="introspect_schema")
+        async def introspect_schema(
+            ctx: RunContext, table_pattern: str | None = None
+        ) -> str:
+            """
+            Introspect database schema to understand table structures.
 
-        Args:
-            table_pattern: Optional pattern to filter tables (e.g., 'public.users', 'user%', '%order%')
-        """
-        tool = tool_registry.get_tool("introspect_schema")
-        return await tool.execute(table_pattern=table_pattern)
+            Args:
+                table_pattern: Optional pattern to filter tables (e.g., 'public.users', 'user%', '%order%')
+            """
+            tool = tool_registry.get_tool("introspect_schema")
+            return await tool.execute(table_pattern=table_pattern)
 
-    @agent.tool(name="execute_sql")
-    async def execute_sql(ctx: RunContext, query: str, limit: int | None = 100) -> str:
-        """
-        Execute a SQL query and return the results.
+        @agent.tool(name="execute_sql")
+        async def execute_sql(
+            ctx: RunContext, query: str, limit: int | None = 100
+        ) -> str:
+            """
+            Execute a SQL query and return the results.
 
-        Args:
-            query: SQL query to execute
-            limit: Maximum number of rows to return (default: 100)
-        """
-        tool = tool_registry.get_tool("execute_sql")
-        return await tool.execute(query=query, limit=limit)
+            Args:
+                query: SQL query to execute
+                limit: Maximum number of rows to return (default: 100)
+            """
+            tool = tool_registry.get_tool("execute_sql")
+            return await tool.execute(query=query, limit=limit)
 
-    return agent
-
-
-def _get_database_type_name(db: BaseDatabaseConnection) -> str:
-    """Get the human-readable database type name (mirrors BaseSQLAgent)."""
-
-    if isinstance(db, PostgreSQLConnection):
-        return "PostgreSQL"
-    elif isinstance(db, MySQLConnection):
-        return "MySQL"
-    elif isinstance(db, SQLiteConnection):
-        return "SQLite"
-    elif isinstance(db, DuckDBConnection):
-        return "DuckDB"
-    elif isinstance(db, CSVConnection):
-        return "DuckDB"
-    else:
-        return "database"
+    def _get_database_type_name(self) -> str:
+        """Get the human-readable database type name."""
+        if isinstance(self.db_connection, PostgreSQLConnection):
+            return "PostgreSQL"
+        elif isinstance(self.db_connection, MySQLConnection):
+            return "MySQL"
+        elif isinstance(self.db_connection, SQLiteConnection):
+            return "SQLite"
+        elif isinstance(self.db_connection, DuckDBConnection):
+            return "DuckDB"
+        elif isinstance(self.db_connection, CSVConnection):
+            return "DuckDB"
+        else:
+            return "database"
