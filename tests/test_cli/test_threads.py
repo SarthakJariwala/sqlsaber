@@ -310,8 +310,8 @@ class TestThreadsCLI:
                 patch("sqlsaber.database.resolver") as mock_resolve,
                 patch("sqlsaber.database.DatabaseConnection") as mock_db_conn_class,
                 patch(
-                    "sqlsaber.agents.pydantic_ai_agent.build_sqlsaber_agent"
-                ) as mock_build_agent,
+                    "sqlsaber.agents.pydantic_ai_agent.SQLSaberAgent"
+                ) as mock_agent_class,
                 patch(
                     "sqlsaber.cli.interactive.InteractiveSession"
                 ) as mock_session_class,
@@ -327,8 +327,9 @@ class TestThreadsCLI:
                 mock_db_conn_class.return_value = mock_db_conn
 
                 # Mock agent and session
-                mock_agent = MagicMock()
-                mock_build_agent.return_value = mock_agent
+                mock_agent_instance = MagicMock()
+                mock_agent_instance.agent = MagicMock()
+                mock_agent_class.return_value = mock_agent_instance
                 mock_session = MagicMock()
                 mock_session_class.return_value = mock_session
 

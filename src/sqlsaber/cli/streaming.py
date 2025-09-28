@@ -8,9 +8,9 @@ rendered via DisplayManager helpers.
 import asyncio
 import json
 from functools import singledispatchmethod
-from typing import AsyncIterable
+from typing import TYPE_CHECKING, AsyncIterable
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import RunContext
 from pydantic_ai.messages import (
     AgentStreamEvent,
     FunctionToolCallEvent,
@@ -25,6 +25,9 @@ from pydantic_ai.messages import (
 from rich.console import Console
 
 from sqlsaber.cli.display import DisplayManager
+
+if TYPE_CHECKING:
+    from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 
 
 class StreamingQueryHandler:
@@ -130,7 +133,7 @@ class StreamingQueryHandler:
     async def execute_streaming_query(
         self,
         user_query: str,
-        agent: Agent,
+        sqlsaber_agent: "SQLSaberAgent",
         cancellation_token: asyncio.Event | None = None,
         message_history: list | None = None,
     ):
@@ -139,21 +142,16 @@ class StreamingQueryHandler:
         try:
             # If Anthropic OAuth, inject SQLsaber instructions before the first user prompt
             prepared_prompt: str | list[str] = user_query
-            is_oauth = bool(getattr(agent, "_sqlsaber_is_oauth", False))
             no_history = not message_history
-            if is_oauth and no_history:
-                ib = getattr(agent, "_sqlsaber_instruction_builder", None)
-                mm = getattr(agent, "_sqlsaber_memory_manager", None)
-                db_type = getattr(agent, "_sqlsaber_db_type", "database")
-                db_name = getattr(agent, "_sqlsaber_database_name", None)
-                instructions = (
-                    ib.build_instructions(db_type=db_type) if ib is not None else ""
+            if sqlsaber_agent.is_oauth and no_history:
+                instructions = sqlsaber_agent.instruction_builder.build_instructions(
+                    db_type=sqlsaber_agent.db_type
                 )
-                mem = (
-                    mm.format_memories_for_prompt(db_name)
-                    if (mm is not None and db_name)
-                    else ""
-                )
+                mem = ""
+                if sqlsaber_agent.database_name:
+                    mem = sqlsaber_agent.memory_manager.format_memories_for_prompt(
+                        sqlsaber_agent.database_name
+                    )
                 parts = [p for p in (instructions, mem) if p and str(p).strip()]
                 if parts:
                     injected = "\n\n".join(parts)
@@ -163,7 +161,7 @@ class StreamingQueryHandler:
             self.display.live.start_status("Crunching data...")
 
             # Run the agent with our event stream handler
-            run = await agent.run(
+            run = await sqlsaber_agent.agent.run(
                 prepared_prompt,
                 message_history=message_history,
                 event_stream_handler=self._event_stream_handler,

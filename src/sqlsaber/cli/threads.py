@@ -262,7 +262,7 @@ def resume(
 
     async def _run() -> None:
         # Lazy imports to avoid heavy modules at CLI startup
-        from sqlsaber.agents import build_sqlsaber_agent
+        from sqlsaber.agents import SQLSaberAgent
         from sqlsaber.cli.interactive import InteractiveSession
         from sqlsaber.config.database import DatabaseConfigManager
         from sqlsaber.database import DatabaseConnection
@@ -292,7 +292,7 @@ def resume(
 
         db_conn = DatabaseConnection(connection_string)
         try:
-            agent = build_sqlsaber_agent(db_conn, db_name)
+            sqlsaber_agent = SQLSaberAgent(db_conn, db_name)
             history = await store.get_thread_messages(thread_id)
             if console.is_terminal:
                 console.print(Panel.fit(f"Thread: {thread.id}", border_style="blue"))
@@ -301,7 +301,7 @@ def resume(
             _render_transcript(console, history, None)
             session = InteractiveSession(
                 console=console,
-                agent=agent,
+                sqlsaber_agent=sqlsaber_agent,
                 db_conn=db_conn,
                 database_name=db_name,
                 initial_thread_id=thread_id,
