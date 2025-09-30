@@ -46,7 +46,10 @@ class ModelConfigManager:
     def _load_config(self) -> dict[str, Any]:
         """Load configuration from file."""
         if not self.config_file.exists():
-            return {"model": self.DEFAULT_MODEL}
+            return {
+                "model": self.DEFAULT_MODEL,
+                "thinking_enabled": False,
+            }
 
         try:
             with open(self.config_file, "r") as f:
@@ -54,9 +57,15 @@ class ModelConfigManager:
                 # Ensure we have a model set
                 if "model" not in config:
                     config["model"] = self.DEFAULT_MODEL
+                # Set defaults for thinking if not present
+                if "thinking_enabled" not in config:
+                    config["thinking_enabled"] = False
                 return config
         except (json.JSONDecodeError, IOError):
-            return {"model": self.DEFAULT_MODEL}
+            return {
+                "model": self.DEFAULT_MODEL,
+                "thinking_enabled": False,
+            }
 
     def _save_config(self, config: dict[str, Any]) -> None:
         """Save configuration to file."""
@@ -76,6 +85,17 @@ class ModelConfigManager:
         config["model"] = model
         self._save_config(config)
 
+    def get_thinking_enabled(self) -> bool:
+        """Get whether thinking is enabled."""
+        config = self._load_config()
+        return config.get("thinking_enabled", False)
+
+    def set_thinking_enabled(self, enabled: bool) -> None:
+        """Set whether thinking is enabled."""
+        config = self._load_config()
+        config["thinking_enabled"] = enabled
+        self._save_config(config)
+
 
 class Config:
     """Configuration class for SQLSaber."""
@@ -85,6 +105,9 @@ class Config:
         self.model_name = self.model_config_manager.get_model()
         self.api_key_manager = APIKeyManager()
         self.auth_config_manager = AuthConfigManager()
+
+        # Thinking configuration
+        self.thinking_enabled = self.model_config_manager.get_thinking_enabled()
 
         # Authentication method (API key or Anthropic OAuth)
         self.auth_method = self.auth_config_manager.get_auth_method()

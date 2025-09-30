@@ -267,6 +267,17 @@ class InteractiveSession:
                     self._thread_id = None
                     continue
 
+                # Thinking commands
+                if user_query == "/thinking on":
+                    self.sqlsaber_agent.set_thinking(enabled=True)
+                    self.console.print("[green]✓ Thinking enabled[/green]\n")
+                    continue
+
+                if user_query == "/thinking off":
+                    self.sqlsaber_agent.set_thinking(enabled=False)
+                    self.console.print("[green]✓ Thinking disabled[/green]\n")
+                    continue
+
                 if memory_text := user_query.strip():
                     # Check if query starts with # for memory addition
                     if memory_text.startswith("#"):

@@ -75,7 +75,7 @@ def query(
     query_text: Annotated[
         str | None,
         cyclopts.Parameter(
-            help="SQL query in natural language (if not provided, reads from stdin or starts interactive mode)",
+            help="Question in natural language (if not provided, reads from stdin or starts interactive mode)",
         ),
     ] = None,
     database: Annotated[
@@ -85,6 +85,7 @@ def query(
             help="Database connection name, file path (CSV/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://) (uses default if not specified)",
         ),
     ] = None,
+    thinking: bool = False,
 ):
     """Run a query against the database or start interactive mode.
 
@@ -142,7 +143,7 @@ def query(
             raise CLIError(f"Error creating database connection: {e}")
 
         # Create pydantic-ai agent instance with database name for memory context
-        sqlsaber_agent = SQLSaberAgent(db_conn, db_name)
+        sqlsaber_agent = SQLSaberAgent(db_conn, db_name, thinking_enabled=thinking)
 
         try:
             if actual_query:

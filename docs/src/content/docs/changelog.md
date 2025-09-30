@@ -7,6 +7,19 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+### v0.26.0 - 2025-09-30
+
+#### Added
+
+- Extended thinking/reasoning mode
+  - Support for Anthropic, OpenAI, Google, and Groq
+  - CLI flags: `--thinking` and `--no-thinking` for per-query control
+  - Interactive commands: `/thinking on` and `/thinking off` for runtime toggling
+  - Configurable default via `thinking_enabled` in model config
+  - Thinking content displayed with dim styling to distinguish from final answers
+
+> This is useful when you want to see the reasoning used to generate the answer or when dealing with complex queries and questions.
+
 ### v0.25.0 - 2025-09-26
 
 #### Added

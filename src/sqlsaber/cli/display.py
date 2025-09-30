@@ -8,7 +8,7 @@ rendered with Live.
 import json
 from typing import Sequence, Type
 
-from pydantic_ai.messages import ModelResponsePart, TextPart
+from pydantic_ai.messages import ModelResponsePart, TextPart, ThinkingPart
 from rich.columns import Columns
 from rich.console import Console, ConsoleOptions, RenderResult
 from rich.live import Live
@@ -75,7 +75,7 @@ class LiveMarkdownRenderer:
             self.end()
             self.paragraph_break()
 
-        self._start()
+        self._start(kind)
         self._current_kind = kind
 
     def append(self, text: str | None) -> None:
@@ -87,7 +87,13 @@ class LiveMarkdownRenderer:
             self.ensure_segment(TextPart)
 
         self._buffer += text
-        self._live.update(Markdown(self._buffer))
+
+        # Apply dim styling for thinking segments
+        if self._current_kind == ThinkingPart:
+            content = Markdown(self._buffer, style="dim")
+            self._live.update(content)
+        else:
+            self._live.update(Markdown(self._buffer))
 
     def end(self) -> None:
         """Finalize and stop the current Live segment, if any."""
@@ -95,13 +101,17 @@ class LiveMarkdownRenderer:
             return
         # Persist the *final* render exactly once, then shut Live down.
         buf = self._buffer
+        kind = self._current_kind
         self._live.stop()
         self._live = None
         self._buffer = ""
         self._current_kind = None
         # Print the complete markdown to scroll-back for permanent reference
         if buf:
-            self.console.print(Markdown(buf))
+            if kind == ThinkingPart:
+                self.console.print(Text(buf, style="dim"))
+            else:
+                self.console.print(Markdown(buf))
 
     def end_if_active(self) -> None:
         self.end()
@@ -153,10 +163,20 @@ class LiveMarkdownRenderer:
         text = Text(f" {message}", style="yellow")
         return Columns([spinner, text], expand=False)
 
-    def _start(self, initial_markdown: str = "") -> None:
+    def _start(
+        self, kind: Type[ModelResponsePart] | None = None, initial_markdown: str = ""
+    ) -> None:
         if self._live is not None:
             self.end()
         self._buffer = initial_markdown or ""
+
+        # Add visual styling for thinking segments
+        if kind == ThinkingPart:
+            if self.console.is_terminal:
+                self.console.print("[dim]💭 Thinking...[/dim]")
+            else:
+                self.console.print("*Thinking...*\n")
+
         # NOTE: Use transient=True so the live widget disappears on exit,
         # giving a clean transition to the final printed result.
         live = Live(

@@ -64,7 +64,7 @@ class TestModelConfigManager:
         with open(model_manager.config_file, "r") as f:
             config = json.load(f)
 
-        assert config == {"model": test_model}
+        assert config == {"model": test_model, "thinking_enabled": False}
         assert model_manager.config_file.read_text().strip().endswith("}")
 
     def test_corrupted_config_file(self, model_manager):

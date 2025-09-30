@@ -19,6 +19,8 @@ class SlashCommandCompleter(Completer):
                 ("clear", "Clear conversation history"),
                 ("exit", "Exit the interactive session"),
                 ("quit", "Exit the interactive session"),
+                ("thinking on", "Enable extended thinking/reasoning"),
+                ("thinking off", "Disable extended thinking/reasoning"),
             ]
 
             # Yield completions that match the partial command

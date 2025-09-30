@@ -29,6 +29,7 @@ saber -d "postgresql://user:pass@host:5432/db" "User statistics for 2024"
 
 - `QUERY-TEXT` - SQL query in natural language (optional, starts interactive mode if not provided)
 - `-d, --database` - Database connection name, file path (CSV/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://)
+- `--thinking` / `--no-thinking` - Enable/disable extended thinking/reasoning mode
 
 **Global Options:**
 
@@ -395,7 +396,10 @@ When in interactive mode (`saber` with no arguments), you have access to a few a
 - `/clear` - Clear conversation history
 - `/exit` - Exit SQLsaber
 - `/quit` - Exit SQLsaber (alias for `/exit`)
+- `/thinking on` - Enable extended thinking/reasoning mode
+- `/thinking off` - Disable extended thinking/reasoning mode
 
 #### Autocomplete
 
 - **Table names** - Type `@table_name[TAB]` for completions
+- **Slash commands** - Type `/[TAB]` for command completions

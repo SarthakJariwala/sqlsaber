@@ -32,14 +32,15 @@ Ask your questions in natural language and `sqlsaber` will gather the right cont
 
 ## Features
 
-- 🔍 Automatic database schema introspection
-- 🛡️ Safe query execution (read-only by default)
-- 🧠 Memory management
-- 💬 Interactive REPL mode
-- 🧵 Conversation threads (store, display, and resume conversations)
-- 🗄️ Support for PostgreSQL, MySQL, SQLite, and DuckDB
-- 🔌 MCP (Model Context Protocol) server support
-- 🎨 Beautiful formatted output
+- Automatic database schema introspection
+- Safe query execution (read-only by default)
+- Memory management
+- Interactive REPL mode
+- Conversation threads (store, display, and resume conversations)
+- Support for PostgreSQL, MySQL, SQLite, DuckDB, and CSVs
+- MCP (Model Context Protocol) server support
+- Extended thinking mode for select models (Anthropic, OpenAI, Google, Groq)
+- Beautiful formatted output
 
 ## Installation
 
@@ -100,6 +101,39 @@ saber memory list
 ```
 
 > You can also add memories in an interactive query session by starting with the `#` sign
+
+### Extended Thinking Mode
+
+For complex queries that require deeper reasoning, `sqlsaber` supports extended thinking mode. When enabled, you will see the model's reasoning process as it generates SQL queries and arrives at conclusions.
+
+**Enable/disable via CLI flags:**
+
+```bash
+# Enable thinking for a single query
+saber --thinking "analyze sales trends across regions"
+
+# Disable thinking for a single query
+saber --no-thinking "show me all users"
+```
+
+**Toggle in interactive mode:**
+
+```bash
+# In interactive mode, use slash commands
+/thinking on   # Enable thinking
+/thinking off  # Disable thinking
+```
+
+**Configure default setting:**
+
+Thinking is disabled by default. To change the default, edit your config file at `~/.config/sqlsaber/model_config.json`:
+
+```json
+{
+  "model": "anthropic:claude-sonnet-4-20250514",
+  "thinking_enabled": true
+}
+```
 
 ## Usage
 

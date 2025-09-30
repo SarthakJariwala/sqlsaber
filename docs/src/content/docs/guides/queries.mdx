@@ -65,10 +65,15 @@ Special commands in interactive mode:
 
 - `/clear` - Clear conversation history
 - `/exit` or `/quit` - Exit SQLsaber
+- `/thinking on` - Enable extended thinking mode
+- `/thinking off` - Disable extended thinking mode
 
 ```
 > /clear
 Conversation history cleared.
+
+> /thinking on
+✓ Thinking enabled
 
 > /exit
 Goodbye!
@@ -88,6 +93,50 @@ Supports schema-aware completions:
 ```
 > @pub[TAB] → @public.customers
 ```
+
+#### Extended Thinking Mode
+
+For complex queries requiring deeper reasoning, enable thinking mode to see step-by-step problem solving process.
+
+**In interactive mode:**
+
+```
+> /thinking on
+✓ Thinking enabled
+
+> Analyze sales trends and forecast next quarter
+💭 Thinking...
+[dim reasoning process appears here]
+[followed by final answer]
+
+> /thinking off
+✓ Thinking disabled
+```
+
+**For single queries:**
+
+```bash
+# Enable thinking for complex analysis
+saber --thinking "Compare performance across regions with seasonal adjustments"
+
+# Disable for simple queries
+saber --no-thinking "How many users do we have?"
+```
+
+**Default configuration:**
+
+Thinking is disabled by default. To change this, edit `~/.config/sqlsaber/model_config.json`:
+
+```json
+{
+  "model": "anthropic:claude-sonnet-4-20250514",
+  "thinking_enabled": true
+}
+```
+
+<Aside type="note">
+Extended thinking is supported for Anthropic, OpenAI, Google, and Groq reasoning models.
+</Aside>
 
 ### Database Selection
 
