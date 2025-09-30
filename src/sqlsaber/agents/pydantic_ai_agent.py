@@ -6,9 +6,10 @@ function tools, and streaming event types directly.
 
 import httpx
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.models.google import GoogleModel
-from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
+from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
+from pydantic_ai.models.groq import GroqModelSettings
+from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google import GoogleProvider
 
@@ -36,6 +37,7 @@ class SQLSaberAgent:
         db_connection: BaseDatabaseConnection,
         database_name: str | None = None,
         memory_manager: MemoryManager | None = None,
+        thinking_enabled: bool | None = None,
     ):
         self.db_connection = db_connection
         self.database_name = database_name
@@ -43,6 +45,13 @@ class SQLSaberAgent:
         self.memory_manager = memory_manager or MemoryManager()
         self.instruction_builder = InstructionBuilder(tool_registry)
         self.db_type = self._get_database_type_name()
+
+        # Thinking configuration (CLI override or config default)
+        self.thinking_enabled = (
+            thinking_enabled
+            if thinking_enabled is not None
+            else self.config.thinking_enabled
+        )
 
         # Configure SQL tools with the database connection
         self._configure_sql_tools()
@@ -84,12 +93,43 @@ class SQLSaberAgent:
             model_obj = GoogleModel(
                 model_name, provider=GoogleProvider(api_key=self.config.api_key)
             )
+            if self.thinking_enabled:
+                settings = GoogleModelSettings(
+                    google_thinking_config={"include_thoughts": True}
+                )
+                return Agent(model_obj, name="sqlsaber", model_settings=settings)
             return Agent(model_obj, name="sqlsaber")
         elif provider == "anthropic" and self.is_oauth:
             return self._create_oauth_anthropic_agent(model_name)
+        elif provider == "anthropic":
+            if self.thinking_enabled:
+                settings = AnthropicModelSettings(
+                    anthropic_thinking={
+                        "type": "enabled",
+                        "budget_tokens": 2048,
+                    },
+                    max_tokens=8192,
+                )
+                return Agent(
+                    self.config.model_name, name="sqlsaber", model_settings=settings
+                )
+            return Agent(self.config.model_name, name="sqlsaber")
         elif provider == "openai":
             model_obj = OpenAIResponsesModel(model_name)
+            if self.thinking_enabled:
+                settings = OpenAIResponsesModelSettings(
+                    openai_reasoning_effort="medium",
+                    openai_reasoning_summary="auto",
+                )
+                return Agent(model_obj, name="sqlsaber", model_settings=settings)
             return Agent(model_obj, name="sqlsaber")
+        elif provider == "groq":
+            if self.thinking_enabled:
+                settings = GroqModelSettings(groq_reasoning_format="parsed")
+                return Agent(
+                    self.config.model_name, name="sqlsaber", model_settings=settings
+                )
+            return Agent(self.config.model_name, name="sqlsaber")
         else:
             return Agent(self.config.model_name, name="sqlsaber")
 
@@ -113,6 +153,15 @@ class SQLSaberAgent:
         http_client = httpx.AsyncClient(event_hooks={"request": [add_oauth_headers]})
         provider_obj = AnthropicProvider(api_key="placeholder", http_client=http_client)
         model_obj = AnthropicModel(model_name, provider=provider_obj)
+        if self.thinking_enabled:
+            settings = AnthropicModelSettings(
+                anthropic_thinking={
+                    "type": "enabled",
+                    "budget_tokens": 2048,
+                },
+                max_tokens=8192,
+            )
+            return Agent(model_obj, name="sqlsaber", model_settings=settings)
         return Agent(model_obj, name="sqlsaber")
 
     def _setup_system_prompt(self, agent: Agent) -> None:
@@ -178,6 +227,12 @@ class SQLSaberAgent:
             """
             tool = tool_registry.get_tool("execute_sql")
             return await tool.execute(query=query, limit=limit)
+
+    def set_thinking(self, enabled: bool) -> None:
+        """Update thinking settings and rebuild the agent."""
+        self.thinking_enabled = enabled
+        # Rebuild agent with new thinking settings
+        self.agent = self._build_agent()
 
     def _get_database_type_name(self) -> str:
         """Get the human-readable database type name."""
