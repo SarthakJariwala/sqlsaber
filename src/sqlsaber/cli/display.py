@@ -109,7 +109,7 @@ class LiveMarkdownRenderer:
         # Print the complete markdown to scroll-back for permanent reference
         if buf:
             if kind == ThinkingPart:
-                self.console.print(Text(buf, style="dim"))
+                self.console.print(Markdown(buf, style="dim"))
             else:
                 self.console.print(Markdown(buf))
 
