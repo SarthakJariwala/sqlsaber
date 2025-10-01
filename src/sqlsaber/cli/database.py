@@ -81,95 +81,34 @@ def add(
 
     if interactive:
         # Interactive mode - prompt for all required fields
+        from sqlsaber.application.db_setup import collect_db_input
+        from sqlsaber.application.prompts import AsyncPrompter
+
         console.print(f"[bold]Adding database connection: {name}[/bold]")
 
-        # Database type
-        if not type or type == "postgresql":
-            type = questionary.select(
-                "Database type:",
-                choices=["postgresql", "mysql", "sqlite", "duckdb"],
-                default="postgresql",
-            ).ask()
-
-        if type in {"sqlite", "duckdb"}:
-            # SQLite/DuckDB only need database file path
-            database = database or questionary.path("Database file path:").ask()
-            database = str(Path(database).expanduser().resolve())
-            host = "localhost"
-            port = 0
-            username = type
-            password = ""
-        else:
-            # PostgreSQL/MySQL need connection details
-            host = host or questionary.text("Host:", default="localhost").ask()
-
-            default_port = 5432 if type == "postgresql" else 3306
-            port = port or int(
-                questionary.text("Port:", default=str(default_port)).ask()
+        async def collect_input():
+            prompter = AsyncPrompter()
+            return await collect_db_input(
+                prompter=prompter, name=name, db_type=type, include_ssl=True
             )
 
-            database = database or questionary.text("Database name:").ask()
-            username = username or questionary.text("Username:").ask()
+        db_input = asyncio.run(collect_input())
 
-            # Ask for password
-            password = getpass.getpass("Password (stored in your OS keychain): ")
+        if db_input is None:
+            console.print("[yellow]Operation cancelled[/yellow]")
+            return
 
-            # Ask for SSL configuration
-            if questionary.confirm("Configure SSL/TLS settings?", default=False).ask():
-                if type == "postgresql":
-                    ssl_mode = (
-                        ssl_mode
-                        or questionary.select(
-                            "SSL mode for PostgreSQL:",
-                            choices=[
-                                "disable",
-                                "allow",
-                                "prefer",
-                                "require",
-                                "verify-ca",
-                                "verify-full",
-                            ],
-                            default="prefer",
-                        ).ask()
-                    )
-                elif type == "mysql":
-                    ssl_mode = (
-                        ssl_mode
-                        or questionary.select(
-                            "SSL mode for MySQL:",
-                            choices=[
-                                "DISABLED",
-                                "PREFERRED",
-                                "REQUIRED",
-                                "VERIFY_CA",
-                                "VERIFY_IDENTITY",
-                            ],
-                            default="PREFERRED",
-                        ).ask()
-                    )
-
-                if ssl_mode and ssl_mode not in ["disable", "DISABLED"]:
-                    if questionary.confirm(
-                        "Specify SSL certificate files?", default=False
-                    ).ask():
-                        ssl_ca = (
-                            ssl_ca or questionary.path("SSL CA certificate file:").ask()
-                        )
-                        if questionary.confirm(
-                            "Specify client certificate?", default=False
-                        ).ask():
-                            ssl_cert = (
-                                ssl_cert
-                                or questionary.path(
-                                    "SSL client certificate file:"
-                                ).ask()
-                            )
-                            ssl_key = (
-                                ssl_key
-                                or questionary.path(
-                                    "SSL client private key file:"
-                                ).ask()
-                            )
+        # Extract values from db_input
+        type = db_input.type
+        host = db_input.host
+        port = db_input.port
+        database = db_input.database
+        username = db_input.username
+        password = db_input.password
+        ssl_mode = db_input.ssl_mode
+        ssl_ca = db_input.ssl_ca
+        ssl_cert = db_input.ssl_cert
+        ssl_key = db_input.ssl_key
     else:
         # Non-interactive mode - use provided values or defaults
         if type == "sqlite":

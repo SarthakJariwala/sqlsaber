@@ -25,10 +25,19 @@ models_app = cyclopts.App(
 class ModelManager:
     """Manages AI model configuration and fetching."""
 
-    DEFAULT_MODEL = "anthropic:claude-sonnet-4-20250514"
+    DEFAULT_MODEL = "anthropic:claude-sonnet-4-5-20250929"
     MODELS_API_URL = "https://models.dev/api.json"
     # Providers come from central registry
     SUPPORTED_PROVIDERS = providers.all_keys()
+
+    RECOMMENDED_MODELS = {
+        "anthropic": "claude-sonnet-4-5-20250929",
+        "openai": "gpt-5",
+        "google": "gemini-2.5-pro",
+        "groq": "llama-3-3-70b-versatile",
+        "mistral": "mistral-large-latest",
+        "cohere": "command-r-plus",
+    }
 
     async def fetch_available_models(
         self, providers: list[str] | None = None
@@ -180,39 +189,20 @@ def set():
     """Set the AI model to use."""
 
     async def interactive_set():
+        from sqlsaber.application.model_selection import choose_model, fetch_models
+        from sqlsaber.application.prompts import AsyncPrompter
+
         console.print("[blue]Fetching available models...[/blue]")
-        models = await model_manager.fetch_available_models()
+        models = await fetch_models(model_manager)
 
         if not models:
             console.print("[red]Failed to fetch models. Cannot set model.[/red]")
             sys.exit(1)
 
-        # Create choices for questionary
-        choices = []
-        for model in models:
-            # Format: "[provider] ID - Name (Description)"
-            prov = model.get("provider", "?")
-            choice_text = f"[{prov}] {model['id']} - {model['name']}"
-            if model["description"]:
-                choice_text += f" ({model['description'][:50]}{'...' if len(model['description']) > 50 else ''})"
-
-            choices.append({"name": choice_text, "value": model["id"]})
-
-        # Get current model to set as default
-        current_model = model_manager.get_current_model()
-        default_index = 0
-        for i, choice in enumerate(choices):
-            if choice["value"] == current_model:
-                default_index = i
-                break
-
-        selected_model = await questionary.select(
-            "Select a model:",
-            choices=choices,
-            use_search_filter=True,
-            use_jk_keys=False,  # Disable j/k keys when using search filter
-            default=choices[default_index] if choices else None,
-        ).ask_async()
+        prompter = AsyncPrompter()
+        selected_model = await choose_model(
+            prompter, models, restrict_provider=None, use_search_filter=True
+        )
 
         if selected_model:
             if model_manager.set_model(selected_model):

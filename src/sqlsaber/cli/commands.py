@@ -11,6 +11,7 @@ from sqlsaber.cli.auth import create_auth_app
 from sqlsaber.cli.database import create_db_app
 from sqlsaber.cli.memory import create_memory_app
 from sqlsaber.cli.models import create_models_app
+from sqlsaber.cli.onboarding import needs_onboarding, run_onboarding
 from sqlsaber.cli.threads import create_threads_app
 
 # Lazy imports - only import what's needed for CLI parsing
@@ -127,6 +128,16 @@ def query(
             if not actual_query:
                 # If stdin was empty, fall back to interactive mode
                 actual_query = None
+
+        # Check if onboarding is needed (only for interactive mode or when no database is configured)
+        if needs_onboarding(database):
+            # Run onboarding flow
+            onboarding_success = await run_onboarding()
+            if not onboarding_success:
+                # User cancelled or onboarding failed
+                raise CLIError(
+                    "Setup incomplete. Please configure your database and try again."
+                )
 
         # Resolve database from CLI input
         try:

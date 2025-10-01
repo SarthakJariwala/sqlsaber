@@ -19,7 +19,7 @@ class APIKeyManager:
 
     def get_api_key(self, provider: str) -> str | None:
         """Get API key for the specified provider using cascading logic."""
-        env_var_name = self._get_env_var_name(provider)
+        env_var_name = self.get_env_var_name(provider)
         service_name = self._get_service_name(provider)
 
         # 1. Check environment variable first
@@ -41,7 +41,7 @@ class APIKeyManager:
         # 3. Prompt user for API key
         return self._prompt_and_store_key(provider, env_var_name, service_name)
 
-    def _get_env_var_name(self, provider: str) -> str:
+    def get_env_var_name(self, provider: str) -> str:
         """Get the expected environment variable name for a provider."""
         # Normalize aliases to canonical provider keys
         key = providers.canonical(provider) or provider
