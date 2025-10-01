@@ -35,25 +35,11 @@ if TYPE_CHECKING:
     from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 
 
-def bottom_toolbar():
-    return [
-        (
-            "class:bottom-toolbar",
-            " Use 'Esc-Enter' or 'Meta-Enter' to submit.",
-        )
-    ]
-
-
-style = Style.from_dict(
-    {
-        "frame.border": "#ebbcba",
-        "bottom-toolbar": "#ebbcba bg:#21202e",
-    }
-)
-
-
 class InteractiveSession:
     """Manages interactive CLI sessions."""
+
+    exit_commands = {"/exit", "/quit", "exit", "quit"}
+    resume_command_template = "saber threads resume {thread_id}"
 
     def __init__(
         self,
@@ -80,28 +66,33 @@ class InteractiveSession:
         self._thread_id: str | None = initial_thread_id
         self.first_message = not self._thread_id
 
-    def show_welcome_message(self):
-        """Display welcome message for interactive mode."""
-        # Show database information
-        db_name = self.database_name or "Unknown"
-        db_type = (
-            "PostgreSQL"
-            if isinstance(self.db_conn, PostgreSQLConnection)
-            else "MySQL"
-            if isinstance(self.db_conn, MySQLConnection)
-            else "DuckDB"
-            if isinstance(self.db_conn, DuckDBConnection)
-            else "DuckDB"
-            if isinstance(self.db_conn, CSVConnection)
-            else "SQLite"
-            if isinstance(self.db_conn, SQLiteConnection)
-            else "database"
+    def _history_path(self) -> Path:
+        """Get the history file path, ensuring directory exists."""
+        history_dir = Path(platformdirs.user_config_dir("sqlsaber"))
+        history_dir.mkdir(parents=True, exist_ok=True)
+        return history_dir / "history"
+
+    def _prompt_style(self) -> Style:
+        """Get the prompt style configuration."""
+        return Style.from_dict(
+            {
+                "frame.border": "gray",
+                "bottom-toolbar": "white bg:#21202e",
+            }
         )
 
-        if self.first_message:
-            self.console.print(
-                Panel.fit(
-                    """
+    def _bottom_toolbar(self):
+        """Get the bottom toolbar text."""
+        return [
+            (
+                "class:bottom-toolbar",
+                " Use 'Esc-Enter' or 'Meta-Enter' to submit.",
+            )
+        ]
+
+    def _banner(self) -> str:
+        """Get the ASCII banner."""
+        return """
 ███████  ██████  ██      ███████  █████  ██████  ███████ ██████
 ██      ██    ██ ██      ██      ██   ██ ██   ██ ██      ██   ██
 ███████ ██    ██ ██      ███████ ███████ ██████  █████   ██████
@@ -109,34 +100,109 @@ class InteractiveSession:
 ███████  ██████  ███████ ███████ ██   ██ ██████  ███████ ██   ██
             ▀▀
     """
-                )
-            )
-            self.console.print(
-                Markdown(
-                    dedent("""
+
+    def _instructions(self) -> str:
+        """Get the instruction text."""
+        return dedent("""
                     - Use `/` for slash commands
                     - Type `@` to get table name completions
                     - Start message with `#` to add something to agent's memory
                     - Use `Ctrl+C` to interrupt and `Ctrl+D` to exit
                     """)
-                )
-            )
 
+    def _db_type_name(self) -> str:
+        """Get human-readable database type name."""
+        mapping = {
+            PostgreSQLConnection: "PostgreSQL",
+            MySQLConnection: "MySQL",
+            DuckDBConnection: "DuckDB",
+            CSVConnection: "DuckDB",
+            SQLiteConnection: "SQLite",
+        }
+        for cls, name in mapping.items():
+            if isinstance(self.db_conn, cls):
+                return name
+        return "database"
+
+    def _resume_hint(self, thread_id: str) -> str:
+        """Build resume command hint."""
+        return self.resume_command_template.format(thread_id=thread_id)
+
+    def show_welcome_message(self):
+        """Display welcome message for interactive mode."""
+        if self.first_message:
+            self.console.print(Panel.fit(self._banner()))
+            self.console.print(Markdown(self._instructions()))
+
+        db_name = self.database_name or "Unknown"
         self.console.print(
-            f"[bold blue]\n\nConnected to:[/bold blue] {db_name} ({db_type})\n"
+            f"[bold blue]\n\nConnected to:[/bold blue] {db_name} ({self._db_type_name()})\n"
         )
-        # If resuming a thread, show a notice
+
         if self._thread_id:
             self.console.print(f"[dim]Resuming thread:[/dim] {self._thread_id}\n")
 
-    async def _end_thread_and_display_resume_hint(self):
-        """End thread and display command to resume thread"""
-        # Print resume hint if there is an active thread
+    async def _end_thread(self):
+        """End thread and display resume hint."""
         if self._thread_id:
             await self._threads.end_thread(self._thread_id)
             self.console.print(
-                f"[dim]You can continue this thread using:[/dim] saber threads resume {self._thread_id}"
+                f"[dim]You can continue this thread using:[/dim] {self._resume_hint(self._thread_id)}"
             )
+
+    async def _handle_memory(self, content: str):
+        """Handle memory addition command."""
+        if not content:
+            self.console.print("[yellow]Empty memory content after '#'[/yellow]\n")
+            return
+
+        try:
+            mm = self.sqlsaber_agent.memory_manager
+            if mm and self.database_name:
+                memory = mm.add_memory(self.database_name, content)
+                self.console.print(f"[green]✓ Memory added:[/green] {content}")
+                self.console.print(f"[dim]Memory ID: {memory.id}[/dim]\n")
+            else:
+                self.console.print(
+                    "[yellow]Could not add memory (no database context)[/yellow]\n"
+                )
+        except Exception as exc:
+            self.console.print(f"[yellow]Could not add memory:[/yellow] {exc}\n")
+
+    async def _cmd_clear(self):
+        """Clear conversation history."""
+        self.message_history = []
+        try:
+            if self._thread_id:
+                await self._threads.end_thread(self._thread_id)
+        except Exception:
+            pass
+        self.console.print("[green]Conversation history cleared.[/green]\n")
+        self._thread_id = None
+        self.first_message = True
+
+    async def _cmd_thinking_on(self):
+        """Enable thinking mode."""
+        self.sqlsaber_agent.set_thinking(enabled=True)
+        self.console.print("[green]✓ Thinking enabled[/green]\n")
+
+    async def _cmd_thinking_off(self):
+        """Disable thinking mode."""
+        self.sqlsaber_agent.set_thinking(enabled=False)
+        self.console.print("[green]✓ Thinking disabled[/green]\n")
+
+    async def _handle_command(self, user_query: str) -> bool:
+        """Handle slash commands. Returns True if command was handled."""
+        if user_query == "/clear":
+            await self._cmd_clear()
+            return True
+        if user_query == "/thinking on":
+            await self._cmd_thinking_on()
+            return True
+        if user_query == "/thinking off":
+            await self._cmd_thinking_off()
+            return True
+        return False
 
     async def _update_table_cache(self):
         """Update the table completer cache with fresh data."""
@@ -169,6 +235,10 @@ class InteractiveSession:
         except Exception:
             # If there's an error, just use empty cache
             self.table_completer.update_cache([])
+
+    async def before_prompt_loop(self):
+        """Hook to refresh context before prompt loop."""
+        await self._update_table_cache()
 
     async def _execute_query_with_cancellation(self, user_query: str):
         """Execute a query with cancellation support."""
@@ -207,6 +277,7 @@ class InteractiveSession:
                             title=user_query,
                             model_name=self.sqlsaber_agent.agent.model.model_name,
                         )
+                        self.first_message = False
                 except Exception:
                     pass
                 finally:
@@ -218,15 +289,9 @@ class InteractiveSession:
     async def run(self):
         """Run the interactive session loop."""
         self.show_welcome_message()
+        await self.before_prompt_loop()
 
-        # Initialize table cache
-        await self._update_table_cache()
-
-        session = PromptSession(
-            history=FileHistory(
-                Path(platformdirs.user_config_dir("sqlsaber")) / "history"
-            )
-        )
+        session = PromptSession(history=FileHistory(self._history_path()))
 
         while True:
             try:
@@ -238,81 +303,32 @@ class InteractiveSession:
                             SlashCommandCompleter(), self.table_completer
                         ),
                         show_frame=True,
-                        bottom_toolbar=bottom_toolbar,
-                        style=style,
+                        bottom_toolbar=self._bottom_toolbar,
+                        style=self._prompt_style(),
                     )
 
                 if not user_query:
                     continue
 
-                if (
-                    user_query in ["/exit", "/quit", "exit", "quit"]
-                    or user_query.startswith("/exit")
-                    or user_query.startswith("/quit")
+                # Handle exit commands
+                if user_query in self.exit_commands or any(
+                    user_query.startswith(cmd) for cmd in self.exit_commands
                 ):
-                    await self._end_thread_and_display_resume_hint()
+                    await self._end_thread()
                     break
 
-                if user_query == "/clear":
-                    # Reset local history (pydantic-ai call will receive empty history on next run)
-                    self.message_history = []
-                    # End current thread (if any) so the next turn creates a fresh one
-                    try:
-                        if self._thread_id:
-                            await self._threads.end_thread(self._thread_id)
-                    except Exception:
-                        pass
-                    self.console.print("[green]Conversation history cleared.[/green]\n")
-                    # Do not print resume hint when clearing; a new thread will be created on next turn
-                    self._thread_id = None
+                # Handle slash commands
+                if await self._handle_command(user_query):
                     continue
 
-                # Thinking commands
-                if user_query == "/thinking on":
-                    self.sqlsaber_agent.set_thinking(enabled=True)
-                    self.console.print("[green]✓ Thinking enabled[/green]\n")
+                # Handle memory addition
+                if user_query.strip().startswith("#"):
+                    await self._handle_memory(user_query.strip()[1:].strip())
                     continue
 
-                if user_query == "/thinking off":
-                    self.sqlsaber_agent.set_thinking(enabled=False)
-                    self.console.print("[green]✓ Thinking disabled[/green]\n")
-                    continue
-
-                if memory_text := user_query.strip():
-                    # Check if query starts with # for memory addition
-                    if memory_text.startswith("#"):
-                        memory_content = memory_text[1:].strip()  # Remove # and trim
-                        if memory_content:
-                            # Add memory via the agent's memory manager
-                            try:
-                                mm = self.sqlsaber_agent.memory_manager
-                                if mm and self.database_name:
-                                    memory = mm.add_memory(
-                                        self.database_name, memory_content
-                                    )
-                                    self.console.print(
-                                        f"[green]✓ Memory added:[/green] {memory_content}"
-                                    )
-                                    self.console.print(
-                                        f"[dim]Memory ID: {memory.id}[/dim]\n"
-                                    )
-                                else:
-                                    self.console.print(
-                                        "[yellow]Could not add memory (no database context)[/yellow]\n"
-                                    )
-                            except Exception:
-                                self.console.print(
-                                    "[yellow]Could not add memory[/yellow]\n"
-                                )
-                        else:
-                            self.console.print(
-                                "[yellow]Empty memory content after '#'[/yellow]\n"
-                            )
-                        continue
-
-                    # Execute query with cancellation support
-                    await self._execute_query_with_cancellation(user_query)
-                    self.display.show_newline()  # Empty line for readability
+                # Execute query with cancellation support
+                await self._execute_query_with_cancellation(user_query)
+                self.display.show_newline()
 
             except KeyboardInterrupt:
                 # Handle Ctrl+C - cancel current task if running
@@ -331,7 +347,7 @@ class InteractiveSession:
                     )
             except EOFError:
                 # Exit when Ctrl+D is pressed
-                await self._end_thread_and_display_resume_hint()
+                await self._end_thread()
                 break
-            except Exception as e:
-                self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
+            except Exception as exc:
+                self.console.print(f"[bold red]Error:[/bold red] {exc}")
