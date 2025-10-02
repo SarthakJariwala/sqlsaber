@@ -7,6 +7,17 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+### v0.27.0 - 2025-10-01
+
+#### Added
+
+- Added onboarding flow for new users
+  - If users don't have a database set up or model provider API key setup, SQLsaber will guide them through the process interactively in a frictionless and delightful manner.
+
+#### Changed
+
+- Final thinking blocks now render Markdown
+
 ### v0.26.0 - 2025-09-30
 
 #### Added
