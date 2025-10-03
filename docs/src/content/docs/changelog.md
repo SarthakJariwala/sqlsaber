@@ -7,6 +7,8 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+### v0.28.0 - 2025-10-03
+
 #### Added
 
 - Unified theming system
