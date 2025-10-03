@@ -5,13 +5,13 @@ from io import StringIO
 import aiosqlite
 import duckdb
 import pytest
-from rich.console import Console
 
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.database import CSVConnection, DuckDBConnection, SQLiteConnection
 from sqlsaber.database.duckdb import DuckDBSchemaIntrospector
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.database.sqlite import SQLiteSchemaIntrospector
+from sqlsaber.theme.manager import create_console
 
 
 class TestSchemaDisplayMappings:
@@ -129,7 +129,7 @@ class TestSchemaDisplayMappings:
 
         # Test display manager
         string_io = StringIO()
-        console = Console(file=string_io, width=120, legacy_windows=False)
+        console = create_console(file=string_io, width=120, legacy_windows=False)
         display_manager = DisplayManager(console)
 
         # This should not raise an error and should populate type information
@@ -167,7 +167,7 @@ class TestSchemaDisplayMappings:
 
         # Test display manager
         string_io = StringIO()
-        console = Console(file=string_io, width=120, legacy_windows=False)
+        console = create_console(file=string_io, width=120, legacy_windows=False)
         display_manager = DisplayManager(console)
 
         # This should not raise an error and should populate type information

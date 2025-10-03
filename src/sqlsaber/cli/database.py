@@ -8,13 +8,13 @@ from typing import Annotated
 
 import cyclopts
 import questionary
-from rich.console import Console
 from rich.table import Table
 
 from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
+from sqlsaber.theme.manager import create_console
 
 # Global instances for CLI commands
-console = Console()
+console = create_console()
 config_manager = DatabaseConfigManager()
 
 # Create the database management CLI app

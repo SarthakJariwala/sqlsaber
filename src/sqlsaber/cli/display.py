@@ -19,6 +19,8 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
+from sqlsaber.theme.manager import get_theme_manager
+
 
 class _SimpleCodeBlock(CodeBlock):
     def __rich_console__(
@@ -46,6 +48,7 @@ class LiveMarkdownRenderer:
 
     def __init__(self, console: Console):
         self.console = console
+        self.tm = get_theme_manager()
         self._live: Live | None = None
         self._status_live: Live | None = None
         self._buffer: str = ""
@@ -90,10 +93,14 @@ class LiveMarkdownRenderer:
 
         # Apply dim styling for thinking segments
         if self._current_kind == ThinkingPart:
-            content = Markdown(self._buffer, style="dim")
+            content = Markdown(
+                self._buffer, style="muted", code_theme=self.tm.pygments_style_name
+            )
             self._live.update(content)
         else:
-            self._live.update(Markdown(self._buffer))
+            self._live.update(
+                Markdown(self._buffer, code_theme=self.tm.pygments_style_name)
+            )
 
     def end(self) -> None:
         """Finalize and stop the current Live segment, if any."""
@@ -109,9 +116,13 @@ class LiveMarkdownRenderer:
         # Print the complete markdown to scroll-back for permanent reference
         if buf:
             if kind == ThinkingPart:
-                self.console.print(Markdown(buf, style="dim"))
+                self.console.print(
+                    Markdown(buf, style="muted", code_theme=self.tm.pygments_style_name)
+                )
             else:
-                self.console.print(Markdown(buf))
+                self.console.print(
+                    Markdown(buf, code_theme=self.tm.pygments_style_name)
+                )
 
     def end_if_active(self) -> None:
         self.end()
@@ -129,7 +140,7 @@ class LiveMarkdownRenderer:
         self._buffer = f"```sql\n{sql}\n```"
         # Use context manager to auto-stop and persist final render
         with Live(
-            Markdown(self._buffer),
+            Markdown(self._buffer, code_theme=self.tm.pygments_style_name),
             console=self.console,
             vertical_overflow="visible",
             refresh_per_second=12,
@@ -159,8 +170,8 @@ class LiveMarkdownRenderer:
         self._status_live = None
 
     def _status_renderable(self, message: str):
-        spinner = Spinner("dots", style="yellow")
-        text = Text(f" {message}", style="yellow")
+        spinner = Spinner("dots", style=self.tm.style("spinner"))
+        text = Text(f" {message}", style=self.tm.style("status"))
         return Columns([spinner, text], expand=False)
 
     def _start(
@@ -173,14 +184,14 @@ class LiveMarkdownRenderer:
         # Add visual styling for thinking segments
         if kind == ThinkingPart:
             if self.console.is_terminal:
-                self.console.print("[dim]💭 Thinking...[/dim]")
+                self.console.print("[muted]💭 Thinking...[/muted]")
             else:
                 self.console.print("*Thinking...*\n")
 
         # NOTE: Use transient=True so the live widget disappears on exit,
         # giving a clean transition to the final printed result.
         live = Live(
-            Markdown(self._buffer),
+            Markdown(self._buffer, code_theme=self.tm.pygments_style_name),
             console=self.console,
             transient=True,
             refresh_per_second=12,
@@ -195,14 +206,16 @@ class DisplayManager:
     def __init__(self, console: Console):
         self.console = console
         self.live = LiveMarkdownRenderer(console)
+        self.tm = get_theme_manager()
 
     def _create_table(
         self,
         columns: Sequence[str | dict[str, str]],
-        header_style: str = "bold blue",
+        header_style: str | None = None,
         title: str | None = None,
     ) -> Table:
         """Create a Rich table with specified columns."""
+        header_style = header_style or self.tm.style("table.header")
         table = Table(show_header=True, header_style=header_style, title=title)
         for col in columns:
             if isinstance(col, dict):
@@ -220,7 +233,7 @@ class DisplayManager:
         if tool_name == "list_tables":
             if self.console.is_terminal:
                 self.console.print(
-                    "[dim bold]:gear: Discovering available tables[/dim bold]"
+                    "[muted bold]:gear: Discovering available tables[/muted bold]"
                 )
             else:
                 self.console.print("**Discovering available tables**\n")
@@ -228,7 +241,7 @@ class DisplayManager:
             pattern = tool_input.get("table_pattern", "all tables")
             if self.console.is_terminal:
                 self.console.print(
-                    f"[dim bold]:gear: Examining schema for: {pattern}[/dim bold]"
+                    f"[muted bold]:gear: Examining schema for: {pattern}[/muted bold]"
                 )
             else:
                 self.console.print(f"**Examining schema for:** {pattern}\n")
@@ -237,10 +250,14 @@ class DisplayManager:
             # rendering for threads show/resume. Controlled by include_sql flag.
             query = tool_input.get("query", "")
             if self.console.is_terminal:
-                self.console.print("[dim bold]:gear: Executing SQL:[/dim bold]")
+                self.console.print("[muted bold]:gear: Executing SQL:[/muted bold]")
                 self.show_newline()
                 syntax = Syntax(
-                    query, "sql", background_color="default", word_wrap=True
+                    query,
+                    "sql",
+                    theme=self.tm.pygments_style_name,
+                    background_color="default",
+                    word_wrap=True,
                 )
                 self.console.print(syntax)
             else:
@@ -258,9 +275,7 @@ class DisplayManager:
             return
 
         if self.console.is_terminal:
-            self.console.print(
-                f"\n[bold magenta]Results ({len(results)} rows):[/bold magenta]"
-            )
+            self.console.print(f"\n[section]Results ({len(results)} rows):[/section]")
         else:
             self.console.print(f"\n**Results ({len(results)} rows):**\n")
 
@@ -272,7 +287,7 @@ class DisplayManager:
         if len(all_columns) > 15:
             if self.console.is_terminal:
                 self.console.print(
-                    f"[yellow]Note: Showing first 15 of {len(all_columns)} columns[/yellow]"
+                    f"[warning]Note: Showing first 15 of {len(all_columns)} columns[/warning]"
                 )
             else:
                 self.console.print(
@@ -290,21 +305,21 @@ class DisplayManager:
         if len(results) > 20:
             if self.console.is_terminal:
                 self.console.print(
-                    f"[yellow]... and {len(results) - 20} more rows[/yellow]"
+                    f"[warning]... and {len(results) - 20} more rows[/warning]"
                 )
             else:
                 self.console.print(f"*... and {len(results) - 20} more rows*\n")
 
     def show_error(self, error_message: str):
         """Display error message."""
-        self.console.print(f"\n[bold red]Error:[/bold red] {error_message}")
+        self.console.print(f"\n[error]Error:[/error] {error_message}")
 
     def show_sql_error(self, error_message: str, suggestions: list[str] | None = None):
         """Display SQL-specific error with optional suggestions."""
         self.show_newline()
-        self.console.print(f"[bold red]SQL error:[/bold red] {error_message}")
+        self.console.print(f"[error]SQL error:[/error] {error_message}")
         if suggestions:
-            self.console.print("[yellow]Hints:[/yellow]")
+            self.console.print("[warning]Hints:[/warning]")
             for suggestion in suggestions:
                 self.console.print(f"  • {suggestion}")
 
@@ -312,7 +327,7 @@ class DisplayManager:
         """Display processing message."""
         self.console.print()  # Add newline
         return self.console.status(
-            f"[yellow]{message}[/yellow]", spinner="bouncingBall"
+            f"[status]{message}[/status]", spinner="bouncingBall"
         )
 
     def show_newline(self):
@@ -335,18 +350,20 @@ class DisplayManager:
             total_tables = data.get("total_tables", 0)
 
             if not tables:
-                self.console.print("[yellow]No tables found in the database.[/yellow]")
+                self.console.print(
+                    "[warning]No tables found in the database.[/warning]"
+                )
                 return
 
             self.console.print(
-                f"\n[bold green]Database Tables ({total_tables} total):[/bold green]"
+                f"\n[title]Database Tables ({total_tables} total):[/title]"
             )
 
             # Create a rich table for displaying table information
             columns = [
-                {"name": "Schema", "style": "cyan"},
-                {"name": "Table Name", "style": "white"},
-                {"name": "Type", "style": "yellow"},
+                {"name": "Schema", "style": "column.schema"},
+                {"name": "Table Name", "style": "column.name"},
+                {"name": "Type", "style": "column.type"},
             ]
             table = self._create_table(columns)
 
@@ -378,26 +395,26 @@ class DisplayManager:
                 return
 
             if not data:
-                self.console.print("[yellow]No schema information found.[/yellow]")
+                self.console.print("[warning]No schema information found.[/warning]")
                 return
 
             self.console.print(
-                f"\n[bold green]Schema Information ({len(data)} tables):[/bold green]"
+                f"\n[title]Schema Information ({len(data)} tables):[/title]"
             )
 
             # Display each table's schema
             for table_name, table_info in data.items():
-                self.console.print(f"\n[bold cyan]Table: {table_name}[/bold cyan]")
+                self.console.print(f"\n[heading]Table: {table_name}[/heading]")
 
                 # Show columns
                 table_columns = table_info.get("columns", {})
                 if table_columns:
                     # Create a table for columns
                     columns = [
-                        {"name": "Column Name", "style": "white"},
-                        {"name": "Type", "style": "yellow"},
-                        {"name": "Nullable", "style": "cyan"},
-                        {"name": "Default", "style": "dim"},
+                        {"name": "Column Name", "style": "column.name"},
+                        {"name": "Type", "style": "column.type"},
+                        {"name": "Nullable", "style": "info"},
+                        {"name": "Default", "style": "muted"},
                     ]
                     col_table = self._create_table(columns, title="Columns")
 
@@ -418,20 +435,20 @@ class DisplayManager:
                 primary_keys = table_info.get("primary_keys", [])
                 if primary_keys:
                     self.console.print(
-                        f"[bold yellow]Primary Keys:[/bold yellow] {', '.join(primary_keys)}"
+                        f"[key.primary]Primary Keys:[/key.primary] {', '.join(primary_keys)}"
                     )
 
                 # Show foreign keys
                 foreign_keys = table_info.get("foreign_keys", [])
                 if foreign_keys:
-                    self.console.print("[bold magenta]Foreign Keys:[/bold magenta]")
+                    self.console.print("[key.foreign]Foreign Keys:[/key.foreign]")
                     for fk in foreign_keys:
                         self.console.print(f"  • {fk}")
 
                 # Show indexes
                 indexes = table_info.get("indexes", [])
                 if indexes:
-                    self.console.print("[bold blue]Indexes:[/bold blue]")
+                    self.console.print("[key.index]Indexes:[/key.index]")
                     for idx in indexes:
                         self.console.print(f"  • {idx}")
 
@@ -457,7 +474,9 @@ class DisplayManager:
         full_text = "".join(text_parts).strip()
         if full_text:
             self.console.print()  # Add spacing before panel
-            markdown = Markdown(full_text)
-            panel = Panel.fit(markdown, border_style="green")
+            markdown = Markdown(full_text, code_theme=self.tm.pygments_style_name)
+            panel = Panel.fit(
+                markdown, border_style=self.tm.style("panel.border.assistant")
+            )
             self.console.print(panel)
             self.console.print()  # Add spacing after panel

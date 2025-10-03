@@ -9,7 +9,6 @@ import platformdirs
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.patch_stdout import patch_stdout
-from prompt_toolkit.styles import Style
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -29,6 +28,7 @@ from sqlsaber.database import (
     SQLiteConnection,
 )
 from sqlsaber.database.schema import SchemaManager
+from sqlsaber.theme.manager import get_theme_manager
 from sqlsaber.threads import ThreadStorage
 
 if TYPE_CHECKING:
@@ -61,6 +61,7 @@ class InteractiveSession:
         self.cancellation_token: asyncio.Event | None = None
         self.table_completer = TableNameCompleter()
         self.message_history: list | None = initial_history or []
+        self.tm = get_theme_manager()
         # Conversation Thread persistence
         self._threads = ThreadStorage()
         self._thread_id: str | None = initial_thread_id
@@ -71,15 +72,6 @@ class InteractiveSession:
         history_dir = Path(platformdirs.user_config_dir("sqlsaber"))
         history_dir.mkdir(parents=True, exist_ok=True)
         return history_dir / "history"
-
-    def _prompt_style(self) -> Style:
-        """Get the prompt style configuration."""
-        return Style.from_dict(
-            {
-                "frame.border": "gray",
-                "bottom-toolbar": "white bg:#21202e",
-            }
-        )
 
     def _bottom_toolbar(self):
         """Get the bottom toolbar text."""
@@ -136,38 +128,38 @@ class InteractiveSession:
 
         db_name = self.database_name or "Unknown"
         self.console.print(
-            f"[bold blue]\n\nConnected to:[/bold blue] {db_name} ({self._db_type_name()})\n"
+            f"[heading]\n\nConnected to:[/heading] {db_name} ({self._db_type_name()})\n"
         )
 
         if self._thread_id:
-            self.console.print(f"[dim]Resuming thread:[/dim] {self._thread_id}\n")
+            self.console.print(f"[muted]Resuming thread:[/muted] {self._thread_id}\n")
 
     async def _end_thread(self):
         """End thread and display resume hint."""
         if self._thread_id:
             await self._threads.end_thread(self._thread_id)
             self.console.print(
-                f"[dim]You can continue this thread using:[/dim] {self._resume_hint(self._thread_id)}"
+                f"[muted]You can continue this thread using:[/muted] {self._resume_hint(self._thread_id)}"
             )
 
     async def _handle_memory(self, content: str):
         """Handle memory addition command."""
         if not content:
-            self.console.print("[yellow]Empty memory content after '#'[/yellow]\n")
+            self.console.print("[warning]Empty memory content after '#'[/warning]\n")
             return
 
         try:
             mm = self.sqlsaber_agent.memory_manager
             if mm and self.database_name:
                 memory = mm.add_memory(self.database_name, content)
-                self.console.print(f"[green]✓ Memory added:[/green] {content}")
-                self.console.print(f"[dim]Memory ID: {memory.id}[/dim]\n")
+                self.console.print(f"[success]✓ Memory added:[/success] {content}")
+                self.console.print(f"[muted]Memory ID: {memory.id}[/muted]\n")
             else:
                 self.console.print(
-                    "[yellow]Could not add memory (no database context)[/yellow]\n"
+                    "[warning]Could not add memory (no database context)[/warning]\n"
                 )
         except Exception as exc:
-            self.console.print(f"[yellow]Could not add memory:[/yellow] {exc}\n")
+            self.console.print(f"[warning]Could not add memory:[/warning] {exc}\n")
 
     async def _cmd_clear(self):
         """Clear conversation history."""
@@ -177,19 +169,19 @@ class InteractiveSession:
                 await self._threads.end_thread(self._thread_id)
         except Exception:
             pass
-        self.console.print("[green]Conversation history cleared.[/green]\n")
+        self.console.print("[success]Conversation history cleared.[/success]\n")
         self._thread_id = None
         self.first_message = True
 
     async def _cmd_thinking_on(self):
         """Enable thinking mode."""
         self.sqlsaber_agent.set_thinking(enabled=True)
-        self.console.print("[green]✓ Thinking enabled[/green]\n")
+        self.console.print("[success]✓ Thinking enabled[/success]\n")
 
     async def _cmd_thinking_off(self):
         """Disable thinking mode."""
         self.sqlsaber_agent.set_thinking(enabled=False)
-        self.console.print("[green]✓ Thinking disabled[/green]\n")
+        self.console.print("[success]✓ Thinking disabled[/success]\n")
 
     async def _handle_command(self, user_query: str) -> bool:
         """Handle slash commands. Returns True if command was handled."""
@@ -297,14 +289,13 @@ class InteractiveSession:
             try:
                 with patch_stdout():
                     user_query = await session.prompt_async(
-                        "",
+                        "> ",
                         multiline=True,
                         completer=CompositeCompleter(
                             SlashCommandCompleter(), self.table_completer
                         ),
-                        show_frame=True,
                         bottom_toolbar=self._bottom_toolbar,
-                        style=self._prompt_style(),
+                        style=self.tm.pt_style(),
                     )
 
                 if not user_query:
@@ -340,14 +331,14 @@ class InteractiveSession:
                         await self.current_task
                     except asyncio.CancelledError:
                         pass
-                    self.console.print("\n[yellow]Query interrupted[/yellow]")
+                    self.console.print("\n[warning]Query interrupted[/warning]")
                 else:
                     self.console.print(
-                        "\n[yellow]Press Ctrl+D to exit. Or use '/exit' or '/quit' slash command.[/yellow]"
+                        "\n[warning]Press Ctrl+D to exit. Or use '/exit' or '/quit' slash command.[/warning]"
                     )
             except EOFError:
                 # Exit when Ctrl+D is pressed
                 await self._end_thread()
                 break
             except Exception as exc:
-                self.console.print(f"[bold red]Error:[/bold red] {exc}")
+                self.console.print(f"[error]Error:[/error] {exc}")

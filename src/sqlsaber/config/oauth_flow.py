@@ -10,12 +10,13 @@ from datetime import datetime, timezone
 
 import httpx
 import questionary
-from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
+
+from sqlsaber.theme.manager import create_console
 
 from .oauth_tokens import OAuthToken, OAuthTokenManager
 
-console = Console()
+console = create_console()
 logger = logging.getLogger(__name__)
 
 

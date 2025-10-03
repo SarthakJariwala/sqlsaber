@@ -3,15 +3,15 @@
 import asyncio
 
 from questionary import Choice
-from rich.console import Console
 
 from sqlsaber.application.prompts import Prompter
 from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
 from sqlsaber.config.auth import AuthConfigManager, AuthMethod
 from sqlsaber.config.oauth_flow import AnthropicOAuthFlow
+from sqlsaber.theme.manager import create_console
 
-console = Console()
+console = create_console()
 
 
 async def select_provider(prompter: Prompter, default: str = "anthropic") -> str | None:

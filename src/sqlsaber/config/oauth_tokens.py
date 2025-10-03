@@ -6,9 +6,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import keyring
-from rich.console import Console
 
-console = Console()
+from sqlsaber.theme.manager import create_console
+
+console = create_console()
 logger = logging.getLogger(__name__)
 
 
@@ -157,9 +158,6 @@ class OAuthTokenManager:
         try:
             keyring.delete_password(service_name, provider)
             console.print(f"OAuth token for {provider} removed", style="green")
-            return True
-        except keyring.errors.PasswordDeleteError:
-            # Token doesn't exist
             return True
         except Exception as e:
             logger.error(f"Failed to remove OAuth token for {provider}: {e}")

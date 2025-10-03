@@ -4,12 +4,11 @@ import getpass
 from dataclasses import dataclass
 from pathlib import Path
 
-from rich.console import Console
-
 from sqlsaber.application.prompts import Prompter
 from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
+from sqlsaber.theme.manager import create_console
 
-console = Console()
+console = create_console()
 
 
 @dataclass

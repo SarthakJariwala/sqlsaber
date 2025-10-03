@@ -12,10 +12,12 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from sqlsaber.theme.manager import create_console, get_theme_manager
 from sqlsaber.threads import ThreadStorage
 
 # Globals consistent with other CLI modules
-console = Console()
+console = create_console()
+tm = get_theme_manager()
 
 
 threads_app = cyclopts.App(
@@ -84,13 +86,23 @@ def _render_transcript(
                         console.print(f"**User:**\n\n{text}\n")
                     else:
                         console.print(
-                            Panel.fit(Markdown(text), title="User", border_style="cyan")
+                            Panel.fit(
+                                Markdown(text, code_theme=tm.pygments_style_name),
+                                title="User",
+                                border_style=tm.style("panel.border.user"),
+                            )
                         )
                     return
         if is_redirected:
             console.print("**User:** (no content)\n")
         else:
-            console.print(Panel.fit("(no content)", title="User", border_style="cyan"))
+            console.print(
+                Panel.fit(
+                    "(no content)",
+                    title="User",
+                    border_style=tm.style("panel.border.user"),
+                )
+            )
 
     def _render_response(message: ModelMessage) -> None:
         for part in getattr(message, "parts", []):
@@ -103,7 +115,9 @@ def _render_transcript(
                     else:
                         console.print(
                             Panel.fit(
-                                Markdown(text), title="Assistant", border_style="green"
+                                Markdown(text, code_theme=tm.pygments_style_name),
+                                title="Assistant",
+                                border_style=tm.style("panel.border.assistant"),
                             )
                         )
             elif kind in ("tool-call", "builtin-tool-call"):
@@ -211,11 +225,11 @@ def list_threads(
         console.print("No threads found.")
         return
     table = Table(title="Threads")
-    table.add_column("ID", style="cyan")
-    table.add_column("Database", style="magenta")
-    table.add_column("Title", style="green")
-    table.add_column("Last Activity", style="dim")
-    table.add_column("Model", style="yellow")
+    table.add_column("ID", style=tm.style("info"))
+    table.add_column("Database", style=tm.style("accent"))
+    table.add_column("Title", style=tm.style("success"))
+    table.add_column("Last Activity", style=tm.style("muted"))
+    table.add_column("Model", style=tm.style("warning"))
     for t in threads:
         table.add_row(
             t.id,
@@ -235,7 +249,7 @@ def show(
     store = ThreadStorage()
     thread = asyncio.run(store.get_thread(thread_id))
     if not thread:
-        console.print(f"[red]Thread not found:[/red] {thread_id}")
+        console.print(f"[error]Thread not found:[/error] {thread_id}")
         return
     msgs = asyncio.run(store.get_thread_messages(thread_id))
     console.print(f"[bold]Thread: {thread.id}[/bold]")
@@ -273,12 +287,12 @@ def resume(
 
         thread = await store.get_thread(thread_id)
         if not thread:
-            console.print(f"[red]Thread not found:[/red] {thread_id}")
+            console.print(f"[error]Thread not found:[/error] {thread_id}")
             return
         db_selector = database or thread.database_name
         if not db_selector:
             console.print(
-                "[red]No database specified or stored with this thread.[/red]"
+                "[error]No database specified or stored with this thread.[/error]"
             )
             return
         try:
@@ -287,7 +301,7 @@ def resume(
             connection_string = resolved.connection_string
             db_name = resolved.name
         except DatabaseResolutionError as e:
-            console.print(f"[red]Database resolution error:[/red] {e}")
+            console.print(f"[error]Database resolution error:[/error] {e}")
             return
 
         db_conn = DatabaseConnection(connection_string)
@@ -295,7 +309,12 @@ def resume(
             sqlsaber_agent = SQLSaberAgent(db_conn, db_name)
             history = await store.get_thread_messages(thread_id)
             if console.is_terminal:
-                console.print(Panel.fit(f"Thread: {thread.id}", border_style="blue"))
+                console.print(
+                    Panel.fit(
+                        f"Thread: {thread.id}",
+                        border_style=tm.style("panel.border.thread"),
+                    )
+                )
             else:
                 console.print(f"# Thread: {thread.id}\n")
             _render_transcript(console, history, None)
@@ -310,7 +329,7 @@ def resume(
             await session.run()
         finally:
             await db_conn.close()
-            console.print("\n[green]Goodbye![/green]")
+            console.print("\n[success]Goodbye![/success]")
 
     asyncio.run(_run())
 
@@ -329,7 +348,7 @@ def prune(
 
     async def _run() -> None:
         deleted = await store.prune_threads(older_than_days=days)
-        console.print(f"[green]✓ Pruned {deleted} thread(s).[/green]")
+        console.print(f"[success]✓ Pruned {deleted} thread(s).[/success]")
 
     asyncio.run(_run())
 

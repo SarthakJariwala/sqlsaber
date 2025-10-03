@@ -170,7 +170,7 @@ class StreamingQueryHandler:
         except asyncio.CancelledError:
             # Show interruption message outside of Live
             self.display.show_newline()
-            self.console.print("[yellow]Query interrupted[/yellow]")
+            self.console.print("[warning]Query interrupted[/warning]")
             return None
         finally:
             # End any active status and live markdown segments
