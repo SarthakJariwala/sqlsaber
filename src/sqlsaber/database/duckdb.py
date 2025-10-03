@@ -52,6 +52,11 @@ class DuckDBConnection(BaseDatabaseConnection):
 
         self.database_path = db_path or ":memory:"
 
+    @property
+    def sqlglot_dialect(self) -> str:
+        """Return the sqlglot dialect name."""
+        return "duckdb"
+
     async def get_pool(self):
         """DuckDB creates connections per query, return database path."""
         return self.database_path

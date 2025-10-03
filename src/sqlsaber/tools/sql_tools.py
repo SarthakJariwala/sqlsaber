@@ -9,6 +9,7 @@ from sqlsaber.database.schema import SchemaManager
 from .base import Tool
 from .enums import ToolCategory, WorkflowPosition
 from .registry import register_tool
+from .sql_guard import add_limit, validate_read_only
 
 
 class SQLTool(Tool):
@@ -207,13 +208,17 @@ class ExecuteSQLTool(SQLTool):
         limit = kwargs.get("limit", self.DEFAULT_LIMIT)
 
         try:
-            # Security check - only allow SELECT queries unless write is enabled
-            write_error = self._validate_write_operation(query)
-            if write_error:
-                return json.dumps({"error": write_error})
+            # Get the dialect for this database
+            dialect = self.db.sqlglot_dialect
+
+            # Security check using sqlglot AST analysis
+            validation_result = validate_read_only(query, dialect)
+            if not validation_result.allowed:
+                return json.dumps({"error": validation_result.reason})
 
             # Add LIMIT if not present and it's a SELECT query
-            query = self._add_limit_to_query(query, limit)
+            if validation_result.is_select and limit:
+                query = add_limit(query, dialect, limit)
 
             # Execute the query
             results = await self.db.execute_query(query)
@@ -249,33 +254,3 @@ class ExecuteSQLTool(SQLTool):
                 )
 
             return json.dumps({"error": error_msg, "suggestions": suggestions})
-
-    def _validate_write_operation(self, query: str) -> str | None:
-        """Validate if a write operation is allowed."""
-        query_upper = query.strip().upper()
-
-        # Check for write operations
-        write_keywords = [
-            "INSERT",
-            "UPDATE",
-            "DELETE",
-            "DROP",
-            "CREATE",
-            "ALTER",
-            "TRUNCATE",
-        ]
-        is_write_query = any(query_upper.startswith(kw) for kw in write_keywords)
-
-        if is_write_query:
-            return (
-                "Write operations are not allowed. Only SELECT queries are permitted."
-            )
-
-        return None
-
-    def _add_limit_to_query(self, query: str, limit: int = 100) -> str:
-        """Add LIMIT clause to SELECT queries if not present."""
-        query_upper = query.strip().upper()
-        if query_upper.startswith("SELECT") and "LIMIT" not in query_upper:
-            return f"{query.rstrip(';')} LIMIT {limit};"
-        return query

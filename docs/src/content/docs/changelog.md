@@ -15,6 +15,15 @@ All notable changes to SQLsaber will be documented here.
     - Light themes: `solarized-light`, `vs`
   - Easy theme switching via `SQLSABER_THEME` environment variable or config file
 
+#### Changed
+
+- Enhanced read-only query validation using `sqlglot` AST analysis
+  - Improved security with comprehensive AST-based detection of write operations
+  - Blocks dangerous operations in nested queries, CTEs, and subqueries
+  - Detects dialect-specific dangerous functions (pg_read_file, LOAD_FILE, readfile, etc.)
+  - Prevents SELECT INTO, SELECT FOR UPDATE/SHARE, and multi-statement queries
+  - Dialect-aware LIMIT clause injection for Postgres, MySQL, SQLite, and DuckDB
+
 ### v0.27.0 - 2025-10-01
 
 #### Added

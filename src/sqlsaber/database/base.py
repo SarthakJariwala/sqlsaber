@@ -61,6 +61,12 @@ class BaseDatabaseConnection(ABC):
         self.connection_string = connection_string
         self._pool = None
 
+    @property
+    @abstractmethod
+    def sqlglot_dialect(self) -> str:
+        """Return the sqlglot dialect name for this database."""
+        pass
+
     @abstractmethod
     async def get_pool(self):
         """Get or create connection pool."""

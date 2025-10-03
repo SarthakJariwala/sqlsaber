@@ -21,6 +21,11 @@ class SQLiteConnection(BaseDatabaseConnection):
         # Extract database path from sqlite:///path format
         self.database_path = connection_string.replace("sqlite:///", "")
 
+    @property
+    def sqlglot_dialect(self) -> str:
+        """Return the sqlglot dialect name."""
+        return "sqlite"
+
     async def get_pool(self):
         """SQLite doesn't use connection pooling, return database path."""
         return self.database_path
