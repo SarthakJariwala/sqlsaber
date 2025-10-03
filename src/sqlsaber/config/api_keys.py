@@ -4,11 +4,11 @@ import getpass
 import os
 
 import keyring
-from rich.console import Console
 
 from sqlsaber.config import providers
+from sqlsaber.theme.manager import create_console
 
-console = Console()
+console = create_console()
 
 
 class APIKeyManager:

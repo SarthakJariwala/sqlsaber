@@ -5,15 +5,15 @@ import os
 import cyclopts
 import keyring
 import questionary
-from rich.console import Console
 
 from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
 from sqlsaber.config.auth import AuthConfigManager, AuthMethod
 from sqlsaber.config.oauth_tokens import OAuthTokenManager
+from sqlsaber.theme.manager import create_console
 
 # Global instances for CLI commands
-console = Console()
+console = create_console()
 config_manager = AuthConfigManager()
 
 # Create the authentication management CLI app

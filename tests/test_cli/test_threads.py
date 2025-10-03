@@ -154,7 +154,7 @@ class TestThreadsCLI:
                     show("nonexistent-thread")
 
                 mock_console.print.assert_called_with(
-                    "[red]Thread not found:[/red] nonexistent-thread"
+                "[error]Thread not found:[/error] nonexistent-thread"
                 )
 
     def test_show_thread_found(self, sample_threads, sample_messages):

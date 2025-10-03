@@ -6,14 +6,14 @@ import sys
 import cyclopts
 import httpx
 import questionary
-from rich.console import Console
 from rich.table import Table
 
 from sqlsaber.config import providers
 from sqlsaber.config.settings import Config
+from sqlsaber.theme.manager import create_console
 
 # Global instances for CLI commands
-console = Console()
+console = create_console()
 
 # Create the model management CLI app
 models_app = cyclopts.App(

@@ -7,6 +7,14 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+#### Added
+
+- Unified theming system
+  - 7 built-in themes with exact Pygments color matching
+    - Dark themes: `nord` (default), `dracula`, `one-dark`, `material`, `lightbulb`
+    - Light themes: `solarized-light`, `vs`
+  - Easy theme switching via `SQLSABER_THEME` environment variable or config file
+
 ### v0.27.0 - 2025-10-01
 
 #### Added

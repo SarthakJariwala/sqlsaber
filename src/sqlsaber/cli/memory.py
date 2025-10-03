@@ -5,14 +5,14 @@ from typing import Annotated
 
 import cyclopts
 import questionary
-from rich.console import Console
 from rich.table import Table
 
 from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.memory.manager import MemoryManager
+from sqlsaber.theme.manager import create_console
 
 # Global instances for CLI commands
-console = Console()
+console = create_console()
 config_manager = DatabaseConfigManager()
 memory_manager = MemoryManager()
 

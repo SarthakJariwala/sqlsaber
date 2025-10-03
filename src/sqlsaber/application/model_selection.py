@@ -1,12 +1,12 @@
 """Shared model selection logic for onboarding and CLI."""
 
 from questionary import Choice
-from rich.console import Console
 
 from sqlsaber.application.prompts import Prompter
 from sqlsaber.cli.models import ModelManager
+from sqlsaber.theme.manager import create_console
 
-console = Console()
+console = create_console()
 
 
 async def fetch_models(

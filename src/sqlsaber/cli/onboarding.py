@@ -2,15 +2,15 @@
 
 import sys
 
-from rich.console import Console
 from rich.panel import Panel
 
 from sqlsaber.cli.models import ModelManager
 from sqlsaber.config.api_keys import APIKeyManager
 from sqlsaber.config.auth import AuthConfigManager
 from sqlsaber.config.database import DatabaseConfigManager
+from sqlsaber.theme.manager import create_console
 
-console = Console()
+console = create_console()
 
 
 def needs_onboarding(database_arg: str | None = None) -> bool:

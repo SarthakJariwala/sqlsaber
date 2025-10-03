@@ -5,7 +5,6 @@ import sys
 from typing import Annotated
 
 import cyclopts
-from rich.console import Console
 
 from sqlsaber.cli.auth import create_auth_app
 from sqlsaber.cli.database import create_db_app
@@ -16,6 +15,7 @@ from sqlsaber.cli.threads import create_threads_app
 
 # Lazy imports - only import what's needed for CLI parsing
 from sqlsaber.config.database import DatabaseConfigManager
+from sqlsaber.theme.manager import create_console
 
 
 class CLIError(Exception):
@@ -37,7 +37,7 @@ app.command(create_memory_app(), name="memory")
 app.command(create_models_app(), name="models")
 app.command(create_threads_app(), name="threads")
 
-console = Console()
+console = create_console()
 config_manager = DatabaseConfigManager()
 
 
