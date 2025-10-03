@@ -23,6 +23,11 @@ class MySQLConnection(BaseDatabaseConnection):
         self._pool: aiomysql.Pool | None = None
         self._parse_connection_string()
 
+    @property
+    def sqlglot_dialect(self) -> str:
+        """Return the sqlglot dialect name."""
+        return "mysql"
+
     def _parse_connection_string(self):
         """Parse MySQL connection string into components."""
         parsed = urlparse(self.connection_string)

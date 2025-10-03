@@ -18,6 +18,7 @@ dependencies = [
     "fastmcp>=2.9.0",
     "cyclopts>=3.22.1",
     "prompt-toolkit>3.0.51",
+    "sqlglot[rs]>=27.20.0",
 ]
 
 [tool.uv]

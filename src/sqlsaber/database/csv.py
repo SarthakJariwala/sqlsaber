@@ -58,6 +58,11 @@ class CSVConnection(BaseDatabaseConnection):
 
         self.table_name = Path(self.csv_path).stem or "csv_table"
 
+    @property
+    def sqlglot_dialect(self) -> str:
+        """Return the sqlglot dialect name."""
+        return "duckdb"
+
     async def get_pool(self):
         """CSV connections do not maintain a pool."""
         return None

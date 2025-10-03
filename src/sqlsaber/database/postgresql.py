@@ -23,6 +23,11 @@ class PostgreSQLConnection(BaseDatabaseConnection):
         self._pool: asyncpg.Pool | None = None
         self._ssl_context = self._create_ssl_context()
 
+    @property
+    def sqlglot_dialect(self) -> str:
+        """Return the sqlglot dialect name."""
+        return "postgres"
+
     def _create_ssl_context(self) -> ssl.SSLContext | None:
         """Create SSL context from connection string parameters."""
         parsed = urlparse(self.connection_string)

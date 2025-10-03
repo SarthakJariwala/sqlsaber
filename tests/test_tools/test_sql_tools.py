@@ -195,7 +195,7 @@ class TestExecuteSQLTool:
             result = await tool.execute(query=query)
             data = json.loads(result)
             assert "error" in data
-            assert "write operations are not allowed" in data["error"].lower()
+            assert "only select" in data["error"].lower()
 
     @pytest.mark.asyncio
     async def test_error_handling(self):
