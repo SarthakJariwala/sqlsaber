@@ -11,6 +11,7 @@ from sqlsaber.cli.database import create_db_app
 from sqlsaber.cli.memory import create_memory_app
 from sqlsaber.cli.models import create_models_app
 from sqlsaber.cli.onboarding import needs_onboarding, run_onboarding
+from sqlsaber.cli.theme import create_theme_app
 from sqlsaber.cli.threads import create_threads_app
 
 # Lazy imports - only import what's needed for CLI parsing
@@ -35,6 +36,7 @@ app.command(create_auth_app(), name="auth")
 app.command(create_db_app(), name="db")
 app.command(create_memory_app(), name="memory")
 app.command(create_models_app(), name="models")
+app.command(create_theme_app(), name="theme")
 app.command(create_threads_app(), name="threads")
 
 console = create_console()
