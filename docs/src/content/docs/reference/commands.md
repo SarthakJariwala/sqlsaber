@@ -310,6 +310,39 @@ saber models reset
 
 ---
 
+### `saber theme`
+
+Manage syntax highlighting theme settings.
+
+#### `saber theme set`
+
+Interactively select a syntax highlighting theme from all available Pygments themes.
+
+**Usage:**
+
+```bash
+saber theme set
+```
+
+You can also set themes via environment variable:
+
+```bash
+export SQLSABER_THEME=dracula
+saber
+```
+
+#### `saber theme reset`
+
+Reset to the default theme (nord).
+
+**Usage:**
+
+```bash
+saber theme reset
+```
+
+---
+
 ### `saber threads`
 
 Manage conversation threads.

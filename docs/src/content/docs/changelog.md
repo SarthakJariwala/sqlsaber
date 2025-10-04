@@ -7,6 +7,14 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+#### Added
+
+- Theme management commands
+  - `saber theme set` - Interactively select from all available Pygments themes with searchable list
+  - `saber theme reset` - Reset to default theme (nord)
+  - Theme configuration persists across sessions
+  - Environment variable `SQLSABER_THEME` can override configured theme
+
 #### Changed
 
 - Theme manager now derives semantic colors directly from selected Pygments styles, enabling out-of-the-box support for any upstream theme while retaining user overrides and fallbacks.

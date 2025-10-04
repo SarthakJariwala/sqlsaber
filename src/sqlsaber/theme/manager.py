@@ -1,7 +1,7 @@
 """Theme management for unified theming across Rich and prompt_toolkit."""
 
+import json
 import os
-import tomllib
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Dict
@@ -131,11 +131,11 @@ def _build_role_palette_from_style(style_name: str) -> dict[str, str]:
 def _load_user_theme_config() -> dict:
     """Load theme configuration from user config directory."""
     cfg_dir = user_config_dir("sqlsaber")
-    path = os.path.join(cfg_dir, "theme.toml")
+    path = os.path.join(cfg_dir, "theme.json")
     if not os.path.exists(path):
         return {}
-    with open(path, "rb") as f:
-        return tomllib.load(f)
+    with open(path, "r") as f:
+        return json.load(f)
 
 
 def _resolve_refs(palette: dict[str, str]) -> dict[str, str]:
