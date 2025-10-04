@@ -7,6 +7,10 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+#### Changed
+
+- Theme manager now derives semantic colors directly from selected Pygments styles, enabling out-of-the-box support for any upstream theme while retaining user overrides and fallbacks.
+
 ### v0.28.0 - 2025-10-03
 
 #### Added

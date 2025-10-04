@@ -10,6 +10,8 @@ from platformdirs import user_config_dir
 from prompt_toolkit.styles import Style as PTStyle
 from prompt_toolkit.styles.pygments import style_from_pygments_cls
 from pygments.styles import get_style_by_name
+from pygments.token import Token
+from pygments.util import ClassNotFound
 from rich.console import Console
 from rich.theme import Theme
 
@@ -43,79 +45,87 @@ DEFAULT_ROLE_PALETTE = {
     "title": "bold $success",
 }
 
-# Theme presets using exact Pygments colors
-THEME_PRESETS = {
-    # Nord - exact colors from pygments nord theme
-    "nord": {
-        "primary": "#81a1c1",  # Keyword (frost)
-        "accent": "#b48ead",  # Number (aurora purple)
-        "success": "#a3be8c",  # String (aurora green)
-        "warning": "#ebcb8b",  # String.Escape (aurora yellow)
-        "error": "#bf616a",  # Error/Generic.Error (aurora red)
-        "info": "#88c0d0",  # Name.Function (frost cyan)
-        "muted": "dim",
-    },
-    # Dracula - exact colors from pygments dracula theme
-    "dracula": {
-        "primary": "#bd93f9",  # purple
-        "accent": "#ff79c6",  # pink
-        "success": "#50fa7b",  # green
-        "warning": "#f1fa8c",  # yellow
-        "error": "#ff5555",  # red
-        "info": "#8be9fd",  # cyan
-        "muted": "dim",
-    },
-    # Solarized Light - exact colors from pygments solarized-light theme
-    "solarized-light": {
-        "primary": "#268bd2",  # blue
-        "accent": "#d33682",  # magenta
-        "success": "#859900",  # green
-        "warning": "#b58900",  # yellow
-        "error": "#dc322f",  # red
-        "info": "#2aa198",  # cyan
-        "muted": "dim",
-    },
-    # VS (Visual Studio Light) - exact colors from pygments vs theme
-    "vs": {
-        "primary": "#0000ff",  # Keyword (blue)
-        "accent": "#2b91af",  # Keyword.Type/Name.Class
-        "success": "#008000",  # Comment (green)
-        "warning": "#b58900",  # (using solarized yellow as fallback)
-        "error": "#dc322f",  # (using solarized red as fallback)
-        "info": "#2aa198",  # (using solarized cyan as fallback)
-        "muted": "dim",
-    },
-    # Material (approximation based on material design colors)
-    "material": {
-        "primary": "#89ddff",  # cyan
-        "accent": "#f07178",  # pink/red
-        "success": "#c3e88d",  # green
-        "warning": "#ffcb6b",  # yellow
-        "error": "#ff5370",  # red
-        "info": "#82aaff",  # blue
-        "muted": "dim",
-    },
-    # One Dark - exact colors from pygments one-dark theme
-    "one-dark": {
-        "primary": "#c678dd",  # Keyword (purple)
-        "accent": "#e06c75",  # Name (red)
-        "success": "#98c379",  # String (green)
-        "warning": "#e5c07b",  # Keyword.Type (yellow)
-        "error": "#e06c75",  # Name (red, used for errors)
-        "info": "#61afef",  # Name.Function (blue)
-        "muted": "dim",
-    },
-    # Lightbulb - exact colors from pygments lightbulb theme (minimal dark)
-    "lightbulb": {
-        "primary": "#73d0ff",  # Keyword.Type/Name.Class (blue_1)
-        "accent": "#dfbfff",  # Number (magenta_1)
-        "success": "#d5ff80",  # String (green_1)
-        "warning": "#ffd173",  # Name.Function (yellow_1)
-        "error": "#f88f7f",  # Error (red_1)
-        "info": "#95e6cb",  # Name.Entity (cyan_1)
-        "muted": "dim",
-    },
+ROLE_TOKEN_PREFERENCES: dict[str, tuple] = {
+    "primary": (
+        Token.Keyword,
+        Token.Keyword.Namespace,
+        Token.Name.Tag,
+    ),
+    "accent": (
+        Token.Name.Tag,
+        Token.Keyword.Type,
+        Token.Literal.Number,
+        Token.Operator.Word,
+    ),
+    "success": (
+        Token.Literal.String,
+        Token.Generic.Inserted,
+        Token.Name.Attribute,
+    ),
+    "warning": (
+        Token.Literal.String.Escape,
+        Token.Name.Constant,
+        Token.Generic.Emph,
+    ),
+    "error": (
+        Token.Error,
+        Token.Generic.Error,
+        Token.Generic.Deleted,
+        Token.Name.Exception,
+    ),
+    "info": (
+        Token.Name.Function,
+        Token.Name.Builtin,
+        Token.Keyword.Type,
+    ),
+    "muted": (
+        Token.Comment,
+        Token.Generic.Subheading,
+        Token.Text,
+    ),
 }
+
+
+def _normalize_hex(color: str | None) -> str | None:
+    if not color:
+        return None
+    color = color.strip()
+    if not color:
+        return None
+    if color.startswith("#"):
+        color = color[1:]
+    if len(color) == 3:
+        color = "".join(ch * 2 for ch in color)
+    if len(color) != 6:
+        return None
+    return f"#{color.lower()}"
+
+
+def _build_role_palette_from_style(style_name: str) -> dict[str, str]:
+    try:
+        style_cls = get_style_by_name(style_name)
+    except ClassNotFound:
+        return {}
+
+    palette: dict[str, str] = {}
+    try:
+        base_color = _normalize_hex(style_cls.style_for_token(Token.Text).get("color"))
+    except KeyError:
+        base_color = None
+    for role, tokens in ROLE_TOKEN_PREFERENCES.items():
+        for token in tokens:
+            try:
+                style_def = style_cls.style_for_token(token)
+            except KeyError:
+                continue
+            color = _normalize_hex(style_def.get("color"))
+            if not color or color == base_color:
+                continue
+            if role == "accent" and color == palette.get("primary"):
+                continue
+            palette[role] = color
+            break
+    return palette
 
 
 def _load_user_theme_config() -> dict:
@@ -204,7 +214,7 @@ def get_theme_manager() -> ThemeManager:
     pygments_style = user_cfg.get("theme", {}).get("pygments_style") or name
 
     roles = dict(DEFAULT_ROLE_PALETTE)
-    roles.update(THEME_PRESETS.get(name, {}))
+    roles.update(_build_role_palette_from_style(pygments_style))
     roles.update(user_cfg.get("roles", {}))
 
     cfg = ThemeConfig(name=name, pygments_style=pygments_style, roles=roles)
