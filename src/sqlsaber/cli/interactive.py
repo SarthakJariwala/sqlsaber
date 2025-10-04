@@ -84,14 +84,14 @@ class InteractiveSession:
 
     def _banner(self) -> str:
         """Get the ASCII banner."""
-        return """
+        return """[primary]
 ███████  ██████  ██      ███████  █████  ██████  ███████ ██████
 ██      ██    ██ ██      ██      ██   ██ ██   ██ ██      ██   ██
 ███████ ██    ██ ██      ███████ ███████ ██████  █████   ██████
      ██ ██ ▄▄ ██ ██           ██ ██   ██ ██   ██ ██      ██   ██
 ███████  ██████  ███████ ███████ ██   ██ ██████  ███████ ██   ██
             ▀▀
-    """
+    [/primary]"""
 
     def _instructions(self) -> str:
         """Get the instruction text."""
@@ -124,11 +124,13 @@ class InteractiveSession:
         """Display welcome message for interactive mode."""
         if self.first_message:
             self.console.print(Panel.fit(self._banner()))
-            self.console.print(Markdown(self._instructions()))
+            self.console.print(
+                Markdown(self._instructions(), code_theme=self.tm.pygments_style_name)
+            )
 
         db_name = self.database_name or "Unknown"
         self.console.print(
-            f"[heading]\n\nConnected to:[/heading] {db_name} ({self._db_type_name()})\n"
+            f"[heading]\nConnected to {db_name} ({self._db_type_name()})[/heading]\n"
         )
 
         if self._thread_id:

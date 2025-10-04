@@ -164,7 +164,7 @@ def query(
                 streaming_handler = StreamingQueryHandler(console)
                 db_type = sqlsaber_agent.db_type
                 console.print(
-                    f"[bold blue]Connected to:[/bold blue] {db_name} ({db_type})\n"
+                    f"[primary]Connected to:[/primary] {db_name} ({db_type})\n"
                 )
                 run = await streaming_handler.execute_streaming_query(
                     actual_query, sqlsaber_agent
@@ -200,13 +200,13 @@ def query(
         finally:
             # Clean up
             await db_conn.close()
-            console.print("\n[green]Goodbye![/green]")
+            console.print("\n[success]Goodbye![/success]")
 
     # Run the async function with proper error handling
     try:
         asyncio.run(run_session())
     except CLIError as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        console.print(f"[error]Error:[/error] {e}")
         sys.exit(e.exit_code)
 
 
