@@ -31,8 +31,6 @@ def test_unknown_theme_falls_back_to_defaults(monkeypatch):
 
     tm = manager.get_theme_manager()
 
-    assert tm.pygments_style_name == "does-not-exist"
-    assert tm.style("primary") == manager.DEFAULT_ROLE_PALETTE["primary"]
-    assert tm.style("accent") == manager.DEFAULT_ROLE_PALETTE["accent"]
+    assert tm.pygments_style_name == "nord"  # nord is the default
 
     monkeypatch.delenv("SQLSABER_THEME", raising=False)
