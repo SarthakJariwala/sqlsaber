@@ -9,7 +9,7 @@ from typing import Dict
 from platformdirs import user_config_dir
 from prompt_toolkit.styles import Style as PTStyle
 from prompt_toolkit.styles.pygments import style_from_pygments_cls
-from pygments.styles import get_style_by_name
+from pygments.styles import get_all_styles, get_style_by_name
 from pygments.token import Token
 from pygments.util import ClassNotFound
 from rich.console import Console
@@ -199,6 +199,9 @@ def get_theme_manager() -> ThemeManager:
     """Get the global theme manager instance."""
     user_cfg = _load_user_theme_config()
     env_name = os.getenv("SQLSABER_THEME")
+
+    if env_name and env_name.lower() not in get_all_styles():
+        env_name = None
 
     name = (
         env_name or user_cfg.get("theme", {}).get("name") or DEFAULT_THEME_NAME
