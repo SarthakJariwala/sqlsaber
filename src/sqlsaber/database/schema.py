@@ -158,7 +158,7 @@ class SchemaManager:
             table["schema"] = table["table_schema"]
             table["type"] = table["table_type"]  # Map table_type to type for display
 
-        return {"tables": tables_list}
+        return {"tables": tables_list, "total_tables": len(tables_list)}
 
     async def close(self):
         """Close database connection."""

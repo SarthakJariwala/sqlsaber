@@ -7,6 +7,12 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+### v0.29.1 - 2025-10-05
+
+#### Fixed
+
+- Fixed `list_tables` tool displaying "0 total" when tables exist
+
 ### v0.29.0 - 2025-10-04
 
 #### Added
