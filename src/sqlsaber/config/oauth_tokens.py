@@ -97,14 +97,14 @@ class OAuthTokenManager:
             if token.is_expired():
                 console.print(
                     f"OAuth token for {provider} has expired and needs refresh",
-                    style="dim yellow",
+                    style="muted warning",
                 )
                 return token  # Return anyway for refresh attempt
 
             if token.expires_soon():
                 console.print(
                     f"OAuth token for {provider} expires soon, consider refreshing",
-                    style="dim yellow",
+                    style="muted warning",
                 )
 
             return token
@@ -126,7 +126,7 @@ class OAuthTokenManager:
             logger.error(f"Failed to store OAuth token for {provider}: {e}")
             console.print(
                 f"Warning: Could not store OAuth token in keyring: {e}",
-                style="yellow",
+                style="warning",
             )
             return False
 
@@ -137,7 +137,7 @@ class OAuthTokenManager:
         existing_token = self.get_oauth_token(provider)
         if not existing_token:
             console.print(
-                f"No existing OAuth token found for {provider}", style="yellow"
+                f"No existing OAuth token found for {provider}", style="warning"
             )
             return False
 
@@ -161,7 +161,9 @@ class OAuthTokenManager:
             return True
         except Exception as e:
             logger.error(f"Failed to remove OAuth token for {provider}: {e}")
-            console.print(f"Warning: Could not remove OAuth token: {e}", style="yellow")
+            console.print(
+                f"Warning: Could not remove OAuth token: {e}", style="warning"
+            )
             return False
 
     def has_oauth_token(self, provider: str) -> bool:

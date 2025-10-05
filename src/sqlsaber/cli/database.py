@@ -95,7 +95,7 @@ def add(
         db_input = asyncio.run(collect_input())
 
         if db_input is None:
-            console.print("[yellow]Operation cancelled[/yellow]")
+            console.print("[warning]Operation cancelled[/warning]")
             return
 
         # Extract values from db_input
@@ -114,7 +114,7 @@ def add(
         if type == "sqlite":
             if not database:
                 console.print(
-                    "[bold red]Error:[/bold red] Database file path is required for SQLite"
+                    "[bold error]Error:[/bold error] Database file path is required for SQLite"
                 )
                 sys.exit(1)
             host = "localhost"
@@ -124,7 +124,7 @@ def add(
         elif type == "duckdb":
             if not database:
                 console.print(
-                    "[bold red]Error:[/bold red] Database file path is required for DuckDB"
+                    "[bold error]Error:[/bold error] Database file path is required for DuckDB"
                 )
                 sys.exit(1)
             database = str(Path(database).expanduser().resolve())
@@ -135,7 +135,7 @@ def add(
         else:
             if not all([host, database, username]):
                 console.print(
-                    "[bold red]Error:[/bold red] Host, database, and username are required"
+                    "[bold error]Error:[/bold error] Host, database, and username are required"
                 )
                 sys.exit(1)
 
@@ -179,7 +179,7 @@ def add(
             console.print(f"[blue]Set '{name}' as default database[/blue]")
 
     except Exception as e:
-        console.print(f"[bold red]Error adding database:[/bold red] {e}")
+        console.print(f"[bold error]Error adding database:[/bold error] {e}")
         sys.exit(1)
 
 
@@ -190,19 +190,19 @@ def list():
     default_name = config_manager.get_default_name()
 
     if not databases:
-        console.print("[yellow]No database connections configured[/yellow]")
+        console.print("[warning]No database connections configured[/warning]")
         console.print("Use 'sqlsaber db add <name>' to add a database connection")
         return
 
     table = Table(title="Database Connections")
     table.add_column("Name", style="cyan")
-    table.add_column("Type", style="magenta")
-    table.add_column("Host", style="green")
-    table.add_column("Port", style="yellow")
-    table.add_column("Database", style="blue")
-    table.add_column("Username", style="white")
-    table.add_column("SSL", style="bright_green")
-    table.add_column("Default", style="bold red")
+    table.add_column("Type", style="accent")
+    table.add_column("Host", style="success")
+    table.add_column("Port", style="warning")
+    table.add_column("Database", style="info")
+    table.add_column("Username", style="info")
+    table.add_column("SSL", style="success")
+    table.add_column("Default", style="error")
 
     for db in databases:
         is_default = "✓" if db.name == default_name else ""
@@ -239,7 +239,7 @@ def remove(
     """Remove a database connection."""
     if not config_manager.get_database(name):
         console.print(
-            f"[bold red]Error:[/bold red] Database connection '{name}' not found"
+            f"[bold error]Error:[/bold error] Database connection '{name}' not found"
         )
         sys.exit(1)
 
@@ -252,7 +252,7 @@ def remove(
             )
         else:
             console.print(
-                f"[bold red]Error:[/bold red] Failed to remove database connection '{name}'"
+                f"[bold error]Error:[/bold error] Failed to remove database connection '{name}'"
             )
             sys.exit(1)
     else:
@@ -269,14 +269,16 @@ def set_default(
     """Set the default database connection."""
     if not config_manager.get_database(name):
         console.print(
-            f"[bold red]Error:[/bold red] Database connection '{name}' not found"
+            f"[bold error]Error:[/bold error] Database connection '{name}' not found"
         )
         sys.exit(1)
 
     if config_manager.set_default_database(name):
         console.print(f"[green]Successfully set '{name}' as default database[/green]")
     else:
-        console.print(f"[bold red]Error:[/bold red] Failed to set '{name}' as default")
+        console.print(
+            f"[bold error]Error:[/bold error] Failed to set '{name}' as default"
+        )
         sys.exit(1)
 
 
@@ -299,14 +301,14 @@ def test(
             db_config = config_manager.get_database(name)
             if not db_config:
                 console.print(
-                    f"[bold red]Error:[/bold red] Database connection '{name}' not found"
+                    f"[bold error]Error:[/bold error] Database connection '{name}' not found"
                 )
                 sys.exit(1)
         else:
             db_config = config_manager.get_default_database()
             if not db_config:
                 console.print(
-                    "[bold red]Error:[/bold red] No default database configured"
+                    "[bold error]Error:[/bold error] No default database configured"
                 )
                 console.print(
                     "Use 'sqlsaber db add <name>' to add a database connection"
@@ -328,7 +330,7 @@ def test(
             )
 
         except Exception as e:
-            console.print(f"[bold red]✗ Connection failed:[/bold red] {e}")
+            console.print(f"[bold error]✗ Connection failed:[/bold error] {e}")
             sys.exit(1)
 
     asyncio.run(test_connection())

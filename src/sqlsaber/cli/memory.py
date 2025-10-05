@@ -29,7 +29,7 @@ def _get_database_name(database: str | None = None) -> str:
         db_config = config_manager.get_database(database)
         if not db_config:
             console.print(
-                f"[bold red]Error:[/bold red] Database connection '{database}' not found."
+                f"[bold error]Error:[/bold error] Database connection '{database}' not found."
             )
             sys.exit(1)
         return database
@@ -37,7 +37,7 @@ def _get_database_name(database: str | None = None) -> str:
         db_config = config_manager.get_default_database()
         if not db_config:
             console.print(
-                "[bold red]Error:[/bold red] No database connections configured."
+                "[bold error]Error:[/bold error] No database connections configured."
             )
             console.print("Use 'sqlsaber db add <name>' to add a database connection.")
             sys.exit(1)
@@ -64,7 +64,7 @@ def add(
         console.print(f"[dim]Memory ID:[/dim] {memory.id}")
         console.print(f"[dim]Content:[/dim] {memory.content}")
     except Exception as e:
-        console.print(f"[bold red]Error adding memory:[/bold red] {e}")
+        console.print(f"[bold error]Error adding memory:[/bold error] {e}")
         sys.exit(1)
 
 
@@ -85,7 +85,7 @@ def list(
 
     if not memories:
         console.print(
-            f"[yellow]No memories found for database '{database_name}'[/yellow]"
+            f"[warning]No memories found for database '{database_name}'[/warning]"
         )
         console.print("Use 'sqlsaber memory add \"<content>\"' to add memories")
         return
@@ -125,7 +125,7 @@ def show(
 
     if not memory:
         console.print(
-            f"[bold red]Error:[/bold red] Memory with ID '{memory_id}' not found for database '{database_name}'"
+            f"[bold error]Error:[/bold error] Memory with ID '{memory_id}' not found for database '{database_name}'"
         )
         sys.exit(1)
 
@@ -154,12 +154,12 @@ def remove(
     memory = memory_manager.get_memory_by_id(database_name, memory_id)
     if not memory:
         console.print(
-            f"[bold red]Error:[/bold red] Memory with ID '{memory_id}' not found for database '{database_name}'"
+            f"[bold error]Error:[/bold error] Memory with ID '{memory_id}' not found for database '{database_name}'"
         )
         sys.exit(1)
 
     # Show memory content before removal
-    console.print("[yellow]Removing memory:[/yellow]")
+    console.print("[warning]Removing memory:[/warning]")
     console.print(f"[dim]Content:[/dim] {memory.content}")
 
     if memory_manager.remove_memory(database_name, memory_id):
@@ -168,7 +168,7 @@ def remove(
         )
     else:
         console.print(
-            f"[bold red]Error:[/bold red] Failed to remove memory '{memory_id}'"
+            f"[bold error]Error:[/bold error] Failed to remove memory '{memory_id}'"
         )
         sys.exit(1)
 
@@ -198,14 +198,14 @@ def clear(
 
     if memories_count == 0:
         console.print(
-            f"[yellow]No memories to clear for database '{database_name}'[/yellow]"
+            f"[warning]No memories to clear for database '{database_name}'[/warning]"
         )
         return
 
     if not force:
         # Show confirmation
         console.print(
-            f"[yellow]About to clear {memories_count} memories for database '{database_name}'[/yellow]"
+            f"[warning]About to clear {memories_count} memories for database '{database_name}'[/warning]"
         )
 
         if not questionary.confirm("Are you sure you want to proceed?").ask():

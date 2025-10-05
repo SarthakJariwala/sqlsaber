@@ -18,14 +18,6 @@ from rich.theme import Theme
 DEFAULT_THEME_NAME = "nord"
 
 DEFAULT_ROLE_PALETTE = {
-    # base roles
-    "primary": "cyan",
-    "accent": "magenta",
-    "success": "green",
-    "warning": "yellow",
-    "error": "red",
-    "info": "cyan",
-    "muted": "dim",
     # components
     "table.header": "bold $primary",
     "panel.border.user": "$info",

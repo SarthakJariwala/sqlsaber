@@ -170,7 +170,7 @@ def _render_transcript(
                                     Panel.fit(
                                         content_str,
                                         title=f"Tool result: {name}",
-                                        border_style="yellow",
+                                        border_style="warning",
                                     )
                                 )
                     except Exception:
@@ -183,7 +183,7 @@ def _render_transcript(
                                 Panel.fit(
                                     content_str,
                                     title=f"Tool result: {name}",
-                                    border_style="yellow",
+                                    border_style="warning",
                                 )
                             )
                 else:
@@ -194,7 +194,7 @@ def _render_transcript(
                             Panel.fit(
                                 content_str,
                                 title=f"Tool result: {name}",
-                                border_style="yellow",
+                                border_style="warning",
                             )
                         )
         # Thinking parts omitted

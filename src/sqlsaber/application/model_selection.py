@@ -34,7 +34,7 @@ async def choose_model(
         Selected model ID (provider:model_id) or None if cancelled
     """
     if not models:
-        console.print("[yellow]No models available[/yellow]")
+        console.print("[warning]No models available[/warning]")
         return None
 
     # Filter by provider if restricted
@@ -42,7 +42,7 @@ async def choose_model(
         models = [m for m in models if m.get("provider") == restrict_provider]
         if not models:
             console.print(
-                f"[yellow]No models available for {restrict_provider}[/yellow]"
+                f"[warning]No models available for {restrict_provider}[/warning]"
             )
             return None
 

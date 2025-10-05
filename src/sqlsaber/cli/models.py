@@ -106,7 +106,7 @@ class ModelManager:
                 results.sort(key=lambda x: (x["provider"], x["name"]))
                 return results
         except Exception as e:
-            console.print(f"[red]Error fetching models: {e}[/red]")
+            console.print(f"[error]Error fetching models: {e}[/error]")
             return []
 
     def get_current_model(self) -> str:
@@ -121,7 +121,7 @@ class ModelManager:
             config.set_model(model_id)
             return True
         except Exception as e:
-            console.print(f"[red]Error setting model: {e}[/red]")
+            console.print(f"[error]Error setting model: {e}[/error]")
             return False
 
     def reset_model(self) -> bool:
@@ -142,17 +142,17 @@ def list():
 
         if not models:
             console.print(
-                "[yellow]No models available or failed to fetch models[/yellow]"
+                "[warning]No models available or failed to fetch models[/warning]"
             )
             return
 
         table = Table(title="Available Models")
         table.add_column("Provider", style="magenta")
         table.add_column("ID", style="cyan")
-        table.add_column("Name", style="green")
-        table.add_column("Description", style="white")
-        table.add_column("Context", style="yellow", justify="right")
-        table.add_column("Current", style="bold red", justify="center")
+        table.add_column("Name", style="success")
+        table.add_column("Description", style="info")
+        table.add_column("Context", style="warning", justify="right")
+        table.add_column("Current", style="bold accent", justify="center")
 
         current_model = model_manager.get_current_model()
 
@@ -196,7 +196,7 @@ def set():
         models = await fetch_models(model_manager)
 
         if not models:
-            console.print("[red]Failed to fetch models. Cannot set model.[/red]")
+            console.print("[error]Failed to fetch models. Cannot set model.[/error]")
             sys.exit(1)
 
         prompter = AsyncPrompter()
@@ -208,10 +208,10 @@ def set():
             if model_manager.set_model(selected_model):
                 console.print(f"[green]✓ Model set to: {selected_model}[/green]")
             else:
-                console.print("[red]✗ Failed to set model[/red]")
+                console.print("[error]✗ Failed to set model[/error]")
                 sys.exit(1)
         else:
-            console.print("[yellow]Operation cancelled[/yellow]")
+            console.print("[warning]Operation cancelled[/warning]")
 
     asyncio.run(interactive_set())
 
@@ -236,10 +236,10 @@ def reset():
                     f"[green]✓ Model reset to default: {ModelManager.DEFAULT_MODEL}[/green]"
                 )
             else:
-                console.print("[red]✗ Failed to reset model[/red]")
+                console.print("[error]✗ Failed to reset model[/error]")
                 sys.exit(1)
         else:
-            console.print("[yellow]Operation cancelled[/yellow]")
+            console.print("[warning]Operation cancelled[/warning]")
 
     asyncio.run(interactive_reset())
 

@@ -131,7 +131,7 @@ class AnthropicOAuthFlow:
         if not questionary.confirm(
             "Continue with browser-based authentication?", default=True
         ).ask():
-            console.print("[yellow]Authentication cancelled.[/yellow]")
+            console.print("[warning]Authentication cancelled.[/warning]")
             return False
 
         try:
@@ -168,7 +168,7 @@ class AnthropicOAuthFlow:
             ).ask()
 
             if not auth_code:
-                console.print("[yellow]Authentication cancelled.[/yellow]")
+                console.print("[warning]Authentication cancelled.[/warning]")
                 return False
 
             # Step 2: Exchange code for tokens
@@ -198,23 +198,23 @@ class AnthropicOAuthFlow:
                 )
 
                 if self.token_manager.store_oauth_token("anthropic", oauth_token):
-                    console.print(
-                        "\n[bold green]✓ Authentication successful![/bold green]"
-                    )
+                    console.print("\n[success]✓ Authentication successful![/success]")
                     console.print(
                         "Your Claude Pro/Max subscription is now configured for SQLSaber."
                     )
                     return True
                 else:
-                    console.print("[red]✗ Failed to store authentication tokens.[/red]")
+                    console.print(
+                        "[error]✗ Failed to store authentication tokens.[/error]"
+                    )
                     return False
 
         except KeyboardInterrupt:
-            console.print("\n[yellow]Authentication cancelled by user.[/yellow]")
+            console.print("\n[warning]Authentication cancelled by user.[/warning]")
             return False
         except Exception as e:
             logger.error(f"OAuth authentication failed: {e}")
-            console.print(f"[red]✗ Authentication failed: {str(e)}[/red]")
+            console.print(f"[error]✗ Authentication failed: {str(e)}[/error]")
             return False
 
     def refresh_token_if_needed(self) -> OAuthToken | None:
@@ -255,13 +255,14 @@ class AnthropicOAuthFlow:
                 console.print("OAuth token refreshed successfully", style="green")
                 return refreshed_token
             else:
-                console.print("Failed to store refreshed token", style="yellow")
+                console.print("Failed to store refreshed token", style="warning")
                 return current_token
 
         except Exception as e:
             logger.warning(f"Token refresh failed: {e}")
             console.print(
-                "Token refresh failed. You may need to re-authenticate.", style="yellow"
+                "Token refresh failed. You may need to re-authenticate.",
+                style="warning",
             )
             return current_token
 

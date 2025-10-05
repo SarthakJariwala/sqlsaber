@@ -36,7 +36,7 @@ class APIKeyManager:
                 return api_key
         except Exception as e:
             # Keyring access failed, continue to prompt
-            console.print(f"Keyring access failed: {e}", style="dim yellow")
+            console.print(f"Keyring access failed: {e}", style="muted warning")
 
         # 3. Prompt user for API key
         return self._prompt_and_store_key(provider, env_var_name, service_name)
@@ -72,7 +72,7 @@ class APIKeyManager:
             if not api_key.strip():
                 console.print(
                     "No API key provided. Some functionality may not work.",
-                    style="yellow",
+                    style="warning",
                 )
                 return None
 
@@ -83,16 +83,16 @@ class APIKeyManager:
             except Exception as e:
                 console.print(
                     f"Warning: Could not store API key in your operating system's credentials store: {e}",
-                    style="yellow",
+                    style="warning",
                 )
                 console.print(
-                    "You may need to enter it again next time", style="yellow"
+                    "You may need to enter it again next time", style="warning"
                 )
 
             return api_key.strip()
 
         except KeyboardInterrupt:
-            console.print("\nOperation cancelled", style="yellow")
+            console.print("\nOperation cancelled", style="warning")
             return None
         except Exception as e:
             console.print(f"Error prompting for API key: {e}", style="red")

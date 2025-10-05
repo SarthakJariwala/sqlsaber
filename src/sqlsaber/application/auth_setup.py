@@ -137,7 +137,7 @@ async def setup_auth(
                 )
                 return True, provider
             else:
-                console.print("[red]✗ Anthropic OAuth setup failed.[/red]")
+                console.print("[error]✗ Anthropic OAuth setup failed.[/error]")
                 return False, None
 
     # API key flow
@@ -160,5 +160,5 @@ async def setup_auth(
         )
         return True, provider
     else:
-        console.print("[yellow]No API key provided.[/yellow]")
+        console.print("[warning]No API key provided.[/warning]")
         return False, None

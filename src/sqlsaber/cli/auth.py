@@ -49,7 +49,7 @@ def setup():
     success, _ = asyncio.run(run_setup())
 
     if not success:
-        console.print("\n[yellow]No authentication configured.[/yellow]")
+        console.print("\n[warning]No authentication configured.[/warning]")
 
     console.print(
         "\nYou can change this anytime by running [cyan]saber auth setup[/cyan] again."
@@ -64,8 +64,10 @@ def status():
     console.print("\n[bold blue]Authentication Status[/bold blue]")
 
     if auth_method is None:
-        console.print("[yellow]No authentication method configured[/yellow]")
-        console.print("Run [cyan]saber auth setup[/cyan] to configure authentication.")
+        console.print("[warning]No authentication method configured[/warning]")
+        console.print(
+            "Run [primary]saber auth setup[/primary] to configure authentication."
+        )
         return
 
     # Show configured method summary
@@ -90,7 +92,7 @@ def status():
         elif from_keyring:
             console.print(f"> {provider}: [green]configured[/green]")
         else:
-            console.print(f"> {provider}: [yellow]not configured[/yellow]")
+            console.print(f"> {provider}: [warning]not configured[/warning]")
 
 
 @auth_app.command
@@ -105,7 +107,7 @@ def reset():
     ).ask()
 
     if provider is None:
-        console.print("[yellow]Reset cancelled.[/yellow]")
+        console.print("[warning]Reset cancelled.[/warning]")
         return
 
     api_key_manager = APIKeyManager()
@@ -121,7 +123,7 @@ def reset():
 
     if not api_key_present and not oauth_present:
         console.print(
-            f"[yellow]No stored credentials found for {provider}. Nothing to reset.[/yellow]"
+            f"[warning]No stored credentials found for {provider}. Nothing to reset.[/warning]"
         )
         return
 
@@ -153,7 +155,7 @@ def reset():
             # Already absent; treat as success
             pass
         except Exception as e:
-            console.print(f"Warning: Could not remove API key: {e}", style="yellow")
+            console.print(f"Warning: Could not remove API key: {e}", style="warning")
 
     # Optionally clear global auth method if removing Anthropic OAuth configuration
     if provider == "anthropic" and oauth_present:
@@ -169,7 +171,7 @@ def reset():
                 config_manager._save_config(config)
                 console.print("Global auth method unset.", style="green")
 
-    console.print("\n[bold green]✓ Reset complete.[/bold green]")
+    console.print("\n[success]✓ Reset complete.[/success]")
     console.print(
         "Environment variables are not modified by this command.", style="dim"
     )

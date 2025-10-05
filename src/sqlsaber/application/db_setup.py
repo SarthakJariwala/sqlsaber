@@ -88,7 +88,7 @@ async def collect_db_input(
         try:
             port = int(port_str)
         except ValueError:
-            console.print("[red]Invalid port number. Using default.[/red]")
+            console.print("[error]Invalid port number. Using default.[/error]")
             port = default_port
 
         database = await prompter.text("Database name:")
@@ -205,7 +205,7 @@ async def test_connection(config: DatabaseConfig, password: str | None) -> bool:
         await db_conn.close()
         return True
     except Exception as e:
-        console.print(f"[bold red]Connection failed:[/bold red] {e}", style="red")
+        console.print(f"[bold error]Connection failed:[/bold error] {e}", style="error")
         return False
 
 
