@@ -123,9 +123,13 @@ class InteractiveSession:
     def show_welcome_message(self):
         """Display welcome message for interactive mode."""
         if self.first_message:
-            self.console.print(Panel.fit(self._banner()))
+            self.console.print(Panel.fit(self._banner(), border_style="primary"))
             self.console.print(
-                Markdown(self._instructions(), code_theme=self.tm.pygments_style_name)
+                Markdown(
+                    self._instructions(),
+                    code_theme=self.tm.pygments_style_name,
+                    inline_code_theme=self.tm.pygments_style_name,
+                )
             )
 
         db_name = self.database_name or "Unknown"

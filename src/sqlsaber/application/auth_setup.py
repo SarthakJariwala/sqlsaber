@@ -104,7 +104,7 @@ async def setup_auth(
     """
     # Check if auth is already configured
     if auth_manager.has_auth_configured():
-        console.print("[green]✓ Authentication already configured![/green]")
+        console.print("[success]✓ Authentication already configured![/success]")
         return True, None
 
     # Select provider

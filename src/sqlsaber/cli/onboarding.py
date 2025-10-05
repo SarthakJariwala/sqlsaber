@@ -32,16 +32,16 @@ def needs_onboarding(database_arg: str | None = None) -> bool:
 
 def welcome_screen() -> None:
     """Display welcome screen to new users."""
-    banner = """
+    banner = """[primary]
 ███████  ██████  ██      ███████  █████  ██████  ███████ ██████
 ██      ██    ██ ██      ██      ██   ██ ██   ██ ██      ██   ██
 ███████ ██    ██ ██      ███████ ███████ ██████  █████   ██████
      ██ ██ ▄▄ ██ ██           ██ ██   ██ ██   ██ ██      ██   ██
 ███████  ██████  ███████ ███████ ██   ██ ██████  ███████ ██   ██
            ▀▀
-    """
+    [/primary]"""
 
-    console.print(Panel.fit(banner, style="bold blue"))
+    console.print(Panel.fit(banner, style="primary"))
     console.print()
 
     welcome_message = """
@@ -52,7 +52,9 @@ SQLsaber is an agentic SQL assistant that lets you query your database using nat
 Let's get you set up in just a few steps.
     """
 
-    console.print(Panel(welcome_message.strip(), border_style="blue", padding=(1, 2)))
+    console.print(
+        Panel.fit(welcome_message.strip(), border_style="primary", padding=(1, 2))
+    )
     console.print()
 
 
@@ -69,9 +71,7 @@ async def setup_database_guided() -> str | None:
     )
     from sqlsaber.application.prompts import AsyncPrompter
 
-    console.print("━" * 80, style="dim")
-    console.print("[bold cyan]Step 1 of 2: Database Connection[/bold cyan]")
-    console.print("━" * 80, style="dim")
+    console.print("[heading]Step 1 of 2: Database Connection[/heading]")
     console.print()
 
     try:
@@ -92,7 +92,7 @@ async def setup_database_guided() -> str | None:
         db_manager = DatabaseConfigManager()
         if db_manager.get_database(name):
             console.print(
-                f"[yellow]Database connection '{name}' already exists.[/yellow]"
+                f"[warning]Database connection '{name}' already exists.[/warning]"
             )
             return name
 
@@ -108,7 +108,7 @@ async def setup_database_guided() -> str | None:
         db_config = build_config(db_input)
 
         # Test the connection
-        console.print(f"[dim]Testing connection to '{name}'...[/dim]")
+        console.print(f"[muted]Testing connection to '{name}'...[/muted]")
         connection_success = await test_connection(db_config, db_input.password)
 
         if not connection_success:
@@ -119,25 +119,25 @@ async def setup_database_guided() -> str | None:
                 return await setup_database_guided()
             else:
                 console.print(
-                    "[yellow]You can add a database later using 'saber db add'[/yellow]"
+                    "[warning]You can add a database later using 'saber db add'[/warning]"
                 )
                 return None
 
         # Save the configuration
         try:
             save_database(db_manager, db_config, db_input.password)
-            console.print(f"[green]✓ Connection to '{name}' successful![/green]")
+            console.print(f"[success]✓ Connection to '{name}' successful![/success]")
             console.print()
             return name
         except Exception as e:
-            console.print(f"[bold red]Error saving database:[/bold red] {e}")
+            console.print(f"[error]Error saving database:[/error] {e}")
             return None
 
     except KeyboardInterrupt:
-        console.print("\n[yellow]Setup cancelled.[/yellow]")
+        console.print("\n[warning]Setup cancelled.[/warning]")
         return None
     except Exception as e:
-        console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+        console.print(f"[error]Unexpected error:[/error] {e}")
         return None
 
 
@@ -151,14 +151,14 @@ async def select_model_for_provider(provider: str) -> str | None:
 
     try:
         console.print()
-        console.print(f"[dim]Fetching available {provider.title()} models...[/dim]")
+        console.print(f"[muted]Fetching available {provider.title()} models...[/muted]")
 
         model_manager = ModelManager()
         models = await fetch_models(model_manager, providers=[provider])
 
         if not models:
             console.print(
-                f"[yellow]Could not fetch models for {provider}. Using default.[/yellow]"
+                f"[warning]Could not fetch models for {provider}. Using default.[/warning]"
             )
             # Use provider-specific default or fallback to Anthropic
             default_model_id = ModelManager.RECOMMENDED_MODELS.get(
@@ -178,10 +178,10 @@ async def select_model_for_provider(provider: str) -> str | None:
         return selected_model
 
     except KeyboardInterrupt:
-        console.print("\n[yellow]Model selection cancelled.[/yellow]")
+        console.print("\n[warning]Model selection cancelled.[/warning]")
         return None
     except Exception as e:
-        console.print(f"[yellow]Error selecting model: {e}. Using default.[/yellow]")
+        console.print(f"[warning]Error selecting model: {e}. Using default.[/warning]")
         # Fallback to provider default
         if provider in ModelManager.RECOMMENDED_MODELS:
             return f"{provider}:{ModelManager.RECOMMENDED_MODELS[provider]}"
@@ -196,9 +196,7 @@ async def setup_auth_guided() -> tuple[bool, str | None]:
     from sqlsaber.application.auth_setup import setup_auth
     from sqlsaber.application.prompts import AsyncPrompter
 
-    console.print("━" * 80, style="dim")
-    console.print("[bold cyan]Step 2 of 2: Authentication[/bold cyan]")
-    console.print("━" * 80, style="dim")
+    console.print("[primary]Step 2 of 2: Authentication[/primary]")
     console.print()
 
     try:
@@ -218,7 +216,7 @@ async def setup_auth_guided() -> tuple[bool, str | None]:
 
         if not success:
             console.print(
-                "[yellow]You can set it up later using 'saber auth setup'[/yellow]"
+                "[warning]You can set it up later using 'saber auth setup'[/warning]"
             )
             console.print()
             return False, None
@@ -233,16 +231,16 @@ async def setup_auth_guided() -> tuple[bool, str | None]:
         if selected_model:
             model_manager = ModelManager()
             model_manager.set_model(selected_model)
-            console.print(f"[green]✓ Model set to: {selected_model}[/green]")
+            console.print(f"[success]✓ Model set to: {selected_model}[/success]")
         console.print()
         return True, selected_model
 
     except KeyboardInterrupt:
-        console.print("\n[yellow]Setup cancelled.[/yellow]")
+        console.print("\n[warning]Setup cancelled.[/warning]")
         console.print()
         return False, None
     except Exception as e:
-        console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+        console.print(f"[error]Unexpected error:[/error] {e}")
         console.print()
         return False, None
 
@@ -251,35 +249,34 @@ def success_screen(
     database_name: str | None, auth_configured: bool, model_name: str | None = None
 ) -> None:
     """Display success screen after onboarding."""
-    console.print("━" * 80, style="dim")
-    console.print("[bold green]You're all set! 🚀[/bold green]")
-    console.print("━" * 80, style="dim")
+
+    console.print("[success]You're all set! 🚀[/success]")
     console.print()
 
     if database_name and auth_configured:
         console.print(
-            f"[green]✓ Database '{database_name}' connected and ready to use[/green]"
+            f"[success]✓ Database '{database_name}' connected and ready to use[/success]"
         )
-        console.print("[green]✓ Authentication configured[/green]")
+        console.print("[success]✓ Authentication configured[/success]")
         if model_name:
-            console.print(f"[green]✓ Model: {model_name}[/green]")
+            console.print(f"[success]✓ Model: {model_name}[/success]")
     elif database_name:
         console.print(
-            f"[green]✓ Database '{database_name}' connected and ready to use[/green]"
+            f"[success]✓ Database '{database_name}' connected and ready to use[/success]"
         )
         console.print(
-            "[yellow]⚠ AI authentication not configured - you'll be prompted when needed[/yellow]"
+            "[warning]⚠ AI authentication not configured - you'll be prompted when needed[/warning]"
         )
     elif auth_configured:
-        console.print("[green]✓ AI authentication configured[/green]")
+        console.print("[success]✓ AI authentication configured[/success]")
         if model_name:
-            console.print(f"[green]✓ Model: {model_name}[/green]")
+            console.print(f"[success]✓ Model: {model_name}[/success]")
         console.print(
-            "[yellow]⚠ No database configured - you'll need to provide one via -d flag[/yellow]"
+            "[warning]⚠ No database configured - you'll need to provide one via -d flag[/warning]"
         )
 
     console.print()
-    console.print("[dim]Starting interactive session...[/dim]")
+    console.print("[muted]Starting interactive session...[/muted]")
     console.print()
 
 
@@ -298,9 +295,9 @@ async def run_onboarding() -> bool:
 
         # If user cancelled database setup, exit
         if database_name is None:
-            console.print("[yellow]Database setup is required to continue.[/yellow]")
+            console.print("[warning]Database setup is required to continue.[/warning]")
             console.print(
-                "[dim]You can also provide a connection string using: saber -d <connection-string>[/dim]"
+                "[muted]You can also provide a connection string using: saber -d <connection-string>[/muted]"
             )
             return False
 
@@ -313,13 +310,13 @@ async def run_onboarding() -> bool:
         return True
 
     except KeyboardInterrupt:
-        console.print("\n[yellow]Onboarding cancelled.[/yellow]")
+        console.print("\n[warning]Onboarding cancelled.[/warning]")
         console.print(
-            "[dim]You can run setup commands manually:[/dim]\n"
-            "[dim]  - saber db add <name>  # Add database connection[/dim]\n"
-            "[dim]  - saber auth setup     # Configure authentication[/dim]"
+            "[muted]You can run setup commands manually:[/muted]\n"
+            "[muted]  - saber db add <name>  # Add database connection[/muted]\n"
+            "[muted]  - saber auth setup     # Configure authentication[/muted]"
         )
         sys.exit(0)
     except Exception as e:
-        console.print(f"[bold red]Onboarding failed:[/bold red] {e}")
+        console.print(f"[error]Onboarding failed:[/error] {e}")
         return False
