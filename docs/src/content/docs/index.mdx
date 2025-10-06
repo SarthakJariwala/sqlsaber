@@ -5,7 +5,8 @@ template: splash
 hero:
   tagline: Stop fighting your database. Gather the right context automatically and get insights with a collaborative SQL agent.
   image:
-    file: ../../assets/sqlsaber-hero.svg
+    alt: "Animated SQLsaber workflow"
+    file: ../../assets/sqlsaber.gif
   actions:
     - text: Get started
       link: /installation/
@@ -25,8 +26,8 @@ import {
 } from "@astrojs/starlight/components";
 
 <script
-  src="https://asciinema.org/a/741230.js"
-  id="asciicast-741230"
+  src="https://asciinema.org/a/746773.js"
+  id="asciicast-746773"
   async="true"
 ></script>
 
@@ -94,10 +95,8 @@ import {
     <Code
       code={`# Install SQLsaber
 $ uv tool install sqlsaber
-\n# Add your database
-$ saber db add mydb
 \n# Start asking questions
-$ saber "what's our revenue this quarter?"`}
+$ saber`}
       lang="bash"
     />
   </div>
