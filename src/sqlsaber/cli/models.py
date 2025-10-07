@@ -152,7 +152,7 @@ def list():
         table.add_column("Name", style="success")
         table.add_column("Description", style="info")
         table.add_column("Context", style="warning", justify="right")
-        table.add_column("Current", style="bold accent", justify="center")
+        table.add_column("Current", style="accent", justify="center")
 
         current_model = model_manager.get_current_model()
 
