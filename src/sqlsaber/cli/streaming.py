@@ -144,17 +144,8 @@ class StreamingQueryHandler:
             prepared_prompt: str | list[str] = user_query
             no_history = not message_history
             if sqlsaber_agent.is_oauth and no_history:
-                instructions = sqlsaber_agent.instruction_builder.build_instructions(
-                    db_type=sqlsaber_agent.db_type
-                )
-                mem = ""
-                if sqlsaber_agent.database_name:
-                    mem = sqlsaber_agent.memory_manager.format_memories_for_prompt(
-                        sqlsaber_agent.database_name
-                    )
-                parts = [p for p in (instructions, mem) if p and str(p).strip()]
-                if parts:
-                    injected = "\n\n".join(parts)
+                injected = sqlsaber_agent.system_prompt_text(include_memory=True)
+                if injected and str(injected).strip():
                     prepared_prompt = [injected, user_query]
 
             # Show a transient status until events start streaming

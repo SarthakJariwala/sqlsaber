@@ -11,9 +11,8 @@
 ## Architecture
 
 - **CLI App**: Agentic SQL assistant for natural language to SQL
-- **Core modules**: `agents/` (AI logic), `cli/` (commands), `database/` (connections), `mcp/` (Model Context Protocol server)
+- **Core modules**: `agents/` (AI logic), `cli/` (commands), `database/` (connections)
 - **Database support**: PostgreSQL, SQLite, MySQL via asyncpg/aiosqlite/aiomysql
-- **MCP integration**: Exposes tools via `sqlsaber-mcp` for Claude Code and other MCP clients
 
 ## Code Style
 

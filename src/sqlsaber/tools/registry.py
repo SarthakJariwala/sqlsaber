@@ -3,7 +3,6 @@
 from typing import Type
 
 from .base import Tool
-from .enums import ToolCategory
 
 
 class ToolRegistry:
@@ -61,45 +60,13 @@ class ToolRegistry:
 
         return self._instances[name]
 
-    def list_tools(self, category: str | ToolCategory | None = None) -> list[str]:
-        """List all registered tool names.
+    def list_tools(self) -> list[str]:
+        """List all registered tool names."""
+        return list(self._tools.keys())
 
-        Args:
-            category: Optional category to filter by (string or ToolCategory enum)
-
-        Returns:
-            List of tool names
-        """
-        if category is None:
-            return list(self._tools.keys())
-
-        # Convert string to enum
-        if isinstance(category, str):
-            try:
-                category = ToolCategory(category)
-            except ValueError:
-                # If string doesn't match any enum, return empty list
-                return []
-
-        # Filter by category
-        result = []
-        for name, tool_class in self._tools.items():
-            tool = self.get_tool(name)
-            if tool.category == category:
-                result.append(name)
-        return result
-
-    def get_all_tools(self, category: str | ToolCategory | None = None) -> list[Tool]:
-        """Get all tool instances.
-
-        Args:
-            category: Optional category to filter by (string or ToolCategory enum)
-
-        Returns:
-            List of tool instances
-        """
-        names = self.list_tools(category)
-        return [self.get_tool(name) for name in names]
+    def get_all_tools(self) -> list[Tool]:
+        """Get all tool instances."""
+        return [self.get_tool(name) for name in self.list_tools()]
 
 
 # Global registry instance

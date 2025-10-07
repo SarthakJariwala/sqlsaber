@@ -2,7 +2,7 @@
 
 import pytest
 
-from sqlsaber.tools import Tool, ToolCategory, ToolRegistry, register_tool
+from sqlsaber.tools import Tool, ToolRegistry, register_tool
 
 
 class MockTestTool1(Tool):
@@ -38,10 +38,6 @@ class MockTestTool2(Tool):
     @property
     def input_schema(self) -> dict:
         return {"type": "object", "properties": {}}
-
-    @property
-    def category(self) -> ToolCategory:
-        return ToolCategory.SQL  # Using a real enum value for testing
 
     async def execute(self, **kwargs) -> str:
         return '{"result": "test2"}'
@@ -101,20 +97,6 @@ class TestToolRegistry:
         assert len(all_tools) == 2
         assert "test_tool_1" in all_tools
         assert "test_tool_2" in all_tools
-
-        # List by category using enum
-        general_tools = registry.list_tools(category=ToolCategory.GENERAL)
-        assert len(general_tools) == 1
-        assert "test_tool_1" in general_tools
-
-        sql_tools = registry.list_tools(category=ToolCategory.SQL)
-        assert len(sql_tools) == 1
-        assert "test_tool_2" in sql_tools
-
-        # Test backward compatibility with strings
-        general_tools_str = registry.list_tools(category="general")
-        assert len(general_tools_str) == 1
-        assert "test_tool_1" in general_tools_str
 
     def test_get_all_tools(self):
         """Test getting all tool instances."""

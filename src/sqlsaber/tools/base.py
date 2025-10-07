@@ -3,8 +3,6 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .enums import ToolCategory, WorkflowPosition
-
 
 class Tool(ABC):
     """Abstract base class for all tools."""
@@ -42,32 +40,3 @@ class Tool(ABC):
             JSON string with the tool's output
         """
         pass
-
-    @property
-    def category(self) -> ToolCategory:
-        """Return the tool category. Override to customize."""
-        return ToolCategory.GENERAL
-
-    def get_usage_instructions(self) -> str | None:
-        """Return tool-specific usage instructions for LLM guidance.
-
-        Returns:
-            Usage instructions string, or None for no specific guidance
-        """
-        return None
-
-    def get_priority(self) -> int:
-        """Return priority for tool ordering in instructions.
-
-        Returns:
-            Priority number (lower = higher priority, default = 100)
-        """
-        return 100
-
-    def get_workflow_position(self) -> WorkflowPosition:
-        """Return the typical workflow position for this tool.
-
-        Returns:
-            WorkflowPosition enum value
-        """
-        return WorkflowPosition.OTHER
