@@ -1,6 +1,6 @@
 [project]
 name = "sqlsaber"
-version = "0.29.1"
+version = "0.30.0"
 description = "SQLsaber - Open-source agentic SQL assistant"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -15,7 +15,6 @@ dependencies = [
     "aiomysql>=0.2.0",
     "aiosqlite>=0.21.0",
     "duckdb>=0.9.2",
-    "fastmcp>=2.9.0",
     "cyclopts>=3.22.1",
     "prompt-toolkit>3.0.51",
     "sqlglot[rs]>=27.20.0",
@@ -34,5 +33,3 @@ packages = ["src/sqlsaber"]
 [project.scripts]
 sqlsaber = "sqlsaber.cli.commands:main"
 saber = "sqlsaber.cli.commands:main"
-sqlsaber-mcp = "sqlsaber.mcp.mcp:main"
-saber-mcp = "sqlsaber.mcp.mcp:main"

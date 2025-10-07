@@ -7,6 +7,20 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+---
+
+### v0.30.0 - 2025-10-07
+
+#### Removed
+
+- MCP server support and related console scripts (`saber-mcp`, `sqlsaber-mcp`)
+
+  > `sqlsaber` can still be used as a cli in coding agents like Claude Code, Codex, or Amp.
+  >
+  > Just *ask* the coding agent to invoke `sqlsaber` cli with your question.
+
+
+
 ### v0.29.1 - 2025-10-05
 
 #### Fixed

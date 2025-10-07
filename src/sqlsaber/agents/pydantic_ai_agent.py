@@ -24,7 +24,6 @@ from sqlsaber.database import (
     SQLiteConnection,
 )
 from sqlsaber.memory.manager import MemoryManager
-from sqlsaber.tools.instructions import InstructionBuilder
 from sqlsaber.tools.registry import tool_registry
 from sqlsaber.tools.sql_tools import SQLTool
 
@@ -43,7 +42,6 @@ class SQLSaberAgent:
         self.database_name = database_name
         self.config = Config()
         self.memory_manager = memory_manager or MemoryManager()
-        self.instruction_builder = InstructionBuilder(tool_registry)
         self.db_type = self._get_database_type_name()
 
         # Thinking configuration (CLI override or config default)
@@ -61,7 +59,7 @@ class SQLSaberAgent:
 
     def _configure_sql_tools(self) -> None:
         """Ensure SQL tools receive the active database connection."""
-        for tool_name in tool_registry.list_tools(category="sql"):
+        for tool_name in tool_registry.list_tools():
             tool = tool_registry.get_tool(tool_name)
             if isinstance(tool, SQLTool):
                 tool.set_connection(self.db_connection)
@@ -165,29 +163,53 @@ class SQLSaberAgent:
         return Agent(model_obj, name="sqlsaber")
 
     def _setup_system_prompt(self, agent: Agent) -> None:
-        """Set up the dynamic system prompt for the agent."""
+        """Configure the agent's system prompt using a simple prompt string."""
         if not self.is_oauth:
 
             @agent.system_prompt(dynamic=True)
             async def sqlsaber_system_prompt(ctx: RunContext) -> str:
-                instructions = self.instruction_builder.build_instructions(
-                    db_type=self.db_type
-                )
-
-                # Add memory context if available
-                mem = ""
-                if self.database_name:
-                    mem = self.memory_manager.format_memories_for_prompt(
-                        self.database_name
-                    )
-
-                parts = [p for p in (instructions, mem) if p and p.strip()]
-                return "\n\n".join(parts) if parts else ""
+                return self.system_prompt_text(include_memory=True)
         else:
 
             @agent.system_prompt(dynamic=True)
             async def sqlsaber_system_prompt(ctx: RunContext) -> str:
+                # OAuth clients (Claude Code) ignore custom system prompts; we inject later.
                 return "You are Claude Code, Anthropic's official CLI for Claude."
+
+    def system_prompt_text(self, include_memory: bool = True) -> str:
+        """Return the original SQLSaber system prompt as a single string."""
+        db = self.db_type
+        base = (
+            f"You are a helpful SQL assistant that helps users query their {db} database.\n\n"
+            "Your responsibilities:\n"
+            "1. Understand user's natural language requests, think and convert them to SQL\n"
+            "2. Use the provided tools efficiently to explore database schema\n"
+            "3. Generate appropriate SQL queries\n"
+            "4. Execute queries safely - queries that modify the database are not allowed\n"
+            "5. Format and explain results clearly\n\n"
+            "IMPORTANT - Tool Usage Strategy:\n"
+            "1. ALWAYS start with 'list_tables' to see available tables and row counts. Use this first to discover available tables.\n"
+            "2. Use 'introspect_schema' with a table_pattern to get details ONLY for relevant tables. Use table patterns like 'sample%' or '%experiment%' to filter related tables.\n"
+            "3. Execute SQL queries safely with automatic LIMIT clauses for SELECT statements. Only SELECT queries are permitted for security.\n\n"
+            "Tool-Specific Guidelines:\n"
+            "- introspect_schema: Use 'introspect_schema' with a table_pattern to get details ONLY for relevant tables. Use table patterns like 'sample%' or '%experiment%' to filter related tables.\n"
+            "- execute_sql: Execute SQL queries safely with automatic LIMIT clauses for SELECT statements. Only SELECT queries are permitted for security.\n\n"
+            "Guidelines:\n"
+            "- Use proper JOIN syntax and avoid cartesian products\n"
+            "- Include appropriate WHERE clauses to limit results\n"
+            "- Explain what the query does in simple terms\n"
+            "- Handle errors gracefully and suggest fixes\n"
+            "- Be security conscious - use parameterized queries when needed\n"
+            "- Timestamp columns must be converted to text when you write queries\n"
+            "- Use table patterns like 'sample%' or '%experiment%' to filter related tables"
+        )
+
+        if include_memory and self.database_name:
+            mem = self.memory_manager.format_memories_for_prompt(self.database_name)
+            mem = mem.strip()
+            if mem:
+                return f"{base}\n\n{mem}"
+        return base
 
     def _register_tools(self, agent: Agent) -> None:
         """Register all the SQL tools with the agent."""

@@ -61,7 +61,7 @@ class BaseSQLAgent(ABC):
     def _init_tools(self) -> None:
         """Initialize SQL tools with database connection."""
         # Get all SQL tools and set their database connection
-        for tool_name in tool_registry.list_tools(category="sql"):
+        for tool_name in tool_registry.list_tools():
             tool = tool_registry.get_tool(tool_name)
             if isinstance(tool, SQLTool):
                 tool.set_connection(self.db)

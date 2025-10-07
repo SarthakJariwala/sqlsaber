@@ -22,10 +22,7 @@ Ask your questions in natural language and `sqlsaber` will gather the right cont
   - [Resume Past Conversation](#resume-past-conversation)
   - [Database Selection](#database-selection)
 - [Examples](#examples)
-- [MCP Server Integration](#mcp-server-integration)
-  - [Starting the MCP Server](#starting-the-mcp-server)
-  - [Configuring MCP Clients](#configuring-mcp-clients)
-  - [Available MCP Tools](#available-mcp-tools)
+
 - [How It Works](#how-it-works)
 - [Contributing](#contributing)
 - [License](#license)
@@ -38,7 +35,7 @@ Ask your questions in natural language and `sqlsaber` will gather the right cont
 - Interactive REPL mode
 - Conversation threads (store, display, and resume conversations)
 - Support for PostgreSQL, MySQL, SQLite, DuckDB, and CSVs
-- MCP (Model Context Protocol) server support
+
 - Extended thinking mode for select models (Anthropic, OpenAI, Google, Groq)
 - Beautiful formatted output
 
@@ -197,43 +194,6 @@ saber "show me orders with customer details for this week"
 
 saber "which products had the highest sales growth last quarter?"
 ```
-
-## MCP Server Integration
-
-SQLSaber includes an MCP (Model Context Protocol) server that allows AI agents like Claude Code to directly leverage tools available in SQLSaber.
-
-### Starting the MCP Server
-
-Run the MCP server using uvx:
-
-```bash
-uvx --from sqlsaber saber-mcp
-```
-
-### Configuring MCP Clients
-
-#### Claude Code
-
-Add SQLSaber as an MCP server in Claude Code:
-
-```bash
-claude mcp add sqlsaber -- uvx --from sqlsaber saber-mcp
-```
-
-#### Other MCP Clients
-
-For other MCP clients, configure them to run the command: `uvx --from sqlsaber saber-mcp`
-
-### Available MCP Tools
-
-Once connected, the MCP client will have access to these tools:
-
-- `get_databases()` - Lists all configured databases
-- `list_tables(database)` - Get all tables in a database with row counts
-- `introspect_schema(database, table_pattern?)` - Get detailed schema information
-- `execute_sql(database, query, limit?)` - Execute SQL queries (read-only)
-
-The MCP server uses your existing SQLSaber database configurations, so make sure to set up your databases using `saber db add` first.
 
 ## How It Works
 

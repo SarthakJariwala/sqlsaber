@@ -7,7 +7,6 @@ from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.schema import SchemaManager
 
 from .base import Tool
-from .enums import ToolCategory, WorkflowPosition
 from .registry import register_tool
 from .sql_guard import add_limit, validate_read_only
 
@@ -25,11 +24,6 @@ class SQLTool(Tool):
         """Set the database connection after initialization."""
         self.db = db_connection
         self.schema_manager = SchemaManager(db_connection)
-
-    @property
-    def category(self) -> ToolCategory:
-        """SQL tools belong to the 'sql' category."""
-        return ToolCategory.SQL
 
 
 @register_tool
@@ -51,18 +45,6 @@ class ListTablesTool(SQLTool):
             "properties": {},
             "required": [],
         }
-
-    def get_usage_instructions(self) -> str | None:
-        """Return usage instructions for this tool."""
-        return "ALWAYS start with 'list_tables' to see available tables and row counts. Use this first to discover available tables."
-
-    def get_priority(self) -> int:
-        """Return priority for tool ordering."""
-        return 10  # High priority - should be used first
-
-    def get_workflow_position(self) -> WorkflowPosition:
-        """Return workflow position."""
-        return WorkflowPosition.DISCOVERY
 
     async def execute(self, **kwargs) -> str:
         """List all tables in the database."""
@@ -100,18 +82,6 @@ class IntrospectSchemaTool(SQLTool):
             },
             "required": [],
         }
-
-    def get_usage_instructions(self) -> str | None:
-        """Return usage instructions for this tool."""
-        return "Use 'introspect_schema' with a table_pattern to get details ONLY for relevant tables. Use table patterns like 'sample%' or '%experiment%' to filter related tables."
-
-    def get_priority(self) -> int:
-        """Return priority for tool ordering."""
-        return 20  # Should come after list_tables
-
-    def get_workflow_position(self) -> WorkflowPosition:
-        """Return workflow position."""
-        return WorkflowPosition.ANALYSIS
 
     async def execute(self, **kwargs) -> str:
         """Introspect database schema."""
@@ -183,18 +153,6 @@ class ExecuteSQLTool(SQLTool):
             },
             "required": ["query"],
         }
-
-    def get_usage_instructions(self) -> str | None:
-        """Return usage instructions for this tool."""
-        return "Execute SQL queries safely with automatic LIMIT clauses for SELECT statements. Only SELECT queries are permitted for security."
-
-    def get_priority(self) -> int:
-        """Return priority for tool ordering."""
-        return 30  # Should come after schema tools
-
-    def get_workflow_position(self) -> WorkflowPosition:
-        """Return workflow position."""
-        return WorkflowPosition.EXECUTION
 
     async def execute(self, **kwargs) -> str:
         """Execute a SQL query."""

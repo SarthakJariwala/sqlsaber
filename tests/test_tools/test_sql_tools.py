@@ -5,7 +5,6 @@ import json
 import pytest
 
 from sqlsaber.database import SQLiteConnection
-from sqlsaber.tools.enums import ToolCategory
 from sqlsaber.tools.sql_tools import (
     ExecuteSQLTool,
     IntrospectSchemaTool,
@@ -75,7 +74,6 @@ class TestListTablesTool:
         """Test tool properties."""
         tool = ListTablesTool()
         assert tool.name == "list_tables"
-        assert tool.category == ToolCategory.SQL
         assert "tables" in tool.description.lower()
 
     @pytest.mark.asyncio
@@ -112,7 +110,6 @@ class TestIntrospectSchemaTool:
         """Test tool properties."""
         tool = IntrospectSchemaTool()
         assert tool.name == "introspect_schema"
-        assert tool.category == ToolCategory.SQL
         assert "schema" in tool.description.lower()
 
     @pytest.mark.asyncio
@@ -140,7 +137,6 @@ class TestExecuteSQLTool:
         """Test tool properties."""
         tool = ExecuteSQLTool()
         assert tool.name == "execute_sql"
-        assert tool.category == ToolCategory.SQL
         assert "query" in tool.input_schema["properties"]
 
     @pytest.mark.asyncio

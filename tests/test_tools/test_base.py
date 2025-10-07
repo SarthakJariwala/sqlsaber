@@ -3,7 +3,6 @@
 import pytest
 
 from sqlsaber.tools.base import Tool
-from sqlsaber.tools.enums import ToolCategory, WorkflowPosition
 
 
 class MockTool(Tool):
@@ -40,8 +39,6 @@ class TestBaseTool:
         tool = MockTool()
         assert tool.name == "mock_tool"
         assert tool.description == "A mock tool for testing"
-        assert tool.category == ToolCategory.GENERAL
-        assert tool.get_workflow_position() == WorkflowPosition.OTHER
         assert "message" in tool.input_schema["properties"]
 
     @pytest.mark.asyncio
