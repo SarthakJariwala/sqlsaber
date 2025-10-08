@@ -9,6 +9,12 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.30.1 - 2025-10-07
+
+#### Fixed
+
+- Minor styling fixes
+
 ### v0.30.0 - 2025-10-07
 
 #### Removed
@@ -18,8 +24,6 @@ All notable changes to SQLsaber will be documented here.
   > `sqlsaber` can still be used as a cli in coding agents like Claude Code, Codex, or Amp.
   >
   > Just *ask* the coding agent to invoke `sqlsaber` cli with your question.
-
-
 
 ### v0.29.1 - 2025-10-05
 

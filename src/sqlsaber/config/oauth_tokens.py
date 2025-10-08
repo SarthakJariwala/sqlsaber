@@ -97,14 +97,14 @@ class OAuthTokenManager:
             if token.is_expired():
                 console.print(
                     f"OAuth token for {provider} has expired and needs refresh",
-                    style="muted warning",
+                    style="muted",
                 )
                 return token  # Return anyway for refresh attempt
 
             if token.expires_soon():
                 console.print(
                     f"OAuth token for {provider} expires soon, consider refreshing",
-                    style="muted warning",
+                    style="muted",
                 )
 
             return token

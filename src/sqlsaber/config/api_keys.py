@@ -36,7 +36,7 @@ class APIKeyManager:
                 return api_key
         except Exception as e:
             # Keyring access failed, continue to prompt
-            console.print(f"Keyring access failed: {e}", style="muted warning")
+            console.print(f"Keyring access failed: {e}", style="warning")
 
         # 3. Prompt user for API key
         return self._prompt_and_store_key(provider, env_var_name, service_name)

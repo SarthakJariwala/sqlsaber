@@ -103,6 +103,7 @@ class Config:
     def __init__(self):
         self.model_config_manager = ModelConfigManager()
         self.model_name = self.model_config_manager.get_model()
+        self.api_key = None
         self.api_key_manager = APIKeyManager()
         self.auth_config_manager = AuthConfigManager()
 
