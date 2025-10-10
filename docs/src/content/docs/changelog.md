@@ -7,6 +7,12 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+### v0.30.2
+
+#### Changed
+
+- Added `keyrings.cryptfile` as Linux-only dependency for better keyring support on Linux systems
+
 ---
 
 ### v0.30.1 - 2025-10-07
