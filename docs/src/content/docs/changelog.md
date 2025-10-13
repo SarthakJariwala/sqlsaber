@@ -7,13 +7,25 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
-### v0.30.2
+---
+
+
+### v0.31.0 - 2025-10-13
+
+#### Added
+
+- Structured logging across the project
+  - Centralized setup with JSON logs to a rotating file by default
+  - Daily rotation at midnight (configurable), with backups retained
+  - Optional pretty console output in development via `SQLSABER_LOG_TO_STDERR=1` or `SQLSABER_DEBUG=1`
+  - Captures stdlib logging and Python warnings into the same pipeline
+  - Environment variables to control behavior: `SQLSABER_LOG_LEVEL`, `SQLSABER_LOG_FILE`, `SQLSABER_LOG_ROTATION`, `SQLSABER_LOG_WHEN`, `SQLSABER_LOG_INTERVAL`, `SQLSABER_LOG_BACKUP_COUNT`, `SQLSABER_LOG_MAX_BYTES`
+
+### v0.30.2 - 2025-10-10
 
 #### Changed
 
 - Added `keyrings.cryptfile` as Linux-only dependency for better keyring support on Linux systems
-
----
 
 ### v0.30.1 - 2025-10-07
 

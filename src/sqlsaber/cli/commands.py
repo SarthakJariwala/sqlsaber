@@ -16,6 +16,7 @@ from sqlsaber.cli.threads import create_threads_app
 
 # Lazy imports - only import what's needed for CLI parsing
 from sqlsaber.config.database import DatabaseConfigManager
+from sqlsaber.config.logging import get_logger, setup_logging
 from sqlsaber.theme.manager import create_console
 
 
@@ -111,6 +112,14 @@ def query(
     """
 
     async def run_session():
+        log = get_logger(__name__)
+        log.info(
+            "cli.session.start",
+            argv=sys.argv[1:],
+            database=database,
+            has_query=query_text is not None,
+            thinking=thinking,
+        )
         # Import heavy dependencies only when actually running a query
         # This is only done to speed up startup time
         from sqlsaber.agents import SQLSaberAgent
@@ -134,25 +143,34 @@ def query(
         # Check if onboarding is needed (only for interactive mode or when no database is configured)
         if needs_onboarding(database):
             # Run onboarding flow
+            log.debug("cli.onboarding.start")
             onboarding_success = await run_onboarding()
             if not onboarding_success:
                 # User cancelled or onboarding failed
                 raise CLIError(
                     "Setup incomplete. Please configure your database and try again."
                 )
+            log.info("cli.onboarding.complete", success=True)
 
         # Resolve database from CLI input
         try:
             resolved = resolve_database(database, config_manager)
             connection_string = resolved.connection_string
             db_name = resolved.name
+            log.info(
+                "db.resolve.success",
+                name=db_name,
+            )
         except DatabaseResolutionError as e:
+            log.error("db.resolve.error", error=str(e))
             raise CLIError(str(e))
 
         # Create database connection
         try:
             db_conn = DatabaseConnection(connection_string)
+            log.info("db.connection.created", db_type=type(db_conn).__name__)
         except Exception as e:
+            log.exception("db.connection.error", error=str(e))
             raise CLIError(f"Error creating database connection: {e}")
 
         # Create pydantic-ai agent instance with database name for memory context
@@ -166,6 +184,7 @@ def query(
                 console.print(
                     f"[primary]Connected to:[/primary] {db_name} ({db_type})\n"
                 )
+                log.info("query.execute.start", db_name=db_name, db_type=db_type)
                 run = await streaming_handler.execute_streaming_query(
                     actual_query, sqlsaber_agent
                 )
@@ -187,8 +206,10 @@ def query(
                         console.print(
                             f"[dim]You can continue this thread using:[/dim] saber threads resume {thread_id}"
                         )
+                        log.info("thread.save.success", thread_id=thread_id)
                 except Exception:
                     # best-effort persistence; don't fail the CLI on storage errors
+                    log.warning("thread.save.failed", exc_info=True)
                     pass
                 finally:
                     await threads.prune_threads()
@@ -200,16 +221,20 @@ def query(
         finally:
             # Clean up
             await db_conn.close()
+            log.info("db.connection.closed")
             console.print("\n[success]Goodbye![/success]")
 
     # Run the async function with proper error handling
     try:
         asyncio.run(run_session())
     except CLIError as e:
+        get_logger(__name__).error("cli.error", error=str(e))
         console.print(f"[error]Error:[/error] {e}")
         sys.exit(e.exit_code)
 
 
 def main():
     """Entry point for the CLI application."""
+    setup_logging()
+    get_logger(__name__).info("cli.start")
     app()

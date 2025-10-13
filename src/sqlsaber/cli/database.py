@@ -11,11 +11,13 @@ import questionary
 from rich.table import Table
 
 from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
+from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console
 
 # Global instances for CLI commands
 console = create_console()
 config_manager = DatabaseConfigManager()
+logger = get_logger(__name__)
 
 # Create the database management CLI app
 db_app = cyclopts.App(
@@ -78,6 +80,13 @@ def add(
     ] = True,
 ):
     """Add a new database connection."""
+    logger.info(
+        "db.add.start",
+        name=name,
+        type=type,
+        interactive=bool(interactive),
+        has_password=False,
+    )
 
     if interactive:
         # Interactive mode - prompt for all required fields
@@ -96,6 +105,7 @@ def add(
 
         if db_input is None:
             console.print("[warning]Operation cancelled[/warning]")
+            logger.info("db.add.cancelled")
             return
 
         # Extract values from db_input
@@ -116,6 +126,7 @@ def add(
                 console.print(
                     "[bold error]Error:[/bold error] Database file path is required for SQLite"
                 )
+                logger.error("db.add.missing_path", db_type="sqlite")
                 sys.exit(1)
             host = "localhost"
             port = 0
@@ -126,6 +137,7 @@ def add(
                 console.print(
                     "[bold error]Error:[/bold error] Database file path is required for DuckDB"
                 )
+                logger.error("db.add.missing_path", db_type="duckdb")
                 sys.exit(1)
             database = str(Path(database).expanduser().resolve())
             host = "localhost"
@@ -137,6 +149,7 @@ def add(
                 console.print(
                     "[bold error]Error:[/bold error] Host, database, and username are required"
                 )
+                logger.error("db.add.missing_fields")
                 sys.exit(1)
 
             if port is None:
@@ -173,12 +186,15 @@ def add(
         # Add the configuration
         config_manager.add_database(db_config, password if password else None)
         console.print(f"[green]Successfully added database connection '{name}'[/green]")
+        logger.info("db.add.success", name=name, type=type)
 
         # Set as default if it's the first one
         if len(config_manager.list_databases()) == 1:
             console.print(f"[blue]Set '{name}' as default database[/blue]")
+            logger.info("db.default.set", name=name)
 
     except Exception as e:
+        logger.exception("db.add.error", name=name, error=str(e))
         console.print(f"[bold error]Error adding database:[/bold error] {e}")
         sys.exit(1)
 
@@ -186,12 +202,14 @@ def add(
 @db_app.command
 def list():
     """List all configured database connections."""
+    logger.info("db.list.start")
     databases = config_manager.list_databases()
     default_name = config_manager.get_default_name()
 
     if not databases:
         console.print("[warning]No database connections configured[/warning]")
         console.print("Use 'sqlsaber db add <name>' to add a database connection")
+        logger.info("db.list.empty")
         return
 
     table = Table(title="Database Connections")
@@ -228,6 +246,7 @@ def list():
         )
 
     console.print(table)
+    logger.info("db.list.complete", count=len(databases))
 
 
 @db_app.command
@@ -237,10 +256,12 @@ def remove(
     ],
 ):
     """Remove a database connection."""
+    logger.info("db.remove.start", name=name)
     if not config_manager.get_database(name):
         console.print(
             f"[bold error]Error:[/bold error] Database connection '{name}' not found"
         )
+        logger.error("db.remove.not_found", name=name)
         sys.exit(1)
 
     if questionary.confirm(
@@ -250,13 +271,16 @@ def remove(
             console.print(
                 f"[green]Successfully removed database connection '{name}'[/green]"
             )
+            logger.info("db.remove.success", name=name)
         else:
             console.print(
                 f"[bold error]Error:[/bold error] Failed to remove database connection '{name}'"
             )
+            logger.error("db.remove.failed", name=name)
             sys.exit(1)
     else:
         console.print("Operation cancelled")
+        logger.info("db.remove.cancelled", name=name)
 
 
 @db_app.command
@@ -267,18 +291,22 @@ def set_default(
     ],
 ):
     """Set the default database connection."""
+    logger.info("db.default.start", name=name)
     if not config_manager.get_database(name):
         console.print(
             f"[bold error]Error:[/bold error] Database connection '{name}' not found"
         )
+        logger.error("db.default.not_found", name=name)
         sys.exit(1)
 
     if config_manager.set_default_database(name):
         console.print(f"[green]Successfully set '{name}' as default database[/green]")
+        logger.info("db.default.success", name=name)
     else:
         console.print(
             f"[bold error]Error:[/bold error] Failed to set '{name}' as default"
         )
+        logger.error("db.default.failed", name=name)
         sys.exit(1)
 
 
@@ -292,6 +320,7 @@ def test(
     ] = None,
 ):
     """Test a database connection."""
+    logger.info("db.test.start")
 
     async def test_connection():
         # Lazy import to keep CLI startup fast
@@ -303,6 +332,7 @@ def test(
                 console.print(
                     f"[bold error]Error:[/bold error] Database connection '{name}' not found"
                 )
+                logger.error("db.test.not_found", name=name)
                 sys.exit(1)
         else:
             db_config = config_manager.get_default_database()
@@ -313,6 +343,7 @@ def test(
                 console.print(
                     "Use 'sqlsaber db add <name>' to add a database connection"
                 )
+                logger.error("db.test.no_default")
                 sys.exit(1)
 
         console.print(f"[blue]Testing connection to '{db_config.name}'...[/blue]")
@@ -328,8 +359,16 @@ def test(
             console.print(
                 f"[green]✓ Connection to '{db_config.name}' successful[/green]"
             )
+            logger.info("db.test.success", name=db_config.name)
 
         except Exception as e:
+            logger.exception(
+                "db.test.failed",
+                name=(
+                    db_config.name if "db_config" in locals() and db_config else name
+                ),
+                error=str(e),
+            )
             console.print(f"[bold error]✗ Connection failed:[/bold error] {e}")
             sys.exit(1)
 

@@ -30,6 +30,7 @@ from sqlsaber.database import (
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.theme.manager import get_theme_manager
 from sqlsaber.threads import ThreadStorage
+from sqlsaber.config.logging import get_logger
 
 if TYPE_CHECKING:
     from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
@@ -66,6 +67,7 @@ class InteractiveSession:
         self._threads = ThreadStorage()
         self._thread_id: str | None = initial_thread_id
         self.first_message = not self._thread_id
+        self.log = get_logger(__name__)
 
     def _history_path(self) -> Path:
         """Get the history file path, ensuring directory exists."""
@@ -240,6 +242,7 @@ class InteractiveSession:
 
     async def _execute_query_with_cancellation(self, user_query: str):
         """Execute a query with cancellation support."""
+        self.log.info("interactive.query.start", database=self.database_name)
         # Create cancellation token
         self.cancellation_token = asyncio.Event()
 
@@ -276,16 +279,18 @@ class InteractiveSession:
                             model_name=self.sqlsaber_agent.agent.model.model_name,
                         )
                         self.first_message = False
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.log.warning("interactive.thread.save_failed", error=str(e))
                 finally:
                     await self._threads.prune_threads()
         finally:
             self.current_task = None
             self.cancellation_token = None
+            self.log.info("interactive.query.end")
 
     async def run(self):
         """Run the interactive session loop."""
+        self.log.info("interactive.start", database=self.database_name)
         self.show_welcome_message()
         await self.before_prompt_loop()
 
@@ -348,3 +353,4 @@ class InteractiveSession:
                 break
             except Exception as exc:
                 self.console.print(f"[error]Error:[/error] {exc}")
+                self.log.exception("interactive.error", error=str(exc))

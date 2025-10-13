@@ -11,10 +11,12 @@ from sqlsaber.config.api_keys import APIKeyManager
 from sqlsaber.config.auth import AuthConfigManager, AuthMethod
 from sqlsaber.config.oauth_tokens import OAuthTokenManager
 from sqlsaber.theme.manager import create_console
+from sqlsaber.config.logging import get_logger
 
 # Global instances for CLI commands
 console = create_console()
 config_manager = AuthConfigManager()
+logger = get_logger(__name__)
 
 # Create the authentication management CLI app
 auth_app = cyclopts.App(
@@ -46,7 +48,9 @@ def setup():
         )
         return success, provider
 
-    success, _ = asyncio.run(run_setup())
+    logger.info("auth.setup.start")
+    success, provider = asyncio.run(run_setup())
+    logger.info("auth.setup.complete", success=bool(success), provider=str(provider))
 
     if not success:
         console.print("\n[warning]No authentication configured.[/warning]")
@@ -59,6 +63,7 @@ def setup():
 @auth_app.command
 def status():
     """Show current authentication configuration and provider key status."""
+    logger.info("auth.status.start")
     auth_method = config_manager.get_auth_method()
 
     console.print("\n[bold blue]Authentication Status[/bold blue]")
@@ -68,6 +73,7 @@ def status():
         console.print(
             "Run [primary]saber auth setup[/primary] to configure authentication."
         )
+        logger.info("auth.status.none_configured")
         return
 
     # Show configured method summary
@@ -93,6 +99,7 @@ def status():
             console.print(f"> {provider}: [green]configured[/green]")
         else:
             console.print(f"> {provider}: [warning]not configured[/warning]")
+    logger.info("auth.status.complete", method=str(auth_method))
 
 
 @auth_app.command
@@ -108,6 +115,7 @@ def reset():
 
     if provider is None:
         console.print("[warning]Reset cancelled.[/warning]")
+        logger.info("auth.reset.cancelled_no_provider")
         return
 
     api_key_manager = APIKeyManager()
@@ -125,6 +133,7 @@ def reset():
         console.print(
             f"[warning]No stored credentials found for {provider}. Nothing to reset.[/warning]"
         )
+        logger.info("auth.reset.nothing_to_reset", provider=provider)
         return
 
     # Build confirmation message
@@ -142,6 +151,7 @@ def reset():
 
     if not confirmed:
         console.print("Reset cancelled.")
+        logger.info("auth.reset.cancelled_confirm", provider=provider)
         return
 
     # Perform deletions
@@ -151,11 +161,13 @@ def reset():
         try:
             keyring.delete_password(service, provider)
             console.print(f"Removed {provider} API key from keyring", style="green")
+            logger.info("auth.reset.api_key_removed", provider=provider)
         except keyring.errors.PasswordDeleteError:
             # Already absent; treat as success
             pass
         except Exception as e:
             console.print(f"Warning: Could not remove API key: {e}", style="warning")
+            logger.warning("auth.reset.api_key_remove_failed", provider=provider, error=str(e))
 
     # Optionally clear global auth method if removing Anthropic OAuth configuration
     if provider == "anthropic" and oauth_present:
@@ -170,8 +182,10 @@ def reset():
                 config["auth_method"] = None
                 config_manager._save_config(config)
                 console.print("Global auth method unset.", style="green")
+                logger.info("auth.reset.global_method_unset")
 
     console.print("\n[success]✓ Reset complete.[/success]")
+    logger.info("auth.reset.complete", provider=provider)
     console.print(
         "Environment variables are not modified by this command.", style="dim"
     )
