@@ -25,6 +25,7 @@ from pydantic_ai.messages import (
 from rich.console import Console
 
 from sqlsaber.cli.display import DisplayManager
+from sqlsaber.config.logging import get_logger
 
 if TYPE_CHECKING:
     from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
@@ -40,6 +41,7 @@ class StreamingQueryHandler:
     def __init__(self, console: Console):
         self.console = console
         self.display = DisplayManager(console)
+        self.log = get_logger(__name__)
 
     async def _event_stream_handler(
         self, ctx: RunContext, event_stream: AsyncIterable[AgentStreamEvent]
@@ -140,6 +142,7 @@ class StreamingQueryHandler:
         # Prepare nicer code block rendering for Markdown
         self.display.live.prepare_code_blocks()
         try:
+            self.log.info("streaming.execute.start")
             # If Anthropic OAuth, inject SQLsaber instructions before the first user prompt
             prepared_prompt: str | list[str] = user_query
             no_history = not message_history
@@ -157,11 +160,13 @@ class StreamingQueryHandler:
                 message_history=message_history,
                 event_stream_handler=self._event_stream_handler,
             )
+            self.log.info("streaming.execute.end")
             return run
         except asyncio.CancelledError:
             # Show interruption message outside of Live
             self.display.show_newline()
             self.console.print("[warning]Query interrupted[/warning]")
+            self.log.info("streaming.execute.cancelled")
             return None
         finally:
             # End any active status and live markdown segments

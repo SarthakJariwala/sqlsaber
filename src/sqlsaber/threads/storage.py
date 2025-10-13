@@ -9,7 +9,6 @@ recommended approach of serializing ModelMessage[] with ModelMessagesTypeAdapter
 """
 
 import asyncio
-import logging
 import time
 import uuid
 from pathlib import Path
@@ -19,7 +18,9 @@ import aiosqlite
 import platformdirs
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
 
-logger = logging.getLogger(__name__)
+from sqlsaber.config.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 SCHEMA_SQL = """
@@ -79,9 +80,9 @@ class ThreadStorage:
                 await db.executescript(SCHEMA_SQL)
                 await db.commit()
             self._initialized = True
-            logger.debug("Initialized threads database at %s", self.db_path)
+            logger.info("threads.db.init", path=str(self.db_path))
         except Exception as e:  # pragma: no cover - best-effort persistence
-            logger.warning("Failed to initialize threads DB: %s", e)
+            logger.warning("threads.db.init_failed", error=str(e))
 
     async def save_snapshot(
         self,
@@ -116,10 +117,10 @@ class ThreadStorage:
                         ),
                     )
                     await db.commit()
-                logger.debug("Created thread %s", thread_id)
+                logger.info("threads.create", thread_id=thread_id)
                 return thread_id
             except Exception as e:  # pragma: no cover
-                logger.warning("Failed to create thread: %s", e)
+                logger.warning("threads.create_failed", error=str(e))
                 return thread_id
         else:
             try:
@@ -140,10 +141,12 @@ class ThreadStorage:
                         ),
                     )
                     await db.commit()
-                logger.debug("Updated thread %s snapshot", thread_id)
+                logger.info("threads.update_snapshot", thread_id=thread_id)
                 return thread_id
             except Exception as e:  # pragma: no cover
-                logger.warning("Failed to update thread %s: %s", thread_id, e)
+                logger.warning(
+                    "threads.update_snapshot_failed", thread_id=thread_id, error=str(e)
+                )
                 return thread_id
 
     async def save_metadata(
@@ -167,9 +170,12 @@ class ThreadStorage:
                     (title, model_name, thread_id),
                 )
                 await db.commit()
+            logger.info("threads.update_metadata", thread_id=thread_id)
             return True
         except Exception as e:  # pragma: no cover
-            logger.warning("Failed to update metadata for thread %s: %s", thread_id, e)
+            logger.warning(
+                "threads.update_metadata_failed", thread_id=thread_id, error=str(e)
+            )
             return False
 
     async def end_thread(self, thread_id: str) -> bool:
@@ -181,9 +187,10 @@ class ThreadStorage:
                     (time.time(), time.time(), thread_id),
                 )
                 await db.commit()
+            logger.info("threads.end", thread_id=thread_id)
             return True
         except Exception as e:  # pragma: no cover
-            logger.warning("Failed to end thread %s: %s", thread_id, e)
+            logger.warning("threads.end_failed", thread_id=thread_id, error=str(e))
             return False
 
     async def get_thread(self, thread_id: str) -> Thread | None:
@@ -211,7 +218,7 @@ class ThreadStorage:
                         model_name=row[6],
                     )
         except Exception as e:  # pragma: no cover
-            logger.warning("Failed to get thread %s: %s", thread_id, e)
+            logger.warning("threads.get_failed", thread_id=thread_id, error=str(e))
             return None
 
     async def get_thread_messages(self, thread_id: str) -> list[ModelMessage]:
@@ -229,7 +236,9 @@ class ThreadStorage:
                     messages_blob: bytes = row[0]
                     return ModelMessagesTypeAdapter.validate_json(messages_blob)
         except Exception as e:  # pragma: no cover
-            logger.warning("Failed to load thread %s messages: %s", thread_id, e)
+            logger.warning(
+                "threads.get_messages_failed", thread_id=thread_id, error=str(e)
+            )
             return []
 
     async def list_threads(
@@ -265,7 +274,7 @@ class ThreadStorage:
                         )
                     return threads
         except Exception as e:  # pragma: no cover
-            logger.warning("Failed to list threads: %s", e)
+            logger.warning("threads.list_failed", error=str(e))
             return []
 
     async def delete_thread(self, thread_id: str) -> bool:
@@ -274,9 +283,12 @@ class ThreadStorage:
             async with self._lock, aiosqlite.connect(self.db_path) as db:
                 cur = await db.execute("DELETE FROM threads WHERE id = ?", (thread_id,))
                 await db.commit()
-                return cur.rowcount > 0
+                deleted = cur.rowcount > 0
+                if deleted:
+                    logger.info("threads.delete", thread_id=thread_id)
+                return deleted
         except Exception as e:  # pragma: no cover
-            logger.warning("Failed to delete thread %s: %s", thread_id, e)
+            logger.warning("threads.delete_failed", thread_id=thread_id, error=str(e))
             return False
 
     async def prune_threads(self, older_than_days: int = 30) -> int:
@@ -297,7 +309,9 @@ class ThreadStorage:
                     (cutoff,),
                 )
                 await db.commit()
-                return cur.rowcount or 0
+                deleted = cur.rowcount or 0
+                logger.info("threads.prune", days=older_than_days, deleted=deleted)
+                return deleted
         except Exception as e:  # pragma: no cover
-            logger.warning("Failed to prune threads: %s", e)
+            logger.warning("threads.prune_failed", days=older_than_days, error=str(e))
             return 0

@@ -2,7 +2,6 @@
 
 import base64
 import hashlib
-import logging
 import secrets
 import urllib.parse
 import webbrowser
@@ -12,12 +11,13 @@ import httpx
 import questionary
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console
 
 from .oauth_tokens import OAuthToken, OAuthTokenManager
 
 console = create_console()
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
@@ -60,6 +60,7 @@ class AnthropicOAuthFlow:
         }
 
         url = "https://claude.ai/oauth/authorize?" + urllib.parse.urlencode(params)
+        logger.debug("oauth.auth_url.created")
         return url, verifier
 
     def _exchange_code_for_tokens(self, code: str, verifier: str) -> dict[str, str]:
@@ -86,11 +87,13 @@ class AnthropicOAuthFlow:
             )
 
             if not response.is_success:
-                error_msg = (
+                logger.error(
+                    "oauth.token_exchange.failed",
+                    status_code=response.status_code,
+                )
+                raise Exception(
                     f"Token exchange failed: {response.status_code} {response.text}"
                 )
-                logger.error(error_msg)
-                raise Exception(error_msg)
 
             return response.json()
 
@@ -110,11 +113,13 @@ class AnthropicOAuthFlow:
             )
 
             if not response.is_success:
-                error_msg = (
+                logger.error(
+                    "oauth.token_refresh.failed",
+                    status_code=response.status_code,
+                )
+                raise Exception(
                     f"Token refresh failed: {response.status_code} {response.text}"
                 )
-                logger.error(error_msg)
-                raise Exception(error_msg)
 
             return response.json()
 
@@ -132,6 +137,7 @@ class AnthropicOAuthFlow:
             "Continue with browser-based authentication?", default=True
         ).ask():
             console.print("[warning]Authentication cancelled.[/warning]")
+            logger.info("oauth.authenticate.cancelled_at_prompt")
             return False
 
         try:
@@ -169,6 +175,7 @@ class AnthropicOAuthFlow:
 
             if not auth_code:
                 console.print("[warning]Authentication cancelled.[/warning]")
+                logger.info("oauth.authenticate.cancelled_no_code")
                 return False
 
             # Step 2: Exchange code for tokens
@@ -202,18 +209,21 @@ class AnthropicOAuthFlow:
                     console.print(
                         "Your Claude Pro/Max subscription is now configured for SQLSaber."
                     )
+                    logger.info("oauth.authenticate.success")
                     return True
                 else:
                     console.print(
                         "[error]✗ Failed to store authentication tokens.[/error]"
                     )
+                    logger.error("oauth.authenticate.store_failed")
                     return False
 
         except KeyboardInterrupt:
             console.print("\n[warning]Authentication cancelled by user.[/warning]")
+            logger.info("oauth.authenticate.cancelled_keyboard")
             return False
         except Exception as e:
-            logger.error(f"OAuth authentication failed: {e}")
+            logger.exception("oauth.authenticate.error", error=str(e))
             console.print(f"[error]✗ Authentication failed: {str(e)}[/error]")
             return False
 
@@ -253,13 +263,15 @@ class AnthropicOAuthFlow:
             # Store the refreshed token
             if self.token_manager.store_oauth_token("anthropic", refreshed_token):
                 console.print("OAuth token refreshed successfully", style="green")
+                logger.info("oauth.token_refresh.success")
                 return refreshed_token
             else:
                 console.print("Failed to store refreshed token", style="warning")
+                logger.warning("oauth.token_refresh.store_failed")
                 return current_token
 
         except Exception as e:
-            logger.warning(f"Token refresh failed: {e}")
+            logger.warning("oauth.token_refresh.error", error=str(e))
             console.print(
                 "Token refresh failed. You may need to re-authenticate.",
                 style="warning",

@@ -1,16 +1,16 @@
 """OAuth token management for SQLSaber."""
 
 import json
-import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import keyring
 
+from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console
 
 console = create_console()
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class OAuthToken:
@@ -99,6 +99,7 @@ class OAuthTokenManager:
                     f"OAuth token for {provider} has expired and needs refresh",
                     style="muted",
                 )
+                logger.info("oauth.token.expired", provider=provider)
                 return token  # Return anyway for refresh attempt
 
             if token.expires_soon():
@@ -106,11 +107,14 @@ class OAuthTokenManager:
                     f"OAuth token for {provider} expires soon, consider refreshing",
                     style="muted",
                 )
+                logger.info("oauth.token.expires_soon", provider=provider)
 
             return token
 
         except Exception as e:
-            logger.warning(f"Failed to retrieve OAuth token for {provider}: {e}")
+            logger.warning(
+                "oauth.token.retrieve_failed", provider=provider, error=str(e)
+            )
             return None
 
     def store_oauth_token(self, provider: str, token: OAuthToken) -> bool:
@@ -121,9 +125,10 @@ class OAuthTokenManager:
             token_data = json.dumps(token.to_dict())
             keyring.set_password(service_name, provider, token_data)
             console.print(f"OAuth token for {provider} stored securely", style="green")
+            logger.info("oauth.token.stored", provider=provider)
             return True
         except Exception as e:
-            logger.error(f"Failed to store OAuth token for {provider}: {e}")
+            logger.error("oauth.token.store_failed", provider=provider, error=str(e))
             console.print(
                 f"Warning: Could not store OAuth token in keyring: {e}",
                 style="warning",
@@ -149,7 +154,10 @@ class OAuthTokenManager:
             token_type=existing_token.token_type,
         )
 
-        return self.store_oauth_token(provider, updated_token)
+        success = self.store_oauth_token(provider, updated_token)
+        if success:
+            logger.info("oauth.token.updated", provider=provider)
+        return success
 
     def remove_oauth_token(self, provider: str) -> bool:
         """Remove OAuth token from storage."""
@@ -158,9 +166,10 @@ class OAuthTokenManager:
         try:
             keyring.delete_password(service_name, provider)
             console.print(f"OAuth token for {provider} removed", style="green")
+            logger.info("oauth.token.removed", provider=provider)
             return True
         except Exception as e:
-            logger.error(f"Failed to remove OAuth token for {provider}: {e}")
+            logger.error("oauth.token.remove_failed", provider=provider, error=str(e))
             console.print(
                 f"Warning: Could not remove OAuth token: {e}", style="warning"
             )

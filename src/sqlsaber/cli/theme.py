@@ -12,8 +12,10 @@ from platformdirs import user_config_dir
 from pygments.styles import get_all_styles
 
 from sqlsaber.theme.manager import DEFAULT_THEME_NAME, create_console
+from sqlsaber.config.logging import get_logger
 
 console = create_console()
+logger = get_logger(__name__)
 
 # Create the theme management CLI app
 theme_app = cyclopts.App(
@@ -71,6 +73,7 @@ class ThemeManager:
             return True
         except Exception as e:
             console.print(f"[error]Error setting theme: {e}[/error]")
+            logger.error("theme.set.error", theme=theme_name, error=str(e))
             return False
 
     def reset_theme(self) -> bool:
@@ -81,6 +84,7 @@ class ThemeManager:
             return True
         except Exception as e:
             console.print(f"[error]Error resetting theme: {e}[/error]")
+            logger.error("theme.reset.error", error=str(e))
             return False
 
     def get_available_themes(self) -> list[str]:
@@ -94,6 +98,7 @@ theme_manager = ThemeManager()
 @theme_app.command
 def set():
     """Set the theme to use for syntax highlighting."""
+    logger.info("theme.set.start")
 
     async def interactive_set():
         themes = theme_manager.get_available_themes()
@@ -119,11 +124,13 @@ def set():
         if selected_theme:
             if theme_manager.set_theme(selected_theme):
                 console.print(f"[success]✓ Theme set to: {selected_theme}[/success]")
+                logger.info("theme.set.done", theme=selected_theme)
             else:
                 console.print("[error]✗ Failed to set theme[/error]")
                 sys.exit(1)
         else:
             console.print("[warning]Operation cancelled[/warning]")
+            logger.info("theme.set.cancelled")
 
     asyncio.run(interactive_set())
 
@@ -136,6 +143,7 @@ def reset():
         console.print(
             f"[success]✓ Theme reset to default: {DEFAULT_THEME_NAME}[/success]"
         )
+        logger.info("theme.reset.done", theme=DEFAULT_THEME_NAME)
     else:
         console.print("[error]✗ Failed to reset theme[/error]")
         sys.exit(1)

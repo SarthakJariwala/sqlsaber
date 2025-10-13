@@ -12,12 +12,14 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console, get_theme_manager
 from sqlsaber.threads import ThreadStorage
 
 # Globals consistent with other CLI modules
 console = create_console()
 tm = get_theme_manager()
+logger = get_logger(__name__)
 
 
 threads_app = cyclopts.App(
@@ -219,10 +221,12 @@ def list_threads(
     ] = 50,
 ):
     """List threads (optionally filtered by database)."""
+    logger.info("threads.cli.list.start", database=database, limit=limit)
     store = ThreadStorage()
     threads = asyncio.run(store.list_threads(database_name=database, limit=limit))
     if not threads:
         console.print("No threads found.")
+        logger.info("threads.cli.list.empty")
         return
     table = Table(title="Threads")
     table.add_column("ID", style=tm.style("info"))
@@ -239,6 +243,7 @@ def list_threads(
             t.model_name or "-",
         )
     console.print(table)
+    logger.info("threads.cli.list.complete", count=len(threads))
 
 
 @threads_app.command
@@ -246,10 +251,12 @@ def show(
     thread_id: Annotated[str, cyclopts.Parameter(help="Thread ID")],
 ):
     """Show thread metadata and render the full transcript."""
+    logger.info("threads.cli.show.start", thread_id=thread_id)
     store = ThreadStorage()
     thread = asyncio.run(store.get_thread(thread_id))
     if not thread:
         console.print(f"[error]Thread not found:[/error] {thread_id}")
+        logger.error("threads.cli.show.not_found", thread_id=thread_id)
         return
     msgs = asyncio.run(store.get_thread_messages(thread_id))
     console.print(f"[bold]Thread: {thread.id}[/bold]")
@@ -261,6 +268,7 @@ def show(
     console.print("")
 
     _render_transcript(console, msgs, None)
+    logger.info("threads.cli.show.complete", thread_id=thread_id)
 
 
 @threads_app.command
@@ -272,6 +280,7 @@ def resume(
     ] = None,
 ):
     """Render transcript, then resume thread in interactive mode."""
+    logger.info("threads.cli.resume.start", thread_id=thread_id, database=database)
     store = ThreadStorage()
 
     async def _run() -> None:
@@ -288,12 +297,14 @@ def resume(
         thread = await store.get_thread(thread_id)
         if not thread:
             console.print(f"[error]Thread not found:[/error] {thread_id}")
+            logger.error("threads.cli.resume.not_found", thread_id=thread_id)
             return
         db_selector = database or thread.database_name
         if not db_selector:
             console.print(
                 "[error]No database specified or stored with this thread.[/error]"
             )
+            logger.error("threads.cli.resume.no_database", thread_id=thread_id)
             return
         try:
             config_manager = DatabaseConfigManager()
@@ -302,6 +313,9 @@ def resume(
             db_name = resolved.name
         except DatabaseResolutionError as e:
             console.print(f"[error]Database resolution error:[/error] {e}")
+            logger.error(
+                "threads.cli.resume.resolve_failed", thread_id=thread_id, error=str(e)
+            )
             return
 
         db_conn = DatabaseConnection(connection_string)
@@ -330,6 +344,7 @@ def resume(
         finally:
             await db_conn.close()
             console.print("\n[success]Goodbye![/success]")
+            logger.info("threads.cli.resume.closed")
 
     asyncio.run(_run())
 
@@ -344,11 +359,13 @@ def prune(
     ] = 30,
 ):
     """Prune old threads by last activity timestamp."""
+    logger.info("threads.cli.prune.start", days=days)
     store = ThreadStorage()
 
     async def _run() -> None:
         deleted = await store.prune_threads(older_than_days=days)
         console.print(f"[success]✓ Pruned {deleted} thread(s).[/success]")
+        logger.info("threads.cli.prune.complete", deleted=deleted)
 
     asyncio.run(_run())
 

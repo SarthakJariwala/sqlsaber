@@ -1,6 +1,6 @@
 [project]
 name = "sqlsaber"
-version = "0.30.2"
+version = "0.31.0"
 description = "SQLsaber - Open-source agentic SQL assistant"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -19,6 +19,7 @@ dependencies = [
     "cyclopts>=3.22.1",
     "prompt-toolkit>3.0.51",
     "sqlglot[rs]>=27.20.0",
+    "structlog>=25.4.0",
 ]
 
 [dependency-groups]
