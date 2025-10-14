@@ -9,6 +9,12 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.32.0 - 2025-10-14
+
+#### Added
+
+- Optional MLflow autologging
+  - Set `MLFLOW_URI` and `MLFLOW_EXP` before running `sqlsaber` to forward telemetry via `mlflow.pydantic_ai.autolog()` with no runtime requirement when the MLflow package is absent.
 
 ### v0.31.0 - 2025-10-13
 
