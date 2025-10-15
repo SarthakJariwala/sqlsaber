@@ -44,7 +44,7 @@ def setup():
             api_key_manager=api_key_manager,
             allow_oauth=True,
             default_provider="anthropic",
-            run_oauth_in_thread=False,
+            run_oauth_in_thread=True,  # questionary's sync prompts need their own event loop
         )
         return success, provider
 
