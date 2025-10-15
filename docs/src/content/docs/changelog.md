@@ -9,6 +9,12 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.32.1 - 2025-10-15
+
+#### Fixed
+
+- Prevented `saber auth setup` from crashing when launching Anthropic OAuth by moving the browser authentication flow onto a background thread, avoiding nested asyncio event loops.
+
 ### v0.32.0 - 2025-10-14
 
 #### Added
