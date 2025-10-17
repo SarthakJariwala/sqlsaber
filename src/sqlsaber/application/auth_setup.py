@@ -1,6 +1,7 @@
 """Shared auth setup logic for onboarding and CLI."""
 
 import asyncio
+import os
 
 from questionary import Choice
 
@@ -9,6 +10,7 @@ from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
 from sqlsaber.config.auth import AuthConfigManager, AuthMethod
 from sqlsaber.config.oauth_flow import AnthropicOAuthFlow
+from sqlsaber.config.oauth_tokens import OAuthTokenManager
 from sqlsaber.theme.manager import create_console
 
 console = create_console()
@@ -102,24 +104,49 @@ async def setup_auth(
     Returns:
         Tuple of (success: bool, provider: str | None)
     """
-    # Check if auth is already configured
-    if auth_manager.has_auth_configured():
-        console.print("[success]✓ Authentication already configured![/success]")
-        return True, None
+    oauth_manager = OAuthTokenManager()
 
-    # Select provider
     provider = await select_provider(prompter, default=default_provider)
 
     if provider is None:
         return False, None
 
+    env_var = api_key_manager.get_env_var_name(provider)
+    api_key_in_env = bool(os.getenv(env_var))
+    api_key_in_keyring = api_key_manager.has_stored_api_key(provider)
+    has_oauth = (
+        oauth_manager.has_oauth_token("anthropic")
+        if provider == "anthropic" and allow_oauth
+        else False
+    )
+
+    if api_key_in_env or api_key_in_keyring or has_oauth:
+        parts: list[str] = []
+        if api_key_in_keyring:
+            parts.append("stored API key")
+        if api_key_in_env:
+            parts.append(f"{env_var} environment variable")
+        if has_oauth:
+            parts.append("OAuth token")
+        summary = ", ".join(parts)
+        console.print(
+            f"[info]Existing authentication found for {provider}: {summary}[/info]"
+        )
+
     # For Anthropic, offer OAuth or API key
     if provider == "anthropic" and allow_oauth:
+        api_key_label = "API Key"
+        if api_key_in_keyring or api_key_in_env:
+            api_key_label += " [configured]"
+        oauth_label = "Claude Pro/Max (OAuth)"
+        if has_oauth:
+            oauth_label += " [configured]"
+
         method_choice = await prompter.select(
             "Authentication method:",
             choices=[
-                Choice("API Key", value=AuthMethod.API_KEY),
-                Choice("Claude Pro/Max (OAuth)", value=AuthMethod.CLAUDE_PRO),
+                Choice(api_key_label, value=AuthMethod.API_KEY),
+                Choice(oauth_label, value=AuthMethod.CLAUDE_PRO),
             ],
         )
 
@@ -127,6 +154,28 @@ async def setup_auth(
             return False, None
 
         if method_choice == AuthMethod.CLAUDE_PRO:
+            if has_oauth:
+                reset = await prompter.confirm(
+                    "Anthropic OAuth is already configured. Reset before continuing?",
+                    default=False,
+                )
+                if not reset:
+                    console.print(
+                        "[warning]No changes made to Anthropic OAuth credentials.[/warning]"
+                    )
+                    return True, None
+
+                removal_success = oauth_manager.remove_oauth_token("anthropic")
+                if not removal_success:
+                    console.print(
+                        "[error]Failed to remove existing Anthropic OAuth credentials.[/error]"
+                    )
+                    return False, None
+
+                current_method = auth_manager.get_auth_method()
+                if current_method == AuthMethod.CLAUDE_PRO:
+                    auth_manager.clear_auth_method()
+
             console.print()
             oauth_success = await configure_oauth_anthropic(
                 auth_manager, run_in_thread=run_oauth_in_thread
@@ -136,12 +185,35 @@ async def setup_auth(
                     "[green]✓ Anthropic OAuth configured successfully![/green]"
                 )
                 return True, provider
-            else:
-                console.print("[error]✗ Anthropic OAuth setup failed.[/error]")
-                return False, None
+
+            console.print("[error]✗ Anthropic OAuth setup failed.[/error]")
+            return False, None
 
     # API key flow
-    env_var = api_key_manager.get_env_var_name(provider)
+    if api_key_in_keyring:
+        reset_api_key = await prompter.confirm(
+            f"{provider.title()} API key is stored in your keyring. Reset before continuing?",
+            default=False,
+        )
+        if not reset_api_key:
+            console.print(
+                "[warning]No changes made to stored API key credentials.[/warning]"
+            )
+            return True, None
+        if not api_key_manager.delete_api_key(provider):
+            console.print(
+                "[error]Failed to remove existing API key credentials.[/error]"
+            )
+            return False, None
+        console.print(
+            f"[muted]{provider.title()} API key removed from keyring.[/muted]"
+        )
+        api_key_in_keyring = False
+
+    if api_key_in_env:
+        console.print(
+            f"[muted]{env_var} is set in your environment. Update it there if you need a new value.[/muted]"
+        )
 
     console.print()
     console.print(f"[dim]To use {provider.title()}, you need an API key.[/dim]")
