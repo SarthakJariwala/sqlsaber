@@ -7,6 +7,10 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+#### Changed
+
+- Improved `auth setup` command: Reworked to select the provider first, offer to reset existing credentials per provider, and allow configuring multiple providers in one session without manual cleanup.
+
 ---
 
 ### v0.33.0 - 2025-10-16

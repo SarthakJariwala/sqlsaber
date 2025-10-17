@@ -41,6 +41,29 @@ class APIKeyManager:
         # 3. Prompt user for API key
         return self._prompt_and_store_key(provider, env_var_name, service_name)
 
+    def has_stored_api_key(self, provider: str) -> bool:
+        """Check if an API key is stored for the provider."""
+        service_name = self._get_service_name(provider)
+        try:
+            return keyring.get_password(service_name, provider) is not None
+        except Exception:
+            return False
+
+    def delete_api_key(self, provider: str) -> bool:
+        """Remove stored API key for the provider."""
+        service_name = self._get_service_name(provider)
+        try:
+            keyring.delete_password(service_name, provider)
+            return True
+        except keyring.errors.PasswordDeleteError:
+            return True
+        except Exception as e:
+            console.print(
+                f"Warning: Could not remove API key: {e}",
+                style="warning",
+            )
+            return False
+
     def get_env_var_name(self, provider: str) -> str:
         """Get the expected environment variable name for a provider."""
         # Normalize aliases to canonical provider keys

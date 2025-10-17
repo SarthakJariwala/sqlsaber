@@ -81,6 +81,12 @@ class AuthConfigManager:
         config["auth_method"] = auth_method.value
         self._save_config(config)
 
+    def clear_auth_method(self) -> None:
+        """Clear any configured authentication method."""
+        config = self._load_config()
+        config["auth_method"] = None
+        self._save_config(config)
+
     def has_auth_configured(self) -> bool:
         """Check if authentication method is configured."""
         return self.get_auth_method() is not None
