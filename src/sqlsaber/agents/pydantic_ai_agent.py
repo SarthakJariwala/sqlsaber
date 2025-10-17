@@ -24,6 +24,9 @@ from sqlsaber.database import (
     SQLiteConnection,
 )
 from sqlsaber.memory.manager import MemoryManager
+from sqlsaber.prompts.claude import SONNET_4_5
+from sqlsaber.prompts.memory import MEMORY_ADDITION
+from sqlsaber.prompts.openai import GPT_5
 from sqlsaber.tools.registry import tool_registry
 from sqlsaber.tools.sql_tools import SQLTool
 
@@ -168,6 +171,16 @@ class SQLSaberAgent:
 
             @agent.system_prompt(dynamic=True)
             async def sqlsaber_system_prompt(ctx: RunContext) -> str:
+                if "gpt-5" in agent.model.model_name:
+                    base = GPT_5.format(db=self.db_type)
+
+                    if self.database_name:
+                        mem = self.memory_manager.format_memories_for_prompt(
+                            self.database_name
+                        )
+                        mem = mem.strip()
+                        if mem:
+                            return f"{base}\n\n{MEMORY_ADDITION}\n\n{mem}"
                 return self.system_prompt_text(include_memory=True)
         else:
 
@@ -178,37 +191,13 @@ class SQLSaberAgent:
 
     def system_prompt_text(self, include_memory: bool = True) -> str:
         """Return the original SQLSaber system prompt as a single string."""
-        db = self.db_type
-        base = (
-            f"You are a helpful SQL assistant that helps users query their {db} database.\n\n"
-            "Your responsibilities:\n"
-            "1. Understand user's natural language requests, think and convert them to SQL\n"
-            "2. Use the provided tools efficiently to explore database schema\n"
-            "3. Generate appropriate SQL queries\n"
-            "4. Execute queries safely - queries that modify the database are not allowed\n"
-            "5. Format and explain results clearly\n\n"
-            "IMPORTANT - Tool Usage Strategy:\n"
-            "1. ALWAYS start with 'list_tables' to see available tables and row counts. Use this first to discover available tables.\n"
-            "2. Use 'introspect_schema' with a table_pattern to get details ONLY for relevant tables. Use table patterns like 'sample%' or '%experiment%' to filter related tables.\n"
-            "3. Execute SQL queries safely with automatic LIMIT clauses for SELECT statements. Only SELECT queries are permitted for security.\n\n"
-            "Tool-Specific Guidelines:\n"
-            "- introspect_schema: Use 'introspect_schema' with a table_pattern to get details ONLY for relevant tables. Use table patterns like 'sample%' or '%experiment%' to filter related tables.\n"
-            "- execute_sql: Execute SQL queries safely with automatic LIMIT clauses for SELECT statements. Only SELECT queries are permitted for security.\n\n"
-            "Guidelines:\n"
-            "- Use proper JOIN syntax and avoid cartesian products\n"
-            "- Include appropriate WHERE clauses to limit results\n"
-            "- Explain what the query does in simple terms\n"
-            "- Handle errors gracefully and suggest fixes\n"
-            "- Be security conscious - use parameterized queries when needed\n"
-            "- Timestamp columns must be converted to text when you write queries\n"
-            "- Use table patterns like 'sample%' or '%experiment%' to filter related tables"
-        )
+        base = SONNET_4_5.format(db=self.db_type)
 
         if include_memory and self.database_name:
             mem = self.memory_manager.format_memories_for_prompt(self.database_name)
             mem = mem.strip()
             if mem:
-                return f"{base}\n\n{mem}"
+                return f"{base}\n\n{MEMORY_ADDITION}\n\n{mem}\n\n"
         return base
 
     def _register_tools(self, agent: Agent) -> None:
