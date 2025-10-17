@@ -15,72 +15,50 @@ Before you begin, make sure you have:
 
 ### Quick Setup
 
-#### 1. Set Up Authentication
+#### 1. Launch the Onboarding Flow
 
-First, configure your AI provider.
-
-SQLsaber uses Claude Sonnet 4 as the model by default, but supports models from [multiple providers](/guides/models).
-
-```bash
-saber auth setup
-```
-
-This will prompt you to:
-
-- Choose a provider (We recommend Anthropic)
-- Enter your API key
-
-<Aside type="tip">
-  If you have a Claude Pro or Max subscription, you can use it with SQLsaber. It
-  is one of the most cost-effective options.
-</Aside>
-
-<Aside type="note">
-  If you choose a provider other than Anthropic, please select the appropriate
-  model for the provider by running `saber models set`.
-</Aside>
-
-#### 2. Add Your Database
-
-Add a database connection:
-
-```bash
-saber db add my-database
-```
-
-This interactive command will ask you for:
-
-- Database type
-  - PostgreSQL
-  - MySQL
-  - SQLite
-  - DuckDB
-- Connection details (host, port, database name, username)
-- SSL configuration (if needed)
-
-<Aside type="note">
-If you don't have a database handy, you can use a sample `legislators` SQLite database from SQLsaber repository:
-
-```bash
-curl -L -o legislators.db https://github.com/SarthakJariwala/sqlsaber/raw/refs/heads/main/legislators.db
-
-# Add it to SQLsaber
-saber db add legislators --type sqlite --database ./legislators.db
-```
-
-</Aside>
-
-#### 3. Your First Query
-
-Now you're ready to ask your first question!
-
-Start SQLsaber in interactive mode:
+Run SQLsaber with no arguments to start the guided setup:
 
 ```bash
 saber
 ```
 
-Try asking a question:
+On your first run, SQLsaber walks you through two guided steps:
+
+1. **Database connection**:
+   Choose the database type and provide connection details.
+
+2. **Authentication**:
+   Sign in to your preferred AI provider and pick a model. We recommend Sonnet 4.5, 4 or GPT-5.
+
+   `sqlsaber` will store your API key securely using your OS credential store.
+
+When both steps succeed you'll see a confirmation screen, and SQLsaber immediately opens an interactive session.
+
+<Aside type="tip">
+  If you have a Claude Pro or Max subscription, you can use it with SQLsaber for
+  a cost-effective setup.
+</Aside>
+
+<Aside type="tip">
+    If you already have a connection string handy, pass it via `saber -d <connection-string>` to skip the onboarding flow.
+</Aside>
+
+<Aside type="note">
+  Need a sample database?
+
+Download the `legislators` SQLite file, then choose `sqlite` when the onboarding flow prompts for a database location (or add it with `saber db add`):
+
+```bash
+curl -L -o legislators.db https://github.com/SarthakJariwala/sqlsaber/raw/refs/heads/main/legislators.db
+```
+
+</Aside>
+
+#### 2. Ask Your First Question
+
+Once onboarding completes, you're already in interactive mode. Try asking a
+question:
 
 ```
 > How many VPs have become presidents via election in 20th century?
