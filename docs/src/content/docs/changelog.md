@@ -9,6 +9,14 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.33.0 - 2025-10-16
+
+#### Changed
+
+- Improved system prompt for GPT-5 using OpenAI's prompt optimizer tool
+- Improved system prompt for Sonnet 4.5 and others using Anthropic's prompt improvement tool
+- Dedicated prompt for GPT-5
+
 ### v0.32.1 - 2025-10-15
 
 #### Fixed
