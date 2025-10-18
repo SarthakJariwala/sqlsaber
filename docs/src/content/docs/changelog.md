@@ -7,11 +7,17 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+---
+
+### v0.34.0 - 2025-10-17
+
 #### Changed
 
 - Improved `auth setup` command: Reworked to select the provider first, offer to reset existing credentials per provider, and allow configuring multiple providers in one session without manual cleanup.
-
----
+- PostgreSQL schema introspection: Exclude TimescaleDB internal schemas by default and add env-based filtering
+  - Default exclusions now include `pg_catalog`, `information_schema`, `_timescaledb_internal`, `_timescaledb_cache`, `_timescaledb_config`, `_timescaledb_catalog`
+  - New environment variable `SQLSABER_PG_EXCLUDE_SCHEMAS` allows excluding additional schemas (comma-separated)
+  - Applies to both `list_tables` and `introspect_schema` tools
 
 ### v0.33.0 - 2025-10-16
 
@@ -65,7 +71,7 @@ All notable changes to SQLsaber will be documented here.
 
   > `sqlsaber` can still be used as a cli in coding agents like Claude Code, Codex, or Amp.
   >
-  > Just *ask* the coding agent to invoke `sqlsaber` cli with your question.
+  > Just _ask_ the coding agent to invoke `sqlsaber` cli with your question.
 
 ### v0.29.1 - 2025-10-05
 
@@ -360,6 +366,7 @@ All notable changes to SQLsaber will be documented here.
 #### Added
 
 - Table name autocomplete with "@" prefix in interactive mode
+
   - Type "@" followed by table name to get fuzzy matching completions
   - Supports schema-aware completions (e.g., "@sample" matches "public.sample")
 

@@ -135,6 +135,35 @@ class PostgreSQLConnection(BaseDatabaseConnection):
 class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
     """PostgreSQL-specific schema introspection."""
 
+    def _get_excluded_schemas(self) -> list[str]:
+        """Return schemas to exclude during introspection.
+
+        Defaults include PostgreSQL system schemas and TimescaleDB internal
+        partitions schema. Additional schemas can be excluded by setting the
+        environment variable `SQLSABER_PG_EXCLUDE_SCHEMAS` to a comma-separated
+        list of schema names.
+        """
+        import os
+
+        # Base exclusions: system schemas and TimescaleDB internal partitions
+        excluded = [
+            "pg_catalog",
+            "information_schema",
+            "_timescaledb_internal",
+            "_timescaledb_cache",
+            "_timescaledb_config",
+            "_timescaledb_catalog",
+        ]
+
+        extra = os.getenv("SQLSABER_PG_EXCLUDE_SCHEMAS", "")
+        if extra:
+            for item in extra.split(","):
+                name = item.strip()
+                if name and name not in excluded:
+                    excluded.append(name)
+
+        return excluded
+
     def _build_table_filter_clause(self, tables: list) -> tuple[str, list]:
         """Build VALUES clause with bind parameters for table filtering.
 
@@ -160,23 +189,35 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
         """Get tables information for PostgreSQL."""
         pool = await connection.get_pool()
         async with pool.acquire() as conn:
-            # Build WHERE clause for filtering
-            where_conditions = [
-                "table_schema NOT IN ('pg_catalog', 'information_schema')"
-            ]
-            params = []
+            # Build WHERE clause for filtering with bind params
+            where_conditions: list[str] = []
+            params: list[Any] = []
+
+            excluded = self._get_excluded_schemas()
+            if excluded:
+                placeholders = ", ".join(f"${i + 1}" for i in range(len(excluded)))
+                where_conditions.append(f"table_schema NOT IN ({placeholders})")
+                params.extend(excluded)
+            else:
+                # Fallback safety
+                where_conditions.append(
+                    "table_schema NOT IN ('pg_catalog', 'information_schema')"
+                )
 
             if table_pattern:
                 # Support patterns like 'schema.table' or just 'table'
                 if "." in table_pattern:
                     schema_pattern, table_name_pattern = table_pattern.split(".", 1)
+                    s_idx = len(params) + 1
+                    t_idx = len(params) + 2
                     where_conditions.append(
-                        "(table_schema LIKE $1 AND table_name LIKE $2)"
+                        f"(table_schema LIKE ${s_idx} AND table_name LIKE ${t_idx})"
                     )
                     params.extend([schema_pattern, table_name_pattern])
                 else:
+                    p_idx = len(params) + 1
                     where_conditions.append(
-                        "(table_name LIKE $1 OR table_schema || '.' || table_name LIKE $1)"
+                        f"(table_name LIKE ${p_idx} OR table_schema || '.' || table_name LIKE ${p_idx})"
                     )
                     params.append(table_pattern)
 
@@ -310,17 +351,28 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
         """Get list of tables with basic information for PostgreSQL."""
         pool = await connection.get_pool()
         async with pool.acquire() as conn:
-            # Get table names and basic info without row counts for better performance
-            tables_query = """
+            # Exclude system schemas (and TimescaleDB internals) for performance
+            excluded = self._get_excluded_schemas()
+            params: list[Any] = []
+            if excluded:
+                placeholders = ", ".join(f"${i + 1}" for i in range(len(excluded)))
+                where_clause = f"table_schema NOT IN ({placeholders})"
+                params.extend(excluded)
+            else:
+                where_clause = (
+                    "table_schema NOT IN ('pg_catalog', 'information_schema')"
+                )
+
+            tables_query = f"""
                 SELECT
                     table_schema,
                     table_name,
                     table_type
                 FROM information_schema.tables
-                WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+                WHERE {where_clause}
                 ORDER BY table_schema, table_name;
             """
-            tables = await conn.fetch(tables_query)
+            tables = await conn.fetch(tables_query, *params)
 
             # Convert to expected format
             return [
