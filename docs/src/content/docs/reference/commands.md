@@ -436,3 +436,12 @@ When in interactive mode (`saber` with no arguments), you have access to a few a
 
 - **Table names** - Type `@table_name[TAB]` for completions
 - **Slash commands** - Type `/[TAB]` for command completions
+
+---
+
+### Environment Variables
+
+These environment variables adjust runtime behavior:
+
+- `SQLSABER_THEME` — Override the configured theme for the session.
+- `SQLSABER_PG_EXCLUDE_SCHEMAS` — Comma-separated list of PostgreSQL schemas to exclude from schema discovery and introspection. Defaults already exclude `pg_catalog`, `information_schema`, `_timescaledb_internal`, `_timescaledb_cache`, `_timescaledb_config`, `_timescaledb_catalog`.

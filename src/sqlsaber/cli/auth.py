@@ -167,7 +167,9 @@ def reset():
             pass
         except Exception as e:
             console.print(f"Warning: Could not remove API key: {e}", style="warning")
-            logger.warning("auth.reset.api_key_remove_failed", provider=provider, error=str(e))
+            logger.warning(
+                "auth.reset.api_key_remove_failed", provider=provider, error=str(e)
+            )
 
     # Optionally clear global auth method if removing Anthropic OAuth configuration
     if provider == "anthropic" and oauth_present:

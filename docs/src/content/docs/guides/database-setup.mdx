@@ -3,7 +3,7 @@ title: Database Setup
 description: Configure database connections in SQLsaber
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 SQLsaber supports PostgreSQL, MySQL, SQLite, DuckDB, and CSV data sources. This guide covers all the ways to configure database connections.
 
@@ -66,7 +66,8 @@ saber -d "./customers.csv" "How many customers are from each state?"
 ```
 
 <Aside type="note">
-For CSV files, first row should contain column headers. SQLsaber will infer data types automatically.
+  For CSV files, first row should contain column headers. SQLsaber will infer
+  data types automatically.
 </Aside>
 
 ### Managing Connections
@@ -86,7 +87,7 @@ saber db set-default my-database
 ```
 
 <Aside type="note">
-By default, SQLsaber will set the first added connection as default.
+  By default, SQLsaber will set the first added connection as default.
 </Aside>
 
 #### Test Connections
@@ -115,10 +116,13 @@ While SQLsaber ensures, via checks before executing queries, that only read quer
 If you have a read-replica of your production database, consider using those credentials to setup connection.
 
 In addition to the read-only role, this will provide additional layer of security and ensure no data modifying queries are executed.
+
 </Aside>
 
 <Aside type="note">
-For development setups, this isn't required but is a good practice if you wish to ensure with absolute certainty that no data modifying queries are ever executed.
+  For development setups, this isn't required but is a good practice if you wish
+  to ensure with absolute certainty that no data modifying queries are ever
+  executed.
 </Aside>
 
 #### Password Storage
@@ -128,6 +132,27 @@ SQLsaber stores database passwords securely using your operating system's creden
 #### SSL Certificates
 
 Store SSL certificates in a secure location and use absolute paths when configuring connections.
+
+### Schema Introspection Filters (PostgreSQL)
+
+By default, SQLsaber excludes system and TimescaleDB internal schemas during schema discovery to keep results focused and fast.
+
+Excluded by default:
+
+- `pg_catalog`
+- `information_schema`
+- `_timescaledb_internal`
+- `_timescaledb_cache`
+- `_timescaledb_config`
+- `_timescaledb_catalog`
+
+You can exclude additional schemas via environment variable before running `saber`:
+
+```bash
+export SQLSABER_PG_EXCLUDE_SCHEMAS="schema1,schema2"
+```
+
+Both the `list_tables` and `introspect_schema` tools respect these filters.
 
 ### Troubleshooting
 
