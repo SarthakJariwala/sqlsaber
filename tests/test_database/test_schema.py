@@ -1,9 +1,10 @@
 """Tests for schema introspection."""
 
+import aiosqlite
 import duckdb
 import pytest
 
-from sqlsaber.database import DuckDBConnection
+from sqlsaber.database import DuckDBConnection, SQLiteConnection
 from sqlsaber.database.schema import (
     DuckDBSchemaIntrospector,
     SchemaManager,
@@ -85,12 +86,8 @@ async def test_duckdb_comments(tmp_path):
 @pytest.mark.asyncio
 async def test_sqlite_no_comments(tmp_path):
     """Verify that SQLite returns None for comments since it doesn't support them."""
-    from sqlsaber.database import SQLiteConnection
 
     db_path = tmp_path / "no_comments.db"
-
-    # Use aiosqlite directly to create a proper SQLite database
-    import aiosqlite
 
     async with aiosqlite.connect(str(db_path)) as conn:
         await conn.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT);")

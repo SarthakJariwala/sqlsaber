@@ -148,6 +148,39 @@ class TestSchemaDisplayMappings:
         await db_conn.close()
 
     @pytest.mark.asyncio
+    async def test_schema_display_includes_comments(self, tmp_path):
+        """Ensure schema display renders table and column comments when present."""
+        db_path = tmp_path / "test_comments.duckdb"
+
+        conn = duckdb.connect(str(db_path))
+        try:
+            conn.execute(
+                "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price DECIMAL);"
+            )
+            conn.execute("COMMENT ON TABLE products IS 'Product catalog';")
+            conn.execute("COMMENT ON COLUMN products.id IS 'Unique product identifier';")
+            conn.execute("COMMENT ON COLUMN products.name IS 'Product name';")
+        finally:
+            conn.close()
+
+        db_conn = DuckDBConnection(f"duckdb:///{db_path}")
+        schema_manager = SchemaManager(db_conn)
+        schema_info = await schema_manager.get_schema_info()
+
+        string_io = StringIO()
+        console = create_console(file=string_io, width=120, legacy_windows=False)
+        display_manager = DisplayManager(console)
+
+        display_manager.show_schema_info(schema_info)
+        output = string_io.getvalue()
+
+        assert "Product catalog" in output
+        assert "Unique product identifier" in output
+        assert "Product name" in output
+
+        await db_conn.close()
+
+    @pytest.mark.asyncio
     async def test_table_list_display_integration(self, tmp_path):
         """Test end-to-end table list display with type mappings."""
         # Create test database with different object types

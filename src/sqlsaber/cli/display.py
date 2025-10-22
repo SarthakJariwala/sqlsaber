@@ -406,9 +406,17 @@ class DisplayManager:
             for table_name, table_info in data.items():
                 self.console.print(f"\n[heading]Table: {table_name}[/heading]")
 
+                table_comment = table_info.get("comment")
+                if table_comment:
+                    self.console.print(f"[muted]Comment: {table_comment}[/muted]")
+
                 # Show columns
                 table_columns = table_info.get("columns", {})
                 if table_columns:
+                    include_column_comments = any(
+                        col_info.get("comment") for col_info in table_columns.values()
+                    )
+
                     # Create a table for columns
                     columns = [
                         {"name": "Column Name", "style": "column.name"},
@@ -416,6 +424,8 @@ class DisplayManager:
                         {"name": "Nullable", "style": "info"},
                         {"name": "Default", "style": "muted"},
                     ]
+                    if include_column_comments:
+                        columns.append({"name": "Comment", "style": "muted"})
                     col_table = self._create_table(columns, title="Columns")
 
                     for col_name, col_info in table_columns.items():
@@ -425,9 +435,15 @@ class DisplayManager:
                             if col_info.get("default")
                             else ""
                         )
-                        col_table.add_row(
-                            col_name, col_info.get("type", ""), nullable, default
-                        )
+                        row = [
+                            col_name,
+                            col_info.get("type", ""),
+                            nullable,
+                            default,
+                        ]
+                        if include_column_comments:
+                            row.append(col_info.get("comment") or "")
+                        col_table.add_row(*row)
 
                     self.console.print(col_table)
 

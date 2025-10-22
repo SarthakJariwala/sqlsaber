@@ -68,21 +68,11 @@ class SchemaManager:
             table_name = table["table_name"]
             full_name = f"{schema_name}.{table_name}"
 
-            # Handle different row types (dict vs Row objects)
-            if hasattr(table, "get"):
-                table_comment = table.get("table_comment")
-            else:
-                # For Row objects, use try-except to safely access the field
-                try:
-                    table_comment = table["table_comment"]
-                except (KeyError, IndexError):
-                    table_comment = None
-
             schema_info[full_name] = {
                 "schema": schema_name,
                 "name": table_name,
                 "type": table["table_type"],
-                "comment": table_comment,
+                "comment": table["table_comment"],
                 "columns": {},
                 "primary_keys": [],
                 "foreign_keys": [],
@@ -97,48 +87,14 @@ class SchemaManager:
             full_name = f"{col['table_schema']}.{col['table_name']}"
             if full_name in schema_info:
                 # Handle different row types (dict vs Row objects)
-                if hasattr(col, "get"):
-                    column_comment = col.get("column_comment")
-                    is_nullable = col.get("is_nullable", "YES")
-                    column_default = col.get("column_default")
-                    max_length = col.get("character_maximum_length")
-                    precision = col.get("numeric_precision")
-                    scale = col.get("numeric_scale")
-                else:
-                    # For Row objects, use try-except to safely access the fields
-                    try:
-                        column_comment = col["column_comment"]
-                    except (KeyError, IndexError):
-                        column_comment = None
-                    try:
-                        is_nullable = col["is_nullable"]
-                    except (KeyError, IndexError):
-                        is_nullable = "YES"
-                    try:
-                        column_default = col["column_default"]
-                    except (KeyError, IndexError):
-                        column_default = None
-                    try:
-                        max_length = col["character_maximum_length"]
-                    except (KeyError, IndexError):
-                        max_length = None
-                    try:
-                        precision = col["numeric_precision"]
-                    except (KeyError, IndexError):
-                        precision = None
-                    try:
-                        scale = col["numeric_scale"]
-                    except (KeyError, IndexError):
-                        scale = None
-
                 column_info: ColumnInfo = {
                     "data_type": col["data_type"],
-                    "nullable": is_nullable == "YES",
-                    "default": column_default,
-                    "max_length": max_length,
-                    "precision": precision,
-                    "scale": scale,
-                    "comment": column_comment,
+                    "nullable": col.get("is_nullable", "YES") == "YES",
+                    "default": col.get("column_default"),
+                    "max_length": col.get("character_maximum_length"),
+                    "precision": col.get("numeric_precision"),
+                    "scale": col.get("numeric_scale"),
+                    "comment": col.get("column_comment"),
                 }
                 # Add type field for display compatibility
                 column_info["type"] = col["data_type"]
