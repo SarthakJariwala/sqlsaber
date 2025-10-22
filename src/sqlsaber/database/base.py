@@ -24,6 +24,7 @@ class ColumnInfo(TypedDict):
     max_length: int | None
     precision: int | None
     scale: int | None
+    comment: str | None
 
 
 class ForeignKeyInfo(TypedDict):
@@ -48,6 +49,7 @@ class SchemaInfo(TypedDict):
     schema: str
     name: str
     type: str
+    comment: str | None
     columns: dict[str, ColumnInfo]
     primary_keys: list[str]
     foreign_keys: list[ForeignKeyInfo]

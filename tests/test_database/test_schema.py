@@ -45,3 +45,69 @@ async def test_duckdb_schema_manager(tmp_path):
     assert any(idx["name"] == "idx_users_name" for idx in users_info["indexes"])
 
     assert any(fk["column"] == "user_id" for fk in orders_info["foreign_keys"])
+
+
+@pytest.mark.asyncio
+async def test_duckdb_comments(tmp_path):
+    """Test that DuckDB table and column comments are retrieved correctly."""
+    db_path = tmp_path / "comments.duckdb"
+
+    conn = duckdb.connect(str(db_path))
+    try:
+        conn.execute(
+            "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price DECIMAL);"
+        )
+        conn.execute("COMMENT ON TABLE products IS 'Product catalog';")
+        conn.execute("COMMENT ON COLUMN products.id IS 'Unique product identifier';")
+        conn.execute("COMMENT ON COLUMN products.name IS 'Product name';")
+        conn.execute("COMMENT ON COLUMN products.price IS 'Product price in USD';")
+    finally:
+        conn.close()
+
+    db_conn = DuckDBConnection(f"duckdb:///{db_path}")
+    schema_manager = SchemaManager(db_conn)
+
+    # Test list_tables includes comments
+    tables = await schema_manager.list_tables()
+    products_table = next(t for t in tables["tables"] if t["table_name"] == "products")
+    assert products_table["table_comment"] == "Product catalog"
+
+    # Test get_schema_info includes comments
+    schema_info = await schema_manager.get_schema_info()
+    products_info = schema_info["main.products"]
+
+    assert products_info["comment"] == "Product catalog"
+    assert products_info["columns"]["id"]["comment"] == "Unique product identifier"
+    assert products_info["columns"]["name"]["comment"] == "Product name"
+    assert products_info["columns"]["price"]["comment"] == "Product price in USD"
+
+
+@pytest.mark.asyncio
+async def test_sqlite_no_comments(tmp_path):
+    """Verify that SQLite returns None for comments since it doesn't support them."""
+    from sqlsaber.database import SQLiteConnection
+
+    db_path = tmp_path / "no_comments.db"
+
+    # Use aiosqlite directly to create a proper SQLite database
+    import aiosqlite
+
+    async with aiosqlite.connect(str(db_path)) as conn:
+        await conn.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT);")
+        await conn.commit()
+
+    db_conn = SQLiteConnection(f"sqlite:///{db_path}")
+    schema_manager = SchemaManager(db_conn)
+
+    # Test list_tables has None for comments
+    tables = await schema_manager.list_tables()
+    items_table = next(t for t in tables["tables"] if t["table_name"] == "items")
+    assert items_table["table_comment"] is None
+
+    # Test get_schema_info has None for comments
+    schema_info = await schema_manager.get_schema_info()
+    items_info = schema_info["main.items"]
+
+    assert items_info["comment"] is None
+    assert items_info["columns"]["id"]["comment"] is None
+    assert items_info["columns"]["name"]["comment"] is None

@@ -95,27 +95,38 @@ class IntrospectSchemaTool(SQLTool):
             # Format the schema information
             formatted_info = {}
             for table_name, table_info in schema_info.items():
-                formatted_info[table_name] = {
-                    "columns": {
-                        col_name: {
-                            "type": col_info["data_type"],
-                            "nullable": col_info["nullable"],
-                            "default": col_info["default"],
-                        }
-                        for col_name, col_info in table_info["columns"].items()
-                    },
-                    "primary_keys": table_info["primary_keys"],
-                    "foreign_keys": [
-                        f"{fk['column']} -> {fk['references']['table']}.{fk['references']['column']}"
-                        for fk in table_info["foreign_keys"]
-                    ],
-                    "indexes": [
-                        f"{idx['name']} ({', '.join(idx['columns'])})"
-                        + (" UNIQUE" if idx["unique"] else "")
-                        + (f" [{idx['type']}]" if idx["type"] else "")
-                        for idx in table_info["indexes"]
-                    ],
-                }
+                table_data = {}
+
+                # Add table comment if present
+                if table_info.get("comment"):
+                    table_data["comment"] = table_info["comment"]
+
+                # Add columns with comments if present
+                table_data["columns"] = {}
+                for col_name, col_info in table_info["columns"].items():
+                    column_data = {
+                        "type": col_info["data_type"],
+                        "nullable": col_info["nullable"],
+                        "default": col_info["default"],
+                    }
+                    if col_info.get("comment"):
+                        column_data["comment"] = col_info["comment"]
+                    table_data["columns"][col_name] = column_data
+
+                # Add other schema information
+                table_data["primary_keys"] = table_info["primary_keys"]
+                table_data["foreign_keys"] = [
+                    f"{fk['column']} -> {fk['references']['table']}.{fk['references']['column']}"
+                    for fk in table_info["foreign_keys"]
+                ]
+                table_data["indexes"] = [
+                    f"{idx['name']} ({', '.join(idx['columns'])})"
+                    + (" UNIQUE" if idx["unique"] else "")
+                    + (f" [{idx['type']}]" if idx["type"] else "")
+                    for idx in table_info["indexes"]
+                ]
+
+                formatted_info[table_name] = table_data
 
             return json.dumps(formatted_info)
         except Exception as e:

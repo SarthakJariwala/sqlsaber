@@ -202,7 +202,8 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
                     SELECT
                         table_schema,
                         table_name,
-                        table_type
+                        table_type,
+                        table_comment
                     FROM information_schema.tables
                     WHERE {" AND ".join(where_conditions)}
                     ORDER BY table_schema, table_name;
@@ -230,7 +231,8 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
                         c.column_default,
                         c.character_maximum_length,
                         c.numeric_precision,
-                        c.numeric_scale
+                        c.numeric_scale,
+                        c.column_comment
                     FROM information_schema.columns c
                     WHERE (c.table_schema, c.table_name) IN ({placeholders})
                     ORDER BY c.table_schema, c.table_name, c.ordinal_position;
@@ -331,7 +333,8 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
                     SELECT
                         t.table_schema,
                         t.table_name,
-                        t.table_type
+                        t.table_type,
+                        t.table_comment
                     FROM information_schema.tables t
                     WHERE t.table_schema NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys')
                     ORDER BY t.table_schema, t.table_name;
@@ -345,6 +348,7 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
                         "table_schema": row["table_schema"],
                         "table_name": row["table_name"],
                         "table_type": row["table_type"],
+                        "table_comment": row["table_comment"],
                     }
                     for row in rows
                 ]
