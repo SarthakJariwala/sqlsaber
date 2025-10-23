@@ -408,3 +408,45 @@ class TestDuckDBSchemaIntrospector:
         assert len(foreign_keys) == 0
 
         await conn.close()
+
+
+class _FakeDuckDBConnection:
+    def __init__(self):
+        self._excluded_schemas: list[str] = []
+
+    @property
+    def excluded_schemas(self) -> list[str]:
+        return self._excluded_schemas
+
+    def set_excluded_schemas(self, schemas: list[str]) -> None:
+        self._excluded_schemas = schemas
+
+
+def test_duckdb_excluded_defaults(monkeypatch):
+    """Default exclusions should include DuckDB system schemas."""
+    monkeypatch.delenv("SQLSABER_DUCKDB_EXCLUDE_SCHEMAS", raising=False)
+    conn = _FakeDuckDBConnection()
+    introspector = DuckDBSchemaIntrospector()
+
+    excluded = introspector._get_excluded_schemas(conn)
+
+    assert "information_schema" in excluded
+    assert "pg_catalog" in excluded
+    assert "duckdb_catalog" in excluded
+
+
+def test_duckdb_excluded_env_and_connection(monkeypatch):
+    """Environment and connection-level exclusions should merge and keep case."""
+    monkeypatch.setenv("SQLSABER_DUCKDB_EXCLUDE_SCHEMAS", "archive,Reports")
+    conn = _FakeDuckDBConnection()
+    conn.set_excluded_schemas(["custom_schema", "Sales"])
+    introspector = DuckDBSchemaIntrospector()
+
+    excluded = introspector._get_excluded_schemas(conn)
+
+    assert "archive" in excluded
+    assert "Reports" in excluded
+    assert "custom_schema" in excluded
+    assert "Sales" in excluded
+    # Ensure case-sensitive duplicates are preserved
+    assert "sales" not in excluded

@@ -108,6 +108,7 @@ class TestDatabaseConfig:
             "ssl_ca": None,
             "ssl_cert": None,
             "ssl_key": None,
+            "exclude_schemas": [],
         }
 
     def test_config_from_dict(self):
@@ -128,6 +129,7 @@ class TestDatabaseConfig:
         assert config.port == 3306
         assert config.username == "admin"
         assert config.database == "production"
+        assert config.exclude_schemas == []
 
 
 class TestDatabaseConfigManager:

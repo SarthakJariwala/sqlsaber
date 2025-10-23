@@ -1,5 +1,7 @@
 """Database module for SQLSaber."""
 
+from collections.abc import Iterable
+
 from .base import (
     DEFAULT_QUERY_TIMEOUT,
     BaseDatabaseConnection,
@@ -18,22 +20,27 @@ from .schema import SchemaManager
 from .sqlite import SQLiteConnection, SQLiteSchemaIntrospector
 
 
-def DatabaseConnection(connection_string: str) -> BaseDatabaseConnection:
+def DatabaseConnection(
+    connection_string: str, *, excluded_schemas: Iterable[str] | None = None
+) -> BaseDatabaseConnection:
     """Factory function to create appropriate database connection based on connection string."""
     if connection_string.startswith("postgresql://"):
-        return PostgreSQLConnection(connection_string)
+        conn = PostgreSQLConnection(connection_string)
     elif connection_string.startswith("mysql://"):
-        return MySQLConnection(connection_string)
+        conn = MySQLConnection(connection_string)
     elif connection_string.startswith("sqlite:///"):
-        return SQLiteConnection(connection_string)
+        conn = SQLiteConnection(connection_string)
     elif connection_string.startswith("duckdb://"):
-        return DuckDBConnection(connection_string)
+        conn = DuckDBConnection(connection_string)
     elif connection_string.startswith("csv:///"):
-        return CSVConnection(connection_string)
+        conn = CSVConnection(connection_string)
     else:
         raise ValueError(
             f"Unsupported database type in connection string: {connection_string}"
         )
+
+    conn.set_excluded_schemas(excluded_schemas)
+    return conn
 
 
 __all__ = [

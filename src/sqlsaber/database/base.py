@@ -1,6 +1,8 @@
 """Base classes and type definitions for database connections and schema introspection."""
 
+import os
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from typing import Any, TypedDict
 
 # Default query timeout to prevent runaway queries
@@ -62,6 +64,7 @@ class BaseDatabaseConnection(ABC):
     def __init__(self, connection_string: str):
         self.connection_string = connection_string
         self._pool = None
+        self._excluded_schemas: list[str] = []
 
     @property
     @abstractmethod
@@ -94,6 +97,27 @@ class BaseDatabaseConnection(ABC):
             timeout: Query timeout in seconds (overrides default_timeout)
         """
         pass
+
+    def set_excluded_schemas(self, schemas: Iterable[str] | None) -> None:
+        """Set schemas to exclude from introspection for this connection."""
+        self._excluded_schemas = []
+        if not schemas:
+            return
+
+        seen: set[str] = set()
+        for schema in schemas:
+            clean = schema.strip()
+            if not clean:
+                continue
+            if clean in seen:
+                continue
+            seen.add(clean)
+            self._excluded_schemas.append(clean)
+
+    @property
+    def excluded_schemas(self) -> list[str]:
+        """Return list of excluded schemas for this connection."""
+        return list(self._excluded_schemas)
 
 
 class BaseSchemaIntrospector(ABC):
@@ -130,3 +154,36 @@ class BaseSchemaIntrospector(ABC):
     async def list_tables_info(self, connection) -> list[dict[str, Any]]:
         """Get list of tables with basic information."""
         pass
+
+    @staticmethod
+    def _merge_excluded_schemas(
+        connection: BaseDatabaseConnection,
+        defaults: Iterable[str],
+        env_var: str | None = None,
+    ) -> list[str]:
+        """Combine default, connection, and environment schema exclusions."""
+
+        combined: list[str] = []
+        seen: set[str] = set()
+
+        def _add(items: Iterable[str]) -> None:
+            for item in items:
+                name = item.strip()
+                if not name:
+                    continue
+                if name in seen:
+                    continue
+                seen.add(name)
+                combined.append(name)
+
+        _add(defaults)
+        _add(getattr(connection, "excluded_schemas", []) or [])
+
+        if env_var:
+            raw = os.getenv(env_var, "")
+            if raw:
+                # Support comma-separated values
+                values = [part.strip() for part in raw.split(",")]
+                _add(values)
+
+        return combined

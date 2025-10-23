@@ -39,9 +39,17 @@ class _FakePool:
 class _FakePGConnection:
     def __init__(self):
         self.pool = _FakePool(_FakeConn())
+        self._excluded_schemas: list[str] = []
 
     async def get_pool(self):
         return self.pool
+
+    def set_excluded_schemas(self, schemas: list[str]) -> None:
+        self._excluded_schemas = schemas
+
+    @property
+    def excluded_schemas(self) -> list[str]:
+        return self._excluded_schemas
 
 
 @pytest.mark.asyncio
@@ -49,8 +57,9 @@ async def test_pg_excluded_schemas_defaults(monkeypatch):
     """Ensure default excluded schemas include TimescaleDB internals."""
     # Ensure env var not set
     monkeypatch.delenv("SQLSABER_PG_EXCLUDE_SCHEMAS", raising=False)
+    conn = _FakePGConnection()
     insp = PostgreSQLSchemaIntrospector()
-    excluded = insp._get_excluded_schemas()
+    excluded = insp._get_excluded_schemas(conn)
     # Defaults
     assert "pg_catalog" in excluded
     assert "information_schema" in excluded
@@ -61,10 +70,35 @@ async def test_pg_excluded_schemas_defaults(monkeypatch):
 async def test_pg_excluded_schemas_env_extension(monkeypatch):
     """Environment variable should extend excluded schema list."""
     monkeypatch.setenv("SQLSABER_PG_EXCLUDE_SCHEMAS", "myschema , other_schema")
+    conn = _FakePGConnection()
     insp = PostgreSQLSchemaIntrospector()
-    excluded = insp._get_excluded_schemas()
+    excluded = insp._get_excluded_schemas(conn)
     assert "myschema" in excluded
     assert "other_schema" in excluded
+
+
+@pytest.mark.asyncio
+async def test_pg_excluded_schemas_connection_extension(monkeypatch):
+    """Connection-level excludes should be merged with defaults."""
+    monkeypatch.delenv("SQLSABER_PG_EXCLUDE_SCHEMAS", raising=False)
+    conn = _FakePGConnection()
+    conn.set_excluded_schemas(["custom_schema"])
+    insp = PostgreSQLSchemaIntrospector()
+    excluded = insp._get_excluded_schemas(conn)
+    assert "custom_schema" in excluded
+    assert "_timescaledb_internal" in excluded
+
+
+@pytest.mark.asyncio
+async def test_pg_excluded_schemas_preserve_case(monkeypatch):
+    """Ensure case-sensitive schema names are preserved in exclusions."""
+    monkeypatch.delenv("SQLSABER_PG_EXCLUDE_SCHEMAS", raising=False)
+    conn = _FakePGConnection()
+    conn.set_excluded_schemas(["Sales", "sales"])
+    insp = PostgreSQLSchemaIntrospector()
+    excluded = insp._get_excluded_schemas(conn)
+    assert "Sales" in excluded
+    assert "sales" in excluded
 
 
 @pytest.mark.asyncio

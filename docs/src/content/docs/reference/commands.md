@@ -104,6 +104,7 @@ saber db add my-database [OPTIONS]
 - `-p, --port` - Database port
 - `--database, --db` - Database name
 - `-u, --username` - Username
+- `--exclude-schemas` - Comma-separated list of schemas to skip during introspection
 - `--ssl-mode` - SSL mode (see SSL options below)
 - `--ssl-ca` - SSL CA certificate file path
 - `--ssl-cert` - SSL client certificate file path
@@ -143,7 +144,27 @@ saber db list
 
 - Database names
 - Connection details (host, port, database)
+- Any excluded schemas configured for the connection
 - Default database indicator
+
+#### `saber db exclude NAME`
+
+Update or inspect schema exclusions for an existing database connection.
+
+**Usage:**
+
+```bash
+saber db exclude my-database [--set SCHEMAS | --add SCHEMAS | --remove SCHEMAS | --clear]
+```
+
+**Options:**
+
+- `--set` — Replace the exclusion list entirely with the provided comma-separated schemas
+- `--add` — Append schemas to the current exclusion list (duplicates are ignored)
+- `--remove` — Remove the provided schemas from the exclusion list
+- `--clear` — Remove all exclusions
+
+Run without flags to interactively edit the exclusion list.
 
 #### `saber db set-default NAME`
 
@@ -445,3 +466,5 @@ These environment variables adjust runtime behavior:
 
 - `SQLSABER_THEME` — Override the configured theme for the session.
 - `SQLSABER_PG_EXCLUDE_SCHEMAS` — Comma-separated list of PostgreSQL schemas to exclude from schema discovery and introspection. Defaults already exclude `pg_catalog`, `information_schema`, `_timescaledb_internal`, `_timescaledb_cache`, `_timescaledb_config`, `_timescaledb_catalog`.
+- `SQLSABER_MYSQL_EXCLUDE_SCHEMAS` — Comma-separated list of MySQL databases to omit from discovery. Defaults exclude `information_schema`, `performance_schema`, `mysql`, and `sys`.
+- `SQLSABER_DUCKDB_EXCLUDE_SCHEMAS` — Comma-separated list of DuckDB schemas to skip during introspection. Defaults exclude `information_schema`, `pg_catalog`, and `duckdb_catalog`.

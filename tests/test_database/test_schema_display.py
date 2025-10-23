@@ -158,7 +158,9 @@ class TestSchemaDisplayMappings:
                 "CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price DECIMAL);"
             )
             conn.execute("COMMENT ON TABLE products IS 'Product catalog';")
-            conn.execute("COMMENT ON COLUMN products.id IS 'Unique product identifier';")
+            conn.execute(
+                "COMMENT ON COLUMN products.id IS 'Unique product identifier';"
+            )
             conn.execute("COMMENT ON COLUMN products.name IS 'Product name';")
         finally:
             conn.close()

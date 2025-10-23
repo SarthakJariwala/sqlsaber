@@ -95,6 +95,13 @@ class DuckDBConnection(BaseDatabaseConnection):
 class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
     """DuckDB-specific schema introspection."""
 
+    def _get_excluded_schemas(self, connection) -> list[str]:
+        """Return schemas to exclude during introspection."""
+        defaults = ["information_schema", "pg_catalog", "duckdb_catalog"]
+        return self._merge_excluded_schemas(
+            connection, defaults, env_var="SQLSABER_DUCKDB_EXCLUDE_SCHEMAS"
+        )
+
     async def _execute_query(
         self,
         connection,
@@ -131,10 +138,14 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
         self, connection, table_pattern: str | None = None
     ) -> list[dict[str, Any]]:
         """Get tables information for DuckDB."""
-        where_conditions = [
-            "t.table_schema NOT IN ('information_schema', 'pg_catalog', 'duckdb_catalog')"
-        ]
+        excluded = self._get_excluded_schemas(connection)
+        where_conditions: list[str] = []
         params: list[Any] = []
+
+        if excluded:
+            placeholders = ", ".join(["?"] * len(excluded))
+            where_conditions.append(f"t.table_schema NOT IN ({placeholders})")
+            params.extend(excluded)
 
         if table_pattern:
             if "." in table_pattern:
@@ -148,6 +159,9 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
                     "(t.table_name LIKE ? OR t.table_schema || '.' || t.table_name LIKE ?)"
                 )
                 params.extend([table_pattern, table_pattern])
+
+        if not where_conditions:
+            where_conditions.append("1=1")
 
         query = f"""
             SELECT
@@ -316,7 +330,16 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
 
     async def list_tables_info(self, connection) -> list[dict[str, Any]]:
         """Get list of tables with basic information for DuckDB."""
-        query = """
+        excluded = self._get_excluded_schemas(connection)
+        params: list[Any] = []
+        if excluded:
+            placeholders = ", ".join(["?"] * len(excluded))
+            where_clause = f"WHERE t.table_schema NOT IN ({placeholders})"
+            params.extend(excluded)
+        else:
+            where_clause = ""
+
+        query = f"""
             SELECT
                 t.table_schema,
                 t.table_name,
@@ -326,8 +349,8 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
             LEFT JOIN duckdb_tables() dt
                 ON t.table_schema = dt.schema_name
                 AND t.table_name = dt.table_name
-            WHERE t.table_schema NOT IN ('information_schema', 'pg_catalog', 'duckdb_catalog')
+            {where_clause}
             ORDER BY t.table_schema, t.table_name;
         """
 
-        return await self._execute_query(connection, query)
+        return await self._execute_query(connection, query, tuple(params))

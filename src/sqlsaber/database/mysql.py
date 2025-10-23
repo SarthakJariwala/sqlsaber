@@ -153,6 +153,13 @@ class MySQLConnection(BaseDatabaseConnection):
 class MySQLSchemaIntrospector(BaseSchemaIntrospector):
     """MySQL-specific schema introspection."""
 
+    def _get_excluded_schemas(self, connection) -> list[str]:
+        """Return schemas to exclude during introspection."""
+        defaults = ["information_schema", "performance_schema", "mysql", "sys"]
+        return self._merge_excluded_schemas(
+            connection, defaults, env_var="SQLSABER_MYSQL_EXCLUDE_SCHEMAS"
+        )
+
     def _build_table_filter_clause(self, tables: list) -> tuple[str, list]:
         """Build row constructor with bind parameters for table filtering.
 
@@ -178,10 +185,14 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
         async with pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 # Build WHERE clause for filtering
-                where_conditions = [
-                    "table_schema NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys')"
-                ]
-                params = []
+                excluded = self._get_excluded_schemas(connection)
+                where_conditions = []
+                params: list[Any] = []
+
+                if excluded:
+                    placeholders = ", ".join(["%s"] * len(excluded))
+                    where_conditions.append(f"table_schema NOT IN ({placeholders})")
+                    params.extend(excluded)
 
                 if table_pattern:
                     # Support patterns like 'schema.table' or just 'table'
@@ -196,6 +207,9 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
                             "(table_name LIKE %s OR CONCAT(table_schema, '.', table_name) LIKE %s)"
                         )
                         params.extend([table_pattern, table_pattern])
+
+                if not where_conditions:
+                    where_conditions.append("1=1")
 
                 # Get tables
                 tables_query = f"""
@@ -329,17 +343,26 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
         async with pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 # Get tables without row counts for better performance
-                tables_query = """
+                excluded = self._get_excluded_schemas(connection)
+                params: list[Any] = []
+                if excluded:
+                    placeholders = ", ".join(["%s"] * len(excluded))
+                    where_clause = f"WHERE t.table_schema NOT IN ({placeholders})"
+                    params.extend(excluded)
+                else:
+                    where_clause = ""
+
+                tables_query = f"""
                     SELECT
                         t.table_schema,
                         t.table_name,
                         t.table_type,
                         t.table_comment
                     FROM information_schema.tables t
-                    WHERE t.table_schema NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys')
+                    {where_clause}
                     ORDER BY t.table_schema, t.table_name;
                 """
-                await cursor.execute(tables_query)
+                await cursor.execute(tables_query, params if params else None)
                 rows = await cursor.fetchall()
 
                 # Convert rows to dictionaries
