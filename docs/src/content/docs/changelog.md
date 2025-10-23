@@ -10,6 +10,7 @@ All notable changes to SQLsaber will be documented here.
 #### Added
 
 - `saber db exclude` command to manage schema exclusions without re-adding a connection, plus a `--exclude-schemas` flag when creating connections.
+- Model name display in both interactive and non-interactive modes alongside database connection information
 
 #### Changed
 
