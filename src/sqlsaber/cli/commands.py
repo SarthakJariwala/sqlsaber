@@ -231,8 +231,10 @@ def query(
                 # Single query mode with streaming
                 streaming_handler = StreamingQueryHandler(console)
                 db_type = sqlsaber_agent.db_type
+                model_name = sqlsaber_agent.agent.model.model_name
                 console.print(
                     f"[primary]Connected to:[/primary] {db_name} ({db_type})\n"
+                    f"[primary]Model:[/primary] {model_name}\n"
                 )
                 log.info("query.execute.start", db_name=db_name, db_type=db_type)
                 run = await streaming_handler.execute_streaming_query(
