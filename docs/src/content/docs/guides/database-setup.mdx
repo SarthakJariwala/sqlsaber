@@ -133,23 +133,32 @@ SQLsaber stores database passwords securely using your operating system's creden
 
 Store SSL certificates in a secure location and use absolute paths when configuring connections.
 
-### Schema Introspection Filters (PostgreSQL)
+### Schema Introspection Filters
 
-By default, SQLsaber excludes system and TimescaleDB internal schemas during schema discovery to keep results focused and fast.
+SQLsaber skips noisy system schemas for every supported database when it introspects metadata, and you can layer on your own exclusions during setup or later via `saber db exclude`.
 
-Excluded by default:
+Default exclusions:
 
-- `pg_catalog`
-- `information_schema`
-- `_timescaledb_internal`
-- `_timescaledb_cache`
-- `_timescaledb_config`
-- `_timescaledb_catalog`
+- **PostgreSQL:** `pg_catalog`, `information_schema`, `_timescaledb_internal`, `_timescaledb_cache`, `_timescaledb_config`, `_timescaledb_catalog`
+- **MySQL:** `information_schema`, `performance_schema`, `mysql`, `sys`
+- **DuckDB / CSV:** `information_schema`, `pg_catalog`, `duckdb_catalog`
 
-You can exclude additional schemas via environment variable before running `saber`:
+When you run `saber db add`, the interactive flow prompts for extra schemas to ignore (or pass `--exclude-schemas schema1,schema2` in non-interactive mode). You can revisit an existing connection at any time:
+
+```bash
+# Replace the exclusion list interactively
+saber db exclude my-database
+
+# Append specific schemas
+saber db exclude my-database --add reporting_temp,rollups
+```
+
+For ad-hoc connections created from raw URLs or file paths, use environment variables to extend the default filters:
 
 ```bash
 export SQLSABER_PG_EXCLUDE_SCHEMAS="schema1,schema2"
+export SQLSABER_MYSQL_EXCLUDE_SCHEMAS="temp_db, staging"
+export SQLSABER_DUCKDB_EXCLUDE_SCHEMAS="internal_schema"
 ```
 
 Both the `list_tables` and `introspect_schema` tools respect these filters.

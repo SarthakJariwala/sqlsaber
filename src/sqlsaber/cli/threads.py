@@ -318,7 +318,9 @@ def resume(
             )
             return
 
-        db_conn = DatabaseConnection(connection_string)
+        db_conn = DatabaseConnection(
+            connection_string, excluded_schemas=resolved.excluded_schemas
+        )
         try:
             sqlsaber_agent = SQLSaberAgent(db_conn, db_name)
             history = await store.get_thread_messages(thread_id)

@@ -214,7 +214,9 @@ def query(
 
         # Create database connection
         try:
-            db_conn = DatabaseConnection(connection_string)
+            db_conn = DatabaseConnection(
+                connection_string, excluded_schemas=resolved.excluded_schemas
+            )
             log.info("db.connection.created", db_type=type(db_conn).__name__)
         except Exception as e:
             log.exception("db.connection.error", error=str(e))

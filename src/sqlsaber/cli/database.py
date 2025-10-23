@@ -26,6 +26,28 @@ db_app = cyclopts.App(
 )
 
 
+def _normalize_schema_list(raw_schemas: list[str]) -> list[str]:
+    """Deduplicate schemas while preserving order and case."""
+    schemas: list[str] = []
+    seen: set[str] = set()
+    for schema in raw_schemas:
+        item = schema.strip()
+        if not item:
+            continue
+        if item in seen:
+            continue
+        seen.add(item)
+        schemas.append(item)
+    return schemas
+
+
+def _parse_schema_list(raw: str | None) -> list[str]:
+    """Parse comma-separated schema list into cleaned list."""
+    if not raw:
+        return []
+    return _normalize_schema_list(raw.split(","))
+
+
 @db_app.command
 def add(
     name: Annotated[str, cyclopts.Parameter(help="Name for the database connection")],
@@ -70,6 +92,13 @@ def add(
     ssl_key: Annotated[
         str | None,
         cyclopts.Parameter(["--ssl-key"], help="SSL client private key file path"),
+    ] = None,
+    exclude_schemas: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--exclude-schemas"],
+            help="Comma-separated list of schemas to exclude from introspection",
+        ),
     ] = None,
     interactive: Annotated[
         bool,
@@ -119,6 +148,7 @@ def add(
         ssl_ca = db_input.ssl_ca
         ssl_cert = db_input.ssl_cert
         ssl_key = db_input.ssl_key
+        exclude_schema_list = _normalize_schema_list(db_input.exclude_schemas)
     else:
         # Non-interactive mode - use provided values or defaults
         if type == "sqlite":
@@ -160,6 +190,7 @@ def add(
                 if questionary.confirm("Enter password?").ask()
                 else ""
             )
+        exclude_schema_list = _parse_schema_list(exclude_schemas)
 
     # Create database config
     # At this point, all required values should be set
@@ -180,6 +211,7 @@ def add(
         ssl_ca=ssl_ca,
         ssl_cert=ssl_cert,
         ssl_key=ssl_key,
+        exclude_schemas=exclude_schema_list,
     )
 
     try:
@@ -219,6 +251,7 @@ def list():
     table.add_column("Port", style="warning")
     table.add_column("Database", style="info")
     table.add_column("Username", style="info")
+    table.add_column("Excluded Schemas", style="muted")
     table.add_column("SSL", style="success")
     table.add_column("Default", style="error")
 
@@ -241,12 +274,123 @@ def list():
             str(db.port) if db.port else "",
             db.database,
             db.username,
+            ", ".join(db.exclude_schemas) if db.exclude_schemas else "",
             ssl_status,
             is_default,
         )
 
     console.print(table)
     logger.info("db.list.complete", count=len(databases))
+
+
+@db_app.command
+def exclude(
+    name: Annotated[
+        str,
+        cyclopts.Parameter(help="Name of the database connection to update"),
+    ],
+    set_schemas: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--set"],
+            help="Replace excluded schemas with this comma-separated list",
+        ),
+    ] = None,
+    add_schemas: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--add"],
+            help="Add comma-separated schemas to the existing exclude list",
+        ),
+    ] = None,
+    remove_schemas: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--remove"],
+            help="Remove comma-separated schemas from the existing exclude list",
+        ),
+    ] = None,
+    clear: Annotated[
+        bool,
+        cyclopts.Parameter(
+            ["--clear", "--no-clear"],
+            help="Clear all excluded schemas",
+        ),
+    ] = False,
+):
+    """Update excluded schemas for a database connection."""
+    logger.info(
+        "db.exclude.start",
+        name=name,
+        set=bool(set_schemas),
+        add=bool(add_schemas),
+        remove=bool(remove_schemas),
+        clear=clear,
+    )
+    db_config = config_manager.get_database(name)
+    if not db_config:
+        console.print(
+            f"[bold error]Error: Database connection '{name}' not found[/bold error]"
+        )
+        logger.error("db.exclude.not_found", name=name)
+        sys.exit(1)
+
+    actions_selected = sum(
+        bool(flag)
+        for flag in [
+            set_schemas is not None,
+            add_schemas is not None,
+            remove_schemas is not None,
+            clear,
+        ]
+    )
+    if actions_selected > 1:
+        console.print(
+            "[bold error]Error: Specify only one of --set, --add, --remove, or --clear[/bold error]"
+        )
+        logger.error("db.exclude.multiple_actions", name=name)
+        sys.exit(1)
+
+    current = [*(db_config.exclude_schemas or [])]
+
+    if clear:
+        updated = []
+    elif set_schemas is not None:
+        updated = _parse_schema_list(set_schemas)
+    elif add_schemas is not None:
+        additions = _parse_schema_list(add_schemas)
+        updated = [*current]
+        current_set = set(current)
+        for schema in additions:
+            if schema not in current_set:
+                updated.append(schema)
+                current_set.add(schema)
+    elif remove_schemas is not None:
+        removals = set(_parse_schema_list(remove_schemas))
+        updated = [schema for schema in current if schema not in removals]
+    else:
+        console.print(
+            "[info]Update excluded schemas for "
+            f"[primary]{name}[/primary] (leave blank to clear)[/info]"
+        )
+        default_value = ", ".join(current)
+        response = questionary.text(
+            "Schemas to exclude (comma separated):", default=default_value
+        ).ask()
+        if response is None:
+            console.print("[warning]Operation cancelled[/warning]")
+            logger.info("db.exclude.cancelled", name=name)
+            return
+        updated = _parse_schema_list(response)
+
+    db_config.exclude_schemas = _normalize_schema_list(updated)
+    config_manager.update_database(db_config)
+
+    console.print(
+        f"[success]Updated excluded schemas for '{name}':[/success] "
+        f"{', '.join(db_config.exclude_schemas) if db_config.exclude_schemas else '(none)'}"
+    )
+    logger.info("db.exclude.success", name=name, count=len(db_config.exclude_schemas))
 
 
 @db_app.command
@@ -259,7 +403,7 @@ def remove(
     logger.info("db.remove.start", name=name)
     if not config_manager.get_database(name):
         console.print(
-            f"[bold error]Error:[/bold error] Database connection '{name}' not found"
+            f"[bold error]Error: Database connection '{name}' not found[/bold error]"
         )
         logger.error("db.remove.not_found", name=name)
         sys.exit(1)
@@ -269,17 +413,17 @@ def remove(
     ).ask():
         if config_manager.remove_database(name):
             console.print(
-                f"[green]Successfully removed database connection '{name}'[/green]"
+                f"[success]Successfully removed database connection '{name}'[/success]"
             )
             logger.info("db.remove.success", name=name)
         else:
             console.print(
-                f"[bold error]Error:[/bold error] Failed to remove database connection '{name}'"
+                f"[bold error]Error: Failed to remove database connection '{name}'[/bold error]"
             )
             logger.error("db.remove.failed", name=name)
             sys.exit(1)
     else:
-        console.print("Operation cancelled")
+        console.print("[warning]Operation cancelled[/warning]")
         logger.info("db.remove.cancelled", name=name)
 
 
@@ -294,17 +438,19 @@ def set_default(
     logger.info("db.default.start", name=name)
     if not config_manager.get_database(name):
         console.print(
-            f"[bold error]Error:[/bold error] Database connection '{name}' not found"
+            f"[bold error]Error: Database connection '{name}' not found[/bold error]"
         )
         logger.error("db.default.not_found", name=name)
         sys.exit(1)
 
     if config_manager.set_default_database(name):
-        console.print(f"[green]Successfully set '{name}' as default database[/green]")
+        console.print(
+            f"[success]Successfully set '{name}' as default database[/success]"
+        )
         logger.info("db.default.success", name=name)
     else:
         console.print(
-            f"[bold error]Error:[/bold error] Failed to set '{name}' as default"
+            f"[bold error]Error: Failed to set '{name}' as default[/bold error]"
         )
         logger.error("db.default.failed", name=name)
         sys.exit(1)
@@ -330,7 +476,7 @@ def test(
             db_config = config_manager.get_database(name)
             if not db_config:
                 console.print(
-                    f"[bold error]Error:[/bold error] Database connection '{name}' not found"
+                    f"[bold error]Error: Database connection '{name}' not found[/bold error]"
                 )
                 logger.error("db.test.not_found", name=name)
                 sys.exit(1)
@@ -338,7 +484,7 @@ def test(
             db_config = config_manager.get_default_database()
             if not db_config:
                 console.print(
-                    "[bold error]Error:[/bold error] No default database configured"
+                    "[bold error]Error: No default database configured[/bold error]"
                 )
                 console.print(
                     "Use 'sqlsaber db add <name>' to add a database connection"
@@ -350,14 +496,16 @@ def test(
 
         try:
             connection_string = db_config.to_connection_string()
-            db_conn = DatabaseConnection(connection_string)
+            db_conn = DatabaseConnection(
+                connection_string, excluded_schemas=db_config.exclude_schemas
+            )
 
             # Try to connect and run a simple query
             await db_conn.execute_query("SELECT 1 as test")
             await db_conn.close()
 
             console.print(
-                f"[green]✓ Connection to '{db_config.name}' successful[/green]"
+                f"[success]✓ Connection to '{db_config.name}' successful[/success]"
             )
             logger.info("db.test.success", name=db_config.name)
 
@@ -369,7 +517,7 @@ def test(
                 ),
                 error=str(e),
             )
-            console.print(f"[bold error]✗ Connection failed:[/bold error] {e}")
+            console.print(f"[bold error]✗ Connection failed: {e}[/bold error]")
             sys.exit(1)
 
     asyncio.run(test_connection())

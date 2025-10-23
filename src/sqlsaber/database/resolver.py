@@ -1,7 +1,5 @@
 """Database connection resolution from CLI input."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -21,6 +19,7 @@ class ResolvedDatabase:
 
     name: str  # Human-readable name for display/logging
     connection_string: str  # Canonical connection string for DatabaseConnection factory
+    excluded_schemas: list[str]
 
 
 SUPPORTED_SCHEMES = {"postgresql", "mysql", "sqlite", "duckdb", "csv"}
@@ -60,6 +59,7 @@ def resolve_database(
         return ResolvedDatabase(
             name=db_cfg.name,
             connection_string=db_cfg.to_connection_string(),
+            excluded_schemas=list(db_cfg.exclude_schemas),
         )
 
     # 1. Connection string?
@@ -71,22 +71,30 @@ def resolve_database(
             db_name = Path(urlparse(spec).path).stem or "database"
         else:  # should not happen because of SUPPORTED_SCHEMES
             db_name = "database"
-        return ResolvedDatabase(name=db_name, connection_string=spec)
+        return ResolvedDatabase(
+            name=db_name, connection_string=spec, excluded_schemas=[]
+        )
 
     # 2. Raw file path?
     path = Path(spec).expanduser().resolve()
     if path.suffix.lower() == ".csv":
         if not path.exists():
             raise DatabaseResolutionError(f"CSV file '{spec}' not found.")
-        return ResolvedDatabase(name=path.stem, connection_string=f"csv:///{path}")
+        return ResolvedDatabase(
+            name=path.stem, connection_string=f"csv:///{path}", excluded_schemas=[]
+        )
     if path.suffix.lower() in {".db", ".sqlite", ".sqlite3"}:
         if not path.exists():
             raise DatabaseResolutionError(f"SQLite file '{spec}' not found.")
-        return ResolvedDatabase(name=path.stem, connection_string=f"sqlite:///{path}")
+        return ResolvedDatabase(
+            name=path.stem, connection_string=f"sqlite:///{path}", excluded_schemas=[]
+        )
     if path.suffix.lower() in {".duckdb", ".ddb"}:
         if not path.exists():
             raise DatabaseResolutionError(f"DuckDB file '{spec}' not found.")
-        return ResolvedDatabase(name=path.stem, connection_string=f"duckdb:///{path}")
+        return ResolvedDatabase(
+            name=path.stem, connection_string=f"duckdb:///{path}", excluded_schemas=[]
+        )
 
     # 3. Must be a configured name
     db_cfg: DatabaseConfig | None = config_mgr.get_database(spec)
@@ -96,5 +104,7 @@ def resolve_database(
             "Use 'sqlsaber db list' to see available connections."
         )
     return ResolvedDatabase(
-        name=db_cfg.name, connection_string=db_cfg.to_connection_string()
+        name=db_cfg.name,
+        connection_string=db_cfg.to_connection_string(),
+        excluded_schemas=list(db_cfg.exclude_schemas),
     )

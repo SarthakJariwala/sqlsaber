@@ -4,7 +4,7 @@ import json
 import os
 import platform
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote_plus
@@ -29,6 +29,7 @@ class DatabaseConfig:
     ssl_cert: str | None = None
     ssl_key: str | None = None
     schema: str | None = None
+    exclude_schemas: list[str] = field(default_factory=list)
 
     def to_connection_string(self) -> str:
         """Convert config to database connection string."""
@@ -149,6 +150,7 @@ class DatabaseConfig:
             "ssl_cert": self.ssl_cert,
             "ssl_key": self.ssl_key,
             "schema": self.schema,
+            "exclude_schemas": self.exclude_schemas,
         }
 
     @classmethod
@@ -166,6 +168,7 @@ class DatabaseConfig:
             ssl_cert=data.get("ssl_cert"),
             ssl_key=data.get("ssl_key"),
             schema=data.get("schema"),
+            exclude_schemas=list(data.get("exclude_schemas", [])),
         )
 
 
@@ -244,6 +247,16 @@ class DatabaseConfigManager:
         if not config["default"]:
             config["default"] = db_config.name
 
+        self._save_config(config)
+
+    def update_database(self, db_config: DatabaseConfig) -> None:
+        """Update an existing database configuration."""
+        config = self._load_config()
+
+        if db_config.name not in config["connections"]:
+            raise ValueError(f"Database '{db_config.name}' does not exist")
+
+        config["connections"][db_config.name] = db_config.to_dict()
         self._save_config(config)
 
     def get_database(self, name: str) -> DatabaseConfig | None:

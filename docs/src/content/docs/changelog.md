@@ -7,6 +7,14 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+#### Added
+
+- `saber db exclude` command to manage schema exclusions without re-adding a connection, plus a `--exclude-schemas` flag when creating connections.
+
+#### Changed
+
+- Schema exclusion configuration now applies to PostgreSQL, MySQL, DuckDB, and CSV connections, combining per-connection settings with environment variables such as `SQLSABER_MYSQL_EXCLUDE_SCHEMAS` and `SQLSABER_DUCKDB_EXCLUDE_SCHEMAS`.
+
 ---
 
 ### v0.35.0 - 2025-10-22

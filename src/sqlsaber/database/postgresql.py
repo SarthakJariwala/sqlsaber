@@ -135,7 +135,7 @@ class PostgreSQLConnection(BaseDatabaseConnection):
 class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
     """PostgreSQL-specific schema introspection."""
 
-    def _get_excluded_schemas(self) -> list[str]:
+    def _get_excluded_schemas(self, connection) -> list[str]:
         """Return schemas to exclude during introspection.
 
         Defaults include PostgreSQL system schemas and TimescaleDB internal
@@ -143,10 +143,7 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
         environment variable `SQLSABER_PG_EXCLUDE_SCHEMAS` to a comma-separated
         list of schema names.
         """
-        import os
-
-        # Base exclusions: system schemas and TimescaleDB internal partitions
-        excluded = [
+        defaults = [
             "pg_catalog",
             "information_schema",
             "_timescaledb_internal",
@@ -155,14 +152,9 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
             "_timescaledb_catalog",
         ]
 
-        extra = os.getenv("SQLSABER_PG_EXCLUDE_SCHEMAS", "")
-        if extra:
-            for item in extra.split(","):
-                name = item.strip()
-                if name and name not in excluded:
-                    excluded.append(name)
-
-        return excluded
+        return self._merge_excluded_schemas(
+            connection, defaults, env_var="SQLSABER_PG_EXCLUDE_SCHEMAS"
+        )
 
     def _build_table_filter_clause(self, tables: list) -> tuple[str, list]:
         """Build VALUES clause with bind parameters for table filtering.
@@ -193,7 +185,7 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
             where_conditions: list[str] = []
             params: list[Any] = []
 
-            excluded = self._get_excluded_schemas()
+            excluded = self._get_excluded_schemas(connection)
             if excluded:
                 placeholders = ", ".join(f"${i + 1}" for i in range(len(excluded)))
                 where_conditions.append(f"table_schema NOT IN ({placeholders})")
@@ -354,7 +346,7 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
         pool = await connection.get_pool()
         async with pool.acquire() as conn:
             # Exclude system schemas (and TimescaleDB internals) for performance
-            excluded = self._get_excluded_schemas()
+            excluded = self._get_excluded_schemas(connection)
             params: list[Any] = []
             if excluded:
                 placeholders = ", ".join(f"${i + 1}" for i in range(len(excluded)))

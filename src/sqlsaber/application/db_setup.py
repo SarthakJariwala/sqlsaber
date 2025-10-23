@@ -1,7 +1,7 @@
 """Shared database setup logic for onboarding and CLI."""
 
 import getpass
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlsaber.application.prompts import Prompter
@@ -9,6 +9,21 @@ from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
 from sqlsaber.theme.manager import create_console
 
 console = create_console()
+
+
+def _normalize_schemas(schemas: list[str]) -> list[str]:
+    """Deduplicate schema list while preserving order and case."""
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for schema in schemas:
+        name = schema.strip()
+        if not name:
+            continue
+        if name in seen:
+            continue
+        seen.add(name)
+        normalized.append(name)
+    return normalized
 
 
 @dataclass
@@ -26,6 +41,7 @@ class DatabaseInput:
     ssl_ca: str | None = None
     ssl_cert: str | None = None
     ssl_key: str | None = None
+    exclude_schemas: list[str] = field(default_factory=list)
 
 
 async def collect_db_input(
@@ -69,10 +85,19 @@ async def collect_db_input(
         port = 0
         username = db_type
         password = ""
+        exclude_schemas: list[str] = []
         ssl_mode = None
         ssl_ca = None
         ssl_cert = None
         ssl_key = None
+
+        if db_type == "duckdb":
+            exclude_prompt = await prompter.text(
+                "Schemas to exclude (comma separated, optional):", default=""
+            )
+            if exclude_prompt is None:
+                return None
+            exclude_schemas = _normalize_schemas(exclude_prompt.split(","))
 
     else:
         # PostgreSQL/MySQL need connection details
@@ -155,6 +180,13 @@ async def collect_db_input(
                                 "SSL client private key file:"
                             )
 
+        exclude_prompt = await prompter.text(
+            "Schemas to exclude (comma separated, optional):", default=""
+        )
+        if exclude_prompt is None:
+            return None
+        exclude_schemas = _normalize_schemas(exclude_prompt.split(","))
+
     return DatabaseInput(
         name=name,
         type=db_type,
@@ -167,6 +199,7 @@ async def collect_db_input(
         ssl_ca=ssl_ca,
         ssl_cert=ssl_cert,
         ssl_key=ssl_key,
+        exclude_schemas=exclude_schemas,
     )
 
 
@@ -183,6 +216,7 @@ def build_config(db_input: DatabaseInput) -> DatabaseConfig:
         ssl_ca=db_input.ssl_ca,
         ssl_cert=db_input.ssl_cert,
         ssl_key=db_input.ssl_key,
+        exclude_schemas=_normalize_schemas(db_input.exclude_schemas),
     )
 
 
@@ -200,7 +234,9 @@ async def test_connection(config: DatabaseConfig, password: str | None) -> bool:
 
     try:
         connection_string = config.to_connection_string()
-        db_conn = DatabaseConnection(connection_string)
+        db_conn = DatabaseConnection(
+            connection_string, excluded_schemas=config.exclude_schemas
+        )
         await db_conn.execute_query("SELECT 1 as test")
         await db_conn.close()
         return True
