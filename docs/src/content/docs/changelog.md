@@ -7,6 +7,10 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+---
+
+### v0.35.0 - 2025-10-22
+
 #### Added
 
 - Table and column comment support across all databases
@@ -18,7 +22,9 @@ All notable changes to SQLsaber will be documented here.
   - Comments are conditionally included in tool output only when present, avoiding clutter
   - Updated `ColumnInfo` and `SchemaInfo` TypedDicts with optional comment fields
 
----
+#### Fixed
+
+- Strip leading/trailing whitespace and new lines from submitted user inputs
 
 ### v0.34.0 - 2025-10-17
 
