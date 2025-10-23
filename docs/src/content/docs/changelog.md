@@ -7,16 +7,22 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+---
+
+### v0.36.0 - 2025-10-23
+
 #### Added
 
 - `saber db exclude` command to manage schema exclusions without re-adding a connection, plus a `--exclude-schemas` flag when creating connections.
-- Model name display in both interactive and non-interactive modes alongside database connection information
+- Model name display in both interactive and non-interactive modes alongside database connection information.
 
 #### Changed
 
 - Schema exclusion configuration now applies to PostgreSQL, MySQL, DuckDB, and CSV connections, combining per-connection settings with environment variables such as `SQLSABER_MYSQL_EXCLUDE_SCHEMAS` and `SQLSABER_DUCKDB_EXCLUDE_SCHEMAS`.
 
----
+#### Fixed
+
+- Fixed ID column truncation in `saber threads list` on smaller terminal screens by ensuring full UUID visibility.
 
 ### v0.35.0 - 2025-10-22
 

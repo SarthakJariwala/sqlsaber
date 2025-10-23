@@ -229,7 +229,7 @@ def list_threads(
         logger.info("threads.cli.list.empty")
         return
     table = Table(title="Threads")
-    table.add_column("ID", style=tm.style("info"))
+    table.add_column("ID", style=tm.style("info"), no_wrap=True, min_width=36)
     table.add_column("Database", style=tm.style("accent"))
     table.add_column("Title", style=tm.style("success"))
     table.add_column("Last Activity", style=tm.style("muted"))
