@@ -226,7 +226,8 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
                 SELECT
                     table_schema,
                     table_name,
-                    table_type
+                    table_type,
+                    obj_description(('"' || table_schema || '"."' || table_name || '"')::regclass, 'pg_class') AS table_comment
                 FROM information_schema.tables
                 WHERE {" AND ".join(where_conditions)}
                 ORDER BY table_schema, table_name;
@@ -252,7 +253,8 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
                     c.column_default,
                     c.character_maximum_length,
                     c.numeric_precision,
-                    c.numeric_scale
+                    c.numeric_scale,
+                    col_description(('"' || c.table_schema || '"."' || c.table_name || '"')::regclass::oid, c.ordinal_position::INT) AS column_comment
                 FROM information_schema.columns c
                 WHERE (c.table_schema, c.table_name) IN (VALUES {values_clause})
                 ORDER BY c.table_schema, c.table_name, c.ordinal_position;
@@ -367,7 +369,8 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
                 SELECT
                     table_schema,
                     table_name,
-                    table_type
+                    table_type,
+                    obj_description(('"' || table_schema || '"."' || table_name || '"')::regclass, 'pg_class') AS table_comment
                 FROM information_schema.tables
                 WHERE {where_clause}
                 ORDER BY table_schema, table_name;
@@ -380,6 +383,7 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
                     "table_schema": table["table_schema"],
                     "table_name": table["table_name"],
                     "table_type": table["table_type"],
+                    "table_comment": table["table_comment"],
                 }
                 for table in tables
             ]

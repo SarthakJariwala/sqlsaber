@@ -132,29 +132,35 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
     ) -> list[dict[str, Any]]:
         """Get tables information for DuckDB."""
         where_conditions = [
-            "table_schema NOT IN ('information_schema', 'pg_catalog', 'duckdb_catalog')"
+            "t.table_schema NOT IN ('information_schema', 'pg_catalog', 'duckdb_catalog')"
         ]
         params: list[Any] = []
 
         if table_pattern:
             if "." in table_pattern:
                 schema_pattern, table_name_pattern = table_pattern.split(".", 1)
-                where_conditions.append("(table_schema LIKE ? AND table_name LIKE ?)")
+                where_conditions.append(
+                    "(t.table_schema LIKE ? AND t.table_name LIKE ?)"
+                )
                 params.extend([schema_pattern, table_name_pattern])
             else:
                 where_conditions.append(
-                    "(table_name LIKE ? OR table_schema || '.' || table_name LIKE ?)"
+                    "(t.table_name LIKE ? OR t.table_schema || '.' || t.table_name LIKE ?)"
                 )
                 params.extend([table_pattern, table_pattern])
 
         query = f"""
             SELECT
-                table_schema,
-                table_name,
-                table_type
-            FROM information_schema.tables
+                t.table_schema,
+                t.table_name,
+                t.table_type,
+                dt.comment AS table_comment
+            FROM information_schema.tables t
+            LEFT JOIN duckdb_tables() dt
+                ON t.table_schema = dt.schema_name
+                AND t.table_name = dt.table_name
             WHERE {" AND ".join(where_conditions)}
-            ORDER BY table_schema, table_name;
+            ORDER BY t.table_schema, t.table_name;
         """
 
         return await self._execute_query(connection, query, tuple(params))
@@ -166,7 +172,7 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
 
         table_filters = []
         for table in tables:
-            table_filters.append("(table_schema = ? AND table_name = ?)")
+            table_filters.append("(c.table_schema = ? AND c.table_name = ?)")
 
         params: list[Any] = []
         for table in tables:
@@ -174,18 +180,23 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
 
         query = f"""
             SELECT
-                table_schema,
-                table_name,
-                column_name,
-                data_type,
-                is_nullable,
-                column_default,
-                character_maximum_length,
-                numeric_precision,
-                numeric_scale
-            FROM information_schema.columns
+                c.table_schema,
+                c.table_name,
+                c.column_name,
+                c.data_type,
+                c.is_nullable,
+                c.column_default,
+                c.character_maximum_length,
+                c.numeric_precision,
+                c.numeric_scale,
+                dc.comment AS column_comment
+            FROM information_schema.columns c
+            LEFT JOIN duckdb_columns() dc
+                ON c.table_schema = dc.schema_name
+                AND c.table_name = dc.table_name
+                AND c.column_name = dc.column_name
             WHERE {" OR ".join(table_filters)}
-            ORDER BY table_schema, table_name, ordinal_position;
+            ORDER BY c.table_schema, c.table_name, c.ordinal_position;
         """
 
         return await self._execute_query(connection, query, tuple(params))
@@ -307,12 +318,16 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
         """Get list of tables with basic information for DuckDB."""
         query = """
             SELECT
-                table_schema,
-                table_name,
-                table_type
-            FROM information_schema.tables
-            WHERE table_schema NOT IN ('information_schema', 'pg_catalog', 'duckdb_catalog')
-            ORDER BY table_schema, table_name;
+                t.table_schema,
+                t.table_name,
+                t.table_type,
+                dt.comment AS table_comment
+            FROM information_schema.tables t
+            LEFT JOIN duckdb_tables() dt
+                ON t.table_schema = dt.schema_name
+                AND t.table_name = dt.table_name
+            WHERE t.table_schema NOT IN ('information_schema', 'pg_catalog', 'duckdb_catalog')
+            ORDER BY t.table_schema, t.table_name;
         """
 
         return await self._execute_query(connection, query)

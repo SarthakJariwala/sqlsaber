@@ -7,6 +7,17 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+#### Added
+
+- Table and column comment support across all databases
+  - Comments are now included in schema introspection to provide richer context to LLM
+  - PostgreSQL: Uses `obj_description()` and `col_description()` functions
+  - MySQL: Retrieves `table_comment` and `column_comment` from `information_schema`
+  - DuckDB: Joins with `duckdb_tables()` and `duckdb_columns()` for comment data
+  - SQLite: Returns `None` for comments (SQLite doesn't support native comments)
+  - Comments are conditionally included in tool output only when present, avoiding clutter
+  - Updated `ColumnInfo` and `SchemaInfo` TypedDicts with optional comment fields
+
 ---
 
 ### v0.34.0 - 2025-10-17

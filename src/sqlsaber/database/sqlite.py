@@ -93,7 +93,10 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
     async def get_tables_info(
         self, connection, table_pattern: str | None = None
     ) -> dict[str, Any]:
-        """Get tables information for SQLite."""
+        """Get tables information for SQLite.
+
+        Note: SQLite does not support native table comments, so table_comment is always None.
+        """
         where_conditions = ["type IN ('table', 'view')", "name NOT LIKE 'sqlite_%'"]
         params = ()
 
@@ -105,7 +108,8 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
             SELECT
                 'main' as table_schema,
                 name as table_name,
-                type as table_type
+                type as table_type,
+                NULL as table_comment
             FROM sqlite_master
             WHERE {" AND ".join(where_conditions)}
             ORDER BY name;
@@ -114,7 +118,10 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
         return await self._execute_query(connection, query, params)
 
     async def get_columns_info(self, connection, tables: list) -> list:
-        """Get columns information for SQLite."""
+        """Get columns information for SQLite.
+
+        Note: SQLite does not support native column comments, so column_comment is always None.
+        """
         if not tables:
             return []
 
@@ -138,6 +145,7 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
                         "character_maximum_length": None,
                         "numeric_precision": None,
                         "numeric_scale": None,
+                        "column_comment": None,
                     }
                 )
 
@@ -237,13 +245,17 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
         return indexes
 
     async def list_tables_info(self, connection) -> list[dict[str, Any]]:
-        """Get list of tables with basic information for SQLite."""
+        """Get list of tables with basic information for SQLite.
+
+        Note: SQLite does not support native table comments, so table_comment is always None.
+        """
         # Get table names without row counts for better performance
         tables_query = """
             SELECT
                 'main' as table_schema,
                 name as table_name,
-                type as table_type
+                type as table_type,
+                NULL as table_comment
             FROM sqlite_master
             WHERE type IN ('table', 'view')
             AND name NOT LIKE 'sqlite_%'
@@ -258,6 +270,7 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
                 "table_schema": table["table_schema"],
                 "table_name": table["table_name"],
                 "table_type": table["table_type"],
+                "table_comment": table["table_comment"],
             }
             for table in tables
         ]

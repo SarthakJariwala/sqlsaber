@@ -72,6 +72,7 @@ class SchemaManager:
                 "schema": schema_name,
                 "name": table_name,
                 "type": table["table_type"],
+                "comment": table["table_comment"],
                 "columns": {},
                 "primary_keys": [],
                 "foreign_keys": [],
@@ -85,6 +86,7 @@ class SchemaManager:
         for col in columns:
             full_name = f"{col['table_schema']}.{col['table_name']}"
             if full_name in schema_info:
+                # Handle different row types (dict vs Row objects)
                 column_info: ColumnInfo = {
                     "data_type": col["data_type"],
                     "nullable": col.get("is_nullable", "YES") == "YES",
@@ -92,6 +94,7 @@ class SchemaManager:
                     "max_length": col.get("character_maximum_length"),
                     "precision": col.get("numeric_precision"),
                     "scale": col.get("numeric_scale"),
+                    "comment": col.get("column_comment"),
                 }
                 # Add type field for display compatibility
                 column_info["type"] = col["data_type"]
