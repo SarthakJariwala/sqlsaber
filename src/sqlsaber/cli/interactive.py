@@ -20,6 +20,7 @@ from sqlsaber.cli.completers import (
 )
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.streaming import StreamingQueryHandler
+from sqlsaber.config.logging import get_logger
 from sqlsaber.database import (
     CSVConnection,
     DuckDBConnection,
@@ -30,7 +31,6 @@ from sqlsaber.database import (
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.theme.manager import get_theme_manager
 from sqlsaber.threads import ThreadStorage
-from sqlsaber.config.logging import get_logger
 
 if TYPE_CHECKING:
     from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
@@ -309,6 +309,8 @@ class InteractiveSession:
                         style=self.tm.pt_style(),
                     )
 
+                user_query = user_query.strip()
+
                 if not user_query:
                     continue
 
@@ -325,7 +327,7 @@ class InteractiveSession:
 
                 # Handle memory addition
                 if user_query.strip().startswith("#"):
-                    await self._handle_memory(user_query.strip()[1:].strip())
+                    await self._handle_memory(user_query[1:].strip())
                     continue
 
                 # Execute query with cancellation support
