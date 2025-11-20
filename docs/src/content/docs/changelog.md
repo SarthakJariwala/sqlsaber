@@ -9,6 +9,12 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.37.0 - 2025-11-20
+
+#### Added
+
+- Simplified programmatic interface to SQLSaber's capabilities, allowing you to run natural language queries against databases from Python code.
+
 ### v0.36.0 - 2025-10-23
 
 #### Added
