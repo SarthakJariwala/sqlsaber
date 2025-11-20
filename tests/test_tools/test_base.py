@@ -12,20 +12,6 @@ class MockTool(Tool):
     def name(self) -> str:
         return "mock_tool"
 
-    @property
-    def description(self) -> str:
-        return "A mock tool for testing"
-
-    @property
-    def input_schema(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "message": {"type": "string"},
-            },
-            "required": ["message"],
-        }
-
     async def execute(self, **kwargs) -> str:
         message = kwargs.get("message", "")
         return f'{{"result": "{message}"}}'
@@ -38,8 +24,6 @@ class TestBaseTool:
         """Test tool properties."""
         tool = MockTool()
         assert tool.name == "mock_tool"
-        assert tool.description == "A mock tool for testing"
-        assert "message" in tool.input_schema["properties"]
 
     @pytest.mark.asyncio
     async def test_execute(self):
