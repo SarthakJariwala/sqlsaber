@@ -15,14 +15,7 @@ from pydantic_ai.providers.google import GoogleProvider
 
 from sqlsaber.config import providers
 from sqlsaber.config.settings import Config
-from sqlsaber.database import (
-    BaseDatabaseConnection,
-    CSVConnection,
-    DuckDBConnection,
-    MySQLConnection,
-    PostgreSQLConnection,
-    SQLiteConnection,
-)
+from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.memory.manager import MemoryManager
 from sqlsaber.prompts.claude import SONNET_4_5
 from sqlsaber.prompts.memory import MEMORY_ADDITION
@@ -45,7 +38,7 @@ class SQLSaberAgent:
         self.database_name = database_name
         self.config = Config()
         self.memory_manager = memory_manager or MemoryManager()
-        self.db_type = self._get_database_type_name()
+        self.db_type = self.db_connection.display_name
 
         # Thinking configuration (CLI override or config default)
         self.thinking_enabled = (
@@ -244,18 +237,3 @@ class SQLSaberAgent:
         self.thinking_enabled = enabled
         # Rebuild agent with new thinking settings
         self.agent = self._build_agent()
-
-    def _get_database_type_name(self) -> str:
-        """Get the human-readable database type name."""
-        if isinstance(self.db_connection, PostgreSQLConnection):
-            return "PostgreSQL"
-        elif isinstance(self.db_connection, MySQLConnection):
-            return "MySQL"
-        elif isinstance(self.db_connection, SQLiteConnection):
-            return "SQLite"
-        elif isinstance(self.db_connection, DuckDBConnection):
-            return "DuckDB"
-        elif isinstance(self.db_connection, CSVConnection):
-            return "DuckDB"
-        else:
-            return "database"

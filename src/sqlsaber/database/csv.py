@@ -63,6 +63,11 @@ class CSVConnection(BaseDatabaseConnection):
         """Return the sqlglot dialect name."""
         return "duckdb"
 
+    @property
+    def display_name(self) -> str:
+        """Return the human-readable name."""
+        return "DuckDB"
+
     async def get_pool(self):
         """CSV connections do not maintain a pool."""
         return None
