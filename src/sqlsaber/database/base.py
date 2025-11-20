@@ -72,6 +72,11 @@ class BaseDatabaseConnection(ABC):
         """Return the sqlglot dialect name for this database."""
         pass
 
+    @property
+    def display_name(self) -> str:
+        """Return the human-readable name for this database type."""
+        return "database"
+
     @abstractmethod
     async def get_pool(self):
         """Get or create connection pool."""

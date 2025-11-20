@@ -28,6 +28,11 @@ class PostgreSQLConnection(BaseDatabaseConnection):
         """Return the sqlglot dialect name."""
         return "postgres"
 
+    @property
+    def display_name(self) -> str:
+        """Return the human-readable name."""
+        return "PostgreSQL"
+
     def _create_ssl_context(self) -> ssl.SSLContext | None:
         """Create SSL context from connection string parameters."""
         parsed = urlparse(self.connection_string)

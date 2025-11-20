@@ -28,6 +28,11 @@ class MySQLConnection(BaseDatabaseConnection):
         """Return the sqlglot dialect name."""
         return "mysql"
 
+    @property
+    def display_name(self) -> str:
+        """Return the human-readable name."""
+        return "MySQL"
+
     def _parse_connection_string(self):
         """Parse MySQL connection string into components."""
         parsed = urlparse(self.connection_string)

@@ -5,14 +5,7 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator
 
-from sqlsaber.database import (
-    BaseDatabaseConnection,
-    CSVConnection,
-    DuckDBConnection,
-    MySQLConnection,
-    PostgreSQLConnection,
-    SQLiteConnection,
-)
+from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.tools import SQLTool, tool_registry
 
@@ -42,21 +35,6 @@ class BaseSQLAgent(ABC):
             cancellation_token: Optional event to signal cancellation
         """
         pass
-
-    def _get_database_type_name(self) -> str:
-        """Get the human-readable database type name."""
-        if isinstance(self.db, PostgreSQLConnection):
-            return "PostgreSQL"
-        elif isinstance(self.db, MySQLConnection):
-            return "MySQL"
-        elif isinstance(self.db, SQLiteConnection):
-            return "SQLite"
-        elif isinstance(self.db, CSVConnection):
-            return "DuckDB"
-        elif isinstance(self.db, DuckDBConnection):
-            return "DuckDB"
-        else:
-            return "database"  # Fallback
 
     def _init_tools(self) -> None:
         """Initialize SQL tools with database connection."""

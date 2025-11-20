@@ -26,6 +26,11 @@ class SQLiteConnection(BaseDatabaseConnection):
         """Return the sqlglot dialect name."""
         return "sqlite"
 
+    @property
+    def display_name(self) -> str:
+        """Return the human-readable name."""
+        return "SQLite"
+
     async def get_pool(self):
         """SQLite doesn't use connection pooling, return database path."""
         return self.database_path
