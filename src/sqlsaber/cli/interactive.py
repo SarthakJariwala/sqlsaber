@@ -19,6 +19,7 @@ from sqlsaber.cli.completers import (
     TableNameCompleter,
 )
 from sqlsaber.cli.display import DisplayManager
+from sqlsaber.cli.slash_commands import CommandContext, SlashCommandProcessor
 from sqlsaber.cli.streaming import StreamingQueryHandler
 from sqlsaber.config.logging import get_logger
 from sqlsaber.database import (
@@ -30,7 +31,7 @@ from sqlsaber.database import (
 )
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.theme.manager import get_theme_manager
-from sqlsaber.threads import ThreadStorage
+from sqlsaber.threads.manager import ThreadManager
 
 if TYPE_CHECKING:
     from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
@@ -38,9 +39,6 @@ if TYPE_CHECKING:
 
 class InteractiveSession:
     """Manages interactive CLI sessions."""
-
-    exit_commands = {"/exit", "/quit", "exit", "quit"}
-    resume_command_template = "saber threads resume {thread_id}"
 
     def __init__(
         self,
@@ -63,10 +61,11 @@ class InteractiveSession:
         self.table_completer = TableNameCompleter()
         self.message_history: list | None = initial_history or []
         self.tm = get_theme_manager()
-        # Conversation Thread persistence
-        self._threads = ThreadStorage()
-        self._thread_id: str | None = initial_thread_id
-        self.first_message = not self._thread_id
+
+        # Component Managers
+        self.thread_manager = ThreadManager(initial_thread_id)
+        self.command_processor = SlashCommandProcessor()
+
         self.log = get_logger(__name__)
 
     def _history_path(self) -> Path:
@@ -118,13 +117,9 @@ class InteractiveSession:
                 return name
         return "database"
 
-    def _resume_hint(self, thread_id: str) -> str:
-        """Build resume command hint."""
-        return self.resume_command_template.format(thread_id=thread_id)
-
     def show_welcome_message(self):
         """Display welcome message for interactive mode."""
-        if self.first_message:
+        if self.thread_manager.first_message:
             self.console.print(Panel.fit(self._banner(), border_style="primary"))
             self.console.print(
                 Markdown(
@@ -141,15 +136,9 @@ class InteractiveSession:
             f"[heading]Model: {model_name}[/heading]\n"
         )
 
-        if self._thread_id:
-            self.console.print(f"[muted]Resuming thread:[/muted] {self._thread_id}\n")
-
-    async def _end_thread(self):
-        """End thread and display resume hint."""
-        if self._thread_id:
-            await self._threads.end_thread(self._thread_id)
+        if self.thread_manager.current_thread_id:
             self.console.print(
-                f"[muted]You can continue this thread using:[/muted] {self._resume_hint(self._thread_id)}"
+                f"[muted]Resuming thread:[/muted] {self.thread_manager.current_thread_id}\n"
             )
 
     async def _handle_memory(self, content: str):
@@ -170,41 +159,6 @@ class InteractiveSession:
                 )
         except Exception as exc:
             self.console.print(f"[warning]Could not add memory:[/warning] {exc}\n")
-
-    async def _cmd_clear(self):
-        """Clear conversation history."""
-        self.message_history = []
-        try:
-            if self._thread_id:
-                await self._threads.end_thread(self._thread_id)
-        except Exception:
-            pass
-        self.console.print("[success]Conversation history cleared.[/success]\n")
-        self._thread_id = None
-        self.first_message = True
-
-    async def _cmd_thinking_on(self):
-        """Enable thinking mode."""
-        self.sqlsaber_agent.set_thinking(enabled=True)
-        self.console.print("[success]✓ Thinking enabled[/success]\n")
-
-    async def _cmd_thinking_off(self):
-        """Disable thinking mode."""
-        self.sqlsaber_agent.set_thinking(enabled=False)
-        self.console.print("[success]✓ Thinking disabled[/success]\n")
-
-    async def _handle_command(self, user_query: str) -> bool:
-        """Handle slash commands. Returns True if command was handled."""
-        if user_query == "/clear":
-            await self._cmd_clear()
-            return True
-        if user_query == "/thinking on":
-            await self._cmd_thinking_on()
-            return True
-        if user_query == "/thinking off":
-            await self._cmd_thinking_off()
-            return True
-        return False
 
     async def _update_table_cache(self):
         """Update the table completer cache with fresh data."""
@@ -263,28 +217,12 @@ class InteractiveSession:
             run_result = await query_task
             # Persist message history from this run using pydantic-ai API
             if run_result is not None:
-                try:
-                    # Use all_messages() so the system prompt and all prior turns are preserved
-                    self.message_history = run_result.all_messages()
-
-                    # Persist snapshot to thread storage (create or overwrite)
-                    self._thread_id = await self._threads.save_snapshot(
-                        messages_json=run_result.all_messages_json(),
-                        database_name=self.database_name,
-                        thread_id=self._thread_id,
-                    )
-                    # Save metadata separately (only if its the first message)
-                    if self.first_message:
-                        await self._threads.save_metadata(
-                            thread_id=self._thread_id,
-                            title=user_query,
-                            model_name=self.sqlsaber_agent.agent.model.model_name,
-                        )
-                        self.first_message = False
-                except Exception as e:
-                    self.log.warning("interactive.thread.save_failed", error=str(e))
-                finally:
-                    await self._threads.prune_threads()
+                self.message_history = await self.thread_manager.save_run(
+                    run_result=run_result,
+                    database_name=self.database_name,
+                    user_query=user_query,
+                    model_name=self.sqlsaber_agent.agent.model.model_name,
+                )
         finally:
             self.current_task = None
             self.cancellation_token = None
@@ -297,6 +235,9 @@ class InteractiveSession:
         await self.before_prompt_loop()
 
         session = PromptSession(history=FileHistory(self._history_path()))
+
+        def clear_history():
+            self.message_history = []
 
         while True:
             try:
@@ -316,15 +257,18 @@ class InteractiveSession:
                 if not user_query:
                     continue
 
-                # Handle exit commands
-                if user_query in self.exit_commands or any(
-                    user_query.startswith(cmd) for cmd in self.exit_commands
-                ):
-                    await self._end_thread()
-                    break
+                # Process slash commands
+                context = CommandContext(
+                    console=self.console,
+                    agent=self.sqlsaber_agent,
+                    thread_manager=self.thread_manager,
+                    on_clear_history=clear_history,
+                )
 
-                # Handle slash commands
-                if await self._handle_command(user_query):
+                cmd_result = await self.command_processor.process(user_query, context)
+                if cmd_result.should_exit:
+                    break
+                if cmd_result.handled:
                     continue
 
                 # Handle memory addition
@@ -353,7 +297,12 @@ class InteractiveSession:
                     )
             except EOFError:
                 # Exit when Ctrl+D is pressed
-                await self._end_thread()
+                ended_thread_id = await self.thread_manager.end_current_thread()
+                if ended_thread_id:
+                    hint = f"saber threads resume {ended_thread_id}"
+                    self.console.print(
+                        f"[muted]You can continue this thread using:[/muted] {hint}"
+                    )
                 break
             except Exception as exc:
                 self.console.print(f"[error]Error:[/error] {exc}")

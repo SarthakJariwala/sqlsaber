@@ -145,8 +145,8 @@ class TestConfig:
         """Test validation error for missing Anthropic API key."""
         config.model_name = "anthropic:claude-3"
         config.auth._api_key_manager.get_api_key.return_value = None
-        
+
         # Ensure no OAuth token is present so it falls back to API key check
-        with patch.object(config.auth, 'get_oauth_token', return_value=None):
+        with patch.object(config.auth, "get_oauth_token", return_value=None):
             with pytest.raises(ValueError, match="Anthropic API key not found"):
                 config.validate()

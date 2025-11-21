@@ -89,12 +89,12 @@ class TestListTablesTool:
         """Test initialization with dependencies injected."""
         mock_db = MockDatabaseConnection()
         mock_schema_manager = MockSchemaManager(mock_db)
-        
+
         tool = ListTablesTool(db_connection=mock_db, schema_manager=mock_schema_manager)
-        
+
         assert tool.db == mock_db
         assert tool.schema_manager == mock_schema_manager
-        
+
         result = await tool.execute()
         data = json.loads(result)
         assert "tables" in data
@@ -103,7 +103,7 @@ class TestListTablesTool:
     async def test_execute_with_connection(self):
         """Test execution with database connection."""
         tool = ListTablesTool()
-        
+
         # Use DI to inject schema manager
         mock_db = MockDatabaseConnection()
         mock_schema_manager = MockSchemaManager(mock_db)
@@ -129,7 +129,7 @@ class TestIntrospectSchemaTool:
     async def test_execute_with_pattern(self):
         """Test execution with table pattern."""
         tool = IntrospectSchemaTool()
-        
+
         # Use DI to inject schema manager
         mock_db = MockDatabaseConnection()
         mock_schema_manager = MockSchemaManager(mock_db)
