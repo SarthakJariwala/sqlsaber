@@ -44,7 +44,7 @@ class SQLSaberAgent:
         self.thinking_enabled = (
             thinking_enabled
             if thinking_enabled is not None
-            else self.config.thinking_enabled
+            else self.config.model.thinking_enabled
         )
 
         # Configure SQL tools with the database connection
@@ -64,15 +64,23 @@ class SQLSaberAgent:
         """Create and configure the pydantic-ai Agent."""
         self.config.validate()
 
+        model_name = self.config.model.name
         model_name_only = (
-            self.config.model_name.split(":", 1)[1]
-            if ":" in self.config.model_name
-            else self.config.model_name
+            model_name.split(":", 1)[1]
+            if ":" in model_name
+            else model_name
         )
 
-        provider = providers.provider_from_model(self.config.model_name) or ""
-        self.is_oauth = provider == "anthropic" and bool(
-            getattr(self.config, "oauth_token", None)
+        provider = providers.provider_from_model(model_name) or ""
+        oauth_token = self.config.auth.get_oauth_token(model_name)
+        self.is_oauth = provider == "anthropic" and bool(oauth_token)
+        
+        # Store tokens for use in _create_agent_for_provider
+        self._current_oauth_token = oauth_token
+        self._current_api_key = (
+            self.config.auth.get_api_key(model_name)
+            if not self.is_oauth
+            else None
         )
 
         agent = self._create_agent_for_provider(provider, model_name_only)
@@ -85,7 +93,7 @@ class SQLSaberAgent:
         """Create the agent based on the provider type."""
         if provider == "google":
             model_obj = GoogleModel(
-                model_name, provider=GoogleProvider(api_key=self.config.api_key)
+                model_name, provider=GoogleProvider(api_key=self._current_api_key)
             )
             if self.thinking_enabled:
                 settings = GoogleModelSettings(
@@ -105,9 +113,9 @@ class SQLSaberAgent:
                     max_tokens=8192,
                 )
                 return Agent(
-                    self.config.model_name, name="sqlsaber", model_settings=settings
+                    self.config.model.name, name="sqlsaber", model_settings=settings
                 )
-            return Agent(self.config.model_name, name="sqlsaber")
+            return Agent(self.config.model.name, name="sqlsaber")
         elif provider == "openai":
             model_obj = OpenAIResponsesModel(model_name)
             if self.thinking_enabled:
@@ -121,11 +129,11 @@ class SQLSaberAgent:
             if self.thinking_enabled:
                 settings = GroqModelSettings(groq_reasoning_format="parsed")
                 return Agent(
-                    self.config.model_name, name="sqlsaber", model_settings=settings
+                    self.config.model.name, name="sqlsaber", model_settings=settings
                 )
-            return Agent(self.config.model_name, name="sqlsaber")
+            return Agent(self.config.model.name, name="sqlsaber")
         else:
-            return Agent(self.config.model_name, name="sqlsaber")
+            return Agent(self.config.model.name, name="sqlsaber")
 
     def _create_oauth_anthropic_agent(self, model_name: str) -> Agent:
         """Create an Anthropic agent with OAuth configuration."""
@@ -135,7 +143,7 @@ class SQLSaberAgent:
                 del request.headers["x-api-key"]
             request.headers.update(
                 {
-                    "Authorization": f"Bearer {self.config.oauth_token}",
+                    "Authorization": f"Bearer {self._current_oauth_token}",
                     "anthropic-version": "2023-06-01",
                     "anthropic-beta": "oauth-2025-04-20",
                     "User-Agent": "ClaudeCode/1.0 (Anthropic Claude Code CLI)",
