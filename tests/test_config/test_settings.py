@@ -106,7 +106,9 @@ class TestConfig:
             mock_manager.get_api_key.return_value = "test-api-key"
 
             config = Config()
-            config._mock_api_key_manager = mock_manager
+            # Store the mock manager on the config object for access in tests
+            # We need to access it via the AuthConfig instance now
+            config.auth._api_key_manager = mock_manager
             return config
 
     def test_initialization(self, config):
@@ -117,30 +119,34 @@ class TestConfig:
     def test_get_api_key_anthropic(self, config):
         """Test API key retrieval for Anthropic models."""
         config.model_name = "anthropic:claude-3-opus"
-        api_key = config._get_api_key()
+        # api_key property calls auth.get_api_key using the current model
+        api_key = config.api_key
 
-        config._mock_api_key_manager.get_api_key.assert_called_with("anthropic")
+        config.auth._api_key_manager.get_api_key.assert_called_with("anthropic")
         assert api_key == "test-api-key"
 
     def test_set_model(self, config):
         """Test setting a new model updates configuration."""
         new_model = "openai:gpt-4-turbo"
-        config._mock_api_key_manager.get_api_key.return_value = "new-api-key"
+        config.auth._api_key_manager.get_api_key.return_value = "new-api-key"
 
         config.set_model(new_model)
 
         assert config.model_name == new_model
-        assert config.model_config_manager.get_model() == new_model
+        # Verify persistence via the manager directly
+        assert config.model._manager.get_model() == new_model
 
     def test_validate_success(self, config):
         """Test successful validation when API key exists."""
-        config.api_key = "valid-key"
+        config.auth._api_key_manager.get_api_key.return_value = "valid-key"
         config.validate()  # Should not raise
 
     def test_validate_missing_anthropic_key(self, config):
         """Test validation error for missing Anthropic API key."""
         config.model_name = "anthropic:claude-3"
-        config.api_key = None
-
-        with pytest.raises(ValueError, match="Anthropic API key not found"):
-            config.validate()
+        config.auth._api_key_manager.get_api_key.return_value = None
+        
+        # Ensure no OAuth token is present so it falls back to API key check
+        with patch.object(config.auth, 'get_oauth_token', return_value=None):
+            with pytest.raises(ValueError, match="Anthropic API key not found"):
+                config.validate()

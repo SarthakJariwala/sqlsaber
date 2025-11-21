@@ -97,52 +97,62 @@ class ModelConfigManager:
         self._save_config(config)
 
 
-class Config:
-    """Configuration class for SQLSaber."""
+class ModelConfig:
+    """Configuration specific to the model."""
 
     def __init__(self):
-        self.model_config_manager = ModelConfigManager()
-        self.model_name = self.model_config_manager.get_model()
-        self.api_key = None
-        self.api_key_manager = APIKeyManager()
-        self.auth_config_manager = AuthConfigManager()
+        self._manager = ModelConfigManager()
 
-        # Thinking configuration
-        self.thinking_enabled = self.model_config_manager.get_thinking_enabled()
+    @property
+    def name(self) -> str:
+        """Get the configured model name."""
+        return self._manager.get_model()
 
-        # Authentication method (API key or Anthropic OAuth)
-        self.auth_method = self.auth_config_manager.get_auth_method()
+    @name.setter
+    def name(self, value: str) -> None:
+        """Set the model name."""
+        self._manager.set_model(value)
 
-        # Optional Anthropic OAuth access token (only relevant for provider=='anthropic')
-        if self.auth_method == AuthMethod.CLAUDE_PRO and self.model_name.startswith(
-            "anthropic"
-        ):
-            self.oauth_token = self.get_oauth_access_token()
-        else:
-            self.api_key = self._get_api_key()
-            # self.oauth_token = None
+    @property
+    def thinking_enabled(self) -> bool:
+        """Get whether thinking is enabled."""
+        return self._manager.get_thinking_enabled()
 
-    def _get_api_key(self) -> str | None:
+    @thinking_enabled.setter
+    def thinking_enabled(self, value: bool) -> None:
+        """Set whether thinking is enabled."""
+        self._manager.set_thinking_enabled(value)
+
+
+class AuthConfig:
+    """Configuration specific to authentication."""
+
+    def __init__(self):
+        self._auth_manager = AuthConfigManager()
+        self._api_key_manager = APIKeyManager()
+
+    @property
+    def method(self) -> AuthMethod | None:
+        """Get the configured authentication method."""
+        return self._auth_manager.get_auth_method()
+
+    def get_api_key(self, model_name: str) -> str | None:
         """Get API key for the model provider using cascading logic."""
-        model = self.model_name or ""
+        model = model_name or ""
         prov = providers.provider_from_model(model)
         if prov in set(providers.all_keys()):
-            return self.api_key_manager.get_api_key(prov)  # type: ignore[arg-type]
+            return self._api_key_manager.get_api_key(prov)  # type: ignore[arg-type]
         return None
 
-    def set_model(self, model: str) -> None:
-        """Set the model and update configuration."""
-        self.model_config_manager.set_model(model)
-        self.model_name = model
-
-    def get_oauth_access_token(self) -> str | None:
-        """Return a valid Anthropic OAuth access token if configured, else None.
-
-        Uses the stored refresh token (if present) to refresh as needed.
-        Only relevant when provider is 'anthropic'.
-        """
-        if not self.model_name.startswith("anthropic"):
+    def get_oauth_token(self, model_name: str) -> str | None:
+        """Return a valid Anthropic OAuth access token if configured, else None."""
+        if not model_name.startswith("anthropic"):
             return None
+
+        # Only check/refresh token if the method is explicitly CLAUDE_PRO
+        if self.method != AuthMethod.CLAUDE_PRO:
+            return None
+
         try:
             flow = AnthropicOAuthFlow()
             token = flow.refresh_token_if_needed()
@@ -150,25 +160,67 @@ class Config:
         except Exception:
             return None
 
-    def validate(self):
-        """Validate that necessary configuration is present.
-
-        Also ensure provider env var is set from keyring if needed for API-key flows.
-        """
-        model = self.model_name or ""
+    def validate(self, model_name: str) -> None:
+        """Validate authentication for the given model."""
+        model = model_name or ""
         provider_key = providers.provider_from_model(model)
         env_var = providers.env_var_name(provider_key or "") if provider_key else None
+
         if env_var:
-            # Anthropic special-case: allow OAuth in lieu of API key only when explicitly configured
+            # Anthropic special-case: allow OAuth in lieu of API key
             if (
                 provider_key == "anthropic"
-                and self.auth_method == AuthMethod.CLAUDE_PRO
-                and self.oauth_token
+                and self.method == AuthMethod.CLAUDE_PRO
+                and self.get_oauth_token(model_name)
             ):
                 return
+
             # If we don't have a key resolved from env/keyring, raise
-            if not self.api_key:
+            api_key = self.get_api_key(model_name)
+            if not api_key:
                 raise ValueError(f"{provider_key.capitalize()} API key not found.")
+
             # Hydrate env var for downstream SDKs if missing
             if not os.getenv(env_var):
-                os.environ[env_var] = self.api_key
+                os.environ[env_var] = api_key
+
+
+class Config:
+    """Configuration class for SQLSaber."""
+
+    def __init__(self):
+        self.model = ModelConfig()
+        self.auth = AuthConfig()
+
+    @property
+    def model_name(self) -> str:
+        """Backwards compatibility wrapper for model name."""
+        return self.model.name
+
+    @model_name.setter
+    def model_name(self, value: str) -> None:
+        """Backwards compatibility wrapper for model name setter."""
+        self.model.name = value
+
+    @property
+    def thinking_enabled(self) -> bool:
+        """Backwards compatibility wrapper for thinking_enabled."""
+        return self.model.thinking_enabled
+
+    @property
+    def api_key(self) -> str | None:
+        """Backwards compatibility wrapper for api_key."""
+        return self.auth.get_api_key(self.model.name)
+
+    @property
+    def oauth_token(self) -> str | None:
+        """Backwards compatibility wrapper for oauth_token."""
+        return self.auth.get_oauth_token(self.model.name)
+
+    def set_model(self, model: str) -> None:
+        """Set the model and update configuration."""
+        self.model.name = model
+
+    def validate(self) -> None:
+        """Validate that necessary configuration is present."""
+        self.auth.validate(self.model.name)
