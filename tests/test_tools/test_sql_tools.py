@@ -150,7 +150,7 @@ class TestExecuteSQLTool:
         assert data["success"] is True
         assert data["row_count"] == 2
         assert len(data["results"]) == 2
-        assert db.queries[-1] == "SELECT * FROM users LIMIT 100;"
+        assert db.queries[-1] == "SELECT * FROM users LIMIT 100"
 
     @pytest.mark.asyncio
     async def test_execute_with_limit(self):

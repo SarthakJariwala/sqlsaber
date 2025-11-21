@@ -312,3 +312,12 @@ class TestAddLimit:
         result = add_limit(query, "postgres", 100)
         # Fallback should still try to add LIMIT
         assert "LIMIT" in result.upper()
+
+    def test_strips_trailing_semicolon(self):
+        """Should strip trailing semicolon before adding LIMIT."""
+        query = "SELECT * FROM users;"
+        result = add_limit(query, "postgres", 100)
+        # Should not end with ;
+        assert result.strip().endswith("LIMIT 100")
+        assert ";" not in result[-5:]  # Ensure no semicolon at the very end
+

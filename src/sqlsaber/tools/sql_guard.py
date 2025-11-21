@@ -197,6 +197,10 @@ def add_limit(sql: str, dialect: str = "ansi", limit: int = 100) -> str:
     Returns:
         SQL with LIMIT clause added (or original if LIMIT already exists)
     """
+    # Strip trailing semicolon to ensure clean parsing and modification
+    # This handles cases where models generate SQL with a trailing semicolon
+    sql = sql.strip().rstrip(";")
+
     try:
         statements = sqlglot.parse(sql, read=dialect)
         if len(statements) != 1:
@@ -204,10 +208,8 @@ def add_limit(sql: str, dialect: str = "ansi", limit: int = 100) -> str:
 
         stmt = statements[0]
 
-        # Check if LIMIT/TOP/FETCH already exists
-        has_limit = any(
-            isinstance(n, (exp.Limit, exp.Top, exp.Fetch)) for n in stmt.walk()
-        )
+        # Check if LIMIT/FETCH already exists
+        has_limit = any(isinstance(n, (exp.Limit, exp.Fetch)) for n in stmt.walk())
         if has_limit:
             return stmt.sql(dialect=dialect)
 
