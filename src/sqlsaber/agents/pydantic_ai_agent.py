@@ -195,42 +195,11 @@ class SQLSaberAgent:
 
     def _register_tools(self, agent: Agent) -> None:
         """Register all the SQL tools with the agent."""
-
-        @agent.tool(name="list_tables")
-        async def list_tables(ctx: RunContext) -> str:
-            """
-            Get a list of all tables in the database with row counts.
-            Use this first to discover available tables.
-            """
-            tool = tool_registry.get_tool("list_tables")
-            return await tool.execute()
-
-        @agent.tool(name="introspect_schema")
-        async def introspect_schema(
-            ctx: RunContext, table_pattern: str | None = None
-        ) -> str:
-            """
-            Introspect database schema to understand table structures.
-
-            Args:
-                table_pattern: Optional pattern to filter tables (e.g., 'public.users', 'user%', '%order%')
-            """
-            tool = tool_registry.get_tool("introspect_schema")
-            return await tool.execute(table_pattern=table_pattern)
-
-        @agent.tool(name="execute_sql")
-        async def execute_sql(
-            ctx: RunContext, query: str, limit: int | None = 100
-        ) -> str:
-            """
-            Execute a SQL query and return the results.
-
-            Args:
-                query: SQL query to execute
-                limit: Maximum number of rows to return (default: 100)
-            """
-            tool = tool_registry.get_tool("execute_sql")
-            return await tool.execute(query=query, limit=limit)
+        for tool_name in tool_registry.list_tools():
+            tool = tool_registry.get_tool(tool_name)
+            # Register the tool dynamically
+            # We use the execute method which now has the correct signature
+            agent.tool_plain(name=tool.name)(tool.execute)
 
     def set_thinking(self, enabled: bool) -> None:
         """Update thinking settings and rebuild the agent."""

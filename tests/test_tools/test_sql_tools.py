@@ -74,7 +74,6 @@ class TestListTablesTool:
         """Test tool properties."""
         tool = ListTablesTool()
         assert tool.name == "list_tables"
-        assert "tables" in tool.description.lower()
 
     @pytest.mark.asyncio
     async def test_execute_without_connection(self):
@@ -110,7 +109,6 @@ class TestIntrospectSchemaTool:
         """Test tool properties."""
         tool = IntrospectSchemaTool()
         assert tool.name == "introspect_schema"
-        assert "schema" in tool.description.lower()
 
     @pytest.mark.asyncio
     async def test_execute_with_pattern(self):
@@ -137,7 +135,6 @@ class TestExecuteSQLTool:
         """Test tool properties."""
         tool = ExecuteSQLTool()
         assert tool.name == "execute_sql"
-        assert "query" in tool.input_schema["properties"]
 
     @pytest.mark.asyncio
     async def test_execute_select_query(self):

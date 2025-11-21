@@ -1,7 +1,6 @@
 """SQL-related tools for database operations."""
 
 import json
-from typing import Any
 
 from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.schema import SchemaManager
@@ -34,19 +33,7 @@ class ListTablesTool(SQLTool):
     def name(self) -> str:
         return "list_tables"
 
-    @property
-    def description(self) -> str:
-        return "Get a list of all tables in the database with row counts. Use this first to discover available tables."
-
-    @property
-    def input_schema(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {},
-            "required": [],
-        }
-
-    async def execute(self, **kwargs) -> str:
+    async def execute(self) -> str:
         """List all tables in the database."""
         if not self.db or not self.schema_manager:
             return json.dumps({"error": "No database connection available"})
@@ -66,30 +53,17 @@ class IntrospectSchemaTool(SQLTool):
     def name(self) -> str:
         return "introspect_schema"
 
-    @property
-    def description(self) -> str:
-        return "Introspect database schema to understand table structures."
+    async def execute(self, table_pattern: str | None = None) -> str:
+        """
+        Introspect database schema.
 
-    @property
-    def input_schema(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "table_pattern": {
-                    "type": "string",
-                    "description": "Optional pattern to filter tables (e.g., 'public.users', 'user%', '%order%')",
-                }
-            },
-            "required": [],
-        }
-
-    async def execute(self, **kwargs) -> str:
-        """Introspect database schema."""
+        Args:
+            table_pattern: Optional pattern to filter tables (e.g., 'public.users', 'user%', '%order%')
+        """
         if not self.db or not self.schema_manager:
             return json.dumps({"error": "No database connection available"})
 
         try:
-            table_pattern = kwargs.get("table_pattern")
             schema_info = await self.schema_manager.get_schema_info(table_pattern)
 
             # Format the schema information
@@ -143,38 +117,22 @@ class ExecuteSQLTool(SQLTool):
     def name(self) -> str:
         return "execute_sql"
 
-    @property
-    def description(self) -> str:
-        return "Execute a SQL query against the database."
+    async def execute(self, query: str, limit: int | None = 100) -> str:
+        """
+        Execute a SQL query against the database.
 
-    @property
-    def input_schema(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "SQL query to execute",
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": f"Maximum number of rows to return (default: {self.DEFAULT_LIMIT})",
-                    "default": self.DEFAULT_LIMIT,
-                },
-            },
-            "required": ["query"],
-        }
-
-    async def execute(self, **kwargs) -> str:
-        """Execute a SQL query."""
+        Args:
+            query: SQL query to execute
+            limit: Maximum number of rows to return (default: 100)
+        """
         if not self.db:
             return json.dumps({"error": "No database connection available"})
 
-        query = kwargs.get("query")
         if not query:
             return json.dumps({"error": "No query provided"})
 
-        limit = kwargs.get("limit", self.DEFAULT_LIMIT)
+        if limit is None:
+            limit = self.DEFAULT_LIMIT
 
         try:
             # Get the dialect for this database
