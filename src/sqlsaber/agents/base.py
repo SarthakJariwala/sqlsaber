@@ -13,9 +13,13 @@ from sqlsaber.tools import SQLTool, tool_registry
 class BaseSQLAgent(ABC):
     """Abstract base class for SQL agents."""
 
-    def __init__(self, db_connection: BaseDatabaseConnection):
+    def __init__(
+        self,
+        db_connection: BaseDatabaseConnection,
+        schema_manager: SchemaManager | None = None,
+    ):
         self.db = db_connection
-        self.schema_manager = SchemaManager(db_connection)
+        self.schema_manager = schema_manager or SchemaManager(db_connection)
 
         # Initialize SQL tools with database connection
         self._init_tools()
@@ -42,7 +46,7 @@ class BaseSQLAgent(ABC):
         for tool_name in tool_registry.list_tools():
             tool = tool_registry.get_tool(tool_name)
             if isinstance(tool, SQLTool):
-                tool.set_connection(self.db)
+                tool.set_connection(self.db, self.schema_manager)
 
     async def process_tool_call(
         self, tool_name: str, tool_input: dict[str, Any]

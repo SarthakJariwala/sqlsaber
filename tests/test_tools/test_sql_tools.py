@@ -85,14 +85,29 @@ class TestListTablesTool:
         assert "no database connection" in data["error"].lower()
 
     @pytest.mark.asyncio
+    async def test_init_with_dependencies(self):
+        """Test initialization with dependencies injected."""
+        mock_db = MockDatabaseConnection()
+        mock_schema_manager = MockSchemaManager(mock_db)
+        
+        tool = ListTablesTool(db_connection=mock_db, schema_manager=mock_schema_manager)
+        
+        assert tool.db == mock_db
+        assert tool.schema_manager == mock_schema_manager
+        
+        result = await tool.execute()
+        data = json.loads(result)
+        assert "tables" in data
+
+    @pytest.mark.asyncio
     async def test_execute_with_connection(self):
         """Test execution with database connection."""
         tool = ListTablesTool()
-        tool.db = MockDatabaseConnection()
-
-        # Mock the schema_manager directly
-        mock_schema_manager = MockSchemaManager(None)
-        tool.schema_manager = mock_schema_manager
+        
+        # Use DI to inject schema manager
+        mock_db = MockDatabaseConnection()
+        mock_schema_manager = MockSchemaManager(mock_db)
+        tool.set_connection(mock_db, mock_schema_manager)
 
         result = await tool.execute()
         data = json.loads(result)
@@ -114,11 +129,11 @@ class TestIntrospectSchemaTool:
     async def test_execute_with_pattern(self):
         """Test execution with table pattern."""
         tool = IntrospectSchemaTool()
-        tool.db = MockDatabaseConnection()
-
-        # Mock the schema_manager directly
-        mock_schema_manager = MockSchemaManager(None)
-        tool.schema_manager = mock_schema_manager
+        
+        # Use DI to inject schema manager
+        mock_db = MockDatabaseConnection()
+        mock_schema_manager = MockSchemaManager(mock_db)
+        tool.set_connection(mock_db, mock_schema_manager)
 
         result = await tool.execute(table_pattern="users")
         data = json.loads(result)

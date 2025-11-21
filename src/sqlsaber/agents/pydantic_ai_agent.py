@@ -16,6 +16,7 @@ from pydantic_ai.providers.google import GoogleProvider
 from sqlsaber.config import providers
 from sqlsaber.config.settings import Config
 from sqlsaber.database import BaseDatabaseConnection
+from sqlsaber.database.schema import SchemaManager
 from sqlsaber.memory.manager import MemoryManager
 from sqlsaber.prompts.claude import SONNET_4_5
 from sqlsaber.prompts.memory import MEMORY_ADDITION
@@ -40,6 +41,9 @@ class SQLSaberAgent:
         self.memory_manager = memory_manager or MemoryManager()
         self.db_type = self.db_connection.display_name
 
+        # Initialize schema manager
+        self.schema_manager = SchemaManager(self.db_connection)
+
         # Thinking configuration (CLI override or config default)
         self.thinking_enabled = (
             thinking_enabled
@@ -58,7 +62,7 @@ class SQLSaberAgent:
         for tool_name in tool_registry.list_tools():
             tool = tool_registry.get_tool(tool_name)
             if isinstance(tool, SQLTool):
-                tool.set_connection(self.db_connection)
+                tool.set_connection(self.db_connection, self.schema_manager)
 
     def _build_agent(self) -> Agent:
         """Create and configure the pydantic-ai Agent."""
@@ -66,15 +70,13 @@ class SQLSaberAgent:
 
         model_name = self.config.model.name
         model_name_only = (
-            model_name.split(":", 1)[1]
-            if ":" in model_name
-            else model_name
+            model_name.split(":", 1)[1] if ":" in model_name else model_name
         )
 
         provider = providers.provider_from_model(model_name) or ""
         oauth_token = self.config.auth.get_oauth_token(model_name)
         self.is_oauth = provider == "anthropic" and bool(oauth_token)
-        
+
         # Store tokens for use in _create_agent_for_provider
         self._current_oauth_token = oauth_token
         self._current_api_key = (
