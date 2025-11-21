@@ -13,16 +13,32 @@ from .sql_guard import add_limit, validate_read_only
 class SQLTool(Tool):
     """Base class for SQL tools that need database access."""
 
-    def __init__(self, db_connection: BaseDatabaseConnection | None = None):
+    def __init__(
+        self,
+        db_connection: BaseDatabaseConnection | None = None,
+        schema_manager: SchemaManager | None = None,
+    ):
         """Initialize with optional database connection."""
         super().__init__()
         self.db = db_connection
-        self.schema_manager = SchemaManager(db_connection) if db_connection else None
+        if schema_manager:
+            self.schema_manager = schema_manager
+        elif db_connection:
+            self.schema_manager = SchemaManager(db_connection)
+        else:
+            self.schema_manager = None
 
-    def set_connection(self, db_connection: BaseDatabaseConnection) -> None:
+    def set_connection(
+        self,
+        db_connection: BaseDatabaseConnection,
+        schema_manager: SchemaManager | None = None,
+    ) -> None:
         """Set the database connection after initialization."""
         self.db = db_connection
-        self.schema_manager = SchemaManager(db_connection)
+        if schema_manager:
+            self.schema_manager = schema_manager
+        else:
+            self.schema_manager = SchemaManager(db_connection)
 
 
 @register_tool
