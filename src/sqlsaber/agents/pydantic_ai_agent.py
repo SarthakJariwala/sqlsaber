@@ -80,9 +80,7 @@ class SQLSaberAgent:
         # Store tokens for use in _create_agent_for_provider
         self._current_oauth_token = oauth_token
         self._current_api_key = (
-            self.config.auth.get_api_key(model_name)
-            if not self.is_oauth
-            else None
+            self.config.auth.get_api_key(model_name) if not self.is_oauth else None
         )
 
         agent = self._create_agent_for_provider(provider, model_name_only)

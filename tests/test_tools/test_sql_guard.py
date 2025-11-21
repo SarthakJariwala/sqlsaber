@@ -320,4 +320,3 @@ class TestAddLimit:
         # Should not end with ;
         assert result.strip().endswith("LIMIT 100")
         assert ";" not in result[-5:]  # Ensure no semicolon at the very end
-
