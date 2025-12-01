@@ -18,6 +18,7 @@ from rich.spinner import Spinner
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
+from tabulate import tabulate
 
 from sqlsaber.theme.manager import get_theme_manager
 
@@ -208,6 +209,47 @@ class DisplayManager:
         self.live = LiveMarkdownRenderer(console)
         self.tm = get_theme_manager()
 
+    def _tables_to_markdown(self, data: dict) -> str:
+        """Convert tables list JSON to markdown table."""
+        rows = data.get("tables", [])
+        cols = ["name", "schema", "type", "table_comment"]
+        table_data = [[row.get(c, "") for c in cols] for row in rows]
+        return tabulate(table_data, headers=cols, tablefmt="github")
+
+    def _schema_to_markdown(self, data: dict) -> str:
+        """Convert schema JSON to markdown tables."""
+        parts = []
+        for table_name, table_info in data.items():
+            columns = table_info.get("columns", {})
+            table_data = [
+                [
+                    col_name,
+                    info["type"],
+                    info["nullable"],
+                    info["default"],
+                    info.get("comment", ""),
+                ]
+                for col_name, info in columns.items()
+            ]
+            md = f"**Table: {table_name}**\n\n"
+            md += tabulate(
+                table_data,
+                headers=["Column", "Type", "Nullable", "Default", "Comments"],
+                tablefmt="github",
+            )
+            if table_info.get("primary_keys"):
+                md += f"\n\n**Primary Keys:** {', '.join(table_info['primary_keys'])}"
+            if table_info.get("foreign_keys"):
+                md += f"\n\n**Foreign Keys:** {', '.join(table_info['foreign_keys'])}"
+            parts.append(md)
+        return "\n\n".join(parts)
+
+    def _results_to_markdown(self, results: list) -> str:
+        """Convert query results to markdown table."""
+        if not results:
+            return "*No results*"
+        return tabulate(results, headers="keys", tablefmt="github")
+
     def _create_table(
         self,
         columns: Sequence[str | dict[str, str]],
@@ -219,9 +261,7 @@ class DisplayManager:
         table = Table(show_header=True, header_style=header_style, title=title)
         for col in columns:
             if isinstance(col, dict):
-                table.add_column(
-                    col["name"], style=col.get("style"), justify=col.get("justify")
-                )
+                table.add_column(col["name"], style=col.get("style"))
             else:
                 table.add_column(col)
         return table
@@ -274,41 +314,35 @@ class DisplayManager:
         if not results:
             return
 
-        if self.console.is_terminal:
-            self.console.print(f"\n[section]Results ({len(results)} rows):[/section]")
-        else:
+        if not self.console.is_terminal:
+            # Markdown output for redirected/piped output
             self.console.print(f"\n**Results ({len(results)} rows):**\n")
+            self.console.print(self._results_to_markdown(results))
+            self.console.print()
+            return
 
-        # Create table with columns from first result
+        # Rich table for terminal
+        self.console.print(f"\n[section]Results ({len(results)} rows):[/section]")
+
         all_columns = list(results[0].keys())
-        display_columns = all_columns[:15]  # Limit to first 15 columns
+        display_columns = all_columns[:15]
 
-        # Show warning if columns were truncated
         if len(all_columns) > 15:
-            if self.console.is_terminal:
-                self.console.print(
-                    f"[warning]Note: Showing first 15 of {len(all_columns)} columns[/warning]"
-                )
-            else:
-                self.console.print(
-                    f"*Note: Showing first 15 of {len(all_columns)} columns*\n"
-                )
+            self.console.print(
+                f"[warning]Note: Showing first 15 of {len(all_columns)} columns[/warning]"
+            )
 
         table = self._create_table(display_columns)
 
-        # Add rows (show first 20 rows)
         for row in results[:20]:
             table.add_row(*[str(row[key]) for key in display_columns])
 
         self.console.print(table)
 
         if len(results) > 20:
-            if self.console.is_terminal:
-                self.console.print(
-                    f"[warning]... and {len(results) - 20} more rows[/warning]"
-                )
-            else:
-                self.console.print(f"*... and {len(results) - 20} more rows*\n")
+            self.console.print(
+                f"[warning]... and {len(results) - 20} more rows[/warning]"
+            )
 
     def show_error(self, error_message: str):
         """Display error message."""
@@ -341,7 +375,6 @@ class DisplayManager:
                 json.loads(tables_data) if isinstance(tables_data, str) else tables_data
             )
 
-            # Handle error case
             if "error" in data:
                 self.show_error(data["error"])
                 return
@@ -350,16 +383,26 @@ class DisplayManager:
             total_tables = data.get("total_tables", 0)
 
             if not tables:
-                self.console.print(
-                    "[warning]No tables found in the database.[/warning]"
-                )
+                if self.console.is_terminal:
+                    self.console.print(
+                        "[warning]No tables found in the database.[/warning]"
+                    )
+                else:
+                    self.console.print("*No tables found in the database.*\n")
                 return
 
+            if not self.console.is_terminal:
+                # Markdown output for redirected/piped output
+                self.console.print(f"\n**Database Tables ({total_tables} total):**\n")
+                self.console.print(self._tables_to_markdown(data))
+                self.console.print()
+                return
+
+            # Rich table for terminal
             self.console.print(
                 f"\n[title]Database Tables ({total_tables} total):[/title]"
             )
 
-            # Create a rich table for displaying table information
             columns = [
                 {"name": "Schema", "style": "column.schema"},
                 {"name": "Table Name", "style": "column.name"},
@@ -367,12 +410,10 @@ class DisplayManager:
             ]
             table = self._create_table(columns)
 
-            # Add rows
             for table_info in tables:
                 schema = table_info.get("schema", "")
                 name = table_info.get("name", "")
                 table_type = table_info.get("type", "")
-
                 table.add_row(schema, name, table_type)
 
             self.console.print(table)
@@ -389,20 +430,31 @@ class DisplayManager:
                 json.loads(schema_data) if isinstance(schema_data, str) else schema_data
             )
 
-            # Handle error case
             if "error" in data:
                 self.show_error(data["error"])
                 return
 
             if not data:
-                self.console.print("[warning]No schema information found.[/warning]")
+                if self.console.is_terminal:
+                    self.console.print(
+                        "[warning]No schema information found.[/warning]"
+                    )
+                else:
+                    self.console.print("*No schema information found.*\n")
                 return
 
+            if not self.console.is_terminal:
+                # Markdown output for redirected/piped output
+                self.console.print(f"\n**Schema Information ({len(data)} tables):**\n")
+                self.console.print(self._schema_to_markdown(data))
+                self.console.print()
+                return
+
+            # Rich tables for terminal
             self.console.print(
                 f"\n[title]Schema Information ({len(data)} tables):[/title]"
             )
 
-            # Display each table's schema
             for table_name, table_info in data.items():
                 self.console.print(f"\n[heading]Table: {table_name}[/heading]")
 
@@ -410,14 +462,12 @@ class DisplayManager:
                 if table_comment:
                     self.console.print(f"[muted]Comment: {table_comment}[/muted]")
 
-                # Show columns
                 table_columns = table_info.get("columns", {})
                 if table_columns:
                     include_column_comments = any(
                         col_info.get("comment") for col_info in table_columns.values()
                     )
 
-                    # Create a table for columns
                     columns = [
                         {"name": "Column Name", "style": "column.name"},
                         {"name": "Type", "style": "column.type"},
@@ -447,21 +497,18 @@ class DisplayManager:
 
                     self.console.print(col_table)
 
-                # Show primary keys
                 primary_keys = table_info.get("primary_keys", [])
                 if primary_keys:
                     self.console.print(
                         f"[key.primary]Primary Keys:[/key.primary] {', '.join(primary_keys)}"
                     )
 
-                # Show foreign keys
                 foreign_keys = table_info.get("foreign_keys", [])
                 if foreign_keys:
                     self.console.print("[key.foreign]Foreign Keys:[/key.foreign]")
                     for fk in foreign_keys:
                         self.console.print(f"  • {fk}")
 
-                # Show indexes
                 indexes = table_info.get("indexes", [])
                 if indexes:
                     self.console.print("[key.index]Indexes:[/key.index]")
