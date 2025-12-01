@@ -106,6 +106,18 @@ def _render_transcript(
                 )
             )
 
+    def _show_generic_tool_result(tool_name: str, content: str) -> None:
+        if is_redirected:
+            console.print(f"**Tool result ({tool_name}):**\n\n{content}\n")
+        else:
+            console.print(
+                Panel.fit(
+                    content,
+                    title=f"Tool result: {tool_name}",
+                    border_style="warning",
+                )
+            )
+
     def _render_response(message: ModelMessage) -> None:
         for part in getattr(message, "parts", []):
             kind = getattr(part, "part_kind", "")
@@ -145,6 +157,8 @@ def _render_transcript(
                     content_str = content
                 else:
                     content_str = json.dumps({"return_value": str(content)})
+
+                # DisplayManager methods auto-detect terminal vs redirected
                 if name == "list_tables":
                     dm.show_table_list(content_str)
                 elif name == "introspect_schema":
@@ -163,42 +177,11 @@ def _render_transcript(
                                 data.get("error"), data.get("suggestions")
                             )
                         else:
-                            if is_redirected:
-                                console.print(
-                                    f"**Tool result ({name}):**\n\n{content_str}\n"
-                                )
-                            else:
-                                console.print(
-                                    Panel.fit(
-                                        content_str,
-                                        title=f"Tool result: {name}",
-                                        border_style="warning",
-                                    )
-                                )
+                            _show_generic_tool_result(name, content_str)
                     except Exception:
-                        if is_redirected:
-                            console.print(
-                                f"**Tool result ({name}):**\n\n{content_str}\n"
-                            )
-                        else:
-                            console.print(
-                                Panel.fit(
-                                    content_str,
-                                    title=f"Tool result: {name}",
-                                    border_style="warning",
-                                )
-                            )
+                        _show_generic_tool_result(name, content_str)
                 else:
-                    if is_redirected:
-                        console.print(f"**Tool result ({name}):**\n\n{content_str}\n")
-                    else:
-                        console.print(
-                            Panel.fit(
-                                content_str,
-                                title=f"Tool result: {name}",
-                                border_style="warning",
-                            )
-                        )
+                    _show_generic_tool_result(name, content_str)
         # Thinking parts omitted
 
     for start_idx, end_idx in slices or [(0, len(all_msgs))]:

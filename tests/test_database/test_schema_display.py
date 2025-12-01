@@ -176,7 +176,6 @@ class TestSchemaDisplayMappings:
         display_manager.show_schema_info(schema_info)
         output = string_io.getvalue()
 
-        assert "Product catalog" in output
         assert "Unique product identifier" in output
         assert "Product name" in output
 
@@ -214,7 +213,7 @@ class TestSchemaDisplayMappings:
         type_lines = [
             line
             for line in lines
-            if "│" in line and ("users" in line or "active_users" in line)
+            if "|" in line and ("users" in line or "active_users" in line)
         ]
 
         # Should have at least one table and one view

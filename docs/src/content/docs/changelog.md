@@ -9,6 +9,18 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.38.0 - 2025-12-01
+
+#### Changed
+
+- Consolidated display formatting logic into `DisplayManager` for cleaner separation of concerns
+  - Markdown table export now handled internally by display methods
+  - `show_table_list`, `show_schema_info`, and `show_query_results` auto-detect terminal vs redirected output
+
+#### Fixed
+
+- Fixed LIMIT clause injection when queries end with semicolons
+
 ### v0.37.0 - 2025-11-20
 
 #### Added
