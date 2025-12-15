@@ -15,6 +15,7 @@ from pydantic_ai.models.groq import GroqModelSettings
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google import GoogleProvider
+from pydantic_ai.providers.openai import OpenAIProvider
 
 
 class AgentProviderStrategy(abc.ABC):
@@ -42,10 +43,12 @@ class GoogleProviderStrategy(AgentProviderStrategy):
         oauth_token: str | None = None,
         thinking_enabled: bool = False,
     ) -> Agent:
-        if not api_key:
-            raise ValueError("API key is required for Google models.")
-
-        model_obj = GoogleModel(model_name, provider=GoogleProvider(api_key=api_key))
+        if api_key:
+            model_obj = GoogleModel(
+                model_name, provider=GoogleProvider(api_key=api_key)
+            )
+        else:
+            model_obj = GoogleModel(model_name)
         if thinking_enabled:
             settings = GoogleModelSettings(
                 google_thinking_config={"include_thoughts": True}
@@ -107,6 +110,14 @@ class AnthropicProviderStrategy(AgentProviderStrategy):
         oauth_token: str | None = None,
         thinking_enabled: bool = False,
     ) -> Agent:
+        # Use explicit provider if api_key provided, else let pydantic-ai use env var
+        if api_key:
+            model_obj = AnthropicModel(
+                model_name, provider=AnthropicProvider(api_key=api_key)
+            )
+        else:
+            model_obj = AnthropicModel(model_name)
+
         if thinking_enabled:
             settings = AnthropicModelSettings(
                 anthropic_thinking={
@@ -115,8 +126,8 @@ class AnthropicProviderStrategy(AgentProviderStrategy):
                 },
                 max_tokens=8192,
             )
-            return Agent(model_name, name="sqlsaber", model_settings=settings)
-        return Agent(model_name, name="sqlsaber")
+            return Agent(model_obj, name="sqlsaber", model_settings=settings)
+        return Agent(model_obj, name="sqlsaber")
 
 
 class OpenAIProviderStrategy(AgentProviderStrategy):
@@ -129,7 +140,12 @@ class OpenAIProviderStrategy(AgentProviderStrategy):
         oauth_token: str | None = None,
         thinking_enabled: bool = False,
     ) -> Agent:
-        model_obj = OpenAIResponsesModel(model_name)
+        if api_key:
+            model_obj = OpenAIResponsesModel(
+                model_name, provider=OpenAIProvider(api_key=api_key)
+            )
+        else:
+            model_obj = OpenAIResponsesModel(model_name)
         if thinking_enabled:
             settings = OpenAIResponsesModelSettings(
                 openai_reasoning_effort="medium",
@@ -221,6 +237,7 @@ class ProviderFactory:
                 GoogleProviderStrategy,
                 OpenAIProviderStrategy,
                 AnthropicOAuthProviderStrategy,
+                AnthropicProviderStrategy,
             ),
         ):
             target_name = model_name

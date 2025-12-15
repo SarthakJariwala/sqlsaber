@@ -29,11 +29,15 @@ class SQLSaberAgent:
         database_name: str | None = None,
         memory_manager: MemoryManager | None = None,
         thinking_enabled: bool | None = None,
+        model_name: str | None = None,
+        api_key: str | None = None,
     ):
         self.db_connection = db_connection
         self.database_name = database_name
         self.config = Config()
         self.memory_manager = memory_manager or MemoryManager()
+        self._model_name_override = model_name
+        self._api_key_override = api_key
         self.db_type = self.db_connection.display_name
 
         # Initialize schema manager
@@ -61,20 +65,37 @@ class SQLSaberAgent:
 
     def _build_agent(self) -> Agent:
         """Create and configure the pydantic-ai Agent."""
-        self.config.validate()
+        if self._api_key_override and not self._model_name_override:
+            raise ValueError(
+                "Model name is required when providing an api_key override."
+            )
 
-        model_name = self.config.model.name
+        # Use override if provided, else fall back to config
+        model_name = self._model_name_override or self.config.model.name
         model_name_only = (
             model_name.split(":", 1)[1] if ":" in model_name else model_name
         )
 
+        # Validate/hydrate credentials for the effective model (not stored model)
+        if not (self._model_name_override and self._api_key_override):
+            self.config.auth.validate(model_name)
+
         provider = providers.provider_from_model(model_name) or ""
-        oauth_token = self.config.auth.get_oauth_token(model_name)
+
+        # API key priority: explicit override > OAuth (if configured) > config
+        oauth_token = (
+            None
+            if self._api_key_override
+            else self.config.auth.get_oauth_token(model_name)
+        )
         self.is_oauth = provider == "anthropic" and bool(oauth_token)
 
-        api_key = (
-            self.config.auth.get_api_key(model_name) if not self.is_oauth else None
-        )
+        if self._api_key_override:
+            api_key = self._api_key_override
+        elif not self.is_oauth:
+            api_key = self.config.auth.get_api_key(model_name)
+        else:
+            api_key = None
 
         factory = ProviderFactory()
         agent = factory.create_agent(
