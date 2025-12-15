@@ -66,6 +66,8 @@ class SQLSaber:
         self,
         database: str | None = None,
         thinking: bool = False,
+        model_name: str | None = None,
+        api_key: str | None = None,
     ):
         """
         Initialize SQLSaber.
@@ -78,6 +80,9 @@ class SQLSaber:
                       - "sqlite:///data.db"
                       - "my-saved-db"
             thinking: Whether to enable "thinking" mode for supported models.
+            model_name: Override model (format: 'provider:model',
+                        e.g., 'anthropic:claude-sonnet-4-20250514').
+            api_key: Override API key for the model provider.
         """
         self._config_manager = DatabaseConfigManager()
         self._resolved = resolve_database(database, self._config_manager)
@@ -88,7 +93,11 @@ class SQLSaber:
             excluded_schemas=self._resolved.excluded_schemas,
         )
         self.agent = SQLSaberAgent(
-            self.connection, self.db_name, thinking_enabled=thinking
+            self.connection,
+            self.db_name,
+            thinking_enabled=thinking,
+            model_name=model_name,
+            api_key=api_key,
         )
 
     async def query(

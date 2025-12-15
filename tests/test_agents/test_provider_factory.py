@@ -140,3 +140,36 @@ def test_factory_create_agent_integration(factory, monkeypatch):
     )
     assert isinstance(agent.model, GoogleModel)
     assert agent.model.model_name == "gemini-pro"
+
+
+# Tests for explicit API key usage (no env var required)
+
+
+def test_anthropic_strategy_with_explicit_api_key():
+    """Test Anthropic strategy creates agent with explicit api_key (no env var)."""
+    strategy = AnthropicProviderStrategy()
+    agent = strategy.create_agent(model_name="claude-3", api_key="test-api-key")
+
+    assert isinstance(agent, Agent)
+    assert isinstance(agent.model, AnthropicModel)
+    assert agent.model.model_name == "claude-3"
+
+
+def test_openai_strategy_with_explicit_api_key():
+    """Test OpenAI strategy creates agent with explicit api_key (no env var)."""
+    strategy = OpenAIProviderStrategy()
+    agent = strategy.create_agent(model_name="gpt-4", api_key="test-api-key")
+
+    assert isinstance(agent, Agent)
+    assert isinstance(agent.model, OpenAIResponsesModel)
+    assert agent.model.model_name == "gpt-4"
+
+
+def test_google_strategy_with_explicit_api_key():
+    """Test Google strategy creates agent with explicit api_key (no env var)."""
+    strategy = GoogleProviderStrategy()
+    agent = strategy.create_agent(model_name="gemini-pro", api_key="test-api-key")
+
+    assert isinstance(agent, Agent)
+    assert isinstance(agent.model, GoogleModel)
+    assert agent.model.model_name == "gemini-pro"

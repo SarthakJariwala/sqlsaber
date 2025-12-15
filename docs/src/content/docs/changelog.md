@@ -7,6 +7,13 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+#### Added
+
+- Python API now supports `model_name` and `api_key` parameters for programmatic model configuration
+  - Override configured model: `SQLSaber(database="...", model_name="anthropic:claude-sonnet-4-20250514")`
+  - Override configured model and API key: `SQLSaber(database="...", model_name="anthropic:claude-sonnet-4-20250514", api_key="sk-...")`
+  - Falls back to OAuth if `api_key` is not provided but OAuth is configured
+
 ---
 
 ### v0.38.0 - 2025-12-01
