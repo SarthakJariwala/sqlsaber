@@ -7,6 +7,10 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+---
+
+### v0.39.0 - 2025-12-15
+
 #### Added
 
 - Python API now supports `model_name` and `api_key` parameters for programmatic model configuration
