@@ -34,9 +34,10 @@ class TestCLICommands:
 
     def test_main_help(self, capsys):
         """Test main help command."""
-        # Cyclopts prints help directly without exiting
-        app(["--help"])
+        with pytest.raises(SystemExit) as exc_info:
+            app(["--help"])
 
+        assert exc_info.value.code == 0
         captured = capsys.readouterr()
         assert "SQLsaber" in captured.out
         assert "SQL assistant for your database" in captured.out
@@ -55,9 +56,10 @@ class TestCLICommands:
 
     def test_subcommands_registered(self, capsys):
         """Test that all subcommands are properly registered."""
-        # Cyclopts prints help directly without exiting
-        app(["--help"])
+        with pytest.raises(SystemExit) as exc_info:
+            app(["--help"])
 
+        assert exc_info.value.code == 0
         captured = capsys.readouterr()
         assert "db" in captured.out
         assert "memory" in captured.out
