@@ -10,6 +10,17 @@ export default defineConfig({
 		starlight({
 			title: "SQLsaber",
 			customCss: ["./src/styles/global.css"],
+			head: [
+				{
+					tag: "script",
+					attrs: {
+						defer: true,
+						src: "https://umami.sarthakjariwala.com/script.js",
+						"data-website-id": "72be4739-0d77-4d79-be5b-cf31a62bca87",
+						"data-domains": "sqlsaber.com",
+					},
+				},
+			],
 			social: [
 				{
 					icon: "github",
