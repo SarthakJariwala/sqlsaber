@@ -1,7 +1,7 @@
 """SQL query validation and security using sqlglot AST analysis."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
 
 import sqlglot
 from sqlglot import exp
@@ -9,7 +9,7 @@ from sqlglot.errors import ParseError
 
 # Prohibited AST node types that indicate write/mutation operations
 # Only include expression types that exist in sqlglot
-PROHIBITED_NODES = {
+PROHIBITED_NODES: set[type[exp.Expression]] = {
     # DML operations
     exp.Insert,
     exp.Update,
@@ -48,13 +48,14 @@ PROHIBITED_NODES = {
 }
 
 try:
-    # Add optional types that may not exist in all sqlglot versions
-    PROHIBITED_NODES.add(exp.Vacuum)
+    vacuum_type = getattr(exp, "Vacuum", None)
+    if vacuum_type is not None:
+        PROHIBITED_NODES.add(vacuum_type)
 except AttributeError:
     pass
 
 # Dangerous functions by dialect that can read files or execute commands
-DANGEROUS_FUNCTIONS_BY_DIALECT = {
+DANGEROUS_FUNCTIONS_BY_DIALECT: dict[str, set[str]] = {
     "postgres": {
         "pg_read_file",
         "pg_read_binary_file",
@@ -84,7 +85,7 @@ class GuardResult:
     """Result of SQL query validation."""
 
     allowed: bool
-    reason: Optional[str] = None
+    reason: str | None = None
     is_select: bool = False
 
 
@@ -100,7 +101,7 @@ def is_select_like(stmt: exp.Expression) -> bool:
     return isinstance(root, (exp.Select, exp.Union, exp.Except, exp.Intersect))
 
 
-def has_prohibited_nodes(stmt: exp.Expression) -> Optional[str]:
+def has_prohibited_nodes(stmt: exp.Expression) -> str | None:
     """Walk AST to find any prohibited operations.
 
     Checks for:
@@ -127,9 +128,9 @@ def has_prohibited_nodes(stmt: exp.Expression) -> Optional[str]:
     return None
 
 
-def has_dangerous_functions(stmt: exp.Expression, dialect: str) -> Optional[str]:
+def has_dangerous_functions(stmt: exp.Expression, dialect: str) -> str | None:
     """Check for dangerous functions that can read files or execute commands."""
-    deny_set = DANGEROUS_FUNCTIONS_BY_DIALECT.get(dialect, set())
+    deny_set = DANGEROUS_FUNCTIONS_BY_DIALECT.get(dialect)
     if not deny_set:
         return None
 
@@ -168,6 +169,8 @@ def validate_read_only(sql: str, dialect: str = "ansi") -> GuardResult:
         )
 
     stmt = statements[0]
+    if stmt is None:
+        return GuardResult(False, "Unable to parse query - empty statement")
 
     # Must be a SELECT-like statement
     if not is_select_like(stmt):
@@ -207,6 +210,8 @@ def add_limit(sql: str, dialect: str = "ansi", limit: int = 100) -> str:
             return sql
 
         stmt = statements[0]
+        if stmt is None:
+            return sql
 
         # Check if LIMIT/FETCH already exists
         has_limit = any(isinstance(n, (exp.Limit, exp.Fetch)) for n in stmt.walk())
@@ -215,7 +220,12 @@ def add_limit(sql: str, dialect: str = "ansi", limit: int = 100) -> str:
 
         # Add LIMIT - sqlglot will render appropriately for dialect
         # (LIMIT for most, TOP for SQL Server, FETCH FIRST for Oracle)
-        stmt = stmt.limit(limit)
+        limit_method: Callable[[int], exp.Expression] | None = getattr(
+            stmt, "limit", None
+        )
+        if limit_method is not None:
+            limited_stmt = limit_method(limit)
+            return limited_stmt.sql(dialect=dialect)
         return stmt.sql(dialect=dialect)
 
     except Exception:

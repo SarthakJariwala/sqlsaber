@@ -4,6 +4,7 @@ import getpass
 import os
 
 import keyring
+import keyring.errors
 
 from sqlsaber.config import providers
 from sqlsaber.theme.manager import create_console

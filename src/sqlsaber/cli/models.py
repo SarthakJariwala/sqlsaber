@@ -2,6 +2,8 @@
 
 import asyncio
 import sys
+from collections.abc import Sequence
+from typing import Any, TypedDict
 
 import cyclopts
 import httpx
@@ -9,9 +11,9 @@ import questionary
 from rich.table import Table
 
 from sqlsaber.config import providers
+from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import Config
 from sqlsaber.theme.manager import create_console
-from sqlsaber.config.logging import get_logger
 
 # Global instances for CLI commands
 console = create_console()
@@ -24,15 +26,25 @@ models_app = cyclopts.App(
 )
 
 
+class FetchedModel(TypedDict):
+    """Structure for fetched model information."""
+
+    id: str
+    provider: str
+    name: str
+    description: str
+    context_length: int
+    knowledge: str
+
+
 class ModelManager:
     """Manages AI model configuration and fetching."""
 
-    DEFAULT_MODEL = "anthropic:claude-sonnet-4-5-20250929"
-    MODELS_API_URL = "https://models.dev/api.json"
-    # Providers come from central registry
-    SUPPORTED_PROVIDERS = providers.all_keys()
+    DEFAULT_MODEL: str = "anthropic:claude-sonnet-4-5-20250929"
+    MODELS_API_URL: str = "https://models.dev/api.json"
+    SUPPORTED_PROVIDERS: Sequence[str] = providers.all_keys()
 
-    RECOMMENDED_MODELS = {
+    RECOMMENDED_MODELS: dict[str, str] = {
         "anthropic": "claude-sonnet-4-5-20250929",
         "openai": "gpt-5",
         "google": "gemini-2.5-pro",
@@ -42,28 +54,30 @@ class ModelManager:
     }
 
     async def fetch_available_models(
-        self, providers: list[str] | None = None
-    ) -> list[dict]:
+        self, providers: Sequence[str] | None = None
+    ) -> list[FetchedModel]:
         """Fetch available models across providers from models.dev API.
 
-        Returns list of dicts with keys: id (provider:model_id), provider, name, description, context_length, knowledge.
+        Returns list of dicts with keys: id (provider:model_id), provider, name,
+        description, context_length, knowledge.
         """
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(self.MODELS_API_URL)
                 response.raise_for_status()
-                data = response.json()
+                data: dict[str, Any] = response.json()
 
-                providers = providers or self.SUPPORTED_PROVIDERS
-                results: list[dict] = []
+                selected_providers = providers or self.SUPPORTED_PROVIDERS
+                results: list[FetchedModel] = []
 
-                for provider in providers:
+                for provider in selected_providers:
                     prov_data = data.get(provider, {})
                     models_obj = (
                         prov_data.get("models") or prov_data.get("Models") or {}
                     )
                     if not isinstance(models_obj, dict):
                         continue
+
                     for model_id, model_info in models_obj.items():
                         formatted_id = f"{provider}:{model_id}"
                         # cost
@@ -77,6 +91,7 @@ class ModelManager:
                             input_cost = cost_info.get("input", 0)
                             output_cost = cost_info.get("output", 0)
                             cost_display = f"${input_cost}/{output_cost} per 1M tokens"
+
                         # context
                         limit_info = (
                             model_info.get("limit", {})
@@ -89,22 +104,28 @@ class ModelManager:
                             else 0
                         )
 
-                        results.append(
-                            {
-                                "id": formatted_id,
-                                "provider": provider,
-                                "name": model_info.get("name", model_id)
-                                if isinstance(model_info, dict)
-                                else model_id,
-                                "description": cost_display,
-                                "context_length": context_length,
-                                "knowledge": model_info.get("knowledge", "")
-                                if isinstance(model_info, dict)
-                                else "",
-                            }
+                        name = (
+                            model_info.get("name", model_id)
+                            if isinstance(model_info, dict)
+                            else model_id
+                        )
+                        knowledge = (
+                            model_info.get("knowledge", "")
+                            if isinstance(model_info, dict)
+                            else ""
                         )
 
-                # Sort by provider then by name
+                        results.append(
+                            FetchedModel(
+                                id=formatted_id,
+                                provider=provider,
+                                name=name,
+                                description=cost_display,
+                                context_length=context_length,
+                                knowledge=knowledge,
+                            )
+                        )
+
                 results.sort(key=lambda x: (x["provider"], x["name"]))
                 logger.info("models.fetch.success", count=len(results))
                 return results
@@ -138,12 +159,12 @@ class ModelManager:
 model_manager = ModelManager()
 
 
-@models_app.command
-def list():
+@models_app.command(name="list")
+def list_models() -> None:
     """List available AI models."""
     logger.info("models.list.start")
 
-    async def fetch_and_display():
+    async def fetch_and_display() -> None:
         console.print("[blue]Fetching available models...[/blue]")
         models = await model_manager.fetch_available_models()
 
@@ -170,7 +191,6 @@ def list():
                 f"{model['context_length']:,}" if model["context_length"] else "N/A"
             )
 
-            # Truncate description if too long
             description = (
                 model["description"][:50] + "..."
                 if len(model["description"]) > 50
@@ -193,12 +213,12 @@ def list():
     asyncio.run(fetch_and_display())
 
 
-@models_app.command
-def set():
+@models_app.command(name="set")
+def set_model_command() -> None:
     """Set the AI model to use."""
     logger.info("models.set.start")
 
-    async def interactive_set():
+    async def interactive_set() -> None:
         from sqlsaber.application.model_selection import choose_model, fetch_models
         from sqlsaber.application.prompts import AsyncPrompter
 
@@ -211,7 +231,7 @@ def set():
             sys.exit(1)
 
         prompter = AsyncPrompter()
-        selected_model = await choose_model(
+        selected_model: str | None = await choose_model(
             prompter, models, restrict_provider=None, use_search_filter=True
         )
 
@@ -230,20 +250,20 @@ def set():
     asyncio.run(interactive_set())
 
 
-@models_app.command
-def current():
+@models_app.command(name="current")
+def current_model() -> None:
     """Show the currently configured model."""
     current = model_manager.get_current_model()
     console.print(f"Current model: [cyan]{current}[/cyan]")
     logger.info("models.current", model=current)
 
 
-@models_app.command
-def reset():
+@models_app.command(name="reset")
+def reset_model_command() -> None:
     """Reset to the default model."""
     logger.info("models.reset.start")
 
-    async def interactive_reset():
+    async def interactive_reset() -> None:
         if await questionary.confirm(
             f"Reset to default model ({ModelManager.DEFAULT_MODEL})?"
         ).ask_async():

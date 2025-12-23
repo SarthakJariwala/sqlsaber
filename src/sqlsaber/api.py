@@ -5,12 +5,25 @@ This module provides a simplified programmatic interface to SQLSaber's capabilit
 allowing you to run natural language queries against databases from Python code.
 """
 
+from __future__ import annotations
+
+from types import TracebackType
+from typing import Any, Protocol, Self
+
 from pydantic_ai.messages import ModelMessage
 
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.database import DatabaseConnection
 from sqlsaber.database.resolver import resolve_database
+
+
+class SQLSaberRunResult(Protocol):
+    """Protocol for pydantic-ai run result objects."""
+
+    def usage(self) -> Any: ...
+    def new_messages(self) -> list[ModelMessage]: ...
+    def all_messages(self) -> list[ModelMessage]: ...
 
 
 class SQLSaberResult(str):
@@ -22,25 +35,28 @@ class SQLSaberResult(str):
     and message history (which contains the generated SQL).
     """
 
-    def __new__(cls, content, run_result):
+    run_result: SQLSaberRunResult
+
+    def __new__(cls, content: str, run_result: SQLSaberRunResult) -> Self:
         obj = super().__new__(cls, content)
         obj.run_result = run_result
         return obj
 
     @property
-    def usage(self):
+    def usage(self) -> Any | None:
         """Token usage statistics."""
-        if callable(self.run_result.usage):
-            return self.run_result.usage()
-        return self.run_result.usage
+        usage_attr = getattr(self.run_result, "usage", None)
+        if callable(usage_attr):
+            return usage_attr()
+        return usage_attr
 
     @property
-    def messages(self):
+    def messages(self) -> list[ModelMessage]:
         """All messages from this run, including tool calls (SQL)."""
         return self.run_result.new_messages()
 
     @property
-    def all_messages(self):
+    def all_messages(self) -> list[ModelMessage]:
         """All messages including history."""
         return self.run_result.all_messages()
 
@@ -141,8 +157,13 @@ class SQLSaber:
         """Close the database connection."""
         await self.connection.close()
 
-    async def __aenter__(self) -> "SQLSaber":
+    async def __aenter__(self) -> Self:
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         await self.close()

@@ -14,6 +14,8 @@ from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
 from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console
 
+type SchemaList = list[str]
+
 # Global instances for CLI commands
 console = create_console()
 config_manager = DatabaseConfigManager()
@@ -26,9 +28,9 @@ db_app = cyclopts.App(
 )
 
 
-def _normalize_schema_list(raw_schemas: list[str]) -> list[str]:
+def _normalize_schema_list(raw_schemas: SchemaList) -> SchemaList:
     """Deduplicate schemas while preserving order and case."""
-    schemas: list[str] = []
+    schemas: SchemaList = []
     seen: set[str] = set()
     for schema in raw_schemas:
         item = schema.strip()
@@ -41,7 +43,7 @@ def _normalize_schema_list(raw_schemas: list[str]) -> list[str]:
     return schemas
 
 
-def _parse_schema_list(raw: str | None) -> list[str]:
+def _parse_schema_list(raw: str | None) -> SchemaList:
     """Parse comma-separated schema list into cleaned list."""
     if not raw:
         return []
@@ -107,7 +109,7 @@ def add(
             help="Use interactive mode",
         ),
     ] = True,
-):
+) -> None:
     """Add a new database connection."""
     logger.info(
         "db.add.start",
@@ -163,12 +165,12 @@ def add(
             username = "sqlite"
             password = ""
         elif type == "duckdb":
-            if not database:
+            if database is None:
                 console.print(
                     "[bold error]Error:[/bold error] Database file path is required for DuckDB"
                 )
                 logger.error("db.add.missing_path", db_type="duckdb")
-                sys.exit(1)
+                raise SystemExit(1)
             database = str(Path(database).expanduser().resolve())
             host = "localhost"
             port = 0
@@ -231,8 +233,8 @@ def add(
         sys.exit(1)
 
 
-@db_app.command
-def list():
+@db_app.command(name="list")
+def list_databases() -> None:
     """List all configured database connections."""
     logger.info("db.list.start")
     databases = config_manager.list_databases()
@@ -317,7 +319,7 @@ def exclude(
             help="Clear all excluded schemas",
         ),
     ] = False,
-):
+) -> None:
     """Update excluded schemas for a database connection."""
     logger.info(
         "db.exclude.start",
@@ -328,12 +330,12 @@ def exclude(
         clear=clear,
     )
     db_config = config_manager.get_database(name)
-    if not db_config:
+    if db_config is None:
         console.print(
             f"[bold error]Error: Database connection '{name}' not found[/bold error]"
         )
         logger.error("db.exclude.not_found", name=name)
-        sys.exit(1)
+        raise SystemExit(1)
 
     actions_selected = sum(
         bool(flag)
@@ -398,7 +400,7 @@ def remove(
     name: Annotated[
         str, cyclopts.Parameter(help="Name of the database connection to remove")
     ],
-):
+) -> None:
     """Remove a database connection."""
     logger.info("db.remove.start", name=name)
     if not config_manager.get_database(name):
@@ -433,7 +435,7 @@ def set_default(
         str,
         cyclopts.Parameter(help="Name of the database connection to set as default"),
     ],
-):
+) -> None:
     """Set the default database connection."""
     logger.info("db.default.start", name=name)
     if not config_manager.get_database(name):
@@ -464,7 +466,7 @@ def test(
             help="Name of the database connection to test (uses default if not specified)",
         ),
     ] = None,
-):
+) -> None:
     """Test a database connection."""
     logger.info("db.test.start")
 
@@ -474,15 +476,15 @@ def test(
 
         if name:
             db_config = config_manager.get_database(name)
-            if not db_config:
+            if db_config is None:
                 console.print(
                     f"[bold error]Error: Database connection '{name}' not found[/bold error]"
                 )
                 logger.error("db.test.not_found", name=name)
-                sys.exit(1)
+                raise SystemExit(1)
         else:
             db_config = config_manager.get_default_database()
-            if not db_config:
+            if db_config is None:
                 console.print(
                     "[bold error]Error: No default database configured[/bold error]"
                 )
@@ -490,7 +492,7 @@ def test(
                     "Use 'sqlsaber db add <name>' to add a database connection"
                 )
                 logger.error("db.test.no_default")
-                sys.exit(1)
+                raise SystemExit(1)
 
         console.print(f"[blue]Testing connection to '{db_config.name}'...[/blue]")
 

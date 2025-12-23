@@ -6,6 +6,7 @@ provider-specific logic and configuration.
 """
 
 import abc
+from typing import Any, Literal, cast, override
 
 import httpx
 from pydantic_ai import Agent
@@ -16,6 +17,8 @@ from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.providers.openai import OpenAIProvider
+
+ProviderName = Literal["google", "anthropic", "anthropic_oauth", "openai", "groq"]
 
 
 class AgentProviderStrategy(abc.ABC):
@@ -36,6 +39,7 @@ class AgentProviderStrategy(abc.ABC):
 class GoogleProviderStrategy(AgentProviderStrategy):
     """Strategy for creating Google agents."""
 
+    @override
     def create_agent(
         self,
         model_name: str,
@@ -60,6 +64,7 @@ class GoogleProviderStrategy(AgentProviderStrategy):
 class AnthropicOAuthProviderStrategy(AgentProviderStrategy):
     """Strategy for creating Anthropic agents with OAuth."""
 
+    @override
     def create_agent(
         self,
         model_name: str,
@@ -90,10 +95,9 @@ class AnthropicOAuthProviderStrategy(AgentProviderStrategy):
 
         if thinking_enabled:
             settings = AnthropicModelSettings(
-                anthropic_thinking={
-                    "type": "enabled",
-                    "budget_tokens": 2048,
-                },
+                anthropic_thinking=cast(
+                    Any, {"type": "enabled", "budget_tokens": 2048}
+                ),
                 max_tokens=8192,
             )
             return Agent(model_obj, name="sqlsaber", model_settings=settings)
@@ -103,6 +107,7 @@ class AnthropicOAuthProviderStrategy(AgentProviderStrategy):
 class AnthropicProviderStrategy(AgentProviderStrategy):
     """Strategy for creating standard Anthropic agents."""
 
+    @override
     def create_agent(
         self,
         model_name: str,
@@ -120,10 +125,9 @@ class AnthropicProviderStrategy(AgentProviderStrategy):
 
         if thinking_enabled:
             settings = AnthropicModelSettings(
-                anthropic_thinking={
-                    "type": "enabled",
-                    "budget_tokens": 2048,
-                },
+                anthropic_thinking=cast(
+                    Any, {"type": "enabled", "budget_tokens": 2048}
+                ),
                 max_tokens=8192,
             )
             return Agent(model_obj, name="sqlsaber", model_settings=settings)
@@ -133,6 +137,7 @@ class AnthropicProviderStrategy(AgentProviderStrategy):
 class OpenAIProviderStrategy(AgentProviderStrategy):
     """Strategy for creating OpenAI agents."""
 
+    @override
     def create_agent(
         self,
         model_name: str,
@@ -149,7 +154,7 @@ class OpenAIProviderStrategy(AgentProviderStrategy):
         if thinking_enabled:
             settings = OpenAIResponsesModelSettings(
                 openai_reasoning_effort="medium",
-                openai_reasoning_summary="auto",
+                openai_reasoning_summary=cast(Any, "auto"),
             )
             return Agent(model_obj, name="sqlsaber", model_settings=settings)
         return Agent(model_obj, name="sqlsaber")
@@ -158,6 +163,7 @@ class OpenAIProviderStrategy(AgentProviderStrategy):
 class GroqProviderStrategy(AgentProviderStrategy):
     """Strategy for creating Groq agents."""
 
+    @override
     def create_agent(
         self,
         model_name: str,
@@ -174,6 +180,7 @@ class GroqProviderStrategy(AgentProviderStrategy):
 class DefaultProviderStrategy(AgentProviderStrategy):
     """Default strategy for other providers."""
 
+    @override
     def create_agent(
         self,
         model_name: str,
@@ -195,10 +202,10 @@ class ProviderFactory:
             "openai": OpenAIProviderStrategy(),
             "groq": GroqProviderStrategy(),
         }
-        self._default_strategy = DefaultProviderStrategy()
+        self._default_strategy: AgentProviderStrategy = DefaultProviderStrategy()
 
     def get_strategy(
-        self, provider: str, is_oauth: bool = False
+        self, provider: ProviderName | str, is_oauth: bool = False
     ) -> AgentProviderStrategy:
         """Retrieve the appropriate strategy for the provider."""
         if provider == "anthropic" and is_oauth:
@@ -208,7 +215,7 @@ class ProviderFactory:
 
     def create_agent(
         self,
-        provider: str,
+        provider: ProviderName | str,
         model_name: str,
         full_model_str: str,
         api_key: str | None = None,

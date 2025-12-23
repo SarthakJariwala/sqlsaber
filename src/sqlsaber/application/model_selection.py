@@ -3,7 +3,7 @@
 from questionary import Choice
 
 from sqlsaber.application.prompts import Prompter
-from sqlsaber.cli.models import ModelManager
+from sqlsaber.cli.models import FetchedModel, ModelManager
 from sqlsaber.theme.manager import create_console
 
 console = create_console()
@@ -11,14 +11,14 @@ console = create_console()
 
 async def fetch_models(
     model_manager: ModelManager, providers: list[str] | None = None
-) -> list[dict]:
+) -> list[FetchedModel]:
     """Fetch available models from models.dev API."""
     return await model_manager.fetch_available_models(providers=providers)
 
 
 async def choose_model(
     prompter: Prompter,
-    models: list[dict],
+    models: list[FetchedModel],
     restrict_provider: str | None = None,
     use_search_filter: bool = True,
 ) -> str | None:

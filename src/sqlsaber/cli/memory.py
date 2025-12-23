@@ -36,16 +36,15 @@ def _get_database_name(database: str | None = None) -> str:
             logger.error("memory.db.not_found", database=database)
             sys.exit(1)
         return database
-    else:
-        db_config = config_manager.get_default_database()
-        if not db_config:
-            console.print(
-                "[bold error]Error:[/bold error] No database connections configured."
-            )
-            console.print("Use 'sqlsaber db add <name>' to add a database connection.")
-            logger.error("memory.db.none_configured")
-            sys.exit(1)
-        return db_config.name
+    db_config = config_manager.get_default_database()
+    if db_config is None:
+        console.print(
+            "[bold error]Error:[/bold error] No database connections configured."
+        )
+        console.print("Use 'sqlsaber db add <name>' to add a database connection.")
+        logger.error("memory.db.none_configured")
+        raise SystemExit(1)
+    return db_config.name
 
 
 @memory_app.command
@@ -134,15 +133,15 @@ def show(
 
     memory = memory_manager.get_memory_by_id(database_name, memory_id)
 
-    if not memory:
+    if memory is None:
         console.print(
             f"[bold error]Error:[/bold error] Memory with ID '{memory_id}' not found for database '{database_name}'"
         )
         logger.error("memory.show.not_found", database=database_name, id=memory_id)
-        sys.exit(1)
+        raise SystemExit(1)
 
     console.print(f"[bold]Memory ID:[/bold] {memory.id}")
-    console.print(f"[bold]Database:[/bold] {memory.database}")
+    console.print(f"[bold]Database:[/bold] {database_name}")
     console.print(f"[bold]Created:[/bold] {memory.formatted_timestamp()}")
     console.print("[bold]Content:[/bold]")
     console.print(f"{memory.content}")
@@ -165,12 +164,12 @@ def remove(
 
     # First check if memory exists
     memory = memory_manager.get_memory_by_id(database_name, memory_id)
-    if not memory:
+    if memory is None:
         console.print(
             f"[bold error]Error:[/bold error] Memory with ID '{memory_id}' not found for database '{database_name}'"
         )
         logger.error("memory.remove.not_found", database=database_name, id=memory_id)
-        sys.exit(1)
+        raise SystemExit(1)
 
     # Show memory content before removal
     console.print("[warning]Removing memory:[/warning]")
