@@ -1,7 +1,6 @@
 """CLI command definitions and handlers."""
 
 import asyncio
-import os
 import sys
 from typing import Annotated
 
@@ -43,52 +42,6 @@ app.command(create_threads_app(), name="threads")
 
 console = create_console()
 config_manager = DatabaseConfigManager()
-
-_MLFLOW_CONFIGURED = False
-
-
-def _maybe_configure_mlflow(log) -> bool:
-    """Enable mlflow autologging when environment variables are present."""
-    global _MLFLOW_CONFIGURED
-    if _MLFLOW_CONFIGURED:
-        return True
-
-    tracking_uri = os.getenv("MLFLOW_URI")
-    experiment = os.getenv("MLFLOW_EXP")
-    if not tracking_uri and not experiment:
-        return False
-
-    try:
-        import mlflow
-    except ModuleNotFoundError:
-        log.warning(
-            "mlflow.setup.skipped",
-            reason="mlflow package not installed",
-            uri=tracking_uri,
-            experiment=experiment,
-        )
-        return False
-
-    try:
-        mlflow.pydantic_ai.autolog()
-    except Exception:
-        log.warning("mlflow.autolog.failed", exc_info=True)
-    try:
-        if tracking_uri:
-            mlflow.set_tracking_uri(tracking_uri)
-        if experiment:
-            mlflow.set_experiment(experiment)
-    except Exception:
-        log.warning("mlflow.setup.failed", exc_info=True)
-        return False
-
-    _MLFLOW_CONFIGURED = True
-    log.info(
-        "mlflow.setup.enabled",
-        uri=tracking_uri,
-        experiment=experiment,
-    )
-    return True
 
 
 @app.meta.default
@@ -224,7 +177,6 @@ def query(
 
         # Create pydantic-ai agent instance with database name for memory context
         sqlsaber_agent = SQLSaberAgent(db_conn, db_name, thinking_enabled=thinking)
-        _maybe_configure_mlflow(log)
 
         try:
             if actual_query:
