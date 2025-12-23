@@ -184,7 +184,7 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
 
     async def get_tables_info(
         self, connection, table_pattern: str | None = None
-    ) -> dict[str, Any]:
+    ) -> list[dict[str, Any]]:
         """Get tables information for MySQL."""
         pool = await connection.get_pool()
         async with pool.acquire() as conn:
@@ -230,7 +230,9 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
                 await cursor.execute(tables_query, params)
                 return await cursor.fetchall()
 
-    async def get_columns_info(self, connection, tables: list) -> list:
+    async def get_columns_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get columns information for MySQL."""
         if not tables:
             return []
@@ -259,7 +261,9 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
                 await cursor.execute(columns_query, params)
                 return await cursor.fetchall()
 
-    async def get_foreign_keys_info(self, connection, tables: list) -> list:
+    async def get_foreign_keys_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get foreign keys information for MySQL."""
         if not tables:
             return []
@@ -290,7 +294,9 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
                 await cursor.execute(fk_query, params)
                 return await cursor.fetchall()
 
-    async def get_primary_keys_info(self, connection, tables: list) -> list:
+    async def get_primary_keys_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get primary keys information for MySQL."""
         if not tables:
             return []
@@ -316,7 +322,9 @@ class MySQLSchemaIntrospector(BaseSchemaIntrospector):
                 await cursor.execute(pk_query, params)
                 return await cursor.fetchall()
 
-    async def get_indexes_info(self, connection, tables: list) -> list:
+    async def get_indexes_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get indexes information for MySQL."""
         if not tables:
             return []

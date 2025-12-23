@@ -3,6 +3,8 @@
 - **Run Python**: `uv run python`
 - **Run tests**: `uv run python -m pytest`
 - **Run single test**: `uv run python -m pytest tests/test_path/test_file.py::test_function`
+- **Type check (all)**: `uvx ty check src/`
+- **Type check (targeted)**: `uvx ty check <file>`
 - **Lint**: `uv run ruff check --fix`
 - **Format**: `uv run ruff format`
 
@@ -16,6 +18,7 @@
 
 - **Imports**: stdlib → 3rd party → local, use relative imports within modules
 - **Naming**: snake_case functions/vars, PascalCase classes, UPPER_SNAKE constants, `_private` methods
-- **Types**: Always use modern type hints (3.12+), async functions for I/O
+- **Types**: Always use ONLY modern type hints (3.12+), async functions for I/O
+  - Type check must pass without errors always
 - **Errors**: Use try/finally for cleanup
 - **Docstrings**: Triple-quoted with Args/Returns sections

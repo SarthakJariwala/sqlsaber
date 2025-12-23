@@ -80,7 +80,9 @@ class SQLiteConnection(BaseDatabaseConnection):
 class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
     """SQLite-specific schema introspection."""
 
-    async def _execute_query(self, connection, query: str, params=()) -> list:
+    async def _execute_query(
+        self, connection, query: str, params: tuple[str, ...] = ()
+    ) -> list[dict[str, Any]]:
         """Helper method to execute queries on both SQLite and CSV connections."""
         # Handle both SQLite and CSV connections
         if hasattr(connection, "database_path"):
@@ -88,22 +90,24 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
             async with aiosqlite.connect(connection.database_path) as conn:
                 conn.row_factory = aiosqlite.Row
                 cursor = await conn.execute(query, params)
-                return await cursor.fetchall()
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
         else:
             # CSV connection - use the existing connection
             conn = await connection.get_pool()
             cursor = await conn.execute(query, params)
-            return await cursor.fetchall()
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
 
     async def get_tables_info(
         self, connection, table_pattern: str | None = None
-    ) -> dict[str, Any]:
+    ) -> list[dict[str, Any]]:
         """Get tables information for SQLite.
 
         Note: SQLite does not support native table comments, so table_comment is always None.
         """
         where_conditions = ["type IN ('table', 'view')", "name NOT LIKE 'sqlite_%'"]
-        params = ()
+        params: tuple[str, ...] = ()
 
         if table_pattern:
             where_conditions.append("name LIKE ?")
@@ -122,7 +126,9 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
 
         return await self._execute_query(connection, query, params)
 
-    async def get_columns_info(self, connection, tables: list) -> list:
+    async def get_columns_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get columns information for SQLite.
 
         Note: SQLite does not support native column comments, so column_comment is always None.
@@ -156,7 +162,9 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
 
         return columns
 
-    async def get_foreign_keys_info(self, connection, tables: list) -> list:
+    async def get_foreign_keys_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get foreign keys information for SQLite."""
         if not tables:
             return []
@@ -183,7 +191,9 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
 
         return foreign_keys
 
-    async def get_primary_keys_info(self, connection, tables: list) -> list:
+    async def get_primary_keys_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get primary keys information for SQLite."""
         if not tables:
             return []
@@ -208,7 +218,9 @@ class SQLiteSchemaIntrospector(BaseSchemaIntrospector):
 
         return primary_keys
 
-    async def get_indexes_info(self, connection, tables: list) -> list:
+    async def get_indexes_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get indexes information for SQLite."""
         if not tables:
             return []

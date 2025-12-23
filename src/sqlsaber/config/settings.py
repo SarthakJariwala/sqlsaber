@@ -178,7 +178,10 @@ class AuthConfig:
             # If we don't have a key resolved from env/keyring, raise
             api_key = self.get_api_key(model_name)
             if not api_key:
-                raise ValueError(f"{provider_key.capitalize()} API key not found.")
+                provider_name = (
+                    provider_key.capitalize() if provider_key else "Provider"
+                )
+                raise ValueError(f"{provider_name} API key not found.")
 
             # Hydrate env var for downstream SDKs if missing
             if not os.getenv(env_var):

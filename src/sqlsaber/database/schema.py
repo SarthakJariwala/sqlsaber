@@ -15,6 +15,8 @@ from .mysql import MySQLConnection, MySQLSchemaIntrospector
 from .postgresql import PostgreSQLConnection, PostgreSQLSchemaIntrospector
 from .sqlite import SQLiteConnection, SQLiteSchemaIntrospector
 
+SchemaMap = dict[str, SchemaInfo]
+
 
 class SchemaManager:
     """Manages database schema introspection."""
@@ -36,9 +38,7 @@ class SchemaManager:
                 f"Unsupported database connection type: {type(db_connection)}"
             )
 
-    async def get_schema_info(
-        self, table_pattern: str | None = None
-    ) -> dict[str, SchemaInfo]:
+    async def get_schema_info(self, table_pattern: str | None = None) -> SchemaMap:
         """Get database schema information, optionally filtered by table pattern.
 
         Args:
@@ -60,33 +60,34 @@ class SchemaManager:
 
         return schema_info
 
-    def _build_table_structure(self, tables: list) -> dict[str, dict]:
+    def _build_table_structure(self, tables: list[dict[str, Any]]) -> SchemaMap:
         """Build basic table structure from table info."""
-        schema_info = {}
+        schema_info: SchemaMap = {}
         for table in tables:
             schema_name = table["table_schema"]
             table_name = table["table_name"]
             full_name = f"{schema_name}.{table_name}"
 
-            schema_info[full_name] = {
-                "schema": schema_name,
-                "name": table_name,
-                "type": table["table_type"],
-                "comment": table["table_comment"],
-                "columns": {},
-                "primary_keys": [],
-                "foreign_keys": [],
-                "indexes": [],
-            }
+            schema_info[full_name] = SchemaInfo(
+                schema=schema_name,
+                name=table_name,
+                type=table["table_type"],
+                comment=table["table_comment"],
+                columns={},
+                primary_keys=[],
+                foreign_keys=[],
+                indexes=[],
+            )
 
         return schema_info
 
-    def _add_columns_to_schema(self, schema_info: dict, columns: list) -> None:
+    def _add_columns_to_schema(
+        self, schema_info: SchemaMap, columns: list[dict[str, Any]]
+    ) -> None:
         """Add column information to schema structure."""
         for col in columns:
             full_name = f"{col['table_schema']}.{col['table_name']}"
             if full_name in schema_info:
-                # Handle different row types (dict vs Row objects)
                 column_info: ColumnInfo = {
                     "data_type": col["data_type"],
                     "nullable": col.get("is_nullable", "YES") == "YES",
@@ -95,13 +96,12 @@ class SchemaManager:
                     "precision": col.get("numeric_precision"),
                     "scale": col.get("numeric_scale"),
                     "comment": col.get("column_comment"),
+                    "type": col["data_type"],
                 }
-                # Add type field for display compatibility
-                column_info["type"] = col["data_type"]
                 schema_info[full_name]["columns"][col["column_name"]] = column_info
 
     def _add_primary_keys_to_schema(
-        self, schema_info: dict, primary_keys: list
+        self, schema_info: SchemaMap, primary_keys: list[dict[str, Any]]
     ) -> None:
         """Add primary key information to schema structure."""
         for pk in primary_keys:
@@ -110,7 +110,7 @@ class SchemaManager:
                 schema_info[full_name]["primary_keys"].append(pk["column_name"])
 
     def _add_foreign_keys_to_schema(
-        self, schema_info: dict, foreign_keys: list
+        self, schema_info: SchemaMap, foreign_keys: list[dict[str, Any]]
     ) -> None:
         """Add foreign key information to schema structure."""
         for fk in foreign_keys:
@@ -125,7 +125,9 @@ class SchemaManager:
                 }
                 schema_info[full_name]["foreign_keys"].append(fk_info)
 
-    def _add_indexes_to_schema(self, schema_info: dict, indexes: list) -> None:
+    def _add_indexes_to_schema(
+        self, schema_info: SchemaMap, indexes: list[dict[str, Any]]
+    ) -> None:
         """Add index information to schema structure."""
         for idx in indexes:
             full_name = f"{idx['table_schema']}.{idx['table_name']}"

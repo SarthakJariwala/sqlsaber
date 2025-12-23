@@ -27,6 +27,7 @@ class ColumnInfo(TypedDict):
     precision: int | None
     scale: int | None
     comment: str | None
+    type: str
 
 
 class ForeignKeyInfo(TypedDict):
@@ -131,27 +132,35 @@ class BaseSchemaIntrospector(ABC):
     @abstractmethod
     async def get_tables_info(
         self, connection, table_pattern: str | None = None
-    ) -> dict[str, Any]:
+    ) -> list[dict[str, Any]]:
         """Get tables information for the specific database type."""
         pass
 
     @abstractmethod
-    async def get_columns_info(self, connection, tables: list) -> list:
+    async def get_columns_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get columns information for the specific database type."""
         pass
 
     @abstractmethod
-    async def get_foreign_keys_info(self, connection, tables: list) -> list:
+    async def get_foreign_keys_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get foreign keys information for the specific database type."""
         pass
 
     @abstractmethod
-    async def get_primary_keys_info(self, connection, tables: list) -> list:
+    async def get_primary_keys_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get primary keys information for the specific database type."""
         pass
 
     @abstractmethod
-    async def get_indexes_info(self, connection, tables: list) -> list:
+    async def get_indexes_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get indexes information for the specific database type."""
         pass
 

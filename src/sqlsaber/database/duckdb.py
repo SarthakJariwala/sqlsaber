@@ -184,7 +184,9 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
 
         return await self._execute_query(connection, query, tuple(params))
 
-    async def get_columns_info(self, connection, tables: list) -> list[dict[str, Any]]:
+    async def get_columns_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get columns information for DuckDB."""
         if not tables:
             return []
@@ -221,7 +223,7 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
         return await self._execute_query(connection, query, tuple(params))
 
     async def get_foreign_keys_info(
-        self, connection, tables: list
+        self, connection, tables: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
         """Get foreign keys information for DuckDB."""
         if not tables:
@@ -256,7 +258,7 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
         return await self._execute_query(connection, query, tuple(params))
 
     async def get_primary_keys_info(
-        self, connection, tables: list
+        self, connection, tables: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
         """Get primary keys information for DuckDB."""
         if not tables:
@@ -284,7 +286,9 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
 
         return await self._execute_query(connection, query, tuple(params))
 
-    async def get_indexes_info(self, connection, tables: list) -> list[dict[str, Any]]:
+    async def get_indexes_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get indexes information for DuckDB."""
         if not tables:
             return []

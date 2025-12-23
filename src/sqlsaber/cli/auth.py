@@ -4,6 +4,7 @@ import os
 
 import cyclopts
 import keyring
+import keyring.errors
 import questionary
 
 from sqlsaber.config import providers

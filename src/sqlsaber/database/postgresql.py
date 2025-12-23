@@ -182,7 +182,7 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
 
     async def get_tables_info(
         self, connection, table_pattern: str | None = None
-    ) -> dict[str, Any]:
+    ) -> list[dict[str, Any]]:
         """Get tables information for PostgreSQL."""
         pool = await connection.get_pool()
         async with pool.acquire() as conn:
@@ -231,7 +231,9 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
             """
             return await conn.fetch(tables_query, *params)
 
-    async def get_columns_info(self, connection, tables: list) -> list:
+    async def get_columns_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get columns information for PostgreSQL."""
         if not tables:
             return []
@@ -258,7 +260,9 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
             """
             return await conn.fetch(columns_query, *params)
 
-    async def get_foreign_keys_info(self, connection, tables: list) -> list:
+    async def get_foreign_keys_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get foreign keys information for PostgreSQL."""
         if not tables:
             return []
@@ -288,7 +292,9 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
             """
             return await conn.fetch(fk_query, *params)
 
-    async def get_primary_keys_info(self, connection, tables: list) -> list:
+    async def get_primary_keys_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get primary keys information for PostgreSQL."""
         if not tables:
             return []
@@ -313,7 +319,9 @@ class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):
             """
             return await conn.fetch(pk_query, *params)
 
-    async def get_indexes_info(self, connection, tables: list) -> list:
+    async def get_indexes_info(
+        self, connection, tables: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Get indexes information for PostgreSQL."""
         if not tables:
             return []
