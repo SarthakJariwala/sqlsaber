@@ -7,22 +7,23 @@ import sqlglot
 from sqlglot import exp
 from sqlglot.errors import ParseError
 
-# Prohibited AST node types that indicate write/mutation operations
-# Only include expression types that exist in sqlglot
-PROHIBITED_NODES: set[type[exp.Expression]] = {
+# DML/DDL operations that can be unlocked in "dangerous" mode
+WRITE_DML_DDL_NODES: set[type[exp.Expression]] = {
     # DML operations
     exp.Insert,
     exp.Update,
     exp.Delete,
     exp.Merge,
-    # DDL operations
-    exp.Create,
-    exp.Drop,
-    exp.Alter,
-    exp.TruncateTable,
-    exp.AlterRename,
     # MySQL specific
     exp.Replace,
+    # DDL operations (non-destructive)
+    exp.Create,
+    exp.Alter,
+    exp.AlterRename,
+}
+
+# Operations that are always prohibited, regardless of mode
+ALWAYS_BLOCKED_NODES: set[type[exp.Expression]] = {
     # Transaction control
     exp.Transaction,
     # Analysis and maintenance
@@ -45,12 +46,15 @@ PROHIBITED_NODES: set[type[exp.Expression]] = {
     exp.Kill,
     # Commands
     exp.Command,
+    # Destructive schema/data operations (no safeguards possible)
+    exp.Drop,
+    exp.TruncateTable,
 }
 
 try:
     vacuum_type = getattr(exp, "Vacuum", None)
     if vacuum_type is not None:
-        PROHIBITED_NODES.add(vacuum_type)
+        ALWAYS_BLOCKED_NODES.add(vacuum_type)
 except AttributeError:
     pass
 
@@ -87,6 +91,7 @@ class GuardResult:
     allowed: bool
     reason: str | None = None
     is_select: bool = False
+    query_type: str | None = None  # "select" | "dml" | "ddl" | "other"
 
 
 def is_select_like(stmt: exp.Expression) -> bool:
@@ -101,18 +106,76 @@ def is_select_like(stmt: exp.Expression) -> bool:
     return isinstance(root, (exp.Select, exp.Union, exp.Except, exp.Intersect))
 
 
-def has_prohibited_nodes(stmt: exp.Expression) -> str | None:
-    """Walk AST to find any prohibited operations.
+def classify_statement(stmt: exp.Expression) -> str:
+    """Classify statement as select/dml/ddl/other.
 
-    Checks for:
-    - Write operations (INSERT/UPDATE/DELETE/etc)
-    - DDL operations (CREATE/DROP/ALTER/etc)
-    - SELECT INTO
-    - Locking clauses (FOR UPDATE/FOR SHARE)
+    Returns:
+        "select" for SELECT-like queries
+        "dml" for INSERT/UPDATE/DELETE/MERGE/REPLACE
+        "ddl" for CREATE/DROP/ALTER/TRUNCATE
+        "other" for anything else
+    """
+    if is_select_like(stmt):
+        return "select"
+
+    root = stmt
+    if isinstance(root, exp.With):
+        root = root.this
+
+    if isinstance(root, (exp.Insert, exp.Update, exp.Delete, exp.Merge, exp.Replace)):
+        return "dml"
+
+    if isinstance(
+        root,
+        (exp.Create, exp.Alter, exp.AlterRename),
+    ):
+        return "ddl"
+
+    # DROP and TRUNCATE are blocked, but classify them for error messages
+    if isinstance(root, (exp.Drop, exp.TruncateTable)):
+        return "ddl"
+
+    return "other"
+
+
+def has_unfiltered_mutation(stmt: exp.Expression) -> str | None:
+    """Check for UPDATE/DELETE without WHERE clause.
+
+    These operations are dangerous because they affect all rows in a table.
     """
     for node in stmt.walk():
-        # Check prohibited node types
-        if isinstance(node, tuple(PROHIBITED_NODES)):
+        if isinstance(node, exp.Update):
+            if not node.args.get("where"):
+                return "UPDATE without WHERE clause is not allowed (would affect all rows)"
+        if isinstance(node, exp.Delete):
+            if not node.args.get("where"):
+                return "DELETE without WHERE clause is not allowed (would affect all rows)"
+    return None
+
+
+def has_prohibited_nodes(
+    stmt: exp.Expression, allow_dangerous: bool = False
+) -> str | None:
+    """Walk AST to find any prohibited operations.
+
+    In read-only mode (allow_dangerous=False):
+      - Block DML/DDL (WRITE_DML_DDL_NODES)
+      - Block always-blocked operations (ALWAYS_BLOCKED_NODES)
+      - Block SELECT INTO
+      - Block locking clauses (FOR UPDATE/FOR SHARE)
+
+    In dangerous mode (allow_dangerous=True):
+      - Allow DML/DDL
+      - Still block ALWAYS_BLOCKED_NODES, SELECT INTO, locking clauses
+      - Block UPDATE/DELETE without WHERE clause
+    """
+    for node in stmt.walk():
+        # Operations that are never allowed
+        if isinstance(node, tuple(ALWAYS_BLOCKED_NODES)):
+            return f"Prohibited operation: {type(node).__name__}"
+
+        # DML/DDL writes are only allowed in dangerous mode
+        if not allow_dangerous and isinstance(node, tuple(WRITE_DML_DDL_NODES)):
             return f"Prohibited operation: {type(node).__name__}"
 
         # Block SELECT INTO (Postgres-style table creation)
@@ -124,6 +187,12 @@ def has_prohibited_nodes(stmt: exp.Expression) -> str | None:
             locks = node.args.get("locks")
             if locks:
                 return "SELECT with locking clause (FOR UPDATE/SHARE) is not allowed"
+
+    # In dangerous mode, block unfiltered mutations
+    if allow_dangerous:
+        reason = has_unfiltered_mutation(stmt)
+        if reason:
+            return reason
 
     return None
 
@@ -186,7 +255,62 @@ def validate_read_only(sql: str, dialect: str = "ansi") -> GuardResult:
     if reason:
         return GuardResult(False, reason)
 
-    return GuardResult(True, None, is_select=True)
+    return GuardResult(True, None, is_select=True, query_type="select")
+
+
+def validate_sql(
+    sql: str, dialect: str = "ansi", allow_dangerous: bool = False
+) -> GuardResult:
+    """Validate SQL with optional write/DDL allowance.
+
+    In read-only mode (default): same behavior as validate_read_only.
+    In dangerous mode: allow DML/DDL, but still enforce:
+      - single statement
+      - parseability
+      - no dangerous functions (file IO, command exec, etc.)
+
+    Args:
+        sql: SQL query to validate
+        dialect: SQL dialect (postgres, mysql, sqlite, tsql, etc.)
+        allow_dangerous: If True, allow DML/DDL statements
+
+    Returns:
+        GuardResult with validation outcome
+    """
+    if not allow_dangerous:
+        return validate_read_only(sql, dialect)
+
+    try:
+        statements = sqlglot.parse(sql, read=dialect)
+    except ParseError as e:
+        return GuardResult(False, f"Unable to parse query safely: {e}")
+    except Exception as e:
+        return GuardResult(False, f"Error parsing query: {e}")
+
+    if len(statements) != 1:
+        return GuardResult(
+            False,
+            f"Only single statements are allowed (got {len(statements)} statements)",
+        )
+
+    stmt = statements[0]
+    if stmt is None:
+        return GuardResult(False, "Unable to parse query - empty statement")
+
+    # Still enforce function-level sandbox even in dangerous mode
+    reason = has_dangerous_functions(stmt, dialect)
+    if reason:
+        return GuardResult(False, reason)
+
+    # Still enforce always-blocked operations (COPY, LOAD DATA, SET, PRAGMA, etc.)
+    reason = has_prohibited_nodes(stmt, allow_dangerous=True)
+    if reason:
+        return GuardResult(False, reason)
+
+    query_type = classify_statement(stmt)
+    return GuardResult(
+        True, None, is_select=(query_type == "select"), query_type=query_type
+    )
 
 
 def add_limit(sql: str, dialect: str = "ansi", limit: int = 100) -> str:

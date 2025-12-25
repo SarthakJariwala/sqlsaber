@@ -111,20 +111,22 @@ class MySQLConnection(BaseDatabaseConnection):
             self._pool = None
 
     async def execute_query(
-        self, query: str, *args, timeout: float | None = None
+        self, query: str, *args, timeout: float | None = None, commit: bool = False
     ) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
-        All queries run in a transaction that is rolled back at the end,
+        By default, all queries run in a transaction that is rolled back at the end,
         ensuring no changes are persisted to the database.
+
+        If commit=True, the transaction will be committed on success.
         """
         effective_timeout = timeout or DEFAULT_QUERY_TIMEOUT
         pool = await self.get_pool()
 
         async with pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cursor:
-                # Start transaction
                 await conn.begin()
+                success = False
                 try:
                     # Set server-side timeout if specified
                     if effective_timeout:
@@ -147,12 +149,15 @@ class MySQLConnection(BaseDatabaseConnection):
                         await cursor.execute(query, args if args else None)
                         rows = await cursor.fetchall()
 
+                    success = True
                     return [dict(row) for row in rows]
                 except asyncio.TimeoutError as exc:
                     raise QueryTimeoutError(effective_timeout or 0) from exc
                 finally:
-                    # Always rollback to ensure no changes are committed
-                    await conn.rollback()
+                    if success and commit:
+                        await conn.commit()
+                    else:
+                        await conn.rollback()
 
 
 class MySQLSchemaIntrospector(BaseSchemaIntrospector):

@@ -99,20 +99,22 @@ class PostgreSQLConnection(BaseDatabaseConnection):
             self._pool = None
 
     async def execute_query(
-        self, query: str, *args, timeout: float | None = None
+        self, query: str, *args, timeout: float | None = None, commit: bool = False
     ) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
-        All queries run in a transaction that is rolled back at the end,
+        By default, all queries run in a transaction that is rolled back at the end,
         ensuring no changes are persisted to the database.
+
+        If commit=True, the transaction will be committed on success.
         """
         effective_timeout = timeout or DEFAULT_QUERY_TIMEOUT
         pool = await self.get_pool()
 
         async with pool.acquire() as conn:
-            # Start a transaction that we'll always rollback
             transaction = conn.transaction()
             await transaction.start()
+            success = False
 
             try:
                 # Set server-side timeout if specified
@@ -129,12 +131,15 @@ class PostgreSQLConnection(BaseDatabaseConnection):
                 else:
                     rows = await conn.fetch(query, *args)
 
+                success = True
                 return [dict(row) for row in rows]
             except asyncio.TimeoutError as exc:
                 raise QueryTimeoutError(effective_timeout or 0) from exc
             finally:
-                # Always rollback to ensure no changes are committed
-                await transaction.rollback()
+                if success and commit:
+                    await transaction.commit()
+                else:
+                    await transaction.rollback()
 
 
 class PostgreSQLSchemaIntrospector(BaseSchemaIntrospector):

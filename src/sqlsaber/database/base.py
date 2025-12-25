@@ -90,17 +90,21 @@ class BaseDatabaseConnection(ABC):
 
     @abstractmethod
     async def execute_query(
-        self, query: str, *args, timeout: float | None = None
+        self, query: str, *args, timeout: float | None = None, commit: bool = False
     ) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
-        All queries run in a transaction that is rolled back at the end,
+        By default, all queries run in a transaction that is rolled back at the end,
         ensuring no changes are persisted to the database.
+
+        If commit=True, the transaction will be committed on success (for DML/DDL
+        in dangerous mode).
 
         Args:
             query: SQL query to execute
             *args: Query parameters
             timeout: Query timeout in seconds (overrides default_timeout)
+            commit: If True, commit the transaction on success instead of rolling back
         """
         pass
 

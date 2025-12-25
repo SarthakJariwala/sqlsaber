@@ -12,10 +12,17 @@ from .duckdb import DuckDBSchemaIntrospector
 
 
 def _execute_duckdb_transaction(
-    conn: duckdb.DuckDBPyConnection, query: str, args: tuple[Any, ...]
+    conn: duckdb.DuckDBPyConnection,
+    query: str,
+    args: tuple[Any, ...],
+    commit: bool = False,
 ) -> list[dict[str, Any]]:
-    """Run a DuckDB query inside a transaction and return list of dicts."""
+    """Run a DuckDB query inside a transaction and return list of dicts.
+
+    If commit=True, commits on success instead of rolling back.
+    """
     conn.execute("BEGIN TRANSACTION")
+    success = False
     try:
         if args:
             conn.execute(query, args)
@@ -29,11 +36,17 @@ def _execute_duckdb_transaction(
             data = conn.fetchall()
             rows = [dict(zip(columns, row)) for row in data]
 
-        conn.execute("ROLLBACK")
+        success = True
         return rows
     except Exception:
         conn.execute("ROLLBACK")
         raise
+    finally:
+        if success:
+            if commit:
+                conn.execute("COMMIT")
+            else:
+                conn.execute("ROLLBACK")
 
 
 class CSVConnection(BaseDatabaseConnection):
@@ -116,7 +129,7 @@ class CSVConnection(BaseDatabaseConnection):
         conn.execute(create_view_sql)
 
     async def execute_query(
-        self, query: str, *args, timeout: float | None = None
+        self, query: str, *args, timeout: float | None = None, commit: bool = False
     ) -> list[dict[str, Any]]:
         effective_timeout = timeout or DEFAULT_QUERY_TIMEOUT
         args_tuple = tuple(args) if args else tuple()
@@ -125,7 +138,7 @@ class CSVConnection(BaseDatabaseConnection):
             conn = duckdb.connect(":memory:")
             try:
                 self._create_view(conn)
-                return _execute_duckdb_transaction(conn, query, args_tuple)
+                return _execute_duckdb_transaction(conn, query, args_tuple, commit)
             finally:
                 conn.close()
 
