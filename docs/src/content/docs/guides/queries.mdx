@@ -138,6 +138,32 @@ Thinking is disabled by default. To change this, edit `~/.config/sqlsaber/model_
 Extended thinking is supported for Anthropic, OpenAI, Google, and Groq reasoning models.
 </Aside>
 
+#### Dangerous Mode
+
+By default, SQLsaber only allows read-only SELECT queries. To enable write operations, use the `--allow-dangerous` flag:
+
+```bash
+# Single query with write access
+saber --allow-dangerous "Insert a new user with email test@example.com"
+
+# Interactive mode with write access
+saber --allow-dangerous
+```
+
+<Aside type="caution">
+This mode allows INSERT, UPDATE, DELETE, CREATE, and ALTER operations. Use with caution as these can modify your data.
+</Aside>
+
+**What's allowed in dangerous mode:**
+- DML: INSERT, UPDATE, DELETE, MERGE, REPLACE
+- DDL: CREATE, ALTER
+
+**What's always blocked (even in dangerous mode):**
+- DROP, TRUNCATE (destructive operations)
+- Transaction control (BEGIN, COMMIT, ROLLBACK)
+- Security operations (GRANT, REVOKE)
+- Database operations (ATTACH, DETACH)
+
 ### Database Selection
 
 #### Using Default
