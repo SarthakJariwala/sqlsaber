@@ -9,6 +9,16 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.40.0 - 2025-12-24
+
+#### Added
+
+- `--allow-dangerous` flag to enable INSERT/UPDATE/DELETE and DDL operations
+  - Allows a restricted set of DML operations: INSERT, UPDATE, DELETE, MERGE, REPLACE
+  - Allows non-destructive DDL operations: CREATE, ALTER
+  - Always blocks dangerous operations: DROP, TRUNCATE, transaction control, GRANT/REVOKE
+  - Works in both single query and interactive modes
+
 ### v0.39.0 - 2025-12-15
 
 #### Added
@@ -18,7 +28,6 @@ All notable changes to SQLsaber will be documented here.
   - Override configured model and API key: `SQLSaber(database="...", model_name="anthropic:claude-sonnet-4-20250514", api_key="sk-...")`
   - Falls back to OAuth if `api_key` is not provided but OAuth is configured
 
----
 
 ### v0.38.0 - 2025-12-01
 

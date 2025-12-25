@@ -106,18 +106,19 @@ saber db remove my-database
 
 ### Security
 
-#### Read-only Access
+#### Read-only by Default
+
+SQLsaber blocks all write operations (INSERT, UPDATE, DELETE, DDL) by default. Only SELECT queries are allowed unless you explicitly enable dangerous mode with `--allow-dangerous`.
+
+Even in dangerous mode, destructive operations like DROP, TRUNCATE, and GRANT/REVOKE are always blocked.
+
+#### Read-only Database Role
 
 > **If you are using SQLsaber with a production database, we recommend setting up a read-only role for your database and using those credentials to setup connection in SQLsaber.**
 
-While SQLsaber ensures, via checks before executing queries, that only read queries are executed and in our testing have observed that LLMs follow the system prompt of only generating read queries, there is no guarantee that this is fool-proof.
+SQLsaber uses AST-based validation (via sqlglot) to analyze every query before execution. This catches write operations in nested queries, CTEs, subqueries, and dialect-specific dangerous functions. However, no validation is fool-proof.
 
-<Aside type="tip">
-If you have a read-replica of your production database, consider using those credentials to setup connection.
-
-In addition to the read-only role, this will provide additional layer of security and ensure no data modifying queries are executed.
-
-</Aside>
+**The most secure approach is to create a read-only database role and use those credentials with SQLsaber.** This provides database-level enforcement that cannot be bypassed regardless of what queries are generated.
 
 <Aside type="note">
   For development setups, this isn't required but is a good practice if you wish
