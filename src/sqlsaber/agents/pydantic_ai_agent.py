@@ -14,6 +14,7 @@ from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.memory.manager import MemoryManager
 from sqlsaber.prompts.claude import SONNET_4_5
+from sqlsaber.prompts.dangerous_mode import DANGEROUS_MODE
 from sqlsaber.prompts.memory import MEMORY_ADDITION
 from sqlsaber.prompts.openai import GPT_5
 from sqlsaber.tools.registry import tool_registry
@@ -31,6 +32,7 @@ class SQLSaberAgent:
         thinking_enabled: bool | None = None,
         model_name: str | None = None,
         api_key: str | None = None,
+        allow_dangerous: bool = False,
     ):
         self.db_connection = db_connection
         self.database_name = database_name
@@ -39,6 +41,7 @@ class SQLSaberAgent:
         self._model_name_override = model_name
         self._api_key_override = api_key
         self.db_type = self.db_connection.display_name
+        self.allow_dangerous = allow_dangerous
 
         # Initialize schema manager
         self.schema_manager = SchemaManager(self.db_connection)
@@ -57,11 +60,12 @@ class SQLSaberAgent:
         self.agent = self._build_agent()
 
     def _configure_sql_tools(self) -> None:
-        """Ensure SQL tools receive the active database connection."""
+        """Ensure SQL tools receive the active database connection and session config."""
         for tool_name in tool_registry.list_tools():
             tool = tool_registry.get_tool(tool_name)
             if isinstance(tool, SQLTool):
                 tool.set_connection(self.db_connection, self.schema_manager)
+                tool.allow_dangerous = self.allow_dangerous
 
     def _build_agent(self) -> Agent:
         """Create and configure the pydantic-ai Agent."""
@@ -122,6 +126,9 @@ class SQLSaberAgent:
                 if isinstance(agent.model, Model) and "gpt-5" in agent.model.model_name:
                     base = GPT_5.format(db=self.db_type)
 
+                    if self.allow_dangerous:
+                        base += DANGEROUS_MODE
+
                     if self.database_name:
                         mem = self.memory_manager.format_memories_for_prompt(
                             self.database_name
@@ -129,6 +136,7 @@ class SQLSaberAgent:
                         mem = mem.strip()
                         if mem:
                             return f"{base}\n\n{MEMORY_ADDITION}\n\n{mem}"
+                    return base
                 return self.system_prompt_text(include_memory=True)
         else:
 
@@ -140,6 +148,9 @@ class SQLSaberAgent:
     def system_prompt_text(self, include_memory: bool = True) -> str:
         """Return the original SQLSaber system prompt as a single string."""
         base = SONNET_4_5.format(db=self.db_type)
+
+        if self.allow_dangerous:
+            base += DANGEROUS_MODE
 
         if include_memory and self.database_name:
             mem = self.memory_manager.format_memories_for_prompt(self.database_name)

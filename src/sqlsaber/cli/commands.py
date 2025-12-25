@@ -5,6 +5,7 @@ import sys
 from typing import Annotated
 
 import cyclopts
+from rich.panel import Panel
 
 from sqlsaber.cli.auth import create_auth_app
 from sqlsaber.cli.database import create_db_app
@@ -18,6 +19,10 @@ from sqlsaber.cli.threads import create_threads_app
 from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.config.logging import get_logger, setup_logging
 from sqlsaber.theme.manager import create_console
+
+DANGEROUS_MODE_WARNING = (
+    "The assistant can execute INSERT/UPDATE/DELETE and DDL statements."
+)
 
 
 class CLIError(Exception):
@@ -90,6 +95,13 @@ def query(
         ),
     ] = None,
     thinking: bool = False,
+    allow_dangerous: Annotated[
+        bool,
+        cyclopts.Parameter(
+            ["--allow-dangerous"],
+            help="Allow INSERT/UPDATE/DELETE/DDL statements (dangerous: can modify or drop data/schema)",
+        ),
+    ] = False,
 ):
     """Run a query against the database or start interactive mode.
 
@@ -119,6 +131,7 @@ def query(
             database=database,
             has_query=query_text is not None,
             thinking=thinking,
+            allow_dangerous=allow_dangerous,
         )
         # Import heavy dependencies only when actually running a query
         # This is only done to speed up startup time
@@ -176,7 +189,12 @@ def query(
             raise CLIError(f"Error creating database connection: {e}")
 
         # Create pydantic-ai agent instance with database name for memory context
-        sqlsaber_agent = SQLSaberAgent(db_conn, db_name, thinking_enabled=thinking)
+        sqlsaber_agent = SQLSaberAgent(
+            db_conn,
+            db_name,
+            thinking_enabled=thinking,
+            allow_dangerous=allow_dangerous,
+        )
 
         try:
             if actual_query:
@@ -188,12 +206,21 @@ def query(
                     f"[primary]Connected to:[/primary] {db_name} ({db_type})\n"
                     f"[primary]Model:[/primary] {model_name}\n"
                 )
+                if allow_dangerous:
+                    console.print(
+                        Panel(
+                            DANGEROUS_MODE_WARNING,
+                            title=":warning: DANGEROUS MODE ENABLED",
+                            style="warning",
+                        )
+                    )
                 log.info("query.execute.start", db_name=db_name, db_type=db_type)
                 run = await streaming_handler.execute_streaming_query(
                     actual_query, sqlsaber_agent
                 )
 
                 # Persist non-interactive run as a thread snapshot so it can be resumed later
+                threads: ThreadStorage | None = None
                 try:
                     if run is not None:
                         threads = ThreadStorage()
@@ -217,9 +244,18 @@ def query(
                     log.warning("thread.save.failed", exc_info=True)
                     pass
                 finally:
-                    await threads.prune_threads()
+                    if threads is not None:
+                        await threads.prune_threads()
             else:
                 # Interactive mode
+                if allow_dangerous:
+                    console.print(
+                        Panel(
+                            DANGEROUS_MODE_WARNING,
+                            title=":warning: DANGEROUS MODE ENABLED",
+                            style="warning",
+                        )
+                    )
                 session = InteractiveSession(console, sqlsaber_agent, db_conn, db_name)
                 await session.run()
 

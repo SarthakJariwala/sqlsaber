@@ -17,6 +17,7 @@ class MockDatabaseConnection(SQLiteConnection):
 
     def __init__(self):
         self.queries = []
+        self.commits = []
         self.mock_results = []
 
     def to_connection_string(self) -> str:
@@ -25,8 +26,11 @@ class MockDatabaseConnection(SQLiteConnection):
     async def test_connection(self) -> bool:
         return True
 
-    async def execute_query(self, query: str) -> list[dict]:
+    async def execute_query(
+        self, query: str, *args, timeout: float | None = None, commit: bool = False
+    ) -> list[dict]:
         self.queries.append(query)
+        self.commits.append(commit)
         return self.mock_results
 
     async def get_pool(self):
@@ -206,13 +210,42 @@ class TestExecuteSQLTool:
             assert "only select" in data["error"].lower()
 
     @pytest.mark.asyncio
+    async def test_commit_for_dml_in_dangerous_mode(self):
+        """Test that DML is committed in dangerous mode."""
+        tool = ExecuteSQLTool()
+        tool.allow_dangerous = True
+        db = MockDatabaseConnection()
+        tool.db = db  # Set db directly, skip schema manager
+
+        result = await tool.execute(query="INSERT INTO users VALUES (1, 'test')")
+        data = json.loads(result)
+
+        assert data["success"] is True
+        assert db.commits[-1] is True
+
+    @pytest.mark.asyncio
+    async def test_no_commit_for_select_in_dangerous_mode(self):
+        """Test that SELECT statements are not committed in dangerous mode."""
+        tool = ExecuteSQLTool()
+        tool.allow_dangerous = True
+        db = MockDatabaseConnection()
+        db.mock_results = [{"name": "users"}]
+        tool.db = db  # Set db directly, skip schema manager
+
+        result = await tool.execute(query="SELECT * FROM users")
+        data = json.loads(result)
+
+        assert data["success"] is True
+        assert db.commits[-1] is False
+
+    @pytest.mark.asyncio
     async def test_error_handling(self):
         """Test error handling."""
         tool = ExecuteSQLTool()
         db = MockDatabaseConnection()
 
         # Simulate database error
-        async def mock_execute_error(query):
+        async def mock_execute_error(query, *args, **kwargs):
             raise Exception("Table 'unknown_table' does not exist")
 
         db.execute_query = mock_execute_error

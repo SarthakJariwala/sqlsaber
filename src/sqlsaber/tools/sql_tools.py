@@ -7,7 +7,7 @@ from sqlsaber.database.schema import SchemaManager
 
 from .base import Tool
 from .registry import register_tool
-from .sql_guard import add_limit, validate_read_only
+from .sql_guard import add_limit, validate_sql
 
 
 class SQLTool(Tool):
@@ -21,6 +21,9 @@ class SQLTool(Tool):
         """Initialize with optional database connection."""
         super().__init__()
         self.db = db_connection
+        # allow_dangerous is set by SQLSaberAgent at session level
+        # Do NOT expose this as a tool parameter to prevent LLM from escalating
+        self.allow_dangerous: bool = False
         if schema_manager:
             self.schema_manager = schema_manager
         elif db_connection:
@@ -155,7 +158,9 @@ class ExecuteSQLTool(SQLTool):
             dialect = self.db.sqlglot_dialect
 
             # Security check using sqlglot AST analysis
-            validation_result = validate_read_only(query, dialect)
+            validation_result = validate_sql(
+                query, dialect, allow_dangerous=self.allow_dangerous
+            )
             if not validation_result.allowed:
                 return json.dumps({"error": validation_result.reason})
 
@@ -163,20 +168,35 @@ class ExecuteSQLTool(SQLTool):
             if validation_result.is_select and limit:
                 query = add_limit(query, dialect, limit)
 
+            query_type = validation_result.query_type or "other"
+
+            # Commit only for DML/DDL statements in dangerous mode
+            commit = bool(self.allow_dangerous and query_type in {"dml", "ddl"})
+
             # Execute the query
-            results = await self.db.execute_query(query)
+            results = await self.db.execute_query(query, commit=commit)
 
-            # Format results
-            actual_limit = limit if limit is not None else len(results)
-
-            return json.dumps(
-                {
-                    "success": True,
-                    "row_count": len(results),
-                    "results": results[:actual_limit],
-                    "truncated": len(results) > actual_limit,
-                }
-            )
+            # Format response based on query type
+            if query_type == "select":
+                actual_limit = limit if limit is not None else len(results)
+                return json.dumps(
+                    {
+                        "success": True,
+                        "row_count": len(results),
+                        "results": results[:actual_limit],
+                        "truncated": len(results) > actual_limit,
+                    }
+                )
+            elif query_type == "dml" or query_type == "ddl":
+                return json.dumps({"success": True})
+            else:
+                return json.dumps(
+                    {
+                        "success": True,
+                        "row_count": len(results),
+                        "results": results,
+                    }
+                )
 
         except Exception as e:
             error_msg = str(e)
