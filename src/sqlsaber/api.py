@@ -7,10 +7,12 @@ allowing you to run natural language queries against databases from Python code.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterable, Awaitable, Sequence
 from types import TracebackType
-from typing import Any, Protocol, Self
+from typing import Any, Callable, Protocol, Self
 
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai import RunContext
+from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.config.database import DatabaseConfigManager
@@ -117,7 +119,14 @@ class SQLSaber:
         )
 
     async def query(
-        self, prompt: str, message_history: list[ModelMessage] | None = None
+        self,
+        prompt: str,
+        message_history: Sequence[ModelMessage] | None = None,
+        event_stream_handler: Callable[
+            [RunContext[Any], AsyncIterable[AgentStreamEvent]],
+            Awaitable[None],
+        ]
+        | None = None,
     ) -> SQLSaberResult:
         """
         Run a natural language query against the database.
@@ -125,22 +134,17 @@ class SQLSaber:
         Args:
             prompt: The natural language query or instruction.
             message_history: Optional history of messages for context.
+            event_stream_handler: Optional streaming handler for AgentStreamEvent.
+                Use this to process streaming events as they arrive.
 
         Returns:
             A SQLSaberResult object (subclass of str) containing the agent's response.
             Access .usage, .messages, etc. for more details.
         """
-        # Handle OAuth injection if needed
-        prepared_prompt: str | list[str] = prompt
-
-        # If we have no history and using OAuth (Claude Code), we need to inject context
-        if self.agent.is_oauth and not message_history:
-            injected = self.agent.system_prompt_text(include_memory=True)
-            if injected and str(injected).strip():
-                prepared_prompt = [injected, prompt]
-
-        result = await self.agent.agent.run(
-            prepared_prompt, message_history=message_history
+        result = await self.agent.run(
+            prompt,
+            message_history=message_history,
+            event_stream_handler=event_stream_handler,
         )
 
         content = ""

@@ -146,30 +146,21 @@ class BufferedStreamingHandler:
         """Execute a query with buffered streaming output."""
         try:
             self.log.info("buffered_streaming.execute.start")
-            # If Anthropic OAuth, inject SQLsaber instructions before the first user prompt
-            prepared_prompt: str | list[str] = user_query
-            no_history = not message_history
-            if sqlsaber_agent.is_oauth and no_history:
-                injected = sqlsaber_agent.system_prompt_text(include_memory=True)
-                if injected and str(injected).strip():
-                    prepared_prompt = [injected, user_query]
 
-            run = await sqlsaber_agent.agent.run(
-                prepared_prompt,
+            run = await sqlsaber_agent.run(
+                user_query,
                 message_history=message_history,
                 event_stream_handler=self._event_stream_handler,
             )
             self.log.info("buffered_streaming.execute.end")
             return run
         except asyncio.CancelledError:
-            # Flush whatever we have so far before showing cancellation message
             self._flush_buffer()
             self.console.print()
             self.console.print("[warning]Query interrupted[/warning]")
             self.log.info("buffered_streaming.execute.cancelled")
             return None
         except Exception:
-            # Defensive: if something fails mid-stream, still show buffered output
             self._flush_buffer()
             self.log.exception("buffered_streaming.execute.error")
             raise
