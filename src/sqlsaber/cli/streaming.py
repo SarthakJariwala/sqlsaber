@@ -141,37 +141,24 @@ class StreamingQueryHandler:
         cancellation_token: asyncio.Event | None = None,
         message_history: list | None = None,
     ):
-        # Prepare nicer code block rendering for Markdown
         self.display.live.prepare_code_blocks()
         try:
             self.log.info("streaming.execute.start")
-            # If Anthropic OAuth, inject SQLsaber instructions before the first user prompt
-            prepared_prompt: str | list[str] = user_query
-            no_history = not message_history
-            if sqlsaber_agent.is_oauth and no_history:
-                injected = sqlsaber_agent.system_prompt_text(include_memory=True)
-                if injected and str(injected).strip():
-                    prepared_prompt = [injected, user_query]
-
-            # Show a transient status until events start streaming
             self.display.live.start_status("Crunching data...")
 
-            # Run the agent with our event stream handler
-            run = await sqlsaber_agent.agent.run(
-                prepared_prompt,
+            run = await sqlsaber_agent.run(
+                user_query,
                 message_history=message_history,
                 event_stream_handler=self._event_stream_handler,
             )
             self.log.info("streaming.execute.end")
             return run
         except asyncio.CancelledError:
-            # Show interruption message outside of Live
             self.display.show_newline()
             self.console.print("[warning]Query interrupted[/warning]")
             self.log.info("streaming.execute.cancelled")
             return None
         finally:
-            # End any active status and live markdown segments
             try:
                 self.display.live.end_status()
             finally:

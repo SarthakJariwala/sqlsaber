@@ -9,6 +9,12 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.41.0 - 2025-12-25
+
+#### Changed
+
+- Simplified event stream handling in agent and API modules
+
 ### v0.40.0 - 2025-12-24
 
 #### Added

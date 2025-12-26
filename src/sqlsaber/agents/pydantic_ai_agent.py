@@ -4,7 +4,11 @@ This replaces the custom AnthropicSQLAgent and uses pydantic-ai's Agent,
 function tools, and streaming event types directly.
 """
 
+from collections.abc import AsyncIterable, Awaitable, Sequence
+from typing import Any, Callable
+
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 from pydantic_ai.models import Model
 
 from sqlsaber.agents.provider_factory import ProviderFactory
@@ -172,3 +176,37 @@ class SQLSaberAgent:
         self.thinking_enabled = enabled
         # Rebuild agent with new thinking settings
         self.agent = self._build_agent()
+
+    async def run(
+        self,
+        prompt: str,
+        message_history: Sequence[ModelMessage] | None = None,
+        event_stream_handler: Callable[
+            [RunContext[Any], AsyncIterable[AgentStreamEvent]],
+            Awaitable[None],
+        ]
+        | None = None,
+    ) -> Any:
+        """
+        Run the agent with centralized OAuth/system-prompt injection.
+
+        Args:
+            prompt: User prompt for this turn.
+            message_history: Optional prior messages for context.
+            event_stream_handler: Optional streaming handler for AgentStreamEvent.
+
+        Returns:
+            The pydantic-ai run result.
+        """
+        prepared_prompt: str | list[str] = prompt
+
+        if self.is_oauth and not message_history:
+            injected = self.system_prompt_text(include_memory=True)
+            if injected and str(injected).strip():
+                prepared_prompt = [injected, prompt]
+
+        return await self.agent.run(
+            prepared_prompt,
+            message_history=message_history,
+            event_stream_handler=event_stream_handler,
+        )
