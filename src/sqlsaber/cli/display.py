@@ -6,7 +6,7 @@ rendered with Live.
 """
 
 import json
-from typing import Sequence, Type
+from typing import TYPE_CHECKING, Sequence, Type
 
 from pydantic_ai.messages import ModelResponsePart, TextPart, ThinkingPart
 from rich.columns import Columns
@@ -21,6 +21,9 @@ from rich.text import Text
 from tabulate import tabulate
 
 from sqlsaber.theme.manager import get_theme_manager
+
+if TYPE_CHECKING:
+    from sqlsaber.cli.usage import SessionUsage
 
 
 class _SimpleCodeBlock(CodeBlock):
@@ -543,3 +546,44 @@ class DisplayManager:
             )
             self.console.print(panel)
             self.console.print()  # Add spacing after panel
+
+    def show_session_summary(self, session_usage: "SessionUsage") -> None:
+        """Display session summary on exit.
+
+        Shows final context size, total output tokens generated, and request/tool counts.
+        """
+        if not self.console.is_terminal:
+            return
+
+        if session_usage.requests == 0:
+            return
+
+        self.console.print()
+        self.console.print("[muted]Session Summary[/muted]")
+        self.console.print("[muted]" + "─" * 40 + "[/muted]")
+
+        tokens_line = Text()
+        tokens_line.append("Input: ", style="muted")
+        tokens_line.append(
+            f"{session_usage.current_context_tokens:,} tokens",
+            style="muted bold",
+        )
+        self.console.print(tokens_line)
+
+        output_line = Text()
+        output_line.append("Output (total): ", style="muted")
+        output_line.append(
+            f"{session_usage.total_output_tokens:,} tokens",
+            style="muted bold",
+        )
+        self.console.print(output_line)
+
+        stats_line = Text()
+        stats_line.append("Requests: ", style="muted")
+        stats_line.append(str(session_usage.requests), style="muted bold")
+        stats_line.append(" │ ", style="muted")
+        stats_line.append("Tool calls: ", style="muted")
+        stats_line.append(str(session_usage.tool_calls), style="muted bold")
+        self.console.print(stats_line)
+
+        self.console.print("[muted]" + "─" * 40 + "[/muted]")

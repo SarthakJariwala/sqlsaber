@@ -9,6 +9,18 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.42.0 - 2025-01-05
+
+#### Added
+
+- Session usage summary displayed on exit
+  - Shows input context size (current tokens), total output tokens generated
+  - Displays request count and tool call count
+  - Summary shown when exiting via `/exit`, `/quit`, or Ctrl+D
+  - Also displayed after single-query (non-interactive) mode
+
+---
+
 ### v0.41.0 - 2025-12-25
 
 #### Changed

@@ -136,8 +136,10 @@ def query(
         # Import heavy dependencies only when actually running a query
         # This is only done to speed up startup time
         from sqlsaber.agents import SQLSaberAgent
+        from sqlsaber.cli.display import DisplayManager
         from sqlsaber.cli.interactive import InteractiveSession
         from sqlsaber.cli.streaming import StreamingQueryHandler
+        from sqlsaber.cli.usage import SessionUsage
         from sqlsaber.database import (
             DatabaseConnection,
         )
@@ -218,6 +220,14 @@ def query(
                 run = await streaming_handler.execute_streaming_query(
                     actual_query, sqlsaber_agent
                 )
+
+                # Track and display session usage
+                if run is not None:
+                    session_usage = SessionUsage()
+                    final_context = run.response.usage.input_tokens
+                    session_usage.add_run(run.usage(), final_context)
+                    display = DisplayManager(console)
+                    display.show_session_summary(session_usage)
 
                 # Persist non-interactive run as a thread snapshot so it can be resumed later
                 threads: ThreadStorage | None = None
