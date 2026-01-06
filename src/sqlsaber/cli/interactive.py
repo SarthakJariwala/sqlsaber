@@ -21,6 +21,7 @@ from sqlsaber.cli.completers import (
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.slash_commands import CommandContext, SlashCommandProcessor
 from sqlsaber.cli.streaming import StreamingQueryHandler
+from sqlsaber.cli.usage import SessionUsage
 from sqlsaber.config.logging import get_logger
 from sqlsaber.database import (
     CSVConnection,
@@ -65,6 +66,7 @@ class InteractiveSession:
         # Component Managers
         self.thread_manager = ThreadManager(initial_thread_id)
         self.command_processor = SlashCommandProcessor()
+        self.session_usage = SessionUsage()
 
         self.log = get_logger(__name__)
 
@@ -223,6 +225,10 @@ class InteractiveSession:
                     user_query=user_query,
                     model_name=self.sqlsaber_agent.agent.model.model_name,
                 )
+                # Track usage for session summary
+                # Use result.response.usage for the FINAL request's context size
+                final_context = run_result.response.usage.input_tokens
+                self.session_usage.add_run(run_result.usage(), final_context)
         finally:
             self.current_task = None
             self.cancellation_token = None
@@ -263,6 +269,7 @@ class InteractiveSession:
                     agent=self.sqlsaber_agent,
                     thread_manager=self.thread_manager,
                     on_clear_history=clear_history,
+                    session_usage=self.session_usage,
                 )
 
                 cmd_result = await self.command_processor.process(user_query, context)
@@ -297,6 +304,7 @@ class InteractiveSession:
                     )
             except EOFError:
                 # Exit when Ctrl+D is pressed
+                self.display.show_session_summary(self.session_usage)
                 ended_thread_id = await self.thread_manager.end_current_thread()
                 if ended_thread_id:
                     hint = f"saber threads resume {ended_thread_id}"

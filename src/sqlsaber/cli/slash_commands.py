@@ -3,8 +3,11 @@ from typing import TYPE_CHECKING, Callable
 
 from rich.console import Console
 
+from sqlsaber.cli.display import DisplayManager
+
 if TYPE_CHECKING:
     from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
+    from sqlsaber.cli.usage import SessionUsage
     from sqlsaber.threads.manager import ThreadManager
 
 
@@ -16,6 +19,7 @@ class CommandContext:
     agent: "SQLSaberAgent"
     thread_manager: "ThreadManager"
     on_clear_history: Callable[[], None]
+    session_usage: "SessionUsage | None" = None
 
 
 @dataclass
@@ -57,6 +61,9 @@ class SlashCommandProcessor:
 
     async def _handle_exit(self, context: CommandContext) -> CommandResult:
         """Handle exit commands."""
+        if context.session_usage is not None:
+            display = DisplayManager(context.console)
+            display.show_session_summary(context.session_usage)
         ended_thread_id = await context.thread_manager.end_current_thread()
         if ended_thread_id:
             hint = f"saber threads resume {ended_thread_id}"
