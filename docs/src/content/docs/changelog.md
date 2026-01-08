@@ -9,6 +9,21 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.43.0 - 2025-01-08
+
+#### Added
+
+- `saber threads export` command to export thread transcripts as shareable HTML files
+  - Dark and light theme support with toggle button
+  - Syntax highlighting for SQL queries
+  - Renders markdown content with code blocks, tables, and formatting
+  - Tool results displayed as collapsible sections with formatted tables
+  - Schema introspection results show columns, types, keys, and comments
+  - Includes thread metadata: database, model, timestamps
+  - Usage: `saber threads export <thread-id> [-o output.html]`
+
+---
+
 ### v0.42.0 - 2025-01-05
 
 #### Added
