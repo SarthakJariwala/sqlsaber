@@ -1,11 +1,11 @@
 ---
-title: Open-source SQL Agent
-description: Stop fighting your database. Let SQLsaber help you.
+title: SQLsaber
+description: Ask questions about your data in plain English. SQLsaber writes SQL queries, executes them, and explains the results.
 template: splash
 hero:
-  tagline: Stop fighting your database. Gather the right context automatically and get insights with a collaborative SQL agent.
+  tagline: Ask questions in plain English. SQLsaber reads your schema, writes SQL, runs it securely, and explains the results.
   image:
-    alt: "Animated SQLsaber workflow"
+    alt: "SQLsaber terminal demo showing natural language query"
     file: ../../assets/sqlsaber.gif
   actions:
     - text: Get started
@@ -31,73 +31,95 @@ import {
   async="true"
 ></script>
 
-<CardGrid>
-  <Card title="Just ask" icon="comment-alt">
-    <p class="text-lg text-muted-foreground">
-      Use natural language to have database-aware conversations using SQLsaber.
-    </p>
-    <p class="text-lg text-muted-foreground">
-      SQLsaber is collaborative SQL agent for experts as well as novices.
-    </p>
-  </Card>
-  <Card title="Smart by design" icon="starlight">
-    <p class="text-lg text-muted-foreground">
-      SQLsaber understands your database automatically.
-    </p>
-    <p class="text-lg text-muted-foreground">
-      It reads your schema, remembers your preferences, and writes SQL that
-      answers your question.
-    </p>
-  </Card>
-</CardGrid>
-
-<Card title="Integrates with your setup" icon="laptop">
-  <p class="text-lg text-muted-foreground">
-    SQLsaber works with what you already have and fits into your existing
-    workflow.
-  </p>
-  <li class="flex items-center gap-3">
-    <Icon name="seti:db" />
-    <span>PostgreSQL, MySQL, SQLite, DuckDB, CSV support</span>
-  </li>
-  <li class="flex items-center gap-3">
-    <Icon name="forward-slash" />
-    <span>Use as CLI in your coding agent of choice</span>
-  </li>
-  <li class="flex items-center gap-3">
-    <Icon name="sun" />
-    <span>Anthropic, OpenAI, and many more models</span>
-  </li>
-  <li class="flex items-center gap-3">
-    <Icon name="seti:shell" />
-    <span>Interactive REPL for back-and-forth conversations</span>
-  </li>
-  <li class="flex items-center gap-3">
-    <Icon name="star" />
-    <span>Human feedback system for database-specific quirks</span>
-  </li>
-
-</Card>
-
-{/* Section: Get Started Now */}
-
-<section class="mx-auto max-w-screen-lg px-4 sm:px-6 lg:px-8 py-16 text-center">
-  <h2 class="font-sans text-4xl md:text-5xl tracking-normal">
-    Get Started Now
+<section class="mx-auto max-w-screen-lg px-4 sm:px-6 lg:px-8 py-8">
+  <h2 class="font-sans text-3xl md:text-4xl tracking-normal text-center mb-8">
+    What SQLsaber does
   </h2>
-  <div class="mt-10 text-left mx-auto max-w-3xl">
-    <Code
-      code={`# Install SQLsaber
-$ uv tool install sqlsaber
-\n# Start asking questions
-$ saber`}
-      lang="bash"
-    />
+  <CardGrid>
+    <Card title="Schema-aware queries" icon="magnifier">
+      <p class="text-lg text-muted-foreground">
+        <strong>Automatically introspects</strong> your database structure. No
+        manual schema documentation needed.
+      </p>
+    </Card>
+    <Card title="Safe execution" icon="approve-check">
+      <p class="text-lg text-muted-foreground">
+        <strong>Read-only by default.</strong> SQLsaber won't modify, delete, or
+        alter your data.
+      </p>
+    </Card>
+    <Card title="Context memory" icon="document">
+      <p class="text-lg text-muted-foreground">
+        Teach it your database quirks: <code>"dates are Unix timestamps"</code>,{" "}
+        <code>"user_id references accounts.id"</code>.
+      </p>
+    </Card>
+    <Card title="Conversation threads" icon="comment-alt">
+      <p class="text-lg text-muted-foreground">
+        Resume past conversations. Ask follow-up questions without repeating
+        context.
+      </p>
+    </Card>
+  </CardGrid>
+</section>
+
+<section class="mx-auto max-w-screen-lg px-4 sm:px-6 lg:px-8 py-8">
+  <h2 class="font-sans text-3xl md:text-4xl tracking-normal text-center mb-8">
+    Works with your stack
+  </h2>
+  <div class="max-w-2xl mx-auto">
+    <ul class="space-y-3">
+      <li class="flex items-center gap-3">
+        <Icon name="seti:db" />
+        <span>
+          <strong>Databases:</strong> PostgreSQL, MySQL, SQLite, DuckDB, CSV
+          files
+        </span>
+      </li>
+      <li class="flex items-center gap-3">
+        <Icon name="sun" />
+        <span>
+          <strong>AI providers:</strong> Anthropic, OpenAI, Google, and others
+        </span>
+      </li>
+      <li class="flex items-center gap-3">
+        <Icon name="seti:shell" />
+        <span>
+          <strong>Interface:</strong> Interactive REPL or single-shot CLI
+          queries
+        </span>
+      </li>
+      <li class="flex items-center gap-3">
+        <Icon name="forward-slash" />
+        <span>
+          <strong>Composable:</strong> Pipe queries, redirect output, use in
+          scripts
+        </span>
+      </li>
+    </ul>
   </div>
-  <div class="mt-10 flex flex-wrap items-center justify-center gap-4">
-    <LinkButton href="/installation/">Install SQLsaber</LinkButton>
+</section>
+
+<section class="mx-auto max-w-screen-lg px-4 sm:px-6 lg:px-8 py-12 text-center">
+  <h2 class="font-sans text-3xl md:text-4xl tracking-normal">
+    Get started in 2 commands
+  </h2>
+  <div class="mt-8 text-left mx-auto max-w-3xl">
+    <Code
+      code={`# Install
+uv tool install sqlsaber
+
+# Run (walks you through setup on first launch)
+
+saber`}
+lang="bash"
+/>
+
+  </div>
+  <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+    <LinkButton href="/installation/">Installation guide</LinkButton>
     <LinkButton href="/guides/getting-started/" variant="secondary">
-      Quick Start Guide
+      Quick start
     </LinkButton>
   </div>
 </section>

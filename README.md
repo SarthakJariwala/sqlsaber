@@ -2,226 +2,124 @@
 
 > SQLsaber is an open-source agentic SQL assistant. Think Claude Code but for SQL.
 
+**Ask questions about your data in plain English. SQLsaber writes SQL queries, executes them, and explains the results.**
+
 ![demo](./sqlsaber.gif)
 
-Stop fighting your database.
-
-Ask your questions in natural language and `sqlsaber` will gather the right context automatically and answer your query by writing SQL and analyzing the results.
-
-## Table of Contents
-
-- [Features](#features)
-- [Installation](#installation)
-- [Configuration](#configuration)
-  - [Database Connection](#database-connection)
-  - [AI Model Configuration](#ai-model-configuration)
-  - [Memory Management](#memory-management)
-- [Usage](#usage)
-  - [Interactive Mode](#interactive-mode)
-  - [Single Query](#single-query)
-  - [Resume Past Conversation](#resume-past-conversation)
-  - [Database Selection](#database-selection)
-- [Examples](#examples)
-
-- [How It Works](#how-it-works)
-- [Contributing](#contributing)
-- [License](#license)
-
-## Features
-
-- Automatic database schema introspection
-- Safe query execution (read-only by default)
-- Memory management
-- Interactive REPL mode
-- Conversation threads (store, display, and resume conversations)
-- Support for PostgreSQL, MySQL, SQLite, DuckDB, and CSVs
-
-- Extended thinking mode for select models (Anthropic, OpenAI, Google, Groq)
-- Beautiful formatted output
-
-## Installation
-
-### `uv`
+SQLsaber reads your schema, writes SQL, executes it, and explains the results—all from a single natural language prompt.
 
 ```bash
-uv tool install sqlsaber
+$ saber "How many orders were placed last month?"
+
+# SQLsaber will:
+# 1. Discover relevant tables (orders, order_items, etc.)
+# 2. Analyze their schema
+# 3. Generate and run SQL
+# 4. Return results with explanation
 ```
 
-### `pipx`
+## Why SQLsaber?
+
+- **No context switching** — Stay in your terminal, ask questions, get answers
+- **Schema-aware** — Automatically introspects your database; no manual setup
+- **Safe by default** — Read-only queries; won't modify your data
+- **Works with your stack** — PostgreSQL, MySQL, SQLite, DuckDB, and CSV files
+
+## Install
 
 ```bash
+# Recommended
+uv tool install sqlsaber
+
+# Or with pipx
 pipx install sqlsaber
 ```
 
-### `brew`
+Then run:
 
 ```bash
-brew install uv
-uv tool install sqlsaber
+saber
 ```
+
+On first launch, SQLsaber walks you through connecting a database and setting up authentication.
+
+## Quick Examples
+
+```bash
+# Interactive mode
+saber
+
+# Single query
+saber "show me users who signed up this week"
+
+# Pipe from stdin
+echo "top 10 customers by revenue" | saber
+
+# Use a specific database
+saber -d mydb "count active subscriptions"
+```
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **Schema introspection** | Discovers tables, columns, and relationships automatically |
+| **Conversation memory** | Add context like "dates are stored as Unix timestamps" |
+| **Thread history** | Resume past conversations with `saber threads resume` |
+| **Extended thinking** | Enable `--thinking` for complex analytical queries |
+| **Multiple AI providers** | Anthropic, OpenAI, Google, Groq (Claude Sonnet 4 by default) |
 
 ## Configuration
 
-### Database Connection
-
-Set your database connection URL:
+### Add a database
 
 ```bash
-saber db add DB_NAME
+saber db add mydb
+# Prompts for connection details
 ```
 
-This will ask you some questions about your database connection
+Or pass a connection string directly:
 
-### AI Model Configuration
+```bash
+saber -d "postgresql://user:pass@localhost:5432/mydb" "count users"
+```
 
-SQLSaber uses Sonnet-4 by default. You can change it using:
+### Change AI model
 
 ```bash
 saber models set
-
-# for more model settings run:
-saber models --help
 ```
 
-### Memory Management
-
-You can add specific context about your database to the model using the memory feature. This is similar to how you add memory/context in Claude Code.
+### Add memory (context for your database)
 
 ```bash
-saber memory add 'always convert dates to string for easier formating'
-```
-
-View all memories
-
-```bash
-saber memory list
-```
-
-> You can also add memories in an interactive query session by starting with the `#` sign
-
-### Extended Thinking Mode
-
-For complex queries that require deeper reasoning, `sqlsaber` supports extended thinking mode. When enabled, you will see the model's reasoning process as it generates SQL queries and arrives at conclusions.
-
-**Enable/disable via CLI flags:**
-
-```bash
-# Enable thinking for a single query
-saber --thinking "analyze sales trends across regions"
-
-# Disable thinking for a single query
-saber --no-thinking "show me all users"
-```
-
-**Toggle in interactive mode:**
-
-```bash
-# In interactive mode, use slash commands
-/thinking on   # Enable thinking
-/thinking off  # Disable thinking
-```
-
-**Configure default setting:**
-
-Thinking is disabled by default. To change the default, edit your config file at `~/.config/sqlsaber/model_config.json`:
-
-```json
-{
-  "model": "anthropic:claude-sonnet-4-20250514",
-  "thinking_enabled": true
-}
-```
-
-## Usage
-
-### Interactive Mode
-
-Start an interactive session:
-
-```bash
-saber
-```
-
-> You can also add memories in an interactive session by starting your message with the `#` sign
-
-### Single Query
-
-Execute a single natural language query:
-
-```bash
-saber "show me all users created this month"
-```
-
-You can also pipe queries from stdin:
-
-```bash
-echo "show me all users created this month" | saber
-cat query.txt | saber
-```
-
-### Resume Past Conversation
-
-Continue a previous conversation thread:
-
-```bash
-saber threads resume THREAD_ID
-```
-
-### Database Selection
-
-Use a specific database connection:
-
-```bash
-# Interactive mode with specific database
-saber -d mydb
-
-# Single query with specific database
-saber -d mydb "count all orders"
-
-# You can also pass a connection string
-saber -d "postgresql://user:password@localhost:5432/mydb" "count all orders"
-saber -d "duckdb:///path/to/data.duckdb" "top customers"
-```
-
-## Examples
-
-```bash
-# Start interactive mode
-saber
-
-# Non-interactive mode
-saber "show me orders with customer details for this week"
-
-saber "which products had the highest sales growth last quarter?"
+saber memory add "customer_id in orders table references users.id"
+saber memory add "all timestamps are UTC"
 ```
 
 ## How It Works
 
-SQLsaber uses a multi-step agentic process to gather the right context and execute SQL queries to answer your questions:
+1. **Discovery** — Lists tables and identifies relevant ones based on your question
+2. **Schema analysis** — Introspects only the tables needed
+3. **Query generation** — Writes SQL tailored to your database dialect
+4. **Execution** — Runs read-only queries with safety checks
+5. **Results** — Formats output with explanations
 
-![](./sqlsaber.svg)
+## Documentation
 
-### 🔍 Discovery Phase
+Full docs at [sqlsaber.com](https://sqlsaber.com):
 
-1. **List Tables Tool**: Quickly discovers available tables with row counts
-2. **Pattern Matching**: Identifies relevant tables based on your query
-
-### 📋 Schema Analysis
-
-3. **Smart Schema Introspection**: Analyzes only the specific table structures needed for your query
-
-### ⚡ Execution Phase
-
-4. **SQL Generation**: Creates optimized SQL queries based on natural language input
-5. **Safe Execution**: Runs read-only queries with built-in protections against destructive operations
-6. **Result Formatting**: Presents results with explanations in tables
+- [Installation](https://sqlsaber.com/installation/)
+- [Getting Started](https://sqlsaber.com/guides/getting-started/)
+- [Database Setup](https://sqlsaber.com/guides/database-setup/)
+- [Command Reference](https://sqlsaber.com/reference/commands/)
 
 ## Contributing
 
-If you like the project, starring the repo is a great way to show your support!
+Contributions welcome! Please open an issue first to discuss changes.
 
-Other contributions are welcome! Please feel free to open an issue to discuss your ideas or report bugs.
+If you find SQLsaber useful, a ⭐ on GitHub helps others discover it.
 
 ## License
 
-This project is licensed under Apache-2.0 License - see the LICENSE file for details.
+Apache-2.0 — see [LICENSE](./LICENSE)
