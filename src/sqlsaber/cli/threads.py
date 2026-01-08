@@ -3,6 +3,7 @@
 import asyncio
 import json
 import time
+from pathlib import Path
 from typing import Annotated
 
 import cyclopts
@@ -12,6 +13,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from sqlsaber.cli.html_export import render_thread_html
 from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console, get_theme_manager
 from sqlsaber.threads import ThreadStorage
@@ -351,6 +353,47 @@ def prune(
         deleted = await store.prune_threads(older_than_days=days)
         console.print(f"[success]✓ Pruned {deleted} thread(s).[/success]")
         logger.info("threads.cli.prune.complete", deleted=deleted)
+
+    asyncio.run(_run())
+
+
+@threads_app.command
+def export(
+    thread_id: Annotated[str, cyclopts.Parameter(help="Thread ID")],
+    output: Annotated[
+        Path | None,
+        cyclopts.Parameter(
+            ["--output", "-o"],
+            help="Output HTML file path (default: ./thread-<id>.html)",
+        ),
+    ] = None,
+):
+    """Export a thread transcript as a standalone HTML file."""
+    logger.info(
+        "threads.cli.export.start",
+        thread_id=thread_id,
+        output=str(output) if output else None,
+    )
+    store = ThreadStorage()
+
+    async def _run() -> None:
+        thread = await store.get_thread(thread_id)
+        if not thread:
+            console.print(f"[error]Thread not found:[/error] {thread_id}")
+            logger.error("threads.cli.share.not_found", thread_id=thread_id)
+            return
+
+        messages = await store.get_thread_messages(thread_id)
+        html = render_thread_html(thread, messages)
+
+        out_path = output or (Path.cwd() / f"thread-{thread.id}.html")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(html, encoding="utf-8")
+
+        console.print(f"[success]✓ Wrote thread HTML to:[/success] {out_path}")
+        logger.info(
+            "threads.cli.export.complete", thread_id=thread_id, output=str(out_path)
+        )
 
     asyncio.run(_run())
 

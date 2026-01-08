@@ -14,6 +14,10 @@ from pydantic_ai.messages import (
 )
 from rich.console import Console
 
+from sqlsaber.cli.html_export import (
+    build_turn_slices,
+    render_thread_html,
+)
 from sqlsaber.cli.threads import (
     _human_readable,
     _render_transcript,
@@ -342,3 +346,111 @@ class TestThreadsCLI:
                 assert resolved.name == "prod_db"
 
         await mock_resume_run()
+
+    def test_build_turn_slices_basic(self, sample_messages):
+        """Test build_turn_slices groups messages correctly by user prompts."""
+        slices = build_turn_slices(sample_messages)
+        assert len(slices) == 1
+        assert slices[0] == (0, 4)
+
+    def test_build_turn_slices_multiple_turns(self):
+        """Test build_turn_slices with multiple user turns."""
+        messages = [
+            ModelRequest(parts=[UserPromptPart("First question")]),
+            ModelResponse(parts=[TextPart("First answer")]),
+            ModelRequest(parts=[UserPromptPart("Second question")]),
+            ModelResponse(parts=[TextPart("Second answer")]),
+        ]
+        slices = build_turn_slices(messages)
+        assert len(slices) == 2
+        assert slices[0] == (0, 2)
+        assert slices[1] == (2, 4)
+
+    def test_build_turn_slices_empty(self):
+        """Test build_turn_slices with no messages."""
+        slices = build_turn_slices([])
+        assert slices == [(0, 0)]
+
+    def test_render_thread_html_basic(self, sample_threads, sample_messages):
+        """Test render_thread_html generates valid HTML."""
+        thread = sample_threads[0]
+        html = render_thread_html(thread, sample_messages)
+
+        assert "<!doctype html>" in html
+        assert "<html" in html
+        assert "</html>" in html
+        assert "SQLsaber" in html
+        assert "highlight.js" in html
+        assert "marked" in html
+        assert thread.id in html
+        assert "Users query" in html
+        assert "prod_db" in html
+        assert "gpt-4" in html
+        assert "User" in html
+        assert "Assistant" in html
+        assert "Show me all tables" in html
+
+    def test_render_thread_html_empty_messages(self, sample_threads):
+        """Test render_thread_html with empty messages."""
+        thread = sample_threads[0]
+        html = render_thread_html(thread, [])
+
+        assert "No messages in this thread" in html
+
+    def test_render_thread_html_escapes_content(self, sample_threads):
+        """Test render_thread_html properly escapes HTML content in user input."""
+        thread = sample_threads[0]
+        messages = [
+            ModelRequest(parts=[UserPromptPart("<script>alert('xss')</script>")]),
+            ModelResponse(parts=[TextPart("Safe response & <test>")]),
+        ]
+        html = render_thread_html(thread, messages)
+
+        assert "&lt;script&gt;alert" in html
+        assert "&amp;" in html
+        assert "&lt;test&gt;" in html
+
+    def test_export_thread_not_found(self):
+        """Test exporting a thread that doesn't exist."""
+        with patch("sqlsaber.cli.threads.ThreadStorage") as mock_storage_class:
+            mock_storage = MagicMock()
+            mock_storage.get_thread = AsyncMock(return_value=None)
+            mock_storage_class.return_value = mock_storage
+
+            with patch("sqlsaber.cli.threads.console") as mock_console:
+                from sqlsaber.cli.threads import export
+
+                export("nonexistent-thread")
+
+                mock_console.print.assert_called_with(
+                    "[error]Thread not found:[/error] nonexistent-thread"
+                )
+
+    @pytest.mark.asyncio
+    async def test_share_thread_integration(self, temp_storage):
+        """Integration test: share creates HTML file with proper content."""
+        simple_messages = [
+            ModelRequest(parts=[UserPromptPart("What is SQL?")]),
+            ModelResponse(parts=[TextPart("SQL is a query language.")]),
+        ]
+        messages_bytes = self._messages_to_bytes(simple_messages)
+        thread_id = await temp_storage.save_snapshot(
+            messages_json=messages_bytes, database_name="test_db"
+        )
+        await temp_storage.save_metadata(thread_id=thread_id, title="Integration Test")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = Path(tmp_dir) / "test_output.html"
+
+            thread = await temp_storage.get_thread(thread_id)
+            messages = await temp_storage.get_thread_messages(thread_id)
+            html = render_thread_html(thread, messages)  # type: ignore[arg-type]
+            output_path.write_text(html, encoding="utf-8")
+
+            assert output_path.exists()
+            html_content = output_path.read_text()
+            assert "<!doctype html>" in html_content
+            assert "Integration Test" in html_content
+            assert "SQLsaber" in html_content
+            assert "What is SQL?" in html_content
+            assert "SQL is a query language." in html_content
