@@ -44,7 +44,7 @@ Manage authentication configuration for AI providers.
 
 #### `saber auth setup`
 
-Configure authentication for SQLsaber (API keys and OAuth).
+Configure authentication for SQLsaber (API keys).
 
 **Usage:**
 
@@ -65,7 +65,6 @@ saber auth status
 **Output shows:**
 
 - Configured providers
-- Authentication methods (API key vs OAuth)
 
 #### `saber auth reset`
 
