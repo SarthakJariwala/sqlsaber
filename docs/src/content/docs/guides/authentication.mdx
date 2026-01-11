@@ -3,15 +3,15 @@ title: Authentication
 description: Configure LLM provider authentication for SQLsaber
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 SQLsaber supports multiple LLM providers.
 
 ### Providers
 
-SQLsaber supports the following LLM providers and authentication methods:
+SQLsaber supports the following LLM providers:
 
-- **Anthropic** - API key or Claude Pro/Max subscription
+- **Anthropic** - API key
 - **OpenAI** - API key
 - **Google** - API key
 - **Groq** - API key
@@ -20,7 +20,8 @@ SQLsaber supports the following LLM providers and authentication methods:
 - **Hugging Face** - API key
 
 <Aside type="note">
-    API keys and OAuth tokens securely using your operating system's credentials store.
+  SQLsaber stores API keys securely using your operating system's credentials
+  store.
 </Aside>
 
 ### Quick Setup
@@ -32,25 +33,14 @@ saber auth setup
 ```
 
 This interactive command will:
+
 1. Let you choose your AI provider
-2. Guide you through the authentication process
+2. Prompt you for an API key (or use an existing environment variable)
 3. Securely store your credentials
 
 #### Anthropic
 
-SQLsaber uses Claude Sonnet 4 by default and supports two authentication methods:
-
-##### Claude Pro/Max subscription (Recommended)
-
-> If you have a Claude Pro or Max subscription, you can use it with SQLsaber:
-
-1. Run the setup:
-   ```bash
-   saber auth setup
-   ```
-2. Choose "Anthropic" as your provider
-3. Select "Claude Pro/Max (OAuth)" as the authentication method
-4. Follow the browser-based OAuth flow
+SQLsaber uses Claude Sonnet 4 by default.
 
 ##### API Key
 
@@ -60,13 +50,9 @@ SQLsaber uses Claude Sonnet 4 by default and supports two authentication methods
    saber auth setup
    ```
 3. Choose "Anthropic" as your provider
-4. Select "API key" as the authentication method
-5. Enter your API key when prompted
+4. Enter your API key when prompted
 
-<Aside type="note">
-Follow the same steps for setting up other providers.
-</Aside>
-
+<Aside type="note">Follow the same steps for setting up other providers.</Aside>
 
 ### Managing Authentication
 
@@ -79,8 +65,9 @@ saber auth status
 ```
 
 This shows:
-- Currently configured providers
-- Authentication methods (API key vs OAuth)
+
+- Configured providers
+- Whether a provider is configured via environment variable or keychain
 
 #### Reset Authentication
 
@@ -91,8 +78,9 @@ saber auth reset
 ```
 
 This will:
+
 1. Ask you to select which provider to reset
-2. Remove API keys from your OS credentials store
+2. Remove the stored API key from your OS credentials store
 
 ### Multiple Providers
 
@@ -103,6 +91,7 @@ You can configure multiple providers and switch between them when selecting mode
 You can also use environment variables for setting API keys.
 
 Example:
+
 ```bash
 # Anthropic
 export ANTHROPIC_API_KEY="your-api-key"

@@ -7,7 +7,7 @@
   - `tools/`: SQL, introspection, registry.
   - `database/`: connection, resolver, schema utilities.
   - `memory/`, `conversation/`: state and persistence.
-  - `config/`: settings, API keys, OAuth, DB configs.
+  - `config/`: settings, API keys, DB configs.
 - Tests: `tests/` mirror modules (`test_cli/`, `test_tools/`, …).
 - Docs & assets: `docs/`, `sqlsaber.gif`, `sqlsaber.svg`.
 

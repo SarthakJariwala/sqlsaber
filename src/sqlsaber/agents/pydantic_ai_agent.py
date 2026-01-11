@@ -47,20 +47,15 @@ class SQLSaberAgent:
         self.db_type = self.db_connection.display_name
         self.allow_dangerous = allow_dangerous
 
-        # Initialize schema manager
         self.schema_manager = SchemaManager(self.db_connection)
 
-        # Thinking configuration (CLI override or config default)
         self.thinking_enabled = (
             thinking_enabled
             if thinking_enabled is not None
             else self.config.model.thinking_enabled
         )
 
-        # Configure SQL tools with the database connection
         self._configure_sql_tools()
-
-        # Create the pydantic-ai agent
         self.agent = self._build_agent()
 
     def _configure_sql_tools(self) -> None:
@@ -78,32 +73,17 @@ class SQLSaberAgent:
                 "Model name is required when providing an api_key override."
             )
 
-        # Use override if provided, else fall back to config
         model_name = self._model_name_override or self.config.model.name
         model_name_only = (
             model_name.split(":", 1)[1] if ":" in model_name else model_name
         )
 
-        # Validate/hydrate credentials for the effective model (not stored model)
         if not (self._model_name_override and self._api_key_override):
             self.config.auth.validate(model_name)
 
         provider = providers.provider_from_model(model_name) or ""
 
-        # API key priority: explicit override > OAuth (if configured) > config
-        oauth_token = (
-            None
-            if self._api_key_override
-            else self.config.auth.get_oauth_token(model_name)
-        )
-        self.is_oauth = provider == "anthropic" and bool(oauth_token)
-
-        if self._api_key_override:
-            api_key = self._api_key_override
-        elif not self.is_oauth:
-            api_key = self.config.auth.get_api_key(model_name)
-        else:
-            api_key = None
+        api_key = self._api_key_override or self.config.auth.get_api_key(model_name)
 
         factory = ProviderFactory()
         agent = factory.create_agent(
@@ -111,43 +91,34 @@ class SQLSaberAgent:
             model_name=model_name_only,
             full_model_str=model_name,
             api_key=api_key,
-            oauth_token=oauth_token,
             thinking_enabled=self.thinking_enabled,
-            is_oauth=self.is_oauth,
         )
 
         self._setup_system_prompt(agent)
         self._register_tools(agent)
-
         return agent
 
     def _setup_system_prompt(self, agent: Agent) -> None:
         """Configure the agent's system prompt using a simple prompt string."""
-        if not self.is_oauth:
 
-            @agent.system_prompt(dynamic=True)
-            async def sqlsaber_system_prompt(ctx: RunContext) -> str:
-                if isinstance(agent.model, Model) and "gpt-5" in agent.model.model_name:
-                    base = GPT_5.format(db=self.db_type)
+        @agent.system_prompt(dynamic=True)
+        async def sqlsaber_system_prompt(ctx: RunContext) -> str:
+            if isinstance(agent.model, Model) and "gpt-5" in agent.model.model_name:
+                base = GPT_5.format(db=self.db_type)
 
-                    if self.allow_dangerous:
-                        base += DANGEROUS_MODE
+                if self.allow_dangerous:
+                    base += DANGEROUS_MODE
 
-                    if self.database_name:
-                        mem = self.memory_manager.format_memories_for_prompt(
-                            self.database_name
-                        )
-                        mem = mem.strip()
-                        if mem:
-                            return f"{base}\n\n{MEMORY_ADDITION}\n\n{mem}"
-                    return base
-                return self.system_prompt_text(include_memory=True)
-        else:
+                if self.database_name:
+                    mem = self.memory_manager.format_memories_for_prompt(
+                        self.database_name
+                    )
+                    mem = mem.strip()
+                    if mem:
+                        return f"{base}\n\n{MEMORY_ADDITION}\n\n{mem}"
+                return base
 
-            @agent.system_prompt(dynamic=True)
-            async def sqlsaber_system_prompt(ctx: RunContext) -> str:
-                # OAuth clients (Claude Code) ignore custom system prompts; we inject later.
-                return "You are Claude Code, Anthropic's official CLI for Claude."
+            return self.system_prompt_text(include_memory=True)
 
     def system_prompt_text(self, include_memory: bool = True) -> str:
         """Return the original SQLSaber system prompt as a single string."""
@@ -167,14 +138,11 @@ class SQLSaberAgent:
         """Register all the SQL tools with the agent."""
         for tool_name in tool_registry.list_tools():
             tool = tool_registry.get_tool(tool_name)
-            # Register the tool dynamically
-            # We use the execute method which now has the correct signature
             agent.tool_plain(name=tool.name)(tool.execute)
 
     def set_thinking(self, enabled: bool) -> None:
         """Update thinking settings and rebuild the agent."""
         self.thinking_enabled = enabled
-        # Rebuild agent with new thinking settings
         self.agent = self._build_agent()
 
     async def run(
@@ -187,26 +155,9 @@ class SQLSaberAgent:
         ]
         | None = None,
     ) -> Any:
-        """
-        Run the agent with centralized OAuth/system-prompt injection.
-
-        Args:
-            prompt: User prompt for this turn.
-            message_history: Optional prior messages for context.
-            event_stream_handler: Optional streaming handler for AgentStreamEvent.
-
-        Returns:
-            The pydantic-ai run result.
-        """
-        prepared_prompt: str | list[str] = prompt
-
-        if self.is_oauth and not message_history:
-            injected = self.system_prompt_text(include_memory=True)
-            if injected and str(injected).strip():
-                prepared_prompt = [injected, prompt]
-
+        """Run the agent."""
         return await self.agent.run(
-            prepared_prompt,
+            prompt,
             message_history=message_history,
             event_stream_handler=event_stream_handler,
         )

@@ -9,6 +9,19 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.44.0 - 2026-01-11
+
+#### Removed
+
+- Removed Anthropic OAuth (Claude Pro/Max subscription) authentication support; Anthropic now requires an API key.
+
+#### Changed
+
+- `saber auth setup` / onboarding now configure API keys only
+- `saber auth reset` now removes stored API keys only
+
+---
+
 ### v0.43.0 - 2025-01-08
 
 #### Added

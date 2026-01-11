@@ -1,4 +1,9 @@
-"""Authentication configuration management for SQLSaber."""
+"""Authentication configuration management for SQLSaber.
+
+This module currently tracks whether the user has run the interactive auth setup.
+SQLSaber authenticates to providers via API keys (environment variables or OS
+keyring storage).
+"""
 
 import json
 import os
@@ -15,7 +20,6 @@ class AuthMethod(Enum):
     """Authentication methods available in SQLSaber."""
 
     API_KEY = "api_key"
-    CLAUDE_PRO = "claude_pro"
 
 
 class AuthConfigManager:
@@ -36,11 +40,11 @@ class AuthConfigManager:
         try:
             if platform.system() == "Windows":
                 return
+
+            if is_directory:
+                os.chmod(path, stat.S_IRWXU)  # 0o700
             else:
-                if is_directory:
-                    os.chmod(path, stat.S_IRWXU)  # 0o700
-                else:
-                    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)  # 0o600
+                os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)  # 0o600
         except (OSError, PermissionError):
             pass
 

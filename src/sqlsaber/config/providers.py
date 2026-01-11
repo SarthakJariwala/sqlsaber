@@ -16,16 +16,13 @@ class ProviderSpec:
 
     key: str
     env_var: str
-    supports_oauth: bool = False
     aliases: tuple[str, ...] = ()
 
 
-# Ordered definition -> used for CLI display order
 _PROVIDERS: List[ProviderSpec] = [
     ProviderSpec(
         key="anthropic",
         env_var="ANTHROPIC_API_KEY",
-        supports_oauth=True,
         aliases=(),
     ),
     ProviderSpec(
@@ -36,7 +33,6 @@ _PROVIDERS: List[ProviderSpec] = [
     ProviderSpec(
         key="google",
         env_var="GOOGLE_API_KEY",
-        # Historically some model IDs start with "google-gla"; treat as alias
         aliases=("google-gla",),
     ),
     ProviderSpec(
@@ -62,7 +58,6 @@ _PROVIDERS: List[ProviderSpec] = [
 ]
 
 
-# Fast lookup maps
 _BY_KEY: Dict[str, ProviderSpec] = {p.key: p for p in _PROVIDERS}
 _ALIAS_TO_KEY: Dict[str, str] = {
     alias: p.key for p in _PROVIDERS for alias in p.aliases
@@ -81,12 +76,6 @@ def env_var_name(key: str) -> str:
     """
     spec = _BY_KEY.get(key)
     return spec.env_var if spec else "AI_API_KEY"
-
-
-def supports_oauth(key: str) -> bool:
-    """Return True if the provider supports OAuth in SQLsaber."""
-    spec = _BY_KEY.get(key)
-    return bool(spec and spec.supports_oauth)
 
 
 def canonical(key_or_alias: str) -> Optional[str]:

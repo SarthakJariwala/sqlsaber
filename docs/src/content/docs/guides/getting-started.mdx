@@ -10,6 +10,7 @@ import { Aside, Code } from "@astrojs/starlight/components";
 **Time:** ~3 minutes
 
 **Prerequisites:**
+
 - A database (PostgreSQL, MySQL, SQLite, or DuckDB)
 - An API key from Anthropic, OpenAI, Google, or Groq
 
@@ -29,6 +30,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Windows
 winget install --id=astral-sh.uv -e
 ```
+
 </Aside>
 
 ## 2. Run the setup
@@ -40,11 +42,7 @@ saber
 On first run, SQLsaber walks you through:
 
 1. **Database connection** — Choose your database type and enter connection details
-2. **AI authentication** — Sign in to your AI provider; credentials are stored in your OS keychain
-
-<Aside type="tip">
-Have a Claude Pro/Max subscription? You can use it with SQLsaber—no separate API key needed.
-</Aside>
+2. **Authentication** — Enter your AI provider API key; credentials are stored in your OS keychain
 
 <Aside type="note">
 **Need a test database?** Download the legislators SQLite file:
@@ -52,6 +50,7 @@ Have a Claude Pro/Max subscription? You can use it with SQLsaber—no separate A
 ```bash
 curl -L -o legislators.db https://github.com/SarthakJariwala/sqlsaber/raw/refs/heads/main/legislators.db
 ```
+
 </Aside>
 
 ## 3. Ask your first question
@@ -63,6 +62,7 @@ After setup completes, you're in interactive mode. Try:
 ```
 
 SQLsaber will:
+
 1. **Discover** relevant tables
 2. **Analyze** their schema
 3. **Generate** SQL
@@ -76,11 +76,11 @@ SQLsaber will:
 
 ## Interactive mode commands
 
-| Command | Action |
-|---------|--------|
-| `/clear` | Clear conversation history |
-| `/exit` | Exit SQLsaber |
-| `@tablename` | Autocomplete table names |
+| Command      | Action                                 |
+| ------------ | -------------------------------------- |
+| `/clear`     | Clear conversation history             |
+| `/exit`      | Exit SQLsaber                          |
+| `@tablename` | Autocomplete table names               |
 | `#your note` | Add to memory (e.g., `#dates are UTC`) |
 
 ## Non-interactive mode
@@ -110,10 +110,10 @@ saber "Monthly active users" > report.md
 
 ## Troubleshooting
 
-| Error | Fix |
-|-------|-----|
-| "No database connections configured" | Run `saber db add mydb` |
-| "Authentication not configured" | Run `saber auth setup` |
-| "Database connection failed" | Run `saber db test mydb` to diagnose |
+| Error                                | Fix                                  |
+| ------------------------------------ | ------------------------------------ |
+| "No database connections configured" | Run `saber db add mydb`              |
+| "Authentication not configured"      | Run `saber auth setup`               |
+| "Database connection failed"         | Run `saber db test mydb` to diagnose |
 
 For command reference, see [`saber --help`](/reference/commands) or the [full documentation](/).

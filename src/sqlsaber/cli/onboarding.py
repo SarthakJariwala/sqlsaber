@@ -209,9 +209,7 @@ async def setup_auth_guided() -> tuple[bool, str | None]:
             prompter=prompter,
             auth_manager=auth_manager,
             api_key_manager=api_key_manager,
-            allow_oauth=True,
             default_provider="anthropic",
-            run_oauth_in_thread=True,
         )
 
         if not success:

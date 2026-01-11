@@ -11,8 +11,6 @@ import platformdirs
 
 from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
-from sqlsaber.config.auth import AuthConfigManager, AuthMethod
-from sqlsaber.config.oauth_flow import AnthropicOAuthFlow
 
 
 class ModelConfigManager:
@@ -35,11 +33,10 @@ class ModelConfigManager:
         try:
             if platform.system() == "Windows":
                 return
+            if is_directory:
+                os.chmod(path, stat.S_IRWXU)  # 0o700
             else:
-                if is_directory:
-                    os.chmod(path, stat.S_IRWXU)  # 0o700
-                else:
-                    os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)  # 0o600
+                os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)  # 0o600
         except (OSError, PermissionError):
             pass
 
@@ -54,13 +51,12 @@ class ModelConfigManager:
         try:
             with open(self.config_file, "r") as f:
                 config = json.load(f)
-                # Ensure we have a model set
-                if "model" not in config:
-                    config["model"] = self.DEFAULT_MODEL
-                # Set defaults for thinking if not present
-                if "thinking_enabled" not in config:
-                    config["thinking_enabled"] = False
-                return config
+
+            if "model" not in config:
+                config["model"] = self.DEFAULT_MODEL
+            if "thinking_enabled" not in config:
+                config["thinking_enabled"] = False
+            return config
         except (json.JSONDecodeError, IOError):
             return {
                 "model": self.DEFAULT_MODEL,
@@ -128,64 +124,36 @@ class AuthConfig:
     """Configuration specific to authentication."""
 
     def __init__(self):
-        self._auth_manager = AuthConfigManager()
         self._api_key_manager = APIKeyManager()
-
-    @property
-    def method(self) -> AuthMethod | None:
-        """Get the configured authentication method."""
-        return self._auth_manager.get_auth_method()
 
     def get_api_key(self, model_name: str) -> str | None:
         """Get API key for the model provider using cascading logic."""
         model = model_name or ""
-        prov = providers.provider_from_model(model)
-        if prov in set(providers.all_keys()):
-            return self._api_key_manager.get_api_key(prov)  # type: ignore[arg-type]
+        provider_key = providers.provider_from_model(model)
+        if provider_key in set(providers.all_keys()):
+            return self._api_key_manager.get_api_key(provider_key)  # type: ignore[arg-type]
         return None
 
-    def get_oauth_token(self, model_name: str) -> str | None:
-        """Return a valid Anthropic OAuth access token if configured, else None."""
-        if not model_name.startswith("anthropic"):
-            return None
-
-        # Only check/refresh token if the method is explicitly CLAUDE_PRO
-        if self.method != AuthMethod.CLAUDE_PRO:
-            return None
-
-        try:
-            flow = AnthropicOAuthFlow()
-            token = flow.refresh_token_if_needed()
-            return token.access_token if token else None
-        except Exception:
-            return None
-
     def validate(self, model_name: str) -> None:
-        """Validate authentication for the given model."""
+        """Validate authentication for the given model.
+
+        On success, this hydrates the provider's expected environment variable (if
+        missing) so downstream SDKs can pick it up.
+        """
         model = model_name or ""
         provider_key = providers.provider_from_model(model)
         env_var = providers.env_var_name(provider_key or "") if provider_key else None
 
-        if env_var:
-            # Anthropic special-case: allow OAuth in lieu of API key
-            if (
-                provider_key == "anthropic"
-                and self.method == AuthMethod.CLAUDE_PRO
-                and self.get_oauth_token(model_name)
-            ):
-                return
+        if not env_var:
+            return
 
-            # If we don't have a key resolved from env/keyring, raise
-            api_key = self.get_api_key(model_name)
-            if not api_key:
-                provider_name = (
-                    provider_key.capitalize() if provider_key else "Provider"
-                )
-                raise ValueError(f"{provider_name} API key not found.")
+        api_key = self.get_api_key(model_name)
+        if not api_key:
+            provider_name = provider_key.capitalize() if provider_key else "Provider"
+            raise ValueError(f"{provider_name} API key not found.")
 
-            # Hydrate env var for downstream SDKs if missing
-            if not os.getenv(env_var):
-                os.environ[env_var] = api_key
+        if not os.getenv(env_var):
+            os.environ[env_var] = api_key
 
 
 class Config:
@@ -214,11 +182,6 @@ class Config:
     def api_key(self) -> str | None:
         """Backwards compatibility wrapper for api_key."""
         return self.auth.get_api_key(self.model.name)
-
-    @property
-    def oauth_token(self) -> str | None:
-        """Backwards compatibility wrapper for oauth_token."""
-        return self.auth.get_oauth_token(self.model.name)
 
     def set_model(self, model: str) -> None:
         """Set the model and update configuration."""
