@@ -7,9 +7,18 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+
 ---
 
-### v0.44.0 - 2026-01-11
+### v0.45.0 - 2026-01-11
+
+#### Added
+
+- New version check on startup
+
+---
+
+### v0.44.0 - 2026-01-10
 
 #### Removed
 
