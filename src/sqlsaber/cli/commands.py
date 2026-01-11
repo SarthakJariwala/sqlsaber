@@ -98,7 +98,7 @@ def query(
         bool,
         cyclopts.Parameter(
             ["--allow-dangerous"],
-            help="Allow INSERT/UPDATE/DELETE/DDL statements (dangerous: can modify or drop data/schema)",
+            help="Allow INSERT/UPDATE/DELETE/DDL statements (DROP/TRUNCATE always blocked; UPDATE/DELETE require WHERE clause)",
         ),
     ] = False,
 ):
