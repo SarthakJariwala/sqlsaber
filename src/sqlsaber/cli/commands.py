@@ -14,6 +14,7 @@ from sqlsaber.cli.models import create_models_app
 from sqlsaber.cli.onboarding import needs_onboarding, run_onboarding
 from sqlsaber.cli.theme import create_theme_app
 from sqlsaber.cli.threads import create_threads_app
+from sqlsaber.cli.update_check import schedule_update_check
 
 # Lazy imports - only import what's needed for CLI parsing
 from sqlsaber.config.database import DatabaseConfigManager
@@ -75,8 +76,6 @@ def meta_handler(
         echo "show me all users" | saber       # Read query from stdin
         cat query.txt | saber                  # Read query from file via stdin
     """
-    # Store database in app context for commands to access
-    app.meta["database"] = database
 
 
 @app.default
@@ -124,6 +123,8 @@ def query(
     """
 
     async def run_session():
+        schedule_update_check(console)
+
         log = get_logger(__name__)
         log.info(
             "cli.session.start",
@@ -203,7 +204,7 @@ def query(
                 # Single query mode with streaming
                 streaming_handler = StreamingQueryHandler(console)
                 db_type = sqlsaber_agent.db_type
-                model_name = sqlsaber_agent.agent.model.model_name
+                model_name = sqlsaber_agent.config.model.name
                 console.print(
                     f"[primary]Connected to:[/primary] {db_name} ({db_type})\n"
                     f"[primary]Model:[/primary] {model_name}\n"
@@ -242,7 +243,7 @@ def query(
                         await threads.save_metadata(
                             thread_id=thread_id,
                             title=actual_query,
-                            model_name=sqlsaber_agent.agent.model.model_name,
+                            model_name=sqlsaber_agent.config.model.name,
                         )
                         await threads.end_thread(thread_id)
                         console.print(
