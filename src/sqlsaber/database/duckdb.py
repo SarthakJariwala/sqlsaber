@@ -142,7 +142,9 @@ class DuckDBSchemaIntrospector(BaseSchemaIntrospector):
             return [dict(zip(columns, row)) for row in rows]
 
         # Handle CSV connections differently
-        if hasattr(connection, "execute_query") and hasattr(connection, "csv_path"):
+        if hasattr(connection, "execute_query") and (
+            hasattr(connection, "csv_path") or hasattr(connection, "csv_sources")
+        ):
             return await connection.execute_query(query, *params_tuple)
 
         def run_query() -> list[dict[str, Any]]:

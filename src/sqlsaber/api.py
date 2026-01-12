@@ -4,8 +4,6 @@ This module provides a simplified programmatic interface to SQLSaber's capabilit
 allowing you to run natural language queries against databases from Python code.
 """
 
-from __future__ import annotations
-
 from collections.abc import AsyncIterable, Awaitable, Sequence
 from pathlib import Path
 from types import TracebackType
@@ -113,7 +111,7 @@ class SQLSaber:
 
     def __init__(
         self,
-        database: str | None = None,
+        database: str | list[str] | tuple[str, ...] | None = None,
         thinking: bool = False,
         model_name: str | None = None,
         api_key: str | None = None,
@@ -123,14 +121,21 @@ class SQLSaber:
 
         Args:
             database: Database connection string, name, or file path.
-                      If None, uses the default configured database.
-                      Examples:
-                      - "postgresql://user:pass@localhost/db"
-                      - "sqlite:///data.db"
-                      - "my-saved-db"
+                If None, uses the default configured database.
+
+                You can also pass multiple CSVs by providing a list/tuple of CSV
+                file paths or CSV connection strings. Each CSV becomes its own
+                DuckDB view (named after the file stem).
+
+                Examples:
+                - "postgresql://user:pass@localhost/db"
+                - "sqlite:///data.db"
+                - "my-saved-db"
+                - ["users.csv", "orders.csv"]
+                - ("csv:///users.csv", "csv:///orders.csv")
             thinking: Whether to enable "thinking" mode for supported models.
             model_name: Override model (format: 'provider:model',
-                        e.g., 'anthropic:claude-sonnet-4-20250514').
+                e.g., 'anthropic:claude-sonnet-4-20250514').
             api_key: Override API key for the model provider.
             memory: Optional extra context to inject into the system prompt.
                 If this points to an existing file path, its contents are read.
@@ -139,7 +144,14 @@ class SQLSaber:
         """
 
         self._config_manager = DatabaseConfigManager()
-        self._resolved = resolve_database(database, self._config_manager)
+
+        database_spec: str | list[str] | None
+        if isinstance(database, tuple):
+            database_spec = list(database)
+        else:
+            database_spec = database
+
+        self._resolved = resolve_database(database_spec, self._config_manager)
 
         self.db_name = self._resolved.name
         self.connection = DatabaseConnection(

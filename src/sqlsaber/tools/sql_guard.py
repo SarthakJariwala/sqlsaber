@@ -146,10 +146,14 @@ def has_unfiltered_mutation(stmt: exp.Expression) -> str | None:
     for node in stmt.walk():
         if isinstance(node, exp.Update):
             if not node.args.get("where"):
-                return "UPDATE without WHERE clause is not allowed (would affect all rows)"
+                return (
+                    "UPDATE without WHERE clause is not allowed (would affect all rows)"
+                )
         if isinstance(node, exp.Delete):
             if not node.args.get("where"):
-                return "DELETE without WHERE clause is not allowed (would affect all rows)"
+                return (
+                    "DELETE without WHERE clause is not allowed (would affect all rows)"
+                )
     return None
 
 
