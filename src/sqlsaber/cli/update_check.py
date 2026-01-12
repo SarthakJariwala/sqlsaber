@@ -102,10 +102,8 @@ def _is_newer(latest: str, current: str) -> bool:
 
 
 def _print_update_notice(console: Console, info: VersionInfo) -> None:
-    console.print(
-        f"\n[warning]Update available:[/warning] {info.current} → {info.latest}"
-    )
-    console.print(f"[dim]Run:[/dim] [accent]uv tool update {PACKAGE_NAME}[/accent]\n")
+    console.print(f"\nUpdate available: {info.current} → {info.latest}\n")
+    console.print(f"Run: uv tool update {PACKAGE_NAME}\n")
 
 
 async def _check_and_notify(console: Console) -> None:
