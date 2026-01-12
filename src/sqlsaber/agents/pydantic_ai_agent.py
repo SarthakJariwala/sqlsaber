@@ -37,11 +37,13 @@ class SQLSaberAgent:
         model_name: str | None = None,
         api_key: str | None = None,
         allow_dangerous: bool = False,
+        memory: str | None = None,
     ):
         self.db_connection = db_connection
         self.database_name = database_name
         self.config = Config()
         self.memory_manager = memory_manager or MemoryManager()
+        self.memory_override = memory
         self._model_name_override = model_name
         self._api_key_override = api_key
         self.db_type = self.db_connection.display_name
@@ -98,6 +100,21 @@ class SQLSaberAgent:
         self._register_tools(agent)
         return agent
 
+    def _prompt_memory_text(self, include_memory: bool = True) -> str | None:
+        if not include_memory:
+            return None
+
+        if self.memory_override is not None:
+            mem = self.memory_override.strip()
+            return mem or None
+
+        if self.database_name:
+            mem = self.memory_manager.format_memories_for_prompt(self.database_name)
+            mem = mem.strip()
+            return mem or None
+
+        return None
+
     def _setup_system_prompt(self, agent: Agent) -> None:
         """Configure the agent's system prompt using a simple prompt string."""
 
@@ -109,13 +126,10 @@ class SQLSaberAgent:
                 if self.allow_dangerous:
                     base += DANGEROUS_MODE
 
-                if self.database_name:
-                    mem = self.memory_manager.format_memories_for_prompt(
-                        self.database_name
-                    )
-                    mem = mem.strip()
-                    if mem:
-                        return f"{base}\n\n{MEMORY_ADDITION}\n\n{mem}"
+                mem = self._prompt_memory_text(include_memory=True)
+                if mem:
+                    return f"{base}\n\n{MEMORY_ADDITION}\n\n{mem}"
+
                 return base
 
             return self.system_prompt_text(include_memory=True)
@@ -127,11 +141,10 @@ class SQLSaberAgent:
         if self.allow_dangerous:
             base += DANGEROUS_MODE
 
-        if include_memory and self.database_name:
-            mem = self.memory_manager.format_memories_for_prompt(self.database_name)
-            mem = mem.strip()
-            if mem:
-                return f"{base}\n\n{MEMORY_ADDITION}\n\n{mem}\n\n"
+        mem = self._prompt_memory_text(include_memory=include_memory)
+        if mem:
+            return f"{base}\n\n{MEMORY_ADDITION}\n\n{mem}\n\n"
+
         return base
 
     def _register_tools(self, agent: Agent) -> None:

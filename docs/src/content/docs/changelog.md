@@ -10,6 +10,15 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.46.0 - 2026-01-12
+
+#### Added
+
+- Python API: add `memory` parameter to inject session context (accepts text or a file path)
+- Agent: prefer passed `memory` over saved database memories
+
+---
+
 ### v0.45.0 - 2026-01-11
 
 #### Added
