@@ -1,5 +1,4 @@
-"""
-Public Python API for SQLSaber.
+"""Public Python API for SQLSaber.
 
 This module provides a simplified programmatic interface to SQLSaber's capabilities,
 allowing you to run natural language queries against databases from Python code.
@@ -8,6 +7,7 @@ allowing you to run natural language queries against databases from Python code.
 from __future__ import annotations
 
 from collections.abc import AsyncIterable, Awaitable, Sequence
+from pathlib import Path
 from types import TracebackType
 from typing import Any, Callable, Protocol, Self
 
@@ -20,6 +20,39 @@ from sqlsaber.database import DatabaseConnection
 from sqlsaber.database.resolver import resolve_database
 
 
+def _resolve_memory_input(memory: str | Path | None) -> str | None:
+    """Resolve memory input.
+
+    - If `memory` is a path (or a string path) to an existing file, read it.
+    - Otherwise treat it as literal text.
+
+    Passing an empty string disables memory injection.
+    """
+
+    if memory is None:
+        return None
+
+    if isinstance(memory, str) and not memory.strip():
+        # Empty string explicitly disables memory injection.
+        # Avoid interpreting it as a filesystem path (Path("") -> ".").
+        return ""
+
+    if isinstance(memory, Path):
+        candidate = memory.expanduser()
+    else:
+        candidate = Path(memory).expanduser()
+
+    if candidate.exists():
+        if candidate.is_dir():
+            raise ValueError(
+                f"Memory path '{candidate}' is a directory, expected a file"
+            )
+        if candidate.is_file():
+            return candidate.read_text(encoding="utf-8", errors="replace")
+
+    return str(memory)
+
+
 class SQLSaberRunResult(Protocol):
     """Protocol for pydantic-ai run result objects."""
 
@@ -29,8 +62,7 @@ class SQLSaberRunResult(Protocol):
 
 
 class SQLSaberResult(str):
-    """
-    Result of a SQLSaber query.
+    """Result of a SQLSaber query.
 
     Behaves like a string (contains the agent's text response) but also
     provides access to the full execution details including usage stats
@@ -64,8 +96,7 @@ class SQLSaberResult(str):
 
 
 class SQLSaber:
-    """
-    Main entry point for the SQLSaber Python API.
+    """Main entry point for the SQLSaber Python API.
 
     Example:
         >>> from sqlsaber import SQLSaber
@@ -86,9 +117,9 @@ class SQLSaber:
         thinking: bool = False,
         model_name: str | None = None,
         api_key: str | None = None,
+        memory: str | Path | None = None,
     ):
-        """
-        Initialize SQLSaber.
+        """Initialize SQLSaber.
 
         Args:
             database: Database connection string, name, or file path.
@@ -101,7 +132,12 @@ class SQLSaber:
             model_name: Override model (format: 'provider:model',
                         e.g., 'anthropic:claude-sonnet-4-20250514').
             api_key: Override API key for the model provider.
+            memory: Optional extra context to inject into the system prompt.
+                If this points to an existing file path, its contents are read.
+                If provided (even as an empty string), it overrides any saved
+                database memories for this session.
         """
+
         self._config_manager = DatabaseConfigManager()
         self._resolved = resolve_database(database, self._config_manager)
 
@@ -110,12 +146,15 @@ class SQLSaber:
             self._resolved.connection_string,
             excluded_schemas=self._resolved.excluded_schemas,
         )
+
+        memory_text = _resolve_memory_input(memory)
         self.agent = SQLSaberAgent(
             self.connection,
             self.db_name,
             thinking_enabled=thinking,
             model_name=model_name,
             api_key=api_key,
+            memory=memory_text,
         )
 
     async def query(
@@ -128,8 +167,7 @@ class SQLSaber:
         ]
         | None = None,
     ) -> SQLSaberResult:
-        """
-        Run a natural language query against the database.
+        """Run a natural language query against the database.
 
         Args:
             prompt: The natural language query or instruction.
