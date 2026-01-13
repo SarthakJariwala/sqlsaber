@@ -9,6 +9,14 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.47.2
+
+#### Fixed
+
+- Fixed JSON serialization of `Decimal`, `datetime`, `date`, `time`, `UUID`, and `bytes` types returned by database drivers
+
+---
+
 ### v0.47.1
 
 #### Fixed

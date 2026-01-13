@@ -1,9 +1,8 @@
 """SQL-related tools for database operations."""
 
-import json
-
 from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.schema import SchemaManager
+from sqlsaber.utils.json_utils import json_dumps
 
 from .base import Tool
 from .registry import register_tool
@@ -55,13 +54,13 @@ class ListTablesTool(SQLTool):
     async def execute(self) -> str:
         """List all tables in the database."""
         if not self.db or not self.schema_manager:
-            return json.dumps({"error": "No database connection available"})
+            return json_dumps({"error": "No database connection available"})
 
         try:
             tables_info = await self.schema_manager.list_tables()
-            return json.dumps(tables_info)
+            return json_dumps(tables_info)
         except Exception as e:
-            return json.dumps({"error": f"Error listing tables: {str(e)}"})
+            return json_dumps({"error": f"Error listing tables: {str(e)}"})
 
 
 @register_tool
@@ -80,7 +79,7 @@ class IntrospectSchemaTool(SQLTool):
             table_pattern: Optional pattern to filter tables (e.g., 'public.users', 'user%', '%order%')
         """
         if not self.db or not self.schema_manager:
-            return json.dumps({"error": "No database connection available"})
+            return json_dumps({"error": "No database connection available"})
 
         try:
             schema_info = await self.schema_manager.get_schema_info(table_pattern)
@@ -121,9 +120,9 @@ class IntrospectSchemaTool(SQLTool):
 
                 formatted_info[table_name] = table_data
 
-            return json.dumps(formatted_info)
+            return json_dumps(formatted_info)
         except Exception as e:
-            return json.dumps({"error": f"Error introspecting schema: {str(e)}"})
+            return json_dumps({"error": f"Error introspecting schema: {str(e)}"})
 
 
 @register_tool
@@ -145,10 +144,10 @@ class ExecuteSQLTool(SQLTool):
             limit: Maximum number of rows to return (default: 100)
         """
         if not self.db:
-            return json.dumps({"error": "No database connection available"})
+            return json_dumps({"error": "No database connection available"})
 
         if not query:
-            return json.dumps({"error": "No query provided"})
+            return json_dumps({"error": "No query provided"})
 
         if limit is None:
             limit = self.DEFAULT_LIMIT
@@ -162,7 +161,7 @@ class ExecuteSQLTool(SQLTool):
                 query, dialect, allow_dangerous=self.allow_dangerous
             )
             if not validation_result.allowed:
-                return json.dumps({"error": validation_result.reason})
+                return json_dumps({"error": validation_result.reason})
 
             # Add LIMIT if not present and it's a SELECT query
             if validation_result.is_select and limit:
@@ -179,7 +178,7 @@ class ExecuteSQLTool(SQLTool):
             # Format response based on query type
             if query_type == "select":
                 actual_limit = limit if limit is not None else len(results)
-                return json.dumps(
+                return json_dumps(
                     {
                         "success": True,
                         "row_count": len(results),
@@ -188,9 +187,9 @@ class ExecuteSQLTool(SQLTool):
                     }
                 )
             elif query_type == "dml" or query_type == "ddl":
-                return json.dumps({"success": True})
+                return json_dumps({"success": True})
             else:
-                return json.dumps(
+                return json_dumps(
                     {
                         "success": True,
                         "row_count": len(results),
@@ -216,4 +215,4 @@ class ExecuteSQLTool(SQLTool):
                     "Review SQL syntax, especially JOIN conditions and WHERE clauses"
                 )
 
-            return json.dumps({"error": error_msg, "suggestions": suggestions})
+            return json_dumps({"error": error_msg})
