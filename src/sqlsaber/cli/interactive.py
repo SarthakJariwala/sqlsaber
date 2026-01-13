@@ -25,6 +25,7 @@ from sqlsaber.cli.usage import SessionUsage
 from sqlsaber.config.logging import get_logger
 from sqlsaber.database import (
     CSVConnection,
+    CSVsConnection,
     DuckDBConnection,
     MySQLConnection,
     PostgreSQLConnection,
@@ -112,6 +113,7 @@ class InteractiveSession:
             MySQLConnection: "MySQL",
             DuckDBConnection: "DuckDB",
             CSVConnection: "DuckDB",
+            CSVsConnection: "DuckDB",
             SQLiteConnection: "SQLite",
         }
         for cls, name in mapping.items():

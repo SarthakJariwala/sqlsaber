@@ -260,8 +260,11 @@ def show(
 def resume(
     thread_id: Annotated[str, cyclopts.Parameter(help="Thread ID to resume")],
     database: Annotated[
-        str | None,
-        cyclopts.Parameter(["--database", "-d"], help="Database name or DSN override"),
+        list[str] | None,
+        cyclopts.Parameter(
+            ["--database", "-d"],
+            help="Database name, DSN override, or one/more CSV files via repeated -d",
+        ),
     ] = None,
 ):
     """Render transcript, then resume thread in interactive mode."""
@@ -284,7 +287,7 @@ def resume(
             console.print(f"[error]Thread not found:[/error] {thread_id}")
             logger.error("threads.cli.resume.not_found", thread_id=thread_id)
             return
-        db_selector = database or thread.database_name
+        db_selector = database if database is not None else thread.database_name
         if not db_selector:
             console.print(
                 "[error]No database specified or stored with this thread.[/error]"

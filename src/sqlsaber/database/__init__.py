@@ -13,6 +13,7 @@ from .base import (
     SchemaInfo,
 )
 from .csv import CSVConnection, CSVSchemaIntrospector
+from .csvs import CSVsConnection
 from .duckdb import DuckDBConnection, DuckDBSchemaIntrospector
 from .mysql import MySQLConnection, MySQLSchemaIntrospector
 from .postgresql import PostgreSQLConnection, PostgreSQLSchemaIntrospector
@@ -34,6 +35,8 @@ def DatabaseConnection(
         conn = DuckDBConnection(connection_string)
     elif connection_string.startswith("csv:///"):
         conn = CSVConnection(connection_string)
+    elif connection_string.startswith("csvs://"):
+        conn = CSVsConnection(connection_string)
     else:
         raise ValueError(
             f"Unsupported database type in connection string: {connection_string}"
@@ -59,6 +62,7 @@ __all__ = [
     "SQLiteConnection",
     "DuckDBConnection",
     "CSVConnection",
+    "CSVsConnection",
     "PostgreSQLSchemaIntrospector",
     "MySQLSchemaIntrospector",
     "SQLiteSchemaIntrospector",

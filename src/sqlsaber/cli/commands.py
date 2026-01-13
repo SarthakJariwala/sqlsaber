@@ -53,10 +53,10 @@ config_manager = DatabaseConfigManager()
 @app.meta.default
 def meta_handler(
     database: Annotated[
-        str | None,
+        list[str] | None,
         cyclopts.Parameter(
             ["--database", "-d"],
-            help="Database connection name, file path (CSV/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://) (uses default if not specified)",
+            help="Database connection name, file path (CSV/SQLite/DuckDB), connection string (postgresql://, mysql://, duckdb://), or one/more CSV files via repeated -d (uses default if not specified)",
         ),
     ] = None,
 ):
@@ -68,6 +68,7 @@ def meta_handler(
         saber "show me all users"              # Run a single query with default database
         saber -d mydb "show me users"          # Run a query with specific database
         saber -d data.csv "show me users"      # Run a query with ad-hoc CSV file
+        saber -d users.csv -d orders.csv "join users and orders"  # Multiple CSV files (one view per file)
         saber -d data.db "show me users"       # Run a query with ad-hoc SQLite file
         saber -d data.duckdb "show me users"   # Run a query with ad-hoc DuckDB file
         saber -d "postgresql://user:pass@host:5432/db" "show users"  # PostgreSQL connection string
@@ -87,10 +88,10 @@ def query(
         ),
     ] = None,
     database: Annotated[
-        str | None,
+        list[str] | None,
         cyclopts.Parameter(
             ["--database", "-d"],
-            help="Database connection name, file path (CSV/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://) (uses default if not specified)",
+            help="Database connection name, file path (CSV/SQLite/DuckDB), connection string (postgresql://, mysql://, duckdb://), or one/more CSV files via repeated -d (uses default if not specified)",
         ),
     ] = None,
     thinking: bool = False,
@@ -114,6 +115,7 @@ def query(
         saber                             # Start interactive mode
         saber "show me all users"         # Run a single query
         saber -d data.csv "show users"    # Run a query with ad-hoc CSV file
+        saber -d users.csv -d orders.csv "join users and orders"  # Multiple CSV files (one view per file)
         saber -d data.db "show users"     # Run a query with ad-hoc SQLite file
         saber -d data.duckdb "show users" # Run a query with ad-hoc DuckDB file
         saber -d "postgresql://user:pass@host:5432/db" "show users"  # PostgreSQL connection string

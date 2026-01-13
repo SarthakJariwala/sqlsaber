@@ -13,7 +13,7 @@ from sqlsaber.theme.manager import create_console
 console = create_console()
 
 
-def needs_onboarding(database_arg: str | None = None) -> bool:
+def needs_onboarding(database_arg: str | list[str] | None = None) -> bool:
     """Check if user needs onboarding.
 
     Onboarding is needed if:

@@ -73,6 +73,26 @@ class TestDatabaseResolver:
         assert result.excluded_schemas == []
 
     @patch("pathlib.Path.exists")
+    def test_resolve_multiple_csv_file_paths(self, mock_exists):
+        """Test that multiple CSV paths resolve to a combined DuckDB view connection."""
+        mock_exists.return_value = True
+        config_mgr = Mock()
+
+        result = resolve_database(["a.csv", "b.csv"], config_mgr)
+        assert result.connection_string.startswith("csvs:///?")
+        assert "spec=" in result.connection_string
+        assert result.excluded_schemas == []
+
+    def test_multiple_database_args_must_be_csv(self):
+        config_mgr = Mock()
+
+        with pytest.raises(
+            DatabaseResolutionError,
+            match="Multiple database arguments are only supported",
+        ):
+            resolve_database(["csv:///a.csv", "sqlite:///test.db"], config_mgr)
+
+    @patch("pathlib.Path.exists")
     def test_file_not_found_error(self, mock_exists):
         """Test that missing files raise appropriate errors."""
         mock_exists.return_value = False

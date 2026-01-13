@@ -10,6 +10,7 @@ from .base import (
     SchemaInfo,
 )
 from .csv import CSVConnection
+from .csvs import CSVsConnection
 from .duckdb import DuckDBConnection, DuckDBSchemaIntrospector
 from .mysql import MySQLConnection, MySQLSchemaIntrospector
 from .postgresql import PostgreSQLConnection, PostgreSQLSchemaIntrospector
@@ -31,7 +32,9 @@ class SchemaManager:
             self.introspector = MySQLSchemaIntrospector()
         elif isinstance(db_connection, SQLiteConnection):
             self.introspector = SQLiteSchemaIntrospector()
-        elif isinstance(db_connection, (DuckDBConnection, CSVConnection)):
+        elif isinstance(
+            db_connection, (DuckDBConnection, CSVConnection, CSVsConnection)
+        ):
             self.introspector = DuckDBSchemaIntrospector()
         else:
             raise ValueError(

@@ -9,7 +9,18 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
-### v0.46.1 
+### v0.47.0 - 2026-01-12
+
+#### Added
+
+- CLI: allow multiple CSVs via repeated `-d` (each CSV becomes its own DuckDB view)
+- CLI: `saber threads resume` now accepts multiple `-d` CSVs
+- Python API: `SQLSaber(database=[...])` now accepts multiple CSVs
+- CSV view names are derived from file stems; collisions are suffixed (`_2`, `_3`, ...)
+
+---
+
+### v0.46.1
 
 #### Fixed
 
