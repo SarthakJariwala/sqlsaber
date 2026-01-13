@@ -9,6 +9,14 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.47.1
+
+#### Fixed
+
+- Fixed rendering of update text
+
+---
+
 ### v0.47.0 - 2026-01-12
 
 #### Added

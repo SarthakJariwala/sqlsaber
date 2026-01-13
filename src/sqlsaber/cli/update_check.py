@@ -101,8 +101,8 @@ def _is_newer(latest: str, current: str) -> bool:
         return _parse_version(latest) > _parse_version(current)
 
 
-def _print_update_notice(console: Console, info: VersionInfo) -> None:
-    console.print(f"\nUpdate available: {info.current} → {info.latest}\n")
+def _print_update_notice(console: Console) -> None:
+    console.print("A new version is now available!\n")
     console.print(f"Run: uv tool update {PACKAGE_NAME}\n")
 
 
@@ -117,7 +117,7 @@ async def _check_and_notify(console: Console) -> None:
 
     if _is_newer(latest, current):
         _LOG.info("update_check.available", current=current, latest=latest)
-        _print_update_notice(console, VersionInfo(current=current, latest=latest))
+        _print_update_notice(console)
 
 
 async def _run_safely(console: Console) -> None:
