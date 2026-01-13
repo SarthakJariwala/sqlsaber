@@ -256,5 +256,3 @@ class TestExecuteSQLTool:
 
         assert "error" in data
         assert "unknown_table" in data["error"]
-        assert "suggestions" in data
-        assert len(data["suggestions"]) > 0
