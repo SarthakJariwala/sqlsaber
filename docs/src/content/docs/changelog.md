@@ -9,6 +9,29 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.48.0
+
+#### Added
+
+- Configurable thinking levels across all providers
+  - New `ThinkingLevel` enum with 5 levels: `minimal`, `low`, `medium`, `high`, `maximum`
+  - Each level maps to provider-specific configurations:
+    - **Anthropic**: `budget_tokens` (1,024 → 100,000)
+    - **OpenAI**: `reasoning_effort` (minimal → xhigh)
+    - **Google**: `thinking_level` (MINIMAL → HIGH)
+    - **Groq**: Binary (any level enables reasoning when thinking is on)
+  - `saber models set` now prompts for thinking level after model selection
+  - `saber models current` displays both model and thinking configuration
+  - `/thinking` slash command enhanced:
+    - `/thinking` - Show current status and level
+    - `/thinking on` - Enable with current level
+    - `/thinking off` - Disable thinking
+    - `/thinking <level>` - Set level (minimal, low, medium, high, maximum)
+  - Config schema upgraded to v2 with automatic migration from v1
+  - `--thinking` / `--no-thinking` now override saved defaults when running `saber`
+
+---
+
 ### v0.47.2
 
 #### Fixed

@@ -13,7 +13,7 @@ from pydantic_ai.models import Model
 
 from sqlsaber.agents.provider_factory import ProviderFactory
 from sqlsaber.config import providers
-from sqlsaber.config.settings import Config
+from sqlsaber.config.settings import Config, ThinkingLevel
 from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.memory.manager import MemoryManager
@@ -34,6 +34,7 @@ class SQLSaberAgent:
         database_name: str | None = None,
         memory_manager: MemoryManager | None = None,
         thinking_enabled: bool | None = None,
+        thinking_level: ThinkingLevel | None = None,
         model_name: str | None = None,
         api_key: str | None = None,
         allow_dangerous: bool = False,
@@ -55,6 +56,12 @@ class SQLSaberAgent:
             thinking_enabled
             if thinking_enabled is not None
             else self.config.model.thinking_enabled
+        )
+
+        self.thinking_level = (
+            thinking_level
+            if thinking_level is not None
+            else self.config.model.thinking_level
         )
 
         self._configure_sql_tools()
@@ -94,6 +101,7 @@ class SQLSaberAgent:
             full_model_str=model_name,
             api_key=api_key,
             thinking_enabled=self.thinking_enabled,
+            thinking_level=self.thinking_level,
         )
 
         self._setup_system_prompt(agent)
@@ -153,9 +161,16 @@ class SQLSaberAgent:
             tool = tool_registry.get_tool(tool_name)
             agent.tool_plain(name=tool.name)(tool.execute)
 
-    def set_thinking(self, enabled: bool) -> None:
-        """Update thinking settings and rebuild the agent."""
+    def set_thinking(self, enabled: bool, level: ThinkingLevel | None = None) -> None:
+        """Update thinking settings and rebuild the agent.
+
+        Args:
+            enabled: Whether thinking is enabled.
+            level: Optional thinking level to set. If not provided, keeps current level.
+        """
         self.thinking_enabled = enabled
+        if level is not None:
+            self.thinking_level = level
         self.agent = self._build_agent()
 
     async def run(

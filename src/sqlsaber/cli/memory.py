@@ -64,7 +64,9 @@ def add(
 
     try:
         memory = memory_manager.add_memory(database_name, content)
-        console.print(f"[green]✓ Memory added for database '{database_name}'[/green]")
+        console.print(
+            f"[success]✓ Memory added for database '{database_name}'[/success]"
+        )
         console.print(f"[dim]Memory ID:[/dim] {memory.id}")
         console.print(f"[dim]Content:[/dim] {memory.content}")
         logger.info("memory.add.success", database=database_name, id=memory.id)
@@ -99,7 +101,7 @@ def list(
         return
 
     table = Table(title=f"Memories for Database: {database_name}")
-    table.add_column("ID", style="cyan", width=36)
+    table.add_column("ID", style="info", width=36)
     table.add_column("Content", style="white")
     table.add_column("Created", style="dim")
 
@@ -177,7 +179,7 @@ def remove(
 
     if memory_manager.remove_memory(database_name, memory_id):
         console.print(
-            f"[green]✓ Memory removed from database '{database_name}'[/green]"
+            f"[success]✓ Memory removed from database '{database_name}'[/success]"
         )
         logger.info("memory.remove.success", database=database_name, id=memory_id)
     else:
@@ -232,7 +234,7 @@ def clear(
 
     cleared_count = memory_manager.clear_memories(database_name)
     console.print(
-        f"[green]✓ Cleared {cleared_count} memories for database '{database_name}'[/green]"
+        f"[success]✓ Cleared {cleared_count} memories for database '{database_name}'[/success]"
     )
     logger.info("memory.clear.success", database=database_name, deleted=cleared_count)
 

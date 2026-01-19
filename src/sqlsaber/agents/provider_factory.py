@@ -17,7 +17,36 @@ from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 
+from sqlsaber.config.settings import ThinkingLevel
+
 ProviderName = Literal["google", "anthropic", "openai", "groq"]
+
+# Mapping from ThinkingLevel to Anthropic budget_tokens
+ANTHROPIC_BUDGET_MAP: dict[ThinkingLevel, int] = {
+    ThinkingLevel.MINIMAL: 1024,
+    ThinkingLevel.LOW: 2048,
+    ThinkingLevel.MEDIUM: 8192,
+    ThinkingLevel.HIGH: 32768,
+    ThinkingLevel.MAXIMUM: 100000,
+}
+
+# Mapping from ThinkingLevel to OpenAI reasoning_effort
+OPENAI_EFFORT_MAP: dict[ThinkingLevel, str] = {
+    ThinkingLevel.MINIMAL: "minimal",
+    ThinkingLevel.LOW: "low",
+    ThinkingLevel.MEDIUM: "medium",
+    ThinkingLevel.HIGH: "high",
+    ThinkingLevel.MAXIMUM: "xhigh",
+}
+
+# Mapping from ThinkingLevel to Google thinking_level
+GOOGLE_LEVEL_MAP: dict[ThinkingLevel, str] = {
+    ThinkingLevel.MINIMAL: "MINIMAL",
+    ThinkingLevel.LOW: "LOW",
+    ThinkingLevel.MEDIUM: "MEDIUM",
+    ThinkingLevel.HIGH: "HIGH",
+    ThinkingLevel.MAXIMUM: "HIGH",  # Google caps at HIGH
+}
 
 
 class AgentProviderStrategy(abc.ABC):
@@ -29,8 +58,16 @@ class AgentProviderStrategy(abc.ABC):
         model_name: str,
         api_key: str | None = None,
         thinking_enabled: bool = False,
+        thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
     ) -> Agent:
-        """Create and configure an Agent for this provider."""
+        """Create and configure an Agent for this provider.
+
+        Args:
+            model_name: The model name to use.
+            api_key: Optional API key override.
+            thinking_enabled: Whether thinking/reasoning is enabled.
+            thinking_level: The thinking level to use (maps to provider-specific settings).
+        """
 
 
 class GoogleProviderStrategy(AgentProviderStrategy):
@@ -42,6 +79,7 @@ class GoogleProviderStrategy(AgentProviderStrategy):
         model_name: str,
         api_key: str | None = None,
         thinking_enabled: bool = False,
+        thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
     ) -> Agent:
         if api_key:
             model_obj = GoogleModel(
@@ -51,8 +89,12 @@ class GoogleProviderStrategy(AgentProviderStrategy):
             model_obj = GoogleModel(model_name)
 
         if thinking_enabled:
+            google_level = GOOGLE_LEVEL_MAP.get(thinking_level, "MEDIUM")
             settings = GoogleModelSettings(
-                google_thinking_config={"include_thoughts": True}
+                google_thinking_config={
+                    "include_thoughts": True,
+                    "thinking_level": google_level,
+                }
             )
             return Agent(model_obj, name="sqlsaber", model_settings=settings)
 
@@ -68,6 +110,7 @@ class AnthropicProviderStrategy(AgentProviderStrategy):
         model_name: str,
         api_key: str | None = None,
         thinking_enabled: bool = False,
+        thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
     ) -> Agent:
         if api_key:
             model_obj = AnthropicModel(
@@ -77,11 +120,14 @@ class AnthropicProviderStrategy(AgentProviderStrategy):
             model_obj = AnthropicModel(model_name)
 
         if thinking_enabled:
+            budget_tokens = ANTHROPIC_BUDGET_MAP.get(thinking_level, 8192)
+            # max_tokens must be >= budget_tokens
+            max_tokens = max(budget_tokens + 4096, 8192)
             settings = AnthropicModelSettings(
                 anthropic_thinking=cast(
-                    Any, {"type": "enabled", "budget_tokens": 2048}
+                    Any, {"type": "enabled", "budget_tokens": budget_tokens}
                 ),
-                max_tokens=8192,
+                max_tokens=max_tokens,
             )
             return Agent(model_obj, name="sqlsaber", model_settings=settings)
 
@@ -97,6 +143,7 @@ class OpenAIProviderStrategy(AgentProviderStrategy):
         model_name: str,
         api_key: str | None = None,
         thinking_enabled: bool = False,
+        thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
     ) -> Agent:
         if api_key:
             model_obj = OpenAIResponsesModel(
@@ -106,8 +153,9 @@ class OpenAIProviderStrategy(AgentProviderStrategy):
             model_obj = OpenAIResponsesModel(model_name)
 
         if thinking_enabled:
+            reasoning_effort = OPENAI_EFFORT_MAP.get(thinking_level, "medium")
             settings = OpenAIResponsesModelSettings(
-                openai_reasoning_effort="medium",
+                openai_reasoning_effort=cast(Any, reasoning_effort),
                 openai_reasoning_summary=cast(Any, "auto"),
             )
             return Agent(model_obj, name="sqlsaber", model_settings=settings)
@@ -116,7 +164,11 @@ class OpenAIProviderStrategy(AgentProviderStrategy):
 
 
 class GroqProviderStrategy(AgentProviderStrategy):
-    """Strategy for creating Groq agents."""
+    """Strategy for creating Groq agents.
+
+    Note: Groq only supports binary thinking (on/off), so any level uses
+    enabled reasoning.
+    """
 
     @override
     def create_agent(
@@ -124,7 +176,9 @@ class GroqProviderStrategy(AgentProviderStrategy):
         model_name: str,
         api_key: str | None = None,
         thinking_enabled: bool = False,
+        thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
     ) -> Agent:
+        # Groq only supports binary reasoning.
         if thinking_enabled:
             settings = GroqModelSettings(groq_reasoning_format="parsed")
             return Agent(model_name, name="sqlsaber", model_settings=settings)
@@ -141,6 +195,7 @@ class DefaultProviderStrategy(AgentProviderStrategy):
         model_name: str,
         api_key: str | None = None,
         thinking_enabled: bool = False,
+        thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
     ) -> Agent:
         return Agent(model_name, name="sqlsaber")
 
@@ -168,6 +223,7 @@ class ProviderFactory:
         full_model_str: str,
         api_key: str | None = None,
         thinking_enabled: bool = False,
+        thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
     ) -> Agent:
         """Create an agent using the appropriate strategy.
 
@@ -177,6 +233,7 @@ class ProviderFactory:
             full_model_str: The full model configuration string (e.g., 'anthropic:claude-3-5-sonnet').
             api_key: Optional API key.
             thinking_enabled: Whether to enable thinking/reasoning features.
+            thinking_level: The thinking level to use (maps to provider-specific settings).
         """
         strategy = self.get_strategy(provider)
 
@@ -191,4 +248,5 @@ class ProviderFactory:
             model_name=target_name,
             api_key=api_key,
             thinking_enabled=thinking_enabled,
+            thinking_level=thinking_level,
         )

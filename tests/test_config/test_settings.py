@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from sqlsaber.config.settings import Config, ModelConfigManager
+from sqlsaber.config.settings import Config, ModelConfigManager, ThinkingLevel
 
 
 class TestModelConfigManager:
@@ -56,7 +56,7 @@ class TestModelConfigManager:
         assert new_manager.get_model() == test_model
 
     def test_config_file_format(self, model_manager):
-        """Test the config file is properly formatted."""
+        """Test the config file is properly formatted (v2 format)."""
         test_model = "anthropic:claude-sonnet-4"
         model_manager.set_model(test_model)
 
@@ -64,7 +64,15 @@ class TestModelConfigManager:
         with open(model_manager.config_file, "r") as f:
             config = json.load(f)
 
-        assert config == {"model": test_model, "thinking_enabled": False}
+        # Config should be v2 format
+        assert config == {
+            "version": 2,
+            "model": test_model,
+            "thinking": {
+                "enabled": False,
+                "level": "medium",
+            },
+        }
         assert model_manager.config_file.read_text().strip().endswith("}")
 
     def test_corrupted_config_file(self, model_manager):
@@ -148,3 +156,155 @@ class TestConfig:
 
         with pytest.raises(ValueError, match="Anthropic API key not found"):
             config.validate()
+
+
+class TestThinkingLevel:
+    """Test the ThinkingLevel enum."""
+
+    def test_all_levels_exist(self):
+        """Test that all expected thinking levels exist."""
+        expected = {"minimal", "low", "medium", "high", "maximum"}
+        actual = {level.value for level in ThinkingLevel}
+        assert actual == expected
+
+    def test_from_string_valid(self):
+        """Test converting valid strings to ThinkingLevel."""
+        assert ThinkingLevel.from_string("minimal") == ThinkingLevel.MINIMAL
+        assert ThinkingLevel.from_string("low") == ThinkingLevel.LOW
+        assert ThinkingLevel.from_string("medium") == ThinkingLevel.MEDIUM
+        assert ThinkingLevel.from_string("high") == ThinkingLevel.HIGH
+        assert ThinkingLevel.from_string("maximum") == ThinkingLevel.MAXIMUM
+
+    def test_from_string_case_insensitive(self):
+        """Test that from_string is case insensitive."""
+        assert ThinkingLevel.from_string("MEDIUM") == ThinkingLevel.MEDIUM
+        assert ThinkingLevel.from_string("High") == ThinkingLevel.HIGH
+
+    def test_from_string_invalid_defaults_to_medium(self):
+        """Test that invalid strings default to MEDIUM."""
+        assert ThinkingLevel.from_string("invalid") == ThinkingLevel.MEDIUM
+        assert ThinkingLevel.from_string("") == ThinkingLevel.MEDIUM
+        assert ThinkingLevel.from_string("super_high") == ThinkingLevel.MEDIUM
+        assert ThinkingLevel.from_string("off") == ThinkingLevel.MEDIUM
+
+
+class TestModelConfigManagerV2:
+    """Test v2 config schema and migration."""
+
+    @pytest.fixture
+    def model_manager(self, temp_dir, monkeypatch):
+        """Create a ModelConfigManager with temp directory."""
+        config_dir = temp_dir / "config"
+        monkeypatch.setattr(
+            "platformdirs.user_config_dir", lambda *args, **kwargs: str(config_dir)
+        )
+        return ModelConfigManager()
+
+    def test_default_config_is_v2(self, model_manager):
+        """Test that default config is v2 format."""
+        config = model_manager._load_config()
+        assert config.get("version") == 2
+        assert "thinking" in config
+        assert config["thinking"]["enabled"] is False
+        assert config["thinking"]["level"] == ThinkingLevel.MEDIUM.value
+
+    def test_migrate_v1_to_v2_thinking_disabled(self, model_manager):
+        """Test migration of v1 config with thinking disabled."""
+        # Write a v1 config
+        model_manager.config_file.parent.mkdir(parents=True, exist_ok=True)
+        v1_config = {
+            "model": "anthropic:claude-3",
+            "thinking_enabled": False,
+        }
+        with open(model_manager.config_file, "w") as f:
+            json.dump(v1_config, f)
+
+        # Load and verify migration
+        config = model_manager._load_config()
+        assert config["version"] == 2
+        assert config["model"] == "anthropic:claude-3"
+        assert config["thinking"]["enabled"] is False
+        assert config["thinking"]["level"] == ThinkingLevel.MEDIUM.value
+
+    def test_migrate_v1_to_v2_thinking_enabled(self, model_manager):
+        """Test migration of v1 config with thinking enabled."""
+        # Write a v1 config with thinking enabled
+        model_manager.config_file.parent.mkdir(parents=True, exist_ok=True)
+        v1_config = {
+            "model": "anthropic:claude-sonnet-4",
+            "thinking_enabled": True,
+        }
+        with open(model_manager.config_file, "w") as f:
+            json.dump(v1_config, f)
+
+        # Load and verify migration
+        config = model_manager._load_config()
+        assert config["version"] == 2
+        assert config["model"] == "anthropic:claude-sonnet-4"
+        assert config["thinking"]["enabled"] is True
+        assert config["thinking"]["level"] == ThinkingLevel.MEDIUM.value
+
+    def test_migration_persists_to_file(self, model_manager):
+        """Test that migration saves the v2 config to file."""
+        # Write a v1 config
+        model_manager.config_file.parent.mkdir(parents=True, exist_ok=True)
+        v1_config = {
+            "model": "openai:gpt-4",
+            "thinking_enabled": True,
+        }
+        with open(model_manager.config_file, "w") as f:
+            json.dump(v1_config, f)
+
+        # Load (triggers migration)
+        model_manager._load_config()
+
+        # Read file directly to verify it was saved as v2
+        with open(model_manager.config_file, "r") as f:
+            saved_config = json.load(f)
+
+        assert saved_config["version"] == 2
+        assert "thinking" in saved_config
+        assert "thinking_enabled" not in saved_config  # v1 key removed
+
+    def test_get_and_set_thinking_level(self, model_manager):
+        """Test getting and setting thinking level."""
+        # Default level is MEDIUM
+        assert model_manager.get_thinking_level() == ThinkingLevel.MEDIUM
+
+        # Set to HIGH
+        model_manager.set_thinking_level(ThinkingLevel.HIGH)
+        assert model_manager.get_thinking_level() == ThinkingLevel.HIGH
+
+        # Set to MINIMAL
+        model_manager.set_thinking_level(ThinkingLevel.MINIMAL)
+        assert model_manager.get_thinking_level() == ThinkingLevel.MINIMAL
+
+    def test_set_thinking_both_enabled_and_level(self, model_manager):
+        """Test setting both thinking enabled and level atomically."""
+        model_manager.set_thinking(enabled=True, level=ThinkingLevel.HIGH)
+
+        assert model_manager.get_thinking_enabled() is True
+        assert model_manager.get_thinking_level() == ThinkingLevel.HIGH
+
+        model_manager.set_thinking(enabled=False, level=ThinkingLevel.LOW)
+
+        assert model_manager.get_thinking_enabled() is False
+        assert model_manager.get_thinking_level() == ThinkingLevel.LOW
+
+    def test_v2_config_file_format(self, model_manager):
+        """Test the v2 config file format."""
+        model_manager.set_model("google:gemini-pro")
+        model_manager.set_thinking(enabled=True, level=ThinkingLevel.MAXIMUM)
+
+        # Read file directly
+        with open(model_manager.config_file, "r") as f:
+            config = json.load(f)
+
+        assert config == {
+            "version": 2,
+            "model": "google:gemini-pro",
+            "thinking": {
+                "enabled": True,
+                "level": "maximum",
+            },
+        }

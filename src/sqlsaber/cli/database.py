@@ -219,7 +219,9 @@ def add(
     try:
         # Add the configuration
         config_manager.add_database(db_config, password if password else None)
-        console.print(f"[green]Successfully added database connection '{name}'[/green]")
+        console.print(
+            f"[success]Successfully added database connection '{name}'[/success]"
+        )
         logger.info("db.add.success", name=name, type=type)
 
         # Set as default if it's the first one
@@ -247,7 +249,7 @@ def list_databases() -> None:
         return
 
     table = Table(title="Database Connections")
-    table.add_column("Name", style="cyan")
+    table.add_column("Name", style="info")
     table.add_column("Type", style="accent")
     table.add_column("Host", style="success")
     table.add_column("Port", style="warning")

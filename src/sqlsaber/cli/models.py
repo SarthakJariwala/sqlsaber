@@ -8,11 +8,12 @@ from typing import Any, TypedDict
 import cyclopts
 import httpx
 import questionary
+from questionary import Choice
 from rich.table import Table
 
 from sqlsaber.config import providers
 from sqlsaber.config.logging import get_logger
-from sqlsaber.config.settings import Config
+from sqlsaber.config.settings import Config, ThinkingLevel
 from sqlsaber.theme.manager import create_console
 
 # Global instances for CLI commands
@@ -177,7 +178,7 @@ def list_models() -> None:
 
         table = Table(title="Available Models")
         table.add_column("Provider", style="magenta")
-        table.add_column("ID", style="cyan")
+        table.add_column("ID", style="info")
         table.add_column("Name", style="success")
         table.add_column("Description", style="info")
         table.add_column("Context", style="warning", justify="right")
@@ -213,6 +214,51 @@ def list_models() -> None:
     asyncio.run(fetch_and_display())
 
 
+def _get_thinking_level_choices() -> list[Choice]:
+    """Build thinking level choices for interactive selection."""
+    return [
+        Choice(
+            "medium (Recommended - balanced cost/quality)", value=ThinkingLevel.MEDIUM
+        ),
+        Choice("low (faster, cheaper)", value=ThinkingLevel.LOW),
+        Choice("high (deeper reasoning)", value=ThinkingLevel.HIGH),
+        Choice("maximum (complex problems, highest cost)", value=ThinkingLevel.MAXIMUM),
+        Choice("minimal (quick responses)", value=ThinkingLevel.MINIMAL),
+        Choice("off (disable extended thinking)", value="off"),
+    ]
+
+
+async def _prompt_thinking_level(prompter: Any) -> tuple[bool, ThinkingLevel]:
+    """Prompt user to configure thinking level.
+
+    Returns:
+        Tuple of (thinking_enabled, thinking_level)
+    """
+    configure = await prompter.confirm(
+        "Configure thinking mode?",
+        default=True,
+    )
+
+    if not configure:
+        config = Config()
+        return config.model.thinking_enabled, config.model.thinking_level
+
+    level = await prompter.select(
+        "Select thinking level:",
+        choices=_get_thinking_level_choices(),
+        use_search_filter=False,
+    )
+
+    if level is None:
+        return False, ThinkingLevel.MEDIUM
+
+    if isinstance(level, str) and level == "off":
+        config = Config()
+        return False, config.model.thinking_level
+
+    return True, level
+
+
 @models_app.command(name="set")
 def set_model_command() -> None:
     """Set the AI model to use."""
@@ -237,8 +283,27 @@ def set_model_command() -> None:
 
         if selected_model:
             if model_manager.set_model(selected_model):
-                console.print(f"[green]✓ Model set to: {selected_model}[/green]")
+                console.print(f"[success]✓ Model set to: {selected_model}[/success]")
                 logger.info("models.set.done", model=selected_model)
+
+                # Prompt for thinking level configuration
+                thinking_enabled, thinking_level = await _prompt_thinking_level(
+                    prompter
+                )
+                config = Config()
+                config.model.set_thinking(thinking_enabled, thinking_level)
+
+                if thinking_enabled:
+                    console.print(
+                        f"[success]✓ Thinking: {thinking_level.value}[/success]"
+                    )
+                else:
+                    console.print("[success]✓ Thinking: disabled[/success]")
+                logger.info(
+                    "models.set.thinking",
+                    enabled=thinking_enabled,
+                    level=thinking_level.value,
+                )
             else:
                 console.print("[error]✗ Failed to set model[/error]")
                 logger.error("models.set.failed", model=selected_model)
@@ -252,10 +317,27 @@ def set_model_command() -> None:
 
 @models_app.command(name="current")
 def current_model() -> None:
-    """Show the currently configured model."""
+    """Show the currently configured model and thinking settings."""
     current = model_manager.get_current_model()
-    console.print(f"Current model: [cyan]{current}[/cyan]")
-    logger.info("models.current", model=current)
+    config = Config()
+    thinking_enabled = config.model.thinking_enabled
+    thinking_level = config.model.thinking_level
+
+    console.print(f"Current model: [info]{current}[/info]")
+
+    if thinking_enabled:
+        console.print(
+            f"Thinking: [success]enabled[/success] ([info]{thinking_level.value}[/info])"
+        )
+    else:
+        console.print("Thinking: [dim]disabled[/dim]")
+
+    logger.info(
+        "models.current",
+        model=current,
+        thinking_enabled=thinking_enabled,
+        thinking_level=thinking_level.value,
+    )
 
 
 @models_app.command(name="reset")
@@ -269,7 +351,7 @@ def reset_model_command() -> None:
         ).ask_async():
             if model_manager.reset_model():
                 console.print(
-                    f"[green]✓ Model reset to default: {ModelManager.DEFAULT_MODEL}[/green]"
+                    f"[success]✓ Model reset to default: {ModelManager.DEFAULT_MODEL}[/success]"
                 )
                 logger.info("models.reset.done", model=ModelManager.DEFAULT_MODEL)
             else:

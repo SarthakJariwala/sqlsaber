@@ -125,7 +125,7 @@ async def setup_auth(
 
     if api_key_configured:
         console.print(
-            f"[green]✓ {provider.title()} API key configured successfully![/green]"
+            f"[success]✓ {provider.title()} API key configured successfully![/success]"
         )
         return True, provider
 
