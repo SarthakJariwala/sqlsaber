@@ -9,6 +9,17 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.49.0
+
+#### Added
+
+- Python API now accepts `thinking_level` parameter for extended thinking models
+  - Accepts string values: `"minimal"`, `"low"`, `"medium"`, `"high"`, `"maximum"`
+  - Automatically enables thinking when `thinking_level` is provided
+  - Example: `SQLSaber(database="my.db", thinking_level="high")`
+
+---
+
 ### v0.48.0
 
 #### Added
