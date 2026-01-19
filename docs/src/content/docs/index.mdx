@@ -25,37 +25,31 @@ import {
   CardGrid,
 } from "@astrojs/starlight/components";
 
-<script
-  src="https://asciinema.org/a/746773.js"
-  id="asciicast-746773"
-  async="true"
-></script>
-
-<section class="mx-auto max-w-screen-lg px-4 sm:px-6 lg:px-8 py-8">
-  <h2 class="font-sans text-3xl md:text-4xl tracking-normal text-center mb-8">
+<section class="mx-auto max-w-4xl px-6 py-16">
+  <h2 class="text-3xl md:text-4xl font-semibold tracking-tight text-center mb-12">
     What SQLsaber does
   </h2>
-  <CardGrid>
+  <CardGrid stagger>
     <Card title="Schema-aware queries" icon="magnifier">
-      <p class="text-lg text-muted-foreground">
+      <p class="text-muted-foreground leading-relaxed">
         <strong>Automatically introspects</strong> your database structure. No
         manual schema documentation needed.
       </p>
     </Card>
     <Card title="Safe execution" icon="approve-check">
-      <p class="text-lg text-muted-foreground">
+      <p class="text-muted-foreground leading-relaxed">
         <strong>Read-only by default.</strong> SQLsaber won't modify, delete, or
         alter your data.
       </p>
     </Card>
     <Card title="Context memory" icon="document">
-      <p class="text-lg text-muted-foreground">
+      <p class="text-muted-foreground leading-relaxed">
         Teach it your database quirks: <code>"dates are Unix timestamps"</code>,{" "}
         <code>"user_id references accounts.id"</code>.
       </p>
     </Card>
     <Card title="Conversation threads" icon="comment-alt">
-      <p class="text-lg text-muted-foreground">
+      <p class="text-muted-foreground leading-relaxed">
         Resume past conversations. Ask follow-up questions without repeating
         context.
       </p>
@@ -63,60 +57,64 @@ import {
   </CardGrid>
 </section>
 
-<section class="mx-auto max-w-screen-lg px-4 sm:px-6 lg:px-8 py-8">
-  <h2 class="font-sans text-3xl md:text-4xl tracking-normal text-center mb-8">
+<section class="mx-auto max-w-4xl px-6 py-16 border-t border-border">
+  <h2 class="text-3xl md:text-4xl font-semibold tracking-tight text-center mb-12">
     Works with your stack
   </h2>
-  <div class="max-w-2xl mx-auto">
-    <ul class="space-y-3">
-      <li class="flex items-center gap-3">
-        <Icon name="seti:db" />
-        <span>
-          <strong>Databases:</strong> PostgreSQL, MySQL, SQLite, DuckDB, CSV
-          files
-        </span>
+  <div class="max-w-xl mx-auto">
+    <ul class="space-y-4">
+      <li class="flex items-start gap-4 p-4 rounded-lg bg-card border border-border hover:border-primary transition-colors">
+        <Icon name="seti:db" class="text-primary mt-0.5" />
+        <div>
+          <span class="font-medium">Databases</span>
+          <p class="text-muted-foreground text-sm mt-1">PostgreSQL, MySQL, SQLite, DuckDB, CSV files</p>
+        </div>
       </li>
-      <li class="flex items-center gap-3">
-        <Icon name="sun" />
-        <span>
-          <strong>AI providers:</strong> Anthropic, OpenAI, Google, and others
-        </span>
+      <li class="flex items-start gap-4 p-4 rounded-lg bg-card border border-border hover:border-primary transition-colors">
+        <Icon name="sun" class="text-primary mt-0.5" />
+        <div>
+          <span class="font-medium">AI providers</span>
+          <p class="text-muted-foreground text-sm mt-1">Anthropic, OpenAI, Google, Groq, and others</p>
+        </div>
       </li>
-      <li class="flex items-center gap-3">
-        <Icon name="seti:shell" />
-        <span>
-          <strong>Interface:</strong> Interactive REPL or single-shot CLI
-          queries
-        </span>
+      <li class="flex items-start gap-4 p-4 rounded-lg bg-card border border-border hover:border-primary transition-colors">
+        <Icon name="seti:shell" class="text-primary mt-0.5" />
+        <div>
+          <span class="font-medium">Interface</span>
+          <p class="text-muted-foreground text-sm mt-1">Interactive REPL or single-shot CLI queries</p>
+        </div>
       </li>
-      <li class="flex items-center gap-3">
-        <Icon name="forward-slash" />
-        <span>
-          <strong>Composable:</strong> Pipe queries, redirect output, use in
-          scripts
-        </span>
+      <li class="flex items-start gap-4 p-4 rounded-lg bg-card border border-border hover:border-primary transition-colors">
+        <Icon name="forward-slash" class="text-primary mt-0.5" />
+        <div>
+          <span class="font-medium">Composable</span>
+          <p class="text-muted-foreground text-sm mt-1">Pipe queries, redirect output, use in scripts</p>
+        </div>
       </li>
     </ul>
   </div>
 </section>
 
-<section class="mx-auto max-w-screen-lg px-4 sm:px-6 lg:px-8 py-12 text-center">
-  <h2 class="font-sans text-3xl md:text-4xl tracking-normal">
-    Get started in 2 commands
-  </h2>
-  <div class="mt-8 text-left mx-auto max-w-3xl">
+<section class="mx-auto max-w-4xl px-6 py-16 border-t border-border">
+  <div class="text-center mb-10">
+    <h2 class="text-3xl md:text-4xl font-semibold tracking-tight">
+      Get started in 2 commands
+    </h2>
+    <p class="text-muted-foreground mt-4 max-w-xl mx-auto">
+      Install with uv and run. SQLsaber walks you through setup on first launch.
+    </p>
+  </div>
+  <div class="mx-auto max-w-2xl">
     <Code
       code={`# Install
 uv tool install sqlsaber
 
-# Run (walks you through setup on first launch)
-
+# Run
 saber`}
-lang="bash"
-/>
-
+      lang="bash"
+    />
   </div>
-  <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+  <div class="mt-10 flex flex-wrap items-center justify-center gap-4">
     <LinkButton href="/installation/">Installation guide</LinkButton>
     <LinkButton href="/guides/getting-started/" variant="secondary">
       Quick start

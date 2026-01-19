@@ -28,6 +28,16 @@ export default defineConfig({
 					href: "https://github.com/SarthakJariwala/sqlsaber",
 				},
 			],
+			components: {
+				// Use default components but allow future customization
+			},
+			expressiveCode: {
+				themes: ["github-dark", "github-light"],
+				styleOverrides: {
+					borderRadius: "0.5rem",
+					borderWidth: "1px",
+				},
+			},
 			sidebar: [
 				{
 					label: "Getting Started",
@@ -37,7 +47,7 @@ export default defineConfig({
 					],
 				},
 				{
-					label: "Guides", 
+					label: "Guides",
 					items: [
 						{ label: "Database Setup", slug: "guides/database-setup" },
 						{ label: "Authentication", slug: "guides/authentication" },
