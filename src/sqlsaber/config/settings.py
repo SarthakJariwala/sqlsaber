@@ -47,7 +47,7 @@ class ModelConfigManager:
         {"version": 2, "model": "...", "thinking": {"enabled": bool, "level": "medium"}}
     """
 
-    DEFAULT_MODEL = "anthropic:claude-sonnet-4-20250514"
+    DEFAULT_MODEL = "anthropic:claude-opus-4-5"
     DEFAULT_THINKING_LEVEL = ThinkingLevel.MEDIUM
     CONFIG_VERSION = 2
 

@@ -67,7 +67,7 @@ saber -d mydb "count active subscriptions"
 | **Conversation memory** | Add context like "dates are stored as Unix timestamps" |
 | **Thread history** | Resume past conversations with `saber threads resume` |
 | **Extended thinking** | Enable `--thinking` for complex analytical queries |
-| **Multiple AI providers** | Anthropic, OpenAI, Google, Groq (Claude Sonnet 4 by default) |
+| **Multiple AI providers** | Anthropic, OpenAI, Google, Groq (Claude Opus 4.5 by default) |
 
 ## Configuration
 

@@ -18,6 +18,10 @@ All notable changes to SQLsaber will be documented here.
   - Automatically enables thinking when `thinking_level` is provided
   - Example: `SQLSaber(database="my.db", thinking_level="high")`
 
+### Changed
+
+- Default recommended model for new configurations is now Claude Opus 4.5 (changed from Sonnet 4.5)
+
 ---
 
 ### v0.48.0
