@@ -94,7 +94,13 @@ def query(
             help="Database connection name, file path (CSV/SQLite/DuckDB), connection string (postgresql://, mysql://, duckdb://), or one/more CSV files via repeated -d (uses default if not specified)",
         ),
     ] = None,
-    thinking: bool = False,
+    thinking: Annotated[
+        bool | None,
+        cyclopts.Parameter(
+            ["--thinking", "--no-thinking"],
+            help="Enable/disable extended thinking/reasoning mode",
+        ),
+    ] = None,
     allow_dangerous: Annotated[
         bool,
         cyclopts.Parameter(

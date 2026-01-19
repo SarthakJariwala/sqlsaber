@@ -19,8 +19,14 @@ class SlashCommandCompleter(Completer):
                 ("clear", "Clear conversation history"),
                 ("exit", "Exit the interactive session"),
                 ("quit", "Exit the interactive session"),
-                ("thinking on", "Enable extended thinking/reasoning"),
-                ("thinking off", "Disable extended thinking/reasoning"),
+                ("thinking", "Get current thinking config status"),
+                ("thinking on", "Enable default thinking"),
+                ("thinking off", "Disable default thinking"),
+                ("thinking low", "Set thinking mode to low"),
+                ("thinking medium", "Set thinking mode to medium"),
+                ("thinking high", "Set thinking mode to high"),
+                ("thinking maximum", "Set thinking mode to maximum"),
+                ("thinking minimal", "Set thinking mode to minimal"),
             ]
 
             # Yield completions that match the partial command

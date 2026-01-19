@@ -310,12 +310,22 @@ saber models list
 
 #### `saber models set`
 
-Set the default model.
+Set the default model and configure thinking level.
 
 **Usage:**
 
 ```bash
 saber models set
+```
+
+#### `saber models current`
+
+Show the currently configured model and thinking settings.
+
+**Usage:**
+
+```bash
+saber models current
 ```
 
 #### `saber models reset`
@@ -449,8 +459,21 @@ When in interactive mode (`saber` with no arguments), you have access to a few a
 - `/clear` - Clear conversation history
 - `/exit` - Exit SQLsaber
 - `/quit` - Exit SQLsaber (alias for `/exit`)
-- `/thinking on` - Enable extended thinking/reasoning mode
-- `/thinking off` - Disable extended thinking/reasoning mode
+- `/thinking` - Show current thinking status and level
+- `/thinking on` - Enable extended thinking with current level
+- `/thinking off` - Disable extended thinking
+- `/thinking <level>` - Set thinking level (implies enable)
+
+**Thinking Levels:**
+
+| Level | Description |
+|-------|-------------|
+| `off` | Disable extended thinking |
+| `minimal` | Quick responses, minimal reasoning |
+| `low` | Light reasoning |
+| `medium` | Balanced cost/quality (default) |
+| `high` | Deep reasoning |
+| `maximum` | Complex problems, highest cost |
 
 #### Autocomplete
 

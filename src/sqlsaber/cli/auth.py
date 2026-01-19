@@ -51,7 +51,7 @@ def setup():
         console.print("\n[warning]No authentication configured.[/warning]")
 
     console.print(
-        "\nYou can change this anytime by running [cyan]saber auth setup[/cyan] again."
+        "\nYou can change this anytime by running [info]saber auth setup[/info] again."
     )
 
 
@@ -82,7 +82,7 @@ def status():
         if from_env:
             console.print(f"> {provider}: configured via {env_var}")
         elif from_keyring:
-            console.print(f"> {provider}: [green]configured[/green]")
+            console.print(f"> {provider}: [success]configured[/success]")
         else:
             console.print(f"> {provider}: [warning]not configured[/warning]")
 

@@ -4,11 +4,15 @@ from typing import TYPE_CHECKING, Callable
 from rich.console import Console
 
 from sqlsaber.cli.display import DisplayManager
+from sqlsaber.config.settings import ThinkingLevel
 
 if TYPE_CHECKING:
     from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
     from sqlsaber.cli.usage import SessionUsage
     from sqlsaber.threads.manager import ThreadManager
+
+# Valid thinking level strings for slash command
+THINKING_LEVELS = {"minimal", "low", "medium", "high", "maximum"}
 
 
 @dataclass
@@ -51,11 +55,9 @@ class SlashCommandProcessor:
         if query == "/clear":
             return await self._handle_clear(context)
 
-        if query == "/thinking on":
-            return await self._handle_thinking(context, enabled=True)
-
-        if query == "/thinking off":
-            return await self._handle_thinking(context, enabled=False)
+        # Handle /thinking command with various arguments
+        if query.startswith("/thinking"):
+            return await self._handle_thinking_command(context, query)
 
         return CommandResult(handled=False)
 
@@ -79,11 +81,63 @@ class SlashCommandProcessor:
         context.console.print("[success]Conversation history cleared.[/success]\n")
         return CommandResult(handled=True)
 
-    async def _handle_thinking(
-        self, context: CommandContext, enabled: bool
+    async def _handle_thinking_command(
+        self, context: CommandContext, query: str
     ) -> CommandResult:
-        """Handle /thinking on/off commands."""
-        context.agent.set_thinking(enabled=enabled)
-        state = "enabled" if enabled else "disabled"
-        context.console.print(f"[success]✓ Thinking {state}[/success]\n")
+        """Handle /thinking commands with various arguments.
+
+        Supported formats:
+            /thinking           - Show current status and level
+            /thinking on        - Enable thinking with current level
+            /thinking off       - Disable thinking
+            /thinking <level>   - Set level (implies enable)
+        """
+        parts = query.split(maxsplit=1)
+        arg = parts[1].strip() if len(parts) > 1 else ""
+
+        # No argument: show current status
+        if not arg:
+            return await self._show_thinking_status(context)
+
+        # Handle "on" - enable with current level
+        if arg == "on":
+            context.agent.set_thinking(enabled=True)
+            level = context.agent.thinking_level
+            context.console.print(
+                f"[success]✓ Thinking: enabled ({level.value})[/success]\n"
+            )
+            return CommandResult(handled=True)
+
+        # Handle "off" - disable thinking
+        if arg == "off":
+            context.agent.set_thinking(enabled=False)
+            context.console.print("[success]✓ Thinking: disabled[/success]\n")
+            return CommandResult(handled=True)
+
+        # Handle thinking levels
+        if arg in THINKING_LEVELS:
+            level = ThinkingLevel(arg)
+            context.agent.set_thinking(enabled=True, level=level)
+            context.console.print(
+                f"[success]✓ Thinking: enabled ({level.value})[/success]\n"
+            )
+            return CommandResult(handled=True)
+
+        # Invalid argument
+        valid_args = ", ".join(sorted(THINKING_LEVELS | {"on", "off"}))
+        context.console.print(
+            f"[warning]Invalid argument. Use: /thinking [{valid_args}][/warning]\n"
+        )
+        return CommandResult(handled=True)
+
+    async def _show_thinking_status(self, context: CommandContext) -> CommandResult:
+        """Show current thinking status and level."""
+        enabled = context.agent.thinking_enabled
+        level = context.agent.thinking_level
+
+        if enabled:
+            context.console.print(f"[info]Thinking: enabled ({level.value})[/info]\n")
+        else:
+            context.console.print("[info]Thinking: disabled[/info]\n")
+
         return CommandResult(handled=True)

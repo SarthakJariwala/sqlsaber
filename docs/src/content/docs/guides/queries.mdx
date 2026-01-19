@@ -96,21 +96,38 @@ Supports schema-aware completions:
 
 #### Extended Thinking Mode
 
-For complex queries requiring deeper reasoning, enable thinking mode to see step-by-step problem solving process.
+For complex queries requiring deeper reasoning, enable thinking mode to see step-by-step problem solving process. You can configure different thinking levels to balance cost vs quality.
+
+**Thinking Levels:**
+
+| Level | Use Case | Description |
+|-------|----------|-------------|
+| `off` | Disable | No extended thinking |
+| `minimal` | Quick responses | Minimal reasoning overhead |
+| `low` | Light reasoning | Faster, cheaper |
+| `medium` | Balanced (default) | Good balance of cost and quality |
+| `high` | Deep reasoning | More thorough analysis |
+| `maximum` | Complex problems | Highest reasoning depth, highest cost |
 
 **In interactive mode:**
 
 ```
-> /thinking on
-✓ Thinking enabled
+> /thinking
+Thinking: disabled
+
+> /thinking medium
+✓ Thinking: enabled (medium)
 
 > Analyze sales trends and forecast next quarter
 💭 Thinking...
-[dim reasoning process appears here]
+[reasoning process appears here]
 [followed by final answer]
 
+> /thinking high
+✓ Thinking: enabled (high)
+
 > /thinking off
-✓ Thinking disabled
+✓ Thinking: disabled
 ```
 
 **For single queries:**
@@ -123,16 +140,33 @@ saber --thinking "Compare performance across regions with seasonal adjustments"
 saber --no-thinking "How many users do we have?"
 ```
 
-**Default configuration:**
+**Configuring thinking level:**
 
-Thinking is disabled by default. To change this, edit `~/.config/sqlsaber/model_config.json`:
+Use `saber models set` to configure thinking level after selecting a model:
 
-```json
-{
-  "model": "anthropic:claude-sonnet-4-20250514",
-  "thinking_enabled": true
-}
+```bash
+saber models set
+# After selecting model, you'll be prompted:
+# ? Configure thinking mode? [Y/n]: y
+# ? Select thinking level: medium (Recommended)
 ```
+
+Check current settings with:
+
+```bash
+saber models current
+# Current model: anthropic:claude-sonnet-4-5-20250929
+# Thinking: enabled (medium)
+```
+
+**Provider-specific mapping:**
+
+Each thinking level maps to provider-specific configurations:
+
+- **Anthropic**: `budget_tokens` (1,024 → 100,000)
+- **OpenAI**: `reasoning_effort` (minimal → xhigh)
+- **Google**: `thinking_level` (MINIMAL → HIGH)
+- **Groq**: Binary (any non-off level enables reasoning)
 
 <Aside type="note">
 Extended thinking is supported for Anthropic, OpenAI, Google, and Groq reasoning models.

@@ -4,6 +4,7 @@ import json
 import os
 import platform
 import stat
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -13,10 +14,42 @@ from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
 
 
+class ThinkingLevel(str, Enum):
+    """Thinking levels that map to provider-specific configurations."""
+
+    MINIMAL = "minimal"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    MAXIMUM = "maximum"
+
+    @classmethod
+    def from_string(cls, value: str) -> "ThinkingLevel":
+        """Convert a string to a ThinkingLevel, defaulting to MEDIUM if invalid or 'off'."""
+        normalized = value.lower()
+        if normalized == "off":
+            return cls.MEDIUM
+        try:
+            return cls(normalized)
+        except ValueError:
+            return cls.MEDIUM
+
+
 class ModelConfigManager:
-    """Manages model configuration persistence."""
+    """Manages model configuration persistence.
+
+    Supports both v1 and v2 config formats with automatic migration.
+
+    v1 format:
+        {"model": "...", "thinking_enabled": bool}
+
+    v2 format:
+        {"version": 2, "model": "...", "thinking": {"enabled": bool, "level": "medium"}}
+    """
 
     DEFAULT_MODEL = "anthropic:claude-sonnet-4-20250514"
+    DEFAULT_THINKING_LEVEL = ThinkingLevel.MEDIUM
+    CONFIG_VERSION = 2
 
     def __init__(self):
         self.config_dir = Path(platformdirs.user_config_dir("sqlsaber", "sqlsaber"))
@@ -40,31 +73,84 @@ class ModelConfigManager:
         except (OSError, PermissionError):
             pass
 
+    def _migrate_v1_to_v2(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Migrate v1 config format to v2.
+
+        v1: {"model": "...", "thinking_enabled": bool}
+        v2: {"version": 2, "model": "...", "thinking": {"enabled": bool, "level": "medium"}}
+        """
+        thinking_enabled = config.get("thinking_enabled", False)
+        return {
+            "version": self.CONFIG_VERSION,
+            "model": config.get("model", self.DEFAULT_MODEL),
+            "thinking": {
+                "enabled": thinking_enabled,
+                "level": self.DEFAULT_THINKING_LEVEL.value,
+            },
+        }
+
     def _load_config(self) -> dict[str, Any]:
-        """Load configuration from file."""
+        """Load configuration from file, migrating v1 to v2 if needed."""
         if not self.config_file.exists():
             return {
+                "version": self.CONFIG_VERSION,
                 "model": self.DEFAULT_MODEL,
-                "thinking_enabled": False,
+                "thinking": {
+                    "enabled": False,
+                    "level": self.DEFAULT_THINKING_LEVEL.value,
+                },
             }
 
         try:
             with open(self.config_file, "r") as f:
                 config = json.load(f)
 
+            # Check if this is v1 format (no version key or version < 2)
+            if config.get("version", 1) < 2:
+                config = self._migrate_v1_to_v2(config)
+                # Save migrated config
+                self._save_config(config)
+                return config
+
+            # Ensure all required fields exist in v2
             if "model" not in config:
                 config["model"] = self.DEFAULT_MODEL
-            if "thinking_enabled" not in config:
-                config["thinking_enabled"] = False
+            if "thinking" not in config:
+                config["thinking"] = {
+                    "enabled": False,
+                    "level": self.DEFAULT_THINKING_LEVEL.value,
+                }
+            else:
+                if "enabled" not in config["thinking"]:
+                    config["thinking"]["enabled"] = False
+                if "level" not in config["thinking"]:
+                    config["thinking"]["level"] = self.DEFAULT_THINKING_LEVEL.value
+            thinking_level = config["thinking"].get(
+                "level", self.DEFAULT_THINKING_LEVEL.value
+            )
+            if isinstance(thinking_level, str) and thinking_level.lower() == "off":
+                config["thinking"]["enabled"] = False
+                config["thinking"]["level"] = self.DEFAULT_THINKING_LEVEL.value
+                try:
+                    self._save_config(config)
+                except OSError:
+                    pass
+
             return config
         except (json.JSONDecodeError, IOError):
             return {
+                "version": self.CONFIG_VERSION,
                 "model": self.DEFAULT_MODEL,
-                "thinking_enabled": False,
+                "thinking": {
+                    "enabled": False,
+                    "level": self.DEFAULT_THINKING_LEVEL.value,
+                },
             }
 
     def _save_config(self, config: dict[str, Any]) -> None:
         """Save configuration to file."""
+        # Ensure version is set
+        config["version"] = self.CONFIG_VERSION
         with open(self.config_file, "w") as f:
             json.dump(config, f, indent=2)
 
@@ -84,12 +170,41 @@ class ModelConfigManager:
     def get_thinking_enabled(self) -> bool:
         """Get whether thinking is enabled."""
         config = self._load_config()
-        return config.get("thinking_enabled", False)
+        return config.get("thinking", {}).get("enabled", False)
 
     def set_thinking_enabled(self, enabled: bool) -> None:
         """Set whether thinking is enabled."""
         config = self._load_config()
-        config["thinking_enabled"] = enabled
+        if "thinking" not in config:
+            config["thinking"] = {
+                "enabled": enabled,
+                "level": self.DEFAULT_THINKING_LEVEL.value,
+            }
+        else:
+            config["thinking"]["enabled"] = enabled
+        self._save_config(config)
+
+    def get_thinking_level(self) -> ThinkingLevel:
+        """Get the configured thinking level."""
+        config = self._load_config()
+        level_str = config.get("thinking", {}).get(
+            "level", self.DEFAULT_THINKING_LEVEL.value
+        )
+        return ThinkingLevel.from_string(level_str)
+
+    def set_thinking_level(self, level: ThinkingLevel) -> None:
+        """Set the thinking level."""
+        config = self._load_config()
+        if "thinking" not in config:
+            config["thinking"] = {"enabled": False, "level": level.value}
+        else:
+            config["thinking"]["level"] = level.value
+        self._save_config(config)
+
+    def set_thinking(self, enabled: bool, level: ThinkingLevel) -> None:
+        """Set both thinking enabled state and level."""
+        config = self._load_config()
+        config["thinking"] = {"enabled": enabled, "level": level.value}
         self._save_config(config)
 
 
@@ -118,6 +233,20 @@ class ModelConfig:
     def thinking_enabled(self, value: bool) -> None:
         """Set whether thinking is enabled."""
         self._manager.set_thinking_enabled(value)
+
+    @property
+    def thinking_level(self) -> ThinkingLevel:
+        """Get the configured thinking level."""
+        return self._manager.get_thinking_level()
+
+    @thinking_level.setter
+    def thinking_level(self, value: ThinkingLevel) -> None:
+        """Set the thinking level."""
+        self._manager.set_thinking_level(value)
+
+    def set_thinking(self, enabled: bool, level: ThinkingLevel) -> None:
+        """Set both thinking enabled state and level atomically."""
+        self._manager.set_thinking(enabled, level)
 
 
 class AuthConfig:

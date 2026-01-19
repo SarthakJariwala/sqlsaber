@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from sqlsaber.cli.slash_commands import CommandContext, SlashCommandProcessor
+from sqlsaber.config.settings import ThinkingLevel
 
 
 @pytest.fixture
@@ -85,3 +86,79 @@ async def test_process_thinking_off(processor, mock_context):
 
     mock_context.agent.set_thinking.assert_called_once_with(enabled=False)
     mock_context.console.print.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_process_thinking_no_args_shows_status(processor, mock_context):
+    """Test /thinking with no args shows current status."""
+    mock_context.agent.thinking_enabled = True
+    mock_context.agent.thinking_level = ThinkingLevel.HIGH
+
+    result = await processor.process("/thinking", mock_context)
+
+    assert result.handled is True
+    assert result.should_exit is False
+    mock_context.console.print.assert_called()
+    # Verify status message is printed
+    call_args = mock_context.console.print.call_args[0][0]
+    assert "enabled" in call_args
+    assert "high" in call_args
+
+
+@pytest.mark.asyncio
+async def test_process_thinking_level_argument(processor, mock_context):
+    """Test /thinking with level argument sets the level."""
+    result = await processor.process("/thinking high", mock_context)
+
+    assert result.handled is True
+    mock_context.agent.set_thinking.assert_called_once_with(
+        enabled=True, level=ThinkingLevel.HIGH
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "level_str,expected_level",
+    [
+        ("minimal", ThinkingLevel.MINIMAL),
+        ("low", ThinkingLevel.LOW),
+        ("medium", ThinkingLevel.MEDIUM),
+        ("high", ThinkingLevel.HIGH),
+        ("maximum", ThinkingLevel.MAXIMUM),
+    ],
+)
+async def test_process_thinking_all_levels(
+    processor, mock_context, level_str, expected_level
+):
+    """Test /thinking with various level arguments."""
+    result = await processor.process(f"/thinking {level_str}", mock_context)
+
+    assert result.handled is True
+    mock_context.agent.set_thinking.assert_called_once_with(
+        enabled=True, level=expected_level
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_thinking_invalid_argument(processor, mock_context):
+    """Test /thinking with invalid argument shows error."""
+    result = await processor.process("/thinking invalid", mock_context)
+
+    assert result.handled is True
+    mock_context.agent.set_thinking.assert_not_called()
+    # Verify warning is printed
+    call_args = mock_context.console.print.call_args[0][0]
+    assert "Invalid" in call_args
+
+
+@pytest.mark.asyncio
+async def test_process_thinking_disabled_status(processor, mock_context):
+    """Test /thinking shows disabled status correctly."""
+    mock_context.agent.thinking_enabled = False
+    mock_context.agent.thinking_level = ThinkingLevel.MEDIUM
+
+    result = await processor.process("/thinking", mock_context)
+
+    assert result.handled is True
+    call_args = mock_context.console.print.call_args[0][0]
+    assert "disabled" in call_args
