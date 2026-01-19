@@ -14,6 +14,7 @@ from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.config.database import DatabaseConfigManager
+from sqlsaber.config.settings import ThinkingLevel
 from sqlsaber.database import DatabaseConnection
 from sqlsaber.database.resolver import resolve_database
 
@@ -113,6 +114,7 @@ class SQLSaber:
         self,
         database: str | list[str] | tuple[str, ...] | None = None,
         thinking: bool = False,
+        thinking_level: ThinkingLevel | str | None = None,
         model_name: str | None = None,
         api_key: str | None = None,
         memory: str | Path | None = None,
@@ -134,6 +136,11 @@ class SQLSaber:
                 - ["users.csv", "orders.csv"]
                 - ("csv:///users.csv", "csv:///orders.csv")
             thinking: Whether to enable "thinking" mode for supported models.
+                Automatically set to True if thinking_level is provided.
+            thinking_level: The thinking level for extended thinking models.
+                Can be a ThinkingLevel enum value or a string ("minimal", "low",
+                "medium", "high", "maximum"). If provided, thinking is automatically
+                enabled. Defaults to the configured level (or "medium" if unset).
             model_name: Override model (format: 'provider:model',
                 e.g., 'anthropic:claude-sonnet-4-20250514').
             api_key: Override API key for the model provider.
@@ -159,11 +166,21 @@ class SQLSaber:
             excluded_schemas=self._resolved.excluded_schemas,
         )
 
+        resolved_thinking_level: ThinkingLevel | None = None
+        thinking_enabled = thinking
+        if thinking_level is not None:
+            if isinstance(thinking_level, str):
+                resolved_thinking_level = ThinkingLevel.from_string(thinking_level)
+            else:
+                resolved_thinking_level = thinking_level
+            thinking_enabled = True
+
         memory_text = _resolve_memory_input(memory)
         self.agent = SQLSaberAgent(
             self.connection,
             self.db_name,
-            thinking_enabled=thinking,
+            thinking_enabled=thinking_enabled,
+            thinking_level=resolved_thinking_level,
             model_name=model_name,
             api_key=api_key,
             memory=memory_text,
