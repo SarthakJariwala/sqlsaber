@@ -9,6 +9,14 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.49.1
+
+#### Fixed
+
+- Fixed "File name too long" error when passing long memory text strings (>255 chars) to the Python API
+
+---
+
 ### v0.49.0
 
 #### Added

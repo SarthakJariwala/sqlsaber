@@ -4,6 +4,8 @@ This module provides a simplified programmatic interface to SQLSaber's capabilit
 allowing you to run natural language queries against databases from Python code.
 """
 
+import errno
+import os
 from collections.abc import AsyncIterable, Awaitable, Sequence
 from pathlib import Path
 from types import TracebackType
@@ -36,18 +38,39 @@ def _resolve_memory_input(memory: str | Path | None) -> str | None:
         # Avoid interpreting it as a filesystem path (Path("") -> ".").
         return ""
 
+    # If it's obviously literal text (contains newlines or is too long to be
+    # a valid filename), skip filesystem probing to avoid ENAMETOOLONG errors.
+    if isinstance(memory, str):
+        if "\n" in memory or "\r" in memory:
+            return memory
+
+        seps = {os.sep}
+        if os.altsep:
+            seps.add(os.altsep)
+
+        has_sep = any(sep in memory for sep in seps)
+        # 255 is the max filename component length on most POSIX filesystems
+        if not has_sep and len(memory) > 255:
+            return memory
+
     if isinstance(memory, Path):
         candidate = memory.expanduser()
     else:
         candidate = Path(memory).expanduser()
 
-    if candidate.exists():
-        if candidate.is_dir():
-            raise ValueError(
-                f"Memory path '{candidate}' is a directory, expected a file"
-            )
-        if candidate.is_file():
-            return candidate.read_text(encoding="utf-8", errors="replace")
+    try:
+        if candidate.exists():
+            if candidate.is_dir():
+                raise ValueError(
+                    f"Memory path '{candidate}' is a directory, expected a file"
+                )
+            if candidate.is_file():
+                return candidate.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        # Treat as literal memory text when path probing fails due to invalid path
+        if e.errno in (errno.ENAMETOOLONG, errno.EINVAL):
+            return str(memory)
+        raise
 
     return str(memory)
 
