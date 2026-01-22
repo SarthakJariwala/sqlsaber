@@ -260,7 +260,7 @@ class AuthConfig:
         model = model_name or ""
         provider_key = providers.provider_from_model(model)
         if provider_key in set(providers.all_keys()):
-            return self._api_key_manager.get_api_key(provider_key)  # type: ignore[arg-type]
+            return self._api_key_manager.get_api_key(provider_key)
         return None
 
     def validate(self, model_name: str) -> None:

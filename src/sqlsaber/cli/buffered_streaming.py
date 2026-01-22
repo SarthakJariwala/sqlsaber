@@ -43,7 +43,7 @@ class BufferedStreamingHandler:
         self.console = console
         self.log = get_logger(__name__)
         self._buffer: str = ""
-        self._current_kind: TextPart | ThinkingPart | None = None
+        self._current_kind: type[TextPart] | type[ThinkingPart] | None = None
 
     def _flush_buffer(self) -> None:
         """Print buffered content and reset."""
@@ -89,7 +89,7 @@ class BufferedStreamingHandler:
             self._flush_buffer()
 
         self._current_kind = new_kind
-        if part.content:
+        if isinstance(part, (TextPart, ThinkingPart)) and part.content:
             self._buffer += part.content
 
     @on_event.register

@@ -173,7 +173,7 @@ def setup_logging(*, force: bool = False) -> None:
 
     # Pre-bind useful context
     try:
-        from importlib.metadata import PackageNotFoundError, version  # type: ignore
+        from importlib.metadata import PackageNotFoundError, version
 
         try:
             ver = version("sqlsaber")

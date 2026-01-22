@@ -134,7 +134,7 @@ class InteractiveSession:
             )
 
         db_name = self.database_name or "Unknown"
-        model_name = self.sqlsaber_agent.agent.model.model_name
+        model_name = getattr(self.sqlsaber_agent.agent.model, "model_name", "Unknown")
         self.console.print(
             f"[heading]\nConnected to {db_name} ({self._db_type_name()})[/heading]\n"
             f"[heading]Model: {model_name}[/heading]\n"
@@ -225,7 +225,7 @@ class InteractiveSession:
                     run_result=run_result,
                     database_name=self.database_name,
                     user_query=user_query,
-                    model_name=self.sqlsaber_agent.agent.model.model_name,
+                    model_name=getattr(self.sqlsaber_agent.agent.model, "model_name", "Unknown"),
                 )
                 # Track usage for session summary
                 # Use result.response.usage for the FINAL request's context size

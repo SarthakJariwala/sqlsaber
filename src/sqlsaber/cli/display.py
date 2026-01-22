@@ -96,15 +96,16 @@ class LiveMarkdownRenderer:
         self._buffer += text
 
         # Apply dim styling for thinking segments
-        if self._current_kind == ThinkingPart:
-            content = Markdown(
-                self._buffer, style="muted", code_theme=self.tm.pygments_style_name
-            )
-            self._live.update(content)
-        else:
-            self._live.update(
-                Markdown(self._buffer, code_theme=self.tm.pygments_style_name)
-            )
+        if self._live is not None:
+            if self._current_kind == ThinkingPart:
+                content = Markdown(
+                    self._buffer, style="muted", code_theme=self.tm.pygments_style_name
+                )
+                self._live.update(content)
+            else:
+                self._live.update(
+                    Markdown(self._buffer, code_theme=self.tm.pygments_style_name)
+                )
 
     def end(self) -> None:
         """Finalize and stop the current Live segment, if any."""

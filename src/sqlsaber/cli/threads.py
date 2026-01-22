@@ -173,7 +173,7 @@ def _render_transcript(
                             and data.get("success")
                             and data.get("results")
                         ):
-                            dm.show_query_results(data["results"])  # type: ignore[arg-type]
+                            dm.show_query_results(data["results"])
                         elif isinstance(data, dict) and "error" in data:
                             dm.show_sql_error(
                                 data.get("error"), data.get("suggestions")
