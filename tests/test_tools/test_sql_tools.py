@@ -169,22 +169,22 @@ class TestExecuteSQLTool:
         assert data["success"] is True
         assert data["row_count"] == 2
         assert len(data["results"]) == 2
-        assert db.queries[-1] == "SELECT * FROM users LIMIT 100"
+        assert db.queries[-1] == "SELECT * FROM users LIMIT 1000"
 
     @pytest.mark.asyncio
     async def test_execute_with_limit(self):
-        """Test executing with custom limit."""
+        """Test executing with an explicit LIMIT."""
         tool = ExecuteSQLTool()
         db = MockDatabaseConnection()
         db.mock_results = [{"id": i} for i in range(10)]
         tool.db = db  # Set db directly, skip schema manager
 
-        result = await tool.execute(query="SELECT * FROM users", limit=5)
+        result = await tool.execute(query="SELECT * FROM users LIMIT 5")
         data = json.loads(result)
 
         assert data["row_count"] == 10
-        assert len(data["results"]) == 5
-        assert data["truncated"] is True
+        assert len(data["results"]) == 10
+        assert db.queries[-1] == "SELECT * FROM users LIMIT 5"
 
     @pytest.mark.asyncio
     async def test_block_write_operations(self):

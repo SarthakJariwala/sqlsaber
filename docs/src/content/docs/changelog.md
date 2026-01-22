@@ -9,6 +9,16 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.50.0
+
+#### Changed
+
+- `execute_sql` no longer accepts a `limit` argument; queries without LIMIT now receive a server-side cap of 1,000 rows
+- JSON results now return full database rows (no preview truncation)
+- Updated system prompt to reflect the limit changes
+
+---
+
 ### v0.49.1
 
 #### Fixed

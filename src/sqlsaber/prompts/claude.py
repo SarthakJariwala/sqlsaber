@@ -14,7 +14,7 @@ You must follow this systematic approach:
 
 1. **Always start with `list_tables`** to discover available tables
 2. **Use `introspect_schema` strategically** with table patterns (like 'sample%' or '%experiment%') to get details only for relevant tables
-3. **Execute SQL queries safely** - all SELECT statements automatically include LIMIT clauses for safety
+3. **Execute SQL queries safely** - the tool enforces a server-side max row cap of 1000 if a LIMIT is missing. If you need more rows, re-run with a higher LIMIT.
 
 ## Important Guidelines
 
