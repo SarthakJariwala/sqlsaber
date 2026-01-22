@@ -92,6 +92,7 @@ class GuardResult:
     reason: str | None = None
     is_select: bool = False
     query_type: str | None = None  # "select" | "dml" | "ddl" | "other"
+    has_limit: bool = False
 
 
 def is_select_like(stmt: exp.Expression) -> bool:
@@ -217,6 +218,15 @@ def has_dangerous_functions(stmt: exp.Expression, dialect: str) -> str | None:
     return None
 
 
+def has_limit_clause(stmt: exp.Expression) -> bool:
+    """Check if a statement already includes a LIMIT/TOP/FETCH clause."""
+    limit_types: list[type[exp.Expression]] = [exp.Limit, exp.Fetch]
+    top_type = getattr(exp, "Top", None)
+    if isinstance(top_type, type):
+        limit_types.append(top_type)
+    return any(isinstance(node, tuple(limit_types)) for node in stmt.walk())
+
+
 def validate_read_only(sql: str, dialect: str = "ansi") -> GuardResult:
     """Validate that SQL query is read-only using AST analysis.
 
@@ -259,7 +269,13 @@ def validate_read_only(sql: str, dialect: str = "ansi") -> GuardResult:
     if reason:
         return GuardResult(False, reason)
 
-    return GuardResult(True, None, is_select=True, query_type="select")
+    return GuardResult(
+        True,
+        None,
+        is_select=True,
+        query_type="select",
+        has_limit=has_limit_clause(stmt),
+    )
 
 
 def validate_sql(
@@ -313,7 +329,11 @@ def validate_sql(
 
     query_type = classify_statement(stmt)
     return GuardResult(
-        True, None, is_select=(query_type == "select"), query_type=query_type
+        True,
+        None,
+        is_select=(query_type == "select"),
+        query_type=query_type,
+        has_limit=has_limit_clause(stmt),
     )
 
 
@@ -341,9 +361,8 @@ def add_limit(sql: str, dialect: str = "ansi", limit: int = 100) -> str:
         if stmt is None:
             return sql
 
-        # Check if LIMIT/FETCH already exists
-        has_limit = any(isinstance(n, (exp.Limit, exp.Fetch)) for n in stmt.walk())
-        if has_limit:
+        # Check if LIMIT/TOP/FETCH already exists
+        if has_limit_clause(stmt):
             return stmt.sql(dialect=dialect)
 
         # Add LIMIT - sqlglot will render appropriately for dialect

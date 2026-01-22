@@ -129,19 +129,18 @@ class IntrospectSchemaTool(SQLTool):
 class ExecuteSQLTool(SQLTool):
     """Tool for executing SQL queries."""
 
-    DEFAULT_LIMIT = 100
+    MAX_ROWS = 1000
 
     @property
     def name(self) -> str:
         return "execute_sql"
 
-    async def execute(self, query: str, limit: int | None = 100) -> str:
+    async def execute(self, query: str) -> str:
         """
         Execute a SQL query against the database.
 
         Args:
             query: SQL query to execute
-            limit: Maximum number of rows to return (default: 100)
         """
         if not self.db:
             return json_dumps({"error": "No database connection available"})
@@ -149,8 +148,7 @@ class ExecuteSQLTool(SQLTool):
         if not query:
             return json_dumps({"error": "No query provided"})
 
-        if limit is None:
-            limit = self.DEFAULT_LIMIT
+        max_rows = self.MAX_ROWS
 
         try:
             # Get the dialect for this database
@@ -164,8 +162,9 @@ class ExecuteSQLTool(SQLTool):
                 return json_dumps({"error": validation_result.reason})
 
             # Add LIMIT if not present and it's a SELECT query
-            if validation_result.is_select and limit:
-                query = add_limit(query, dialect, limit)
+            if validation_result.is_select and max_rows:
+                if not validation_result.has_limit:
+                    query = add_limit(query, dialect, max_rows)
 
             query_type = validation_result.query_type or "other"
 
@@ -177,13 +176,12 @@ class ExecuteSQLTool(SQLTool):
 
             # Format response based on query type
             if query_type == "select":
-                actual_limit = limit if limit is not None else len(results)
+                row_count = len(results)
                 return json_dumps(
                     {
                         "success": True,
-                        "row_count": len(results),
-                        "results": results[:actual_limit],
-                        "truncated": len(results) > actual_limit,
+                        "row_count": row_count,
+                        "results": results,
                     }
                 )
             elif query_type == "dml" or query_type == "ddl":
