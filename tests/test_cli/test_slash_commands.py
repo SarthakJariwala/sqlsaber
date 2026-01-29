@@ -162,3 +162,33 @@ async def test_process_thinking_disabled_status(processor, mock_context):
     assert result.handled is True
     call_args = mock_context.console.print.call_args[0][0]
     assert "disabled" in call_args
+
+
+@pytest.mark.asyncio
+async def test_process_handoff_with_goal(processor, mock_context):
+    """Test /handoff with a goal returns handoff_goal in result."""
+    result = await processor.process("/handoff optimize this query", mock_context)
+
+    assert result.handled is True
+    assert result.should_exit is False
+    assert result.handoff_goal == "optimize this query"
+
+
+@pytest.mark.asyncio
+async def test_process_handoff_without_goal_shows_usage(processor, mock_context):
+    """Test /handoff without goal shows usage message."""
+    result = await processor.process("/handoff", mock_context)
+
+    assert result.handled is True
+    assert result.handoff_goal is None
+    mock_context.console.print.assert_called()
+    call_args = mock_context.console.print.call_args[0][0]
+    assert "Usage" in call_args
+
+
+@pytest.mark.asyncio
+async def test_process_handoff_preserves_goal_case(processor, mock_context):
+    """Test /handoff preserves the original case of the goal."""
+    result = await processor.process("/handoff Check UPPER and lower Case", mock_context)
+
+    assert result.handoff_goal == "Check UPPER and lower Case"

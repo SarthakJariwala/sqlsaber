@@ -67,6 +67,7 @@ Special commands in interactive mode:
 - `/exit` or `/quit` - Exit SQLsaber
 - `/thinking on` - Enable extended thinking mode
 - `/thinking off` - Disable extended thinking mode
+- `/handoff <goal>` - Start a fresh thread with context from current conversation
 
 ```
 > /clear
@@ -100,14 +101,14 @@ For complex queries requiring deeper reasoning, enable thinking mode to see step
 
 **Thinking Levels:**
 
-| Level | Use Case | Description |
-|-------|----------|-------------|
-| `off` | Disable | No extended thinking |
-| `minimal` | Quick responses | Minimal reasoning overhead |
-| `low` | Light reasoning | Faster, cheaper |
-| `medium` | Balanced (default) | Good balance of cost and quality |
-| `high` | Deep reasoning | More thorough analysis |
-| `maximum` | Complex problems | Highest reasoning depth, highest cost |
+| Level     | Use Case           | Description                           |
+| --------- | ------------------ | ------------------------------------- |
+| `off`     | Disable            | No extended thinking                  |
+| `minimal` | Quick responses    | Minimal reasoning overhead            |
+| `low`     | Light reasoning    | Faster, cheaper                       |
+| `medium`  | Balanced (default) | Good balance of cost and quality      |
+| `high`    | Deep reasoning     | More thorough analysis                |
+| `maximum` | Complex problems   | Highest reasoning depth, highest cost |
 
 **In interactive mode:**
 
@@ -169,7 +170,27 @@ Each thinking level maps to provider-specific configurations:
 - **Groq**: Binary (any non-off level enables reasoning)
 
 <Aside type="note">
-Extended thinking is supported for Anthropic, OpenAI, Google, and Groq reasoning models.
+  Extended thinking is supported for Anthropic, OpenAI, Google, and Groq
+  reasoning models.
+</Aside>
+
+#### Handoff
+
+When your conversation gets long or you want to start fresh while preserving context, use the `/handoff` command:
+
+```
+> /handoff optimize the monthly revenue query for better performance
+```
+
+The handoff:
+
+1. Summarizes your conversation (tables discovered, SQL queries run, key findings)
+2. Presents an editable draft prompt
+3. Ends the current thread and starts fresh with your edited prompt
+
+<Aside type="tip">
+  Use handoff when you want to pivot to a new direction while keeping relevant
+  history.
 </Aside>
 
 #### Dangerous Mode
@@ -185,14 +206,17 @@ saber --allow-dangerous
 ```
 
 <Aside type="caution">
-This mode allows INSERT, UPDATE, DELETE, CREATE, and ALTER operations. Use with caution as these can modify your data.
+  This mode allows INSERT, UPDATE, DELETE, CREATE, and ALTER operations. Use
+  with caution as these can modify your data.
 </Aside>
 
 **What's allowed in dangerous mode:**
+
 - DML: INSERT, UPDATE, DELETE, MERGE, REPLACE
 - DDL: CREATE, ALTER
 
 **What's always blocked (even in dangerous mode):**
+
 - DROP, TRUNCATE (destructive operations)
 - Transaction control (BEGIN, COMMIT, ROLLBACK)
 - Security operations (GRANT, REVOKE)

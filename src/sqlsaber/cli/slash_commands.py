@@ -32,6 +32,7 @@ class CommandResult:
 
     handled: bool
     should_exit: bool = False
+    handoff_goal: str | None = None
 
 
 class SlashCommandProcessor:
@@ -58,6 +59,10 @@ class SlashCommandProcessor:
         # Handle /thinking command with various arguments
         if query.startswith("/thinking"):
             return await self._handle_thinking_command(context, query)
+
+        # Handle /handoff command
+        if query.startswith("/handoff"):
+            return await self._handle_handoff(context, user_query)
 
         return CommandResult(handled=False)
 
@@ -141,3 +146,23 @@ class SlashCommandProcessor:
             context.console.print("[info]Thinking: disabled[/info]\n")
 
         return CommandResult(handled=True)
+
+    async def _handle_handoff(
+        self, context: CommandContext, raw_query: str
+    ) -> CommandResult:
+        """Handle /handoff command.
+
+        Usage: /handoff <goal>
+        Returns a CommandResult with the handoff goal for InteractiveSession to process.
+        """
+        parts = raw_query.split(maxsplit=1)
+        goal = parts[1].strip() if len(parts) > 1 else ""
+
+        if not goal:
+            context.console.print(
+                "[warning]Usage: /handoff <goal>[/warning]\n"
+                "[muted]Example: /handoff now optimize this query for performance[/muted]\n"
+            )
+            return CommandResult(handled=True)
+
+        return CommandResult(handled=True, handoff_goal=goal)

@@ -9,6 +9,18 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.51.0
+
+#### Added
+
+- `/handoff` command for starting fresh threads with context
+  - Generates a context-aware prompt summarizing the current conversation
+  - Extracts database schema, SQL queries, and key findings
+  - Presents an editable draft before starting the new thread
+  - Usage: `/handoff <goal>` (e.g., `/handoff optimize this query for performance`)
+
+---
+
 ### v0.50.0
 
 #### Changed
