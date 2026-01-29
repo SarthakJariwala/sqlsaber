@@ -1,6 +1,7 @@
 """Interactive mode handling for the CLI."""
 
 import asyncio
+from collections.abc import Callable
 from pathlib import Path
 from textwrap import dedent
 from typing import TYPE_CHECKING
@@ -200,6 +201,76 @@ class InteractiveSession:
         """Hook to refresh context before prompt loop."""
         await self._update_table_cache()
 
+    async def _handle_handoff(
+        self,
+        session: PromptSession,
+        goal: str,
+        clear_history: Callable[[], None],
+    ) -> None:
+        """Handle the handoff flow: generate draft, let user edit, start new thread.
+
+        Args:
+            session: The prompt session for user input.
+            goal: The user's goal for the new thread.
+            clear_history: Callback to clear message history.
+        """
+        from sqlsaber.agents.handoff_agent import HandoffAgent
+
+        self.display.live.start_status("Generating handoff prompt...")
+
+        try:
+            handoff_agent = HandoffAgent()
+
+            draft = await handoff_agent.generate_draft(
+                message_history=self.message_history or [],
+                goal=goal,
+            )
+        except Exception as e:
+            self.display.live.end_status()
+            self.console.print(
+                f"[error]Failed to generate handoff prompt:[/error] {e}\n"
+            )
+            return
+        finally:
+            self.display.live.end_status()
+
+        self.console.print(
+            "[success]Draft generated. Edit and submit to start new thread:[/success]\n"
+        )
+
+        try:
+            with patch_stdout():
+                edited = await session.prompt_async(
+                    "handoff > ",
+                    multiline=True,
+                    default=draft,
+                    bottom_toolbar=self._bottom_toolbar,
+                    style=self.tm.pt_style(),
+                )
+        except KeyboardInterrupt:
+            self.console.print("\n[muted]Handoff cancelled.[/muted]\n")
+            return
+
+        edited = edited.strip()
+        if not edited:
+            self.console.print("[warning]Empty handoff prompt; cancelled.[/warning]\n")
+            return
+
+        old_id = await self.thread_manager.end_current_thread()
+        if old_id:
+            self.console.print(f"[muted]Previous thread saved:[/muted] {old_id}")
+            self.console.print(
+                f"[muted]Resume with:[/muted] saber threads resume {old_id}\n"
+            )
+
+        clear_history()
+        await self.thread_manager.clear_current_thread()
+
+        self.console.print("[heading]Starting new thread...[/heading]\n")
+
+        await self._execute_query_with_cancellation(edited)
+        self.display.show_newline()
+
     async def _execute_query_with_cancellation(self, user_query: str):
         """Execute a query with cancellation support."""
         self.log.info("interactive.query.start", database=self.database_name)
@@ -225,7 +296,9 @@ class InteractiveSession:
                     run_result=run_result,
                     database_name=self.database_name,
                     user_query=user_query,
-                    model_name=getattr(self.sqlsaber_agent.agent.model, "model_name", "Unknown"),
+                    model_name=getattr(
+                        self.sqlsaber_agent.agent.model, "model_name", "Unknown"
+                    ),
                 )
                 # Track usage for session summary
                 # Use result.response.usage for the FINAL request's context size
@@ -277,6 +350,14 @@ class InteractiveSession:
                 cmd_result = await self.command_processor.process(user_query, context)
                 if cmd_result.should_exit:
                     break
+
+                # Handle handoff command
+                if cmd_result.handoff_goal:
+                    await self._handle_handoff(
+                        session, cmd_result.handoff_goal, clear_history
+                    )
+                    continue
+
                 if cmd_result.handled:
                     continue
 

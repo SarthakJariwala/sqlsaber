@@ -18,6 +18,7 @@ class SlashCommandCompleter(Completer):
             commands = [
                 ("clear", "Clear conversation history"),
                 ("exit", "Exit the interactive session"),
+                ("handoff", "Start new thread with context from current"),
                 ("quit", "Exit the interactive session"),
                 ("thinking", "Get current thinking config status"),
                 ("thinking on", "Enable default thinking"),
