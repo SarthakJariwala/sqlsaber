@@ -9,6 +9,20 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.52.0
+
+#### Added
+
+- **Plugin system for tools** via `sqlsaber.tools` entry points
+  - External packages can register custom tools by adding entry points in `pyproject.toml`
+  - Supports direct Tool class registration or factory functions
+  - Automatic plugin discovery on startup
+- `Tool.requires_ctx` class attribute for tools needing `RunContext` access
+- `execute_sql` results now include `file` key with `tool_call_id` for result traceability
+- Display manager shows JSON output for non-SQL tool inputs
+
+---
+
 ### v0.51.0
 
 #### Added

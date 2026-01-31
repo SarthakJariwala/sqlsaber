@@ -1,6 +1,7 @@
 """Tests for SQL tools."""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -163,7 +164,7 @@ class TestExecuteSQLTool:
         db.mock_results = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
         tool.db = db  # Set db directly, skip schema manager
 
-        result = await tool.execute(query="SELECT * FROM users")
+        result = await tool.execute(SimpleNamespace(tool_call_id=None), "SELECT * FROM users")
         data = json.loads(result)
 
         assert data["success"] is True
@@ -179,7 +180,9 @@ class TestExecuteSQLTool:
         db.mock_results = [{"id": i} for i in range(10)]
         tool.db = db  # Set db directly, skip schema manager
 
-        result = await tool.execute(query="SELECT * FROM users LIMIT 5")
+        result = await tool.execute(
+            SimpleNamespace(tool_call_id=None), "SELECT * FROM users LIMIT 5"
+        )
         data = json.loads(result)
 
         assert data["row_count"] == 10
@@ -204,7 +207,7 @@ class TestExecuteSQLTool:
         ]
 
         for query in write_queries:
-            result = await tool.execute(query=query)
+            result = await tool.execute(SimpleNamespace(tool_call_id=None), query)
             data = json.loads(result)
             assert "error" in data
             assert "only select" in data["error"].lower()
@@ -217,7 +220,9 @@ class TestExecuteSQLTool:
         db = MockDatabaseConnection()
         tool.db = db  # Set db directly, skip schema manager
 
-        result = await tool.execute(query="INSERT INTO users VALUES (1, 'test')")
+        result = await tool.execute(
+            SimpleNamespace(tool_call_id=None), "INSERT INTO users VALUES (1, 'test')"
+        )
         data = json.loads(result)
 
         assert data["success"] is True
@@ -232,7 +237,7 @@ class TestExecuteSQLTool:
         db.mock_results = [{"name": "users"}]
         tool.db = db  # Set db directly, skip schema manager
 
-        result = await tool.execute(query="SELECT * FROM users")
+        result = await tool.execute(SimpleNamespace(tool_call_id=None), "SELECT * FROM users")
         data = json.loads(result)
 
         assert data["success"] is True
@@ -251,7 +256,9 @@ class TestExecuteSQLTool:
         db.execute_query = mock_execute_error
         tool.db = db  # Set db directly, skip schema manager
 
-        result = await tool.execute(query="SELECT * FROM unknown_table")
+        result = await tool.execute(
+            SimpleNamespace(tool_call_id=None), "SELECT * FROM unknown_table"
+        )
         data = json.loads(result)
 
         assert "error" in data
