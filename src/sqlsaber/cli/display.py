@@ -307,6 +307,8 @@ class DisplayManager:
             else:
                 self.console.print("**Executing SQL:**\n")
                 self.console.print(f"```sql\n{query}\n```\n")
+        else:
+            self.console.print_json(json.dumps(tool_input))
 
     def show_text_stream(self, text: str):
         """Display streaming text."""

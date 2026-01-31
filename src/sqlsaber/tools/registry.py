@@ -1,8 +1,17 @@
 """Tool registry for managing available tools."""
 
+import inspect
+from collections.abc import Iterable
+from importlib.metadata import entry_points
 from typing import Type
 
+from sqlsaber.config.logging import get_logger
+
 from .base import Tool
+
+logger = get_logger(__name__)
+
+PLUGIN_GROUP = "sqlsaber.tools"
 
 
 class ToolRegistry:
@@ -71,6 +80,99 @@ class ToolRegistry:
 
 # Global registry instance
 tool_registry = ToolRegistry()
+
+
+def _select_entry_points(group: str) -> Iterable:
+    eps = entry_points()
+    if hasattr(eps, "select"):
+        return eps.select(group=group)
+    return eps.get(group, [])
+
+
+def _call_plugin_factory(factory, registry: ToolRegistry):
+    try:
+        signature = inspect.signature(factory)
+    except (TypeError, ValueError):
+        return factory(registry)
+
+    params = list(signature.parameters.values())
+    has_varargs = any(param.kind == param.VAR_POSITIONAL for param in params)
+    positional_params = [
+        param
+        for param in params
+        if param.kind in (param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD)
+    ]
+    if has_varargs or positional_params:
+        return factory(registry)
+    return factory()
+
+
+def _normalize_tool_classes(result) -> list[type[Tool]]:
+    if result is None:
+        return []
+
+    if isinstance(result, type) and issubclass(result, Tool):
+        return [result]
+
+    if isinstance(result, Iterable) and not isinstance(result, (str, bytes)):
+        classes: list[type[Tool]] = []
+        for item in result:
+            if isinstance(item, type) and issubclass(item, Tool):
+                classes.append(item)
+            else:
+                logger.warning("Plugin returned non-Tool entry: %r", item)
+        return classes
+
+    logger.warning("Plugin returned unsupported result: %r", result)
+    return []
+
+
+def discover_plugins(registry: ToolRegistry | None = None) -> list[str]:
+    """Discover and load tool plugins via entry points.
+
+    Plugins register via pyproject.toml entry points:
+
+        [project.entry-points."sqlsaber.tools"]
+        my_tool = "my_package.module:MyToolClass"
+
+    Returns:
+        List of successfully loaded plugin names.
+    """
+
+    target_registry = registry or tool_registry
+    loaded: list[str] = []
+    for ep in _select_entry_points(PLUGIN_GROUP):
+        try:
+            plugin_obj = ep.load()
+
+            if isinstance(plugin_obj, type) and issubclass(plugin_obj, Tool):
+                target_registry.register(plugin_obj)
+                loaded.append(ep.name)
+                logger.debug("Loaded plugin tool: %s", ep.name)
+                continue
+
+            if callable(plugin_obj):
+                result = _call_plugin_factory(plugin_obj, target_registry)
+                tool_classes = _normalize_tool_classes(result)
+                if tool_classes:
+                    for tool_class in tool_classes:
+                        try:
+                            target_registry.register(tool_class)
+                        except ValueError:
+                            logger.debug(
+                                "Plugin '%s' tool already registered: %s",
+                                ep.name,
+                                tool_class,
+                            )
+                loaded.append(ep.name)
+                logger.debug("Loaded plugin tools from: %s", ep.name)
+                continue
+
+            logger.warning("Plugin '%s' is not a Tool or factory", ep.name)
+        except Exception as exc:
+            logger.warning("Failed to load plugin '%s': %s", ep.name, exc)
+
+    return loaded
 
 
 def register_tool(tool_class: Type[Tool]) -> Type[Tool]:

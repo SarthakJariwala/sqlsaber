@@ -159,7 +159,8 @@ class SQLSaberAgent:
         """Register all the SQL tools with the agent."""
         for tool_name in tool_registry.list_tools():
             tool = tool_registry.get_tool(tool_name)
-            agent.tool_plain(name=tool.name)(tool.execute)
+            register = agent.tool if tool.requires_ctx else agent.tool_plain
+            register(name=tool.name)(tool.execute)
 
     def set_thinking(self, enabled: bool, level: ThinkingLevel | None = None) -> None:
         """Update thinking settings and rebuild the agent.

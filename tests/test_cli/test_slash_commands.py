@@ -189,6 +189,8 @@ async def test_process_handoff_without_goal_shows_usage(processor, mock_context)
 @pytest.mark.asyncio
 async def test_process_handoff_preserves_goal_case(processor, mock_context):
     """Test /handoff preserves the original case of the goal."""
-    result = await processor.process("/handoff Check UPPER and lower Case", mock_context)
+    result = await processor.process(
+        "/handoff Check UPPER and lower Case", mock_context
+    )
 
     assert result.handoff_goal == "Check UPPER and lower Case"

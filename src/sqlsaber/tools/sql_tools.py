@@ -1,5 +1,7 @@
 """SQL-related tools for database operations."""
 
+from pydantic_ai import RunContext
+
 from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.utils.json_utils import json_dumps
@@ -130,12 +132,13 @@ class ExecuteSQLTool(SQLTool):
     """Tool for executing SQL queries."""
 
     MAX_ROWS = 1000
+    requires_ctx = True
 
     @property
     def name(self) -> str:
         return "execute_sql"
 
-    async def execute(self, query: str) -> str:
+    async def execute(self, ctx: RunContext, query: str) -> str:
         """
         Execute a SQL query against the database.
 
@@ -175,25 +178,30 @@ class ExecuteSQLTool(SQLTool):
             results = await self.db.execute_query(query, commit=commit)
 
             # Format response based on query type
+            tool_call_id = ctx.tool_call_id
             if query_type == "select":
                 row_count = len(results)
-                return json_dumps(
-                    {
-                        "success": True,
-                        "row_count": row_count,
-                        "results": results,
-                    }
-                )
-            elif query_type == "dml" or query_type == "ddl":
-                return json_dumps({"success": True})
-            else:
-                return json_dumps(
-                    {
-                        "success": True,
-                        "row_count": len(results),
-                        "results": results,
-                    }
-                )
+                payload = {
+                    "success": True,
+                    "row_count": row_count,
+                    "results": results,
+                }
+                if tool_call_id:
+                    payload["file"] = f"result_{tool_call_id}.json"
+                return json_dumps(payload)
+            if query_type in {"dml", "ddl"}:
+                payload = {"success": True}
+                if tool_call_id:
+                    payload["file"] = f"result_{tool_call_id}.json"
+                return json_dumps(payload)
+            payload = {
+                "success": True,
+                "row_count": len(results),
+                "results": results,
+            }
+            if tool_call_id:
+                payload["file"] = f"result_{tool_call_id}.json"
+            return json_dumps(payload)
 
         except Exception as e:
             error_msg = str(e)

@@ -1,10 +1,13 @@
 """Base class for SQLSaber tools."""
 
 from abc import ABC, abstractmethod
+from typing import ClassVar
 
 
 class Tool(ABC):
     """Abstract base class for all tools."""
+
+    requires_ctx: ClassVar[bool] = False
 
     def __init__(self):
         """Initialize the tool."""
