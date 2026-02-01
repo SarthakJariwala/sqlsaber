@@ -160,7 +160,7 @@ def test_register_sandbox_tools_enabled_with_modal_config(
         monkeypatch.delenv(env_vars, raising=False)
     monkeypatch.setenv("HOME", str(tmp_path))
     modal_config = tmp_path / ".modal.toml"
-    modal_config.write_text("token_id = \"test\"\n", encoding="utf-8")
+    modal_config.write_text('token_id = "test"\n', encoding="utf-8")
     registry = ToolRegistry()
 
     registered = register_tools(registry)
@@ -185,7 +185,7 @@ def test_register_sandbox_tools_enabled_with_modal_config_path(
     ]:
         monkeypatch.delenv(env_vars, raising=False)
     config_path = tmp_path / "custom-modal.toml"
-    config_path.write_text("token_id = \"test\"\n", encoding="utf-8")
+    config_path.write_text('token_id = "test"\n', encoding="utf-8")
     monkeypatch.setenv("MODAL_CONFIG_PATH", str(config_path))
     registry = ToolRegistry()
 
@@ -227,7 +227,9 @@ async def test_run_python_rejects_large_payload(
     monkeypatch.setenv("E2B_API_KEY", "test-key")
     tool = RunPythonTool()
 
-    result = _parse_result(await tool.execute(_make_ctx(), code="x" * (MAX_CODE_CHARS + 1)))
+    result = _parse_result(
+        await tool.execute(_make_ctx(), code="x" * (MAX_CODE_CHARS + 1))
+    )
 
     assert "error" in result
 

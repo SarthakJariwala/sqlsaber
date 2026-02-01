@@ -108,18 +108,6 @@ def _render_transcript(
                 )
             )
 
-    def _show_generic_tool_result(tool_name: str, content: str) -> None:
-        if is_redirected:
-            console.print(f"**Tool result ({tool_name}):**\n\n{content}\n")
-        else:
-            console.print(
-                Panel.fit(
-                    content,
-                    title=f"Tool result: {tool_name}",
-                    border_style="warning",
-                )
-            )
-
     def _render_response(message: ModelMessage) -> None:
         for part in getattr(message, "parts", []):
             kind = getattr(part, "part_kind", "")
@@ -153,37 +141,7 @@ def _render_transcript(
             elif kind in ("tool-return", "builtin-tool-return"):
                 name = getattr(part, "tool_name", "tool")
                 content = getattr(part, "content", None)
-                if isinstance(content, (dict, list)):
-                    content_str = json.dumps(content, ensure_ascii=False)
-                elif isinstance(content, str):
-                    content_str = content
-                else:
-                    content_str = json.dumps({"return_value": str(content)})
-
-                # DisplayManager methods auto-detect terminal vs redirected
-                if name == "list_tables":
-                    dm.show_table_list(content_str)
-                elif name == "introspect_schema":
-                    dm.show_schema_info(content_str)
-                elif name == "execute_sql":
-                    try:
-                        data = json.loads(content_str)
-                        if (
-                            isinstance(data, dict)
-                            and data.get("success")
-                            and data.get("results")
-                        ):
-                            dm.show_query_results(data["results"])
-                        elif isinstance(data, dict) and "error" in data:
-                            dm.show_sql_error(
-                                data.get("error"), data.get("suggestions")
-                            )
-                        else:
-                            _show_generic_tool_result(name, content_str)
-                    except Exception:
-                        _show_generic_tool_result(name, content_str)
-                else:
-                    _show_generic_tool_result(name, content_str)
+                dm.show_tool_result(name, content)
         # Thinking parts omitted
 
     for start_idx, end_idx in slices or [(0, len(all_msgs))]:

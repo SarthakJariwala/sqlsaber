@@ -164,7 +164,9 @@ class TestExecuteSQLTool:
         db.mock_results = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
         tool.db = db  # Set db directly, skip schema manager
 
-        result = await tool.execute(SimpleNamespace(tool_call_id=None), "SELECT * FROM users")
+        result = await tool.execute(
+            SimpleNamespace(tool_call_id=None), "SELECT * FROM users"
+        )
         data = json.loads(result)
 
         assert data["success"] is True
@@ -237,7 +239,9 @@ class TestExecuteSQLTool:
         db.mock_results = [{"name": "users"}]
         tool.db = db  # Set db directly, skip schema manager
 
-        result = await tool.execute(SimpleNamespace(tool_call_id=None), "SELECT * FROM users")
+        result = await tool.execute(
+            SimpleNamespace(tool_call_id=None), "SELECT * FROM users"
+        )
         data = json.loads(result)
 
         assert data["success"] is True

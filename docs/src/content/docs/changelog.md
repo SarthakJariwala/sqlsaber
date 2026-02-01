@@ -9,6 +9,16 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.53.0
+
+#### Added
+
+- Tool display specs unify tool rendering across CLI, streaming, threads, and HTML export
+- Tool-level display hooks for execution and result rendering (terminal + HTML)
+- Spec-based formatting for tool results, with fallback rendering for unknown tools
+
+---
+
 ### v0.52.0
 
 #### Added

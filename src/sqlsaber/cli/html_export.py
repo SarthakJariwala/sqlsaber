@@ -5,6 +5,8 @@ from html import escape
 
 from pydantic_ai.messages import ModelMessage
 
+from sqlsaber.cli.display import DisplayManager
+from sqlsaber.theme.manager import create_console
 from sqlsaber.threads.storage import Thread
 
 
@@ -48,173 +50,28 @@ def _html_escape_multimodal(content: object) -> str:
     return escape(str(content))
 
 
-def _render_sql_results_table(content_str: str, sql_query: str | None = None) -> str:
-    """Render SQL execute results as an HTML table with the query."""
-    parts: list[str] = []
+def _render_tool_result_html(
+    display: DisplayManager,
+    tool_name: str,
+    content: object,
+    args: dict | None = None,
+) -> str:
+    content_payload = content
+    if isinstance(content, (dict, list)):
+        content_payload = json.dumps(content, ensure_ascii=False)
+    elif not isinstance(content, str):
+        content_payload = json.dumps({"return_value": str(content)}, ensure_ascii=False)
 
-    if sql_query:
-        parts.append(
-            f'<div class="sql-query"><pre><code class="language-sql">{escape(sql_query)}</code></pre></div>'
-        )
-
-    try:
-        data = json.loads(content_str)
-        if isinstance(data, dict) and data.get("success") and data.get("results"):
-            results = data["results"]
-            if isinstance(results, list) and results:
-                first = results[0]
-                if isinstance(first, dict):
-                    headers = list(first.keys())
-                    rows_html = []
-                    for row in results[:100]:  # Limit to 100 rows
-                        cells = "".join(
-                            f"<td>{escape(str(row.get(h, '')))}</td>" for h in headers
-                        )
-                        rows_html.append(f"<tr>{cells}</tr>")
-                    header_html = "".join(f"<th>{escape(h)}</th>" for h in headers)
-                    count_note = (
-                        f'<p class="result-count">{len(results)} row(s) returned</p>'
-                    )
-                    if len(results) > 100:
-                        count_note = f'<p class="result-count">Showing 100 of {len(results)} rows</p>'
-                    parts.append(f"""
-{count_note}
-<div class="table-wrapper">
-<table class="sql-results">
-<thead><tr>{header_html}</tr></thead>
-<tbody>{"".join(rows_html)}</tbody>
-</table>
-</div>""")
-                    return "".join(parts)
-            elif isinstance(results, list) and not results:
-                parts.append('<p class="result-count">0 rows returned</p>')
-                return "".join(parts)
-        if isinstance(data, dict) and "error" in data:
-            error = escape(str(data.get("error", "")))
-            parts.append(
-                f'<div class="sql-error"><strong>Error:</strong> {error}</div>'
+    html = display.render_tool_result_html(tool_name, content_payload, args=args)
+    if tool_name == "execute_sql" and args:
+        query = args.get("sql") or args.get("query")
+        if isinstance(query, str) and query.strip():
+            sql_html = (
+                f'<div class="sql-query"><pre><code class="language-sql">'
+                f"{escape(query)}</code></pre></div>"
             )
-            return "".join(parts)
-    except (json.JSONDecodeError, TypeError):
-        pass
-
-    parts.append(f"<pre><code>{escape(content_str)}</code></pre>")
-    return "".join(parts)
-
-
-def _render_list_tables_html(content_str: str) -> str:
-    """Render list_tables results as an HTML table."""
-    try:
-        data = json.loads(content_str)
-
-        if isinstance(data, dict) and "error" in data:
-            return f'<div class="sql-error"><strong>Error:</strong> {escape(str(data["error"]))}</div>'
-
-        if isinstance(data, list):
-            if not data:
-                return '<p class="result-count">No tables found in the database.</p>'
-            if isinstance(data[0], str):
-                rows_html = [
-                    f"<tr><td>—</td><td>{escape(t)}</td><td>—</td></tr>" for t in data
-                ]
-                return f"""
-<p class="result-count">{len(data)} table(s) found</p>
-<div class="table-wrapper">
-<table class="sql-results">
-<thead><tr><th>Schema</th><th>Table Name</th><th>Type</th></tr></thead>
-<tbody>{"".join(rows_html)}</tbody>
-</table>
-</div>"""
-
-        if isinstance(data, dict):
-            tables = data.get("tables", [])
-            total = data.get("total_tables", len(tables))
-
-            if not tables:
-                return '<p class="result-count">No tables found in the database.</p>'
-
-            rows_html = []
-            for t in tables:
-                schema = escape(str(t.get("schema", "")))
-                name = escape(str(t.get("name", "")))
-                ttype = escape(str(t.get("type", "")))
-                rows_html.append(
-                    f"<tr><td>{schema}</td><td>{name}</td><td>{ttype}</td></tr>"
-                )
-
-            return f"""
-<p class="result-count">{total} table(s) found</p>
-<div class="table-wrapper">
-<table class="sql-results">
-<thead><tr><th>Schema</th><th>Table Name</th><th>Type</th></tr></thead>
-<tbody>{"".join(rows_html)}</tbody>
-</table>
-</div>"""
-
-        return f"<pre><code>{escape(content_str)}</code></pre>"
-    except (json.JSONDecodeError, TypeError, AttributeError):
-        return f"<pre><code>{escape(content_str)}</code></pre>"
-
-
-def _render_introspect_schema_html(content_str: str) -> str:
-    """Render introspect_schema results as formatted HTML tables."""
-    try:
-        data = json.loads(content_str)
-        if "error" in data:
-            return f'<div class="sql-error"><strong>Error:</strong> {escape(str(data["error"]))}</div>'
-
-        if not data:
-            return '<p class="result-count">No schema information found.</p>'
-
-        parts: list[str] = []
-        parts.append(f'<p class="result-count">{len(data)} table(s) introspected</p>')
-
-        for table_name, table_info in data.items():
-            parts.append('<div class="schema-table">')
-            parts.append(f'<h4 class="table-name">{escape(table_name)}</h4>')
-
-            if table_info.get("comment"):
-                parts.append(
-                    f'<p class="table-comment">{escape(str(table_info["comment"]))}</p>'
-                )
-
-            columns = table_info.get("columns", {})
-            if columns:
-                rows = []
-                for col_name, col_info in columns.items():
-                    nullable = "✓" if col_info.get("nullable") else "✗"
-                    default = escape(str(col_info.get("default") or "—"))
-                    comment = escape(str(col_info.get("comment") or ""))
-                    rows.append(
-                        f"<tr><td>{escape(col_name)}</td><td>{escape(str(col_info.get('type', '')))}</td>"
-                        f"<td>{nullable}</td><td>{default}</td><td>{comment}</td></tr>"
-                    )
-                parts.append("""
-<div class="table-wrapper">
-<table class="sql-results schema-columns">
-<thead><tr><th>Column</th><th>Type</th><th>Nullable</th><th>Default</th><th>Comment</th></tr></thead>
-<tbody>""")
-                parts.append("".join(rows))
-                parts.append("</tbody></table></div>")
-
-            pks = table_info.get("primary_keys", [])
-            if pks:
-                parts.append(
-                    f'<p class="key-info"><strong>Primary Keys:</strong> {escape(", ".join(pks))}</p>'
-                )
-
-            fks = table_info.get("foreign_keys", [])
-            if fks:
-                fk_list = "".join(f"<li>{escape(fk)}</li>" for fk in fks)
-                parts.append(
-                    f'<p class="key-info"><strong>Foreign Keys:</strong></p><ul class="key-list">{fk_list}</ul>'
-                )
-
-            parts.append("</div>")
-
-        return "".join(parts)
-    except (json.JSONDecodeError, TypeError):
-        return f"<pre><code>{escape(content_str)}</code></pre>"
+            return sql_html + html
+    return html
 
 
 def _human_readable_time(timestamp: float | None) -> str:
@@ -694,6 +551,7 @@ def render_thread_html(thread: Thread, all_msgs: list[ModelMessage]) -> str:
 
     body_parts: list[str] = []
     slices = build_turn_slices(all_msgs)
+    display = DisplayManager(create_console())
 
     for start_idx, end_idx in slices:
         if not (0 <= start_idx < len(all_msgs)):
@@ -779,14 +637,10 @@ def render_thread_html(thread: Thread, all_msgs: list[ModelMessage]) -> str:
                         tool_calls.get(call_id, {}).get("sql") if call_id else None
                     )
 
-                    if tool_name == "execute_sql":
-                        result_html = _render_sql_results_table(content_str, sql_query)
-                    elif tool_name == "list_tables":
-                        result_html = _render_list_tables_html(content_str)
-                    elif tool_name == "introspect_schema":
-                        result_html = _render_introspect_schema_html(content_str)
-                    else:
-                        result_html = f"<pre><code>{escape(content_str)}</code></pre>"
+                    tool_args = {"sql": sql_query} if sql_query else None
+                    result_html = _render_tool_result_html(
+                        display, tool_name, content_str, args=tool_args
+                    )
 
                     tool_details_html.append(
                         f"""<details class="tool" open>

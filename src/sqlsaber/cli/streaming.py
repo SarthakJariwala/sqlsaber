@@ -6,7 +6,6 @@ rendered via DisplayManager helpers.
 """
 
 import asyncio
-import json
 from functools import singledispatchmethod
 from typing import TYPE_CHECKING, AsyncIterable
 
@@ -103,32 +102,9 @@ class StreamingQueryHandler:
         # Route tool result to appropriate display
         tool_name = event.result.tool_name
         content = event.result.content
-        if tool_name == "list_tables":
-            if isinstance(content, (str, dict)):
-                self.display.show_table_list(content)
-        elif tool_name == "introspect_schema":
-            if isinstance(content, (str, dict)):
-                self.display.show_schema_info(content)
-        elif tool_name == "execute_sql":
-            data: dict[str, object] = {}
-            if isinstance(content, str):
-                try:
-                    data = json.loads(content)
-                except (json.JSONDecodeError, TypeError) as exc:
-                    try:
-                        self.console.log(f"Malformed execute_sql result: {exc}")
-                    except Exception:
-                        pass
-            elif isinstance(content, dict):
-                data = content
-
-            if isinstance(data, dict):
-                if data.get("success") and data.get("results"):
-                    self.display.show_query_results(data["results"])  # type: ignore[arg-type]
-                elif "error" in data:
-                    error_msg = data.get("error")
-                    if isinstance(error_msg, str):
-                        self.display.show_sql_error(error_msg, data.get("suggestions"))  # type: ignore[arg-type]
+        if tool_name is None:
+            return
+        self.display.show_tool_result(tool_name, content)
         # Add a blank line after tool output to separate from next segment
         self.display.show_newline()
         # Show status while agent sends a follow-up request to the model

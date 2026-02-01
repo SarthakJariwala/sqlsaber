@@ -11,6 +11,13 @@ from typing import Iterable
 from pydantic_ai import RunContext
 
 from sqlsaber.tools.base import Tool
+from sqlsaber.tools.display import (
+    DisplayMetadata,
+    ExecutingConfig,
+    FieldMappings,
+    ResultConfig,
+    ToolDisplaySpec,
+)
 from sqlsaber.tools.registry import ToolRegistry
 from sqlsaber.utils.json_utils import json_dumps
 
@@ -91,6 +98,20 @@ class RunPythonTool(Tool):
     """Run Python code in a sandboxed environment."""
 
     requires_ctx = True
+
+    display_spec = ToolDisplaySpec(
+        executing=ExecutingConfig(
+            message="Running Python in sandbox",
+            icon="🐍",
+            show_args=["requirements", "timeout_seconds"],
+        ),
+        result=ResultConfig(
+            format="panel",
+            title="Python Output",
+            fields=FieldMappings(output="stdout", error="stderr", success="success"),
+        ),
+        metadata=DisplayMetadata(display_name="Run Python"),
+    )
 
     @property
     def name(self) -> str:
