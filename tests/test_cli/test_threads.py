@@ -263,8 +263,11 @@ class TestThreadsCLI:
 
             _render_transcript(mock_console, messages)
 
-            # Verify query results were shown
-            mock_dm.show_query_results.assert_called_with([{"id": 1, "name": "John"}])
+            # Verify tool results were shown
+            mock_dm.show_tool_result.assert_called_with(
+                "execute_sql",
+                '{"success": true, "results": [{"id": 1, "name": "John"}]}',
+            )
 
     def test_create_threads_app(self):
         """Test that threads app is created correctly."""

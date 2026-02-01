@@ -6,7 +6,7 @@ rendered with Live.
 """
 
 import json
-from typing import TYPE_CHECKING, Sequence, Type
+from typing import TYPE_CHECKING, Type
 
 from pydantic_ai.messages import ModelResponsePart, TextPart, ThinkingPart
 from rich.columns import Columns
@@ -16,11 +16,10 @@ from rich.markdown import CodeBlock, Markdown
 from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.syntax import Syntax
-from rich.table import Table
 from rich.text import Text
-from tabulate import tabulate
-
 from sqlsaber.theme.manager import get_theme_manager
+from sqlsaber.tools.display import ResultConfig, SpecRenderer, ToolDisplaySpec
+from sqlsaber.tools.registry import tool_registry
 
 if TYPE_CHECKING:
     from sqlsaber.cli.usage import SessionUsage
@@ -212,156 +211,60 @@ class DisplayManager:
         self.console = console
         self.live = LiveMarkdownRenderer(console)
         self.tm = get_theme_manager()
-
-    def _tables_to_markdown(self, data: dict) -> str:
-        """Convert tables list JSON to markdown table."""
-        rows = data.get("tables", [])
-        cols = ["name", "schema", "type", "table_comment"]
-        table_data = [[row.get(c, "") for c in cols] for row in rows]
-        return tabulate(table_data, headers=cols, tablefmt="github")
-
-    def _schema_to_markdown(self, data: dict) -> str:
-        """Convert schema JSON to markdown tables."""
-        parts = []
-        for table_name, table_info in data.items():
-            columns = table_info.get("columns", {})
-            table_data = [
-                [
-                    col_name,
-                    info["type"],
-                    info["nullable"],
-                    info["default"],
-                    info.get("comment", ""),
-                ]
-                for col_name, info in columns.items()
-            ]
-            md = f"**Table: {table_name}**\n\n"
-            md += tabulate(
-                table_data,
-                headers=["Column", "Type", "Nullable", "Default", "Comments"],
-                tablefmt="github",
-            )
-            if table_info.get("primary_keys"):
-                md += f"\n\n**Primary Keys:** {', '.join(table_info['primary_keys'])}"
-            if table_info.get("foreign_keys"):
-                md += f"\n\n**Foreign Keys:** {', '.join(table_info['foreign_keys'])}"
-            parts.append(md)
-        return "\n\n".join(parts)
-
-    def _results_to_markdown(self, results: list) -> str:
-        """Convert query results to markdown table."""
-        if not results:
-            return "*No results*"
-        return tabulate(results, headers="keys", tablefmt="github")
-
-    def _create_table(
-        self,
-        columns: Sequence[str | dict[str, str]],
-        header_style: str | None = None,
-        title: str | None = None,
-    ) -> Table:
-        """Create a Rich table with specified columns."""
-        header_style = header_style or self.tm.style("table.header")
-        table = Table(show_header=True, header_style=header_style, title=title)
-        for col in columns:
-            if isinstance(col, dict):
-                table.add_column(col["name"], style=col.get("style"))
-            else:
-                table.add_column(col)
-        return table
+        self._spec_renderer = SpecRenderer(self.tm)
 
     def show_tool_executing(self, tool_name: str, tool_input: dict):
         """Display tool execution details."""
-        # Normalized leading blank line before tool headers
         self.show_newline()
-        if tool_name == "list_tables":
-            if self.console.is_terminal:
-                self.console.print(
-                    "[muted bold]:gear: Discovering available tables[/muted bold]"
-                )
-            else:
-                self.console.print("**Discovering available tables**\n")
-        elif tool_name == "introspect_schema":
-            pattern = tool_input.get("table_pattern", "all tables")
-            if self.console.is_terminal:
-                self.console.print(
-                    f"[muted bold]:gear: Examining schema for: {pattern}[/muted bold]"
-                )
-            else:
-                self.console.print(f"**Examining schema for:** {pattern}\n")
-        elif tool_name == "execute_sql":
-            # For streaming, we render SQL via LiveMarkdownRenderer; keep Syntax
-            # rendering for threads show/resume. Controlled by include_sql flag.
-            query = tool_input.get("query", "")
-            if self.console.is_terminal:
-                self.console.print("[muted bold]:gear: Executing SQL:[/muted bold]")
-                self.show_newline()
-                syntax = Syntax(
-                    query,
-                    "sql",
-                    theme=self.tm.pygments_style_name,
-                    background_color="default",
-                    word_wrap=True,
-                )
-                self.console.print(syntax)
-            else:
-                self.console.print("**Executing SQL:**\n")
-                self.console.print(f"```sql\n{query}\n```\n")
-        else:
-            self.console.print_json(json.dumps(tool_input))
+        tool = self._get_tool(tool_name)
+        if tool and tool.render_executing(self.console, tool_input):
+            return
+
+        spec = tool.display_spec if tool else None
+        if spec:
+            self._spec_renderer.render_executing(
+                self.console, tool_name, tool_input, spec
+            )
+            return
+
+        self._render_fallback_result(tool_input)
 
     def show_text_stream(self, text: str):
         """Display streaming text."""
         if text is not None:  # Extra safety check
             self.console.print(text, end="", markup=False)
 
-    def show_query_results(self, results: list):
-        """Display query results in a formatted table."""
-        if not results:
+    def show_tool_result(self, tool_name: str, result: object) -> None:
+        """Display tool result using override/spec/fallback resolution."""
+        tool = self._get_tool(tool_name)
+        if tool and tool.render_result(self.console, result):
             return
 
-        if not self.console.is_terminal:
-            # Markdown output for redirected/piped output
-            self.console.print(f"\n**Results ({len(results)} rows):**\n")
-            self.console.print(self._results_to_markdown(results))
-            self.console.print()
+        spec = tool.display_spec if tool else None
+        if spec:
+            self._spec_renderer.render_result(self.console, tool_name, result, spec)
             return
 
-        # Rich table for terminal
-        self.console.print(f"\n[section]Results ({len(results)} rows):[/section]")
+        self._render_fallback_result(result)
 
-        all_columns = list(results[0].keys())
-        display_columns = all_columns[:15]
-
-        if len(all_columns) > 15:
-            self.console.print(
-                f"[warning]Note: Showing first 15 of {len(all_columns)} columns[/warning]"
+    def render_tool_result_html(
+        self, tool_name: str, result: object, args: dict | None = None
+    ) -> str:
+        tool = self._get_tool(tool_name)
+        if tool:
+            html = tool.render_result_html(result)
+            if html is not None:
+                return html
+        spec = tool.display_spec if tool else None
+        if spec:
+            return self._spec_renderer.render_result_html(
+                tool_name, result, spec, args=args
             )
-
-        table = self._create_table(display_columns)
-
-        for row in results[:20]:
-            table.add_row(*[str(row[key]) for key in display_columns])
-
-        self.console.print(table)
-
-        if len(results) > 20:
-            self.console.print(
-                f"[warning]... and {len(results) - 20} more rows[/warning]"
-            )
+        return self._render_fallback_result_html(result)
 
     def show_error(self, error_message: str):
         """Display error message."""
         self.console.print(f"\n[error]Error:[/error] {error_message}")
-
-    def show_sql_error(self, error_message: str, suggestions: list[str] | None = None):
-        """Display SQL-specific error with optional suggestions."""
-        self.show_newline()
-        self.console.print(f"[error]SQL error:[/error] {error_message}")
-        if suggestions:
-            self.console.print("[warning]Hints:[/warning]")
-            for suggestion in suggestions:
-                self.console.print(f"  • {suggestion}")
 
     def show_processing(self, message: str):
         """Display processing message."""
@@ -374,157 +277,42 @@ class DisplayManager:
         """Display a newline for spacing."""
         self.console.print()
 
-    def show_table_list(self, tables_data: str | dict):
-        """Display the results from list_tables tool."""
+    def _get_tool(self, tool_name: str):
         try:
-            data = (
-                json.loads(tables_data) if isinstance(tables_data, str) else tables_data
-            )
+            return tool_registry.get_tool(tool_name)
+        except KeyError:
+            return None
 
-            if "error" in data:
-                self.show_error(data["error"])
+    def _render_fallback_result(self, result: object) -> None:
+        if isinstance(result, str):
+            try:
+                parsed = json.loads(result)
+                self._render_fallback_result(parsed)
                 return
-
-            tables = data.get("tables", [])
-            total_tables = data.get("total_tables", 0)
-
-            if not tables:
+            except json.JSONDecodeError:
                 if self.console.is_terminal:
-                    self.console.print(
-                        "[warning]No tables found in the database.[/warning]"
-                    )
+                    self.console.print(result)
                 else:
-                    self.console.print("*No tables found in the database.*\n")
+                    self.console.print(f"```\n{result}\n```\n")
                 return
 
-            if not self.console.is_terminal:
-                # Markdown output for redirected/piped output
-                self.console.print(f"\n**Database Tables ({total_tables} total):**\n")
-                self.console.print(self._tables_to_markdown(data))
-                self.console.print()
-                return
+        if isinstance(result, (dict, list)):
+            if self.console.is_terminal:
+                self.console.print_json(json.dumps(result, ensure_ascii=False))
+            else:
+                self.console.print(
+                    f"```json\n{json.dumps(result, ensure_ascii=False, indent=2)}\n```\n"
+                )
+            return
 
-            # Rich table for terminal
-            self.console.print(
-                f"\n[title]Database Tables ({total_tables} total):[/title]"
-            )
+        if self.console.is_terminal:
+            self.console.print(str(result))
+        else:
+            self.console.print(f"```\n{result}\n```\n")
 
-            columns = [
-                {"name": "Schema", "style": "column.schema"},
-                {"name": "Table Name", "style": "column.name"},
-                {"name": "Type", "style": "column.type"},
-            ]
-            table = self._create_table(columns)
-
-            for table_info in tables:
-                schema = table_info.get("schema", "")
-                name = table_info.get("name", "")
-                table_type = table_info.get("type", "")
-                table.add_row(schema, name, table_type)
-
-            self.console.print(table)
-
-        except json.JSONDecodeError:
-            self.show_error("Failed to parse table list data")
-        except Exception as e:
-            self.show_error(f"Error displaying table list: {str(e)}")
-
-    def show_schema_info(self, schema_data: str | dict):
-        """Display the results from introspect_schema tool."""
-        try:
-            data = (
-                json.loads(schema_data) if isinstance(schema_data, str) else schema_data
-            )
-
-            if "error" in data:
-                self.show_error(data["error"])
-                return
-
-            if not data:
-                if self.console.is_terminal:
-                    self.console.print(
-                        "[warning]No schema information found.[/warning]"
-                    )
-                else:
-                    self.console.print("*No schema information found.*\n")
-                return
-
-            if not self.console.is_terminal:
-                # Markdown output for redirected/piped output
-                self.console.print(f"\n**Schema Information ({len(data)} tables):**\n")
-                self.console.print(self._schema_to_markdown(data))
-                self.console.print()
-                return
-
-            # Rich tables for terminal
-            self.console.print(
-                f"\n[title]Schema Information ({len(data)} tables):[/title]"
-            )
-
-            for table_name, table_info in data.items():
-                self.console.print(f"\n[heading]Table: {table_name}[/heading]")
-
-                table_comment = table_info.get("comment")
-                if table_comment:
-                    self.console.print(f"[muted]Comment: {table_comment}[/muted]")
-
-                table_columns = table_info.get("columns", {})
-                if table_columns:
-                    include_column_comments = any(
-                        col_info.get("comment") for col_info in table_columns.values()
-                    )
-
-                    columns = [
-                        {"name": "Column Name", "style": "column.name"},
-                        {"name": "Type", "style": "column.type"},
-                        {"name": "Nullable", "style": "info"},
-                        {"name": "Default", "style": "muted"},
-                    ]
-                    if include_column_comments:
-                        columns.append({"name": "Comment", "style": "muted"})
-                    col_table = self._create_table(columns, title="Columns")
-
-                    for col_name, col_info in table_columns.items():
-                        nullable = "✓" if col_info.get("nullable", False) else "✗"
-                        default = (
-                            str(col_info.get("default", ""))
-                            if col_info.get("default")
-                            else ""
-                        )
-                        row = [
-                            col_name,
-                            col_info.get("type", ""),
-                            nullable,
-                            default,
-                        ]
-                        if include_column_comments:
-                            row.append(col_info.get("comment") or "")
-                        col_table.add_row(*row)
-
-                    self.console.print(col_table)
-
-                primary_keys = table_info.get("primary_keys", [])
-                if primary_keys:
-                    self.console.print(
-                        f"[key.primary]Primary Keys:[/key.primary] {', '.join(primary_keys)}"
-                    )
-
-                foreign_keys = table_info.get("foreign_keys", [])
-                if foreign_keys:
-                    self.console.print("[key.foreign]Foreign Keys:[/key.foreign]")
-                    for fk in foreign_keys:
-                        self.console.print(f"  • {fk}")
-
-                indexes = table_info.get("indexes", [])
-                if indexes:
-                    self.console.print("[key.index]Indexes:[/key.index]")
-                    for idx in indexes:
-                        self.console.print(f"  • {idx}")
-
-        except json.JSONDecodeError:
-            self.show_error("Failed to parse schema data")
-        except Exception as e:
-            self.show_error(f"Error displaying schema information: {str(e)}")
+    def _render_fallback_result_html(self, result: object) -> str:
+        spec = ToolDisplaySpec(result=ResultConfig(format="json"))
+        return self._spec_renderer.render_result_html("tool", result, spec)
 
     def show_markdown_response(self, content: list):
         """Display the assistant's response as rich markdown in a panel."""

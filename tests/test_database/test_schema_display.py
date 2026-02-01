@@ -133,7 +133,7 @@ class TestSchemaDisplayMappings:
         display_manager = DisplayManager(console)
 
         # This should not raise an error and should populate type information
-        display_manager.show_schema_info(schema_info)
+        display_manager.show_tool_result("introspect_schema", schema_info)
         output = string_io.getvalue()
 
         # Verify types are displayed (not empty)
@@ -173,7 +173,7 @@ class TestSchemaDisplayMappings:
         console = create_console(file=string_io, width=120, legacy_windows=False)
         display_manager = DisplayManager(console)
 
-        display_manager.show_schema_info(schema_info)
+        display_manager.show_tool_result("introspect_schema", schema_info)
         output = string_io.getvalue()
 
         assert "Unique product identifier" in output
@@ -205,7 +205,7 @@ class TestSchemaDisplayMappings:
         display_manager = DisplayManager(console)
 
         # This should not raise an error and should populate type information
-        display_manager.show_table_list(tables)
+        display_manager.show_tool_result("list_tables", tables)
         output = string_io.getvalue()
 
         # Verify types are displayed in the Type column (not empty)
