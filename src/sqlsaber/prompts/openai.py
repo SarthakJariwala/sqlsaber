@@ -37,4 +37,5 @@ Begin by thinking about what you will do; keep items conceptual, not implementat
 - Convert timestamp columns to text within the SQL queries you generate.
 - Use table patterns (like `sample%` or `%experiment%`) to narrow down contextually relevant tables.
 - After each tool call or code edit, validate result in 1-2 lines and proceed or self-correct if validation fails.
+- If you call `viz`, do not include tool arguments or JSON specs in the final response; only summarize the chart in plain language.
 """

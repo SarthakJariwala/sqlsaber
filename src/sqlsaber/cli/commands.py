@@ -1,5 +1,10 @@
 """CLI command definitions and handlers."""
 
+# Setup logging early, before any imports that trigger plugin discovery
+from sqlsaber.config.logging import setup_logging
+
+setup_logging()
+
 import asyncio
 import sys
 from typing import Annotated
@@ -18,7 +23,7 @@ from sqlsaber.cli.update_check import schedule_update_check
 
 # Lazy imports - only import what's needed for CLI parsing
 from sqlsaber.config.database import DatabaseConfigManager
-from sqlsaber.config.logging import get_logger, setup_logging
+from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console
 from sqlsaber.utils.text_input import resolve_text_input
 
@@ -309,6 +314,5 @@ def query(
 
 def main():
     """Entry point for the CLI application."""
-    setup_logging()
     get_logger(__name__).info("cli.start")
     app()

@@ -26,14 +26,12 @@ class APIKeyManager:
         # 1. Check environment variable first
         api_key = os.getenv(env_var_name)
         if api_key:
-            console.print(f"Using {env_var_name} from environment", style="dim")
             return api_key
 
         # 2. Check keyring storage
         try:
             api_key = keyring.get_password(service_name, provider)
             if api_key:
-                console.print(f"Using stored {provider} API key", style="dim")
                 return api_key
         except Exception as e:
             # Keyring access failed, continue to prompt

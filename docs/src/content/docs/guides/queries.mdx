@@ -95,57 +95,6 @@ Supports schema-aware completions:
 > @pub[TAB] → @public.customers
 ```
 
-#### Python Sandbox Tool
-
-SQLSaber can optionally run Python code in a secure remote sandbox when a sandbox
-provider is configured. This is useful for quick calculations, stats, or
-data transformations that are easier in Python than in SQL.
-
-To enable it, install the sandbox plugin:
-
-```
-uv tool install --with sqlsaber-sandbox sqlsaber
-```
-
-Supported providers (via the `cased/sandboxes` library):
-
-- Daytona (`DAYTONA_API_KEY`)
-- E2B (`E2B_API_KEY`)
-- Sprites (`SPRITES_TOKEN`)
-- Hopx (`HOPX_API_KEY`)
-- Modal (`MODAL_TOKEN_ID` or `~/.modal.toml`)
-- Cloudflare (`CLOUDFLARE_SANDBOX_BASE_URL` + `CLOUDFLARE_API_TOKEN`)
-
-When at least one provider is configured, the agent can use a `run_python` tool
-to execute Python code in that sandbox. If no provider is configured, the tool
-is not available.
-
-<Aside type="caution">
-  Sandboxed execution is remote and isolated, but still runs arbitrary code.
-  Only enable sandbox providers in environments you trust.
-</Aside>
-
-#### Registering Tools in a Django App
-
-You can register custom tools directly in a Django app using `AppConfig.ready`.
-This is useful for application-specific tools that you don't want to package as
-a standalone plugin.
-
-```python
-# myapp/apps.py
-from django.apps import AppConfig
-
-from sqlsaber.tools.registry import tool_registry
-from myapp.tools import MyCustomTool
-
-
-class MyAppConfig(AppConfig):
-    name = "myapp"
-
-    def ready(self):
-        tool_registry.register(MyCustomTool)
-```
-
 #### Extended Thinking Mode
 
 For complex queries requiring deeper reasoning, enable thinking mode to see step-by-step problem solving process. You can configure different thinking levels to balance cost vs quality.

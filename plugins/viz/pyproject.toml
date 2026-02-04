@@ -1,0 +1,20 @@
+[project]
+name = "sqlsaber-viz"
+version = "0.1.0"
+description = "SQLsaber terminal visualization plugin"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["sqlsaber", "plotext>=5.3.0"]
+
+[project.entry-points."sqlsaber.tools"]
+viz = "sqlsaber_viz:register_tools"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sqlsaber_viz"]
+
+[dependency-groups]
+dev = ["pytest>=9.0.2", "pytest-asyncio>=0.25.0"]
