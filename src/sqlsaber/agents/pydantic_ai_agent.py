@@ -39,12 +39,17 @@ class SQLSaberAgent:
         api_key: str | None = None,
         allow_dangerous: bool = False,
         memory: str | None = None,
+        system_prompt: str | None = None,
     ):
         self.db_connection = db_connection
         self.database_name = database_name
         self.config = Config()
         self.memory_manager = memory_manager or MemoryManager()
         self.memory_override = memory
+        if system_prompt is not None and not system_prompt.strip():
+            self.system_prompt_override = None
+        else:
+            self.system_prompt_override = system_prompt
         self._model_name_override = model_name
         self._api_key_override = api_key
         self.db_type = self.db_connection.display_name
@@ -128,32 +133,33 @@ class SQLSaberAgent:
 
         @agent.system_prompt(dynamic=True)
         async def sqlsaber_system_prompt(ctx: RunContext) -> str:
-            if isinstance(agent.model, Model) and "gpt-5" in agent.model.model_name:
-                base = GPT_5.format(db=self.db_type)
+            use_gpt5 = (
+                isinstance(agent.model, Model) and "gpt-5" in agent.model.model_name
+            )
+            base = self._base_system_prompt(use_gpt5=use_gpt5)
+            return self._apply_prompt_extras(base, include_memory=True)
 
-                if self.allow_dangerous:
-                    base += DANGEROUS_MODE
+    def _base_system_prompt(self, *, use_gpt5: bool) -> str:
+        if self.system_prompt_override is not None:
+            return self.system_prompt_override
+        if use_gpt5:
+            return GPT_5.format(db=self.db_type)
+        return SONNET_4_5.format(db=self.db_type)
 
-                mem = self._prompt_memory_text(include_memory=True)
-                if mem:
-                    return f"{base}\n\n{MEMORY_ADDITION}\n\n{mem}"
-
-                return base
-
-            return self.system_prompt_text(include_memory=True)
-
-    def system_prompt_text(self, include_memory: bool = True) -> str:
-        """Return the original SQLSaber system prompt as a single string."""
-        base = SONNET_4_5.format(db=self.db_type)
-
+    def _apply_prompt_extras(self, base: str, *, include_memory: bool) -> str:
+        prompt = base
         if self.allow_dangerous:
-            base += DANGEROUS_MODE
+            prompt += DANGEROUS_MODE
 
         mem = self._prompt_memory_text(include_memory=include_memory)
         if mem:
-            return f"{base}\n\n{MEMORY_ADDITION}\n\n{mem}\n\n"
+            prompt = f"{prompt}\n\n{MEMORY_ADDITION}\n\n{mem}"
+        return prompt
 
-        return base
+    def system_prompt_text(self, include_memory: bool = True) -> str:
+        """Return the SQLSaber system prompt as a single string."""
+        base = self._base_system_prompt(use_gpt5=False)
+        return self._apply_prompt_extras(base, include_memory=include_memory)
 
     def _register_tools(self, agent: Agent) -> None:
         """Register all the SQL tools with the agent."""
