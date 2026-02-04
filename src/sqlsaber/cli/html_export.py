@@ -552,6 +552,7 @@ def render_thread_html(thread: Thread, all_msgs: list[ModelMessage]) -> str:
     body_parts: list[str] = []
     slices = build_turn_slices(all_msgs)
     display = DisplayManager(create_console())
+    display.set_replay_messages(all_msgs)
 
     for start_idx, end_idx in slices:
         if not (0 <= start_idx < len(all_msgs)):

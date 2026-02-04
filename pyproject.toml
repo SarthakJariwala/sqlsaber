@@ -1,6 +1,6 @@
 [project]
 name = "sqlsaber"
-version = "0.54.0"
+version = "0.55.0"
 description = "SQLsaber - Open-source agentic SQL assistant"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -24,7 +24,17 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["ruff>=0.12.0", "pytest>=8.0.0", "pytest-asyncio>=1.0.0"]
+dev = [
+    "ruff>=0.12.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=1.0.0",
+    "sqlsaber-sandbox",
+    "sqlsaber-viz",
+]
+
+[tool.uv.sources]
+sqlsaber-sandbox = { path = "plugins/sandbox", editable = true }
+sqlsaber-viz = { path = "plugins/viz", editable = true }
 
 [build-system]
 requires = ["hatchling"]

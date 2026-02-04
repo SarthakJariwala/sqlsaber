@@ -212,6 +212,11 @@ class DisplayManager:
         self.live = LiveMarkdownRenderer(console)
         self.tm = get_theme_manager()
         self._spec_renderer = SpecRenderer(self.tm)
+        self._replay_messages: list | None = None
+
+    def set_replay_messages(self, messages: list) -> None:
+        """Set message history for replay scenarios (e.g., threads show)."""
+        self._replay_messages = messages
 
     def show_tool_executing(self, tool_name: str, tool_input: dict):
         """Display tool execution details."""
@@ -237,8 +242,13 @@ class DisplayManager:
     def show_tool_result(self, tool_name: str, result: object) -> None:
         """Display tool result using override/spec/fallback resolution."""
         tool = self._get_tool(tool_name)
-        if tool and tool.render_result(self.console, result):
-            return
+        if tool:
+            if self._replay_messages is not None and hasattr(
+                tool, "set_replay_messages"
+            ):
+                tool.set_replay_messages(self._replay_messages)
+            if tool.render_result(self.console, result):
+                return
 
         spec = tool.display_spec if tool else None
         if spec:
@@ -252,6 +262,10 @@ class DisplayManager:
     ) -> str:
         tool = self._get_tool(tool_name)
         if tool:
+            if self._replay_messages is not None and hasattr(
+                tool, "set_replay_messages"
+            ):
+                tool.set_replay_messages(self._replay_messages)
             html = tool.render_result_html(result)
             if html is not None:
                 return html

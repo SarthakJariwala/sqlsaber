@@ -96,9 +96,12 @@ class StreamingQueryHandler:
                 self.display.live.start_sql_block(query)
         else:
             self.display.show_tool_executing(event.part.tool_name, args)
+            if event.part.tool_name == "viz":
+                self.display.live.start_status("Generating visualization...")
 
     @on_event.register
     async def _(self, event: FunctionToolResultEvent, ctx: RunContext) -> None:
+        self.display.live.end_status()
         # Route tool result to appropriate display
         tool_name = event.result.tool_name
         content = event.result.content

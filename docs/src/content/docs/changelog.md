@@ -9,6 +9,14 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.55.0
+
+#### Added
+
+- Updated system prompt for new visualization tool plugin
+
+---
+
 ### v0.54.0
 
 #### Added

@@ -44,6 +44,7 @@ def _render_transcript(
     from sqlsaber.cli.display import DisplayManager
 
     dm = DisplayManager(console)
+    dm.set_replay_messages(all_msgs)
     # Check if output is being redirected (for clean markdown export)
     is_redirected = not console.is_terminal
 

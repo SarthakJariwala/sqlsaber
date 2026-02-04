@@ -3,7 +3,7 @@ title: Installation
 description: Install SQLsaber in under a minute
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 ## Install with uv (recommended)
 
@@ -21,6 +21,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Windows
 winget install --id=astral-sh.uv -e
 ```
+
 </Aside>
 
 ## Alternative: pipx
@@ -34,6 +35,25 @@ pipx install sqlsaber
 ```bash
 saber --version
 ```
+
+## Plugins
+
+SQLsaber supports optional plugins that allows users to extend its capabilities.
+
+There are two official plugins for visualization and Python execution:
+
+```bash
+# Visualization plugin - render charts in your terminal
+uv tool install --with sqlsaber-viz sqlsaber
+
+# Python sandbox plugin - run Python in a secure sandbox
+uv tool install --with sqlsaber-sandbox sqlsaber
+
+# Or install both
+uv tool install --with sqlsaber-viz,sqlsaber-sandbox sqlsaber
+```
+
+See the [plugins guide](/guides/plugins) for detailed setup and usage.
 
 ## Upgrade
 
