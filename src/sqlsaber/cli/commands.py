@@ -20,6 +20,7 @@ from sqlsaber.cli.update_check import schedule_update_check
 from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.config.logging import get_logger, setup_logging
 from sqlsaber.theme.manager import create_console
+from sqlsaber.utils.text_input import resolve_text_input
 
 DANGEROUS_MODE_WARNING = (
     "The assistant can execute INSERT/UPDATE/DELETE and DDL statements."
@@ -108,6 +109,13 @@ def query(
             help="Allow INSERT/UPDATE/DELETE/DDL statements (DROP/TRUNCATE always blocked; UPDATE/DELETE require WHERE clause)",
         ),
     ] = False,
+    system_prompt: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--system-prompt"],
+            help="Custom system prompt text or path to a file (overrides built-in prompt)",
+        ),
+    ] = None,
 ):
     """Run a query against the database or start interactive mode.
 
@@ -141,6 +149,7 @@ def query(
             has_query=query_text is not None,
             thinking=thinking,
             allow_dangerous=allow_dangerous,
+            system_prompt_provided=system_prompt is not None,
         )
         # Import heavy dependencies only when actually running a query
         # This is only done to speed up startup time
@@ -200,11 +209,16 @@ def query(
             raise CLIError(f"Error creating database connection: {e}")
 
         # Create pydantic-ai agent instance with database name for memory context
+        try:
+            resolved_system_prompt = resolve_text_input(system_prompt)
+        except (ValueError, OSError) as e:
+            raise CLIError(str(e))
         sqlsaber_agent = SQLSaberAgent(
             db_conn,
             db_name,
             thinking_enabled=thinking,
             allow_dangerous=allow_dangerous,
+            system_prompt=resolved_system_prompt,
         )
 
         try:

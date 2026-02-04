@@ -9,6 +9,14 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+### v0.54.0
+
+#### Added
+
+- Custom system prompt override via CLI (`--system-prompt`) and Python API (`system_prompt`)
+
+---
+
 ### v0.53.0
 
 #### Added

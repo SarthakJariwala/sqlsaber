@@ -4,8 +4,6 @@ This module provides a simplified programmatic interface to SQLSaber's capabilit
 allowing you to run natural language queries against databases from Python code.
 """
 
-import errno
-import os
 from collections.abc import AsyncIterable, Awaitable, Sequence
 from pathlib import Path
 from types import TracebackType
@@ -19,60 +17,7 @@ from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.config.settings import ThinkingLevel
 from sqlsaber.database import DatabaseConnection
 from sqlsaber.database.resolver import resolve_database
-
-
-def _resolve_memory_input(memory: str | Path | None) -> str | None:
-    """Resolve memory input.
-
-    - If `memory` is a path (or a string path) to an existing file, read it.
-    - Otherwise treat it as literal text.
-
-    Passing an empty string disables memory injection.
-    """
-
-    if memory is None:
-        return None
-
-    if isinstance(memory, str) and not memory.strip():
-        # Empty string explicitly disables memory injection.
-        # Avoid interpreting it as a filesystem path (Path("") -> ".").
-        return ""
-
-    # If it's obviously literal text (contains newlines or is too long to be
-    # a valid filename), skip filesystem probing to avoid ENAMETOOLONG errors.
-    if isinstance(memory, str):
-        if "\n" in memory or "\r" in memory:
-            return memory
-
-        seps = {os.sep}
-        if os.altsep:
-            seps.add(os.altsep)
-
-        has_sep = any(sep in memory for sep in seps)
-        # 255 is the max filename component length on most POSIX filesystems
-        if not has_sep and len(memory) > 255:
-            return memory
-
-    if isinstance(memory, Path):
-        candidate = memory.expanduser()
-    else:
-        candidate = Path(memory).expanduser()
-
-    try:
-        if candidate.exists():
-            if candidate.is_dir():
-                raise ValueError(
-                    f"Memory path '{candidate}' is a directory, expected a file"
-                )
-            if candidate.is_file():
-                return candidate.read_text(encoding="utf-8", errors="replace")
-    except OSError as e:
-        # Treat as literal memory text when path probing fails due to invalid path
-        if e.errno in (errno.ENAMETOOLONG, errno.EINVAL):
-            return str(memory)
-        raise
-
-    return str(memory)
+from sqlsaber.utils.text_input import resolve_text_input
 
 
 class SQLSaberRunResult(Protocol):
@@ -141,6 +86,7 @@ class SQLSaber:
         model_name: str | None = None,
         api_key: str | None = None,
         memory: str | Path | None = None,
+        system_prompt: str | Path | None = None,
     ):
         """Initialize SQLSaber.
 
@@ -171,6 +117,8 @@ class SQLSaber:
                 If this points to an existing file path, its contents are read.
                 If provided (even as an empty string), it overrides any saved
                 database memories for this session.
+            system_prompt: Custom system prompt text to replace SQLSaber's default.
+                If this points to an existing file path, its contents are read.
         """
 
         self._config_manager = DatabaseConfigManager()
@@ -198,7 +146,8 @@ class SQLSaber:
                 resolved_thinking_level = thinking_level
             thinking_enabled = True
 
-        memory_text = _resolve_memory_input(memory)
+        memory_text = resolve_text_input(memory)
+        system_prompt_text = resolve_text_input(system_prompt)
         self.agent = SQLSaberAgent(
             self.connection,
             self.db_name,
@@ -207,6 +156,7 @@ class SQLSaber:
             model_name=model_name,
             api_key=api_key,
             memory=memory_text,
+            system_prompt=system_prompt_text,
         )
 
     async def query(
