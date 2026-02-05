@@ -3,7 +3,7 @@
 import asyncio
 import sys
 from collections.abc import Sequence
-from typing import Any, TypedDict
+from typing import Annotated, Any, TypedDict
 
 import cyclopts
 import httpx
@@ -13,7 +13,7 @@ from rich.table import Table
 
 from sqlsaber.config import providers
 from sqlsaber.config.logging import get_logger
-from sqlsaber.config.settings import Config, ThinkingLevel
+from sqlsaber.config.settings import SUBAGENT_KEYS, Config, ThinkingLevel
 from sqlsaber.theme.manager import create_console
 
 # Global instances for CLI commands
@@ -25,6 +25,8 @@ models_app = cyclopts.App(
     name="models",
     help="Select and manage models",
 )
+
+AGENT_CHOICES: tuple[str, ...] = ("main", *SUBAGENT_KEYS)
 
 
 class FetchedModel(TypedDict):
@@ -160,6 +162,14 @@ class ModelManager:
 model_manager = ModelManager()
 
 
+def _normalize_agent(agent: str) -> str:
+    normalized = agent.strip().lower()
+    if normalized not in AGENT_CHOICES:
+        options = ", ".join(AGENT_CHOICES)
+        raise ValueError(f"Invalid agent '{agent}'. Choose from: {options}.")
+    return normalized
+
+
 @models_app.command(name="list")
 def list_models() -> None:
     """List available AI models."""
@@ -260,9 +270,23 @@ async def _prompt_thinking_level(prompter: Any) -> tuple[bool, ThinkingLevel]:
 
 
 @models_app.command(name="set")
-def set_model_command() -> None:
+def set_model_command(
+    agent: Annotated[
+        str,
+        cyclopts.Parameter(
+            ["--agent"],
+            help="Target agent (main, handoff, viz)",
+        ),
+    ] = "main",
+) -> None:
     """Set the AI model to use."""
     logger.info("models.set.start")
+
+    try:
+        target_agent = _normalize_agent(agent)
+    except ValueError as exc:
+        console.print(f"[error]{exc}[/error]")
+        sys.exit(1)
 
     async def interactive_set() -> None:
         from sqlsaber.application.model_selection import choose_model, fetch_models
@@ -282,49 +306,112 @@ def set_model_command() -> None:
         )
 
         if selected_model:
-            if model_manager.set_model(selected_model):
-                console.print(f"[success]✓ Model set to: {selected_model}[/success]")
-                logger.info("models.set.done", model=selected_model)
-
-                # Prompt for thinking level configuration
-                thinking_enabled, thinking_level = await _prompt_thinking_level(
-                    prompter
-                )
-                config = Config()
-                config.model.set_thinking(thinking_enabled, thinking_level)
-
-                if thinking_enabled:
+            if target_agent == "main":
+                if model_manager.set_model(selected_model):
                     console.print(
-                        f"[success]✓ Thinking: {thinking_level.value}[/success]"
+                        f"[success]✓ Model set to: {selected_model}[/success]"
+                    )
+                    logger.info(
+                        "models.set.done", model=selected_model, agent=target_agent
+                    )
+
+                    # Prompt for thinking level configuration
+                    thinking_enabled, thinking_level = await _prompt_thinking_level(
+                        prompter
+                    )
+                    config = Config()
+                    config.model.set_thinking(thinking_enabled, thinking_level)
+
+                    if thinking_enabled:
+                        console.print(
+                            f"[success]✓ Thinking: {thinking_level.value}[/success]"
+                        )
+                    else:
+                        console.print("[success]✓ Thinking: disabled[/success]")
+                    logger.info(
+                        "models.set.thinking",
+                        enabled=thinking_enabled,
+                        level=thinking_level.value,
+                        agent=target_agent,
                     )
                 else:
-                    console.print("[success]✓ Thinking: disabled[/success]")
-                logger.info(
-                    "models.set.thinking",
-                    enabled=thinking_enabled,
-                    level=thinking_level.value,
-                )
+                    console.print("[error]✗ Failed to set model[/error]")
+                    logger.error(
+                        "models.set.failed", model=selected_model, agent=target_agent
+                    )
+                    sys.exit(1)
             else:
-                console.print("[error]✗ Failed to set model[/error]")
-                logger.error("models.set.failed", model=selected_model)
-                sys.exit(1)
+                config = Config()
+                config.model.set_subagent_model(target_agent, selected_model)
+                console.print(
+                    f"[success]✓ {target_agent.title()} model set to: {selected_model}[/success]"
+                )
+                logger.info(
+                    "models.set.subagent",
+                    model=selected_model,
+                    agent=target_agent,
+                )
         else:
             console.print("[warning]Operation cancelled[/warning]")
-            logger.info("models.set.cancelled")
+            logger.info("models.set.cancelled", agent=target_agent)
 
     asyncio.run(interactive_set())
 
 
 @models_app.command(name="current")
-def current_model() -> None:
+def current_model(
+    agent: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--agent"],
+            help="Show model for agent (main, handoff, viz)",
+        ),
+    ] = None,
+) -> None:
     """Show the currently configured model and thinking settings."""
     current = model_manager.get_current_model()
     config = Config()
     thinking_enabled = config.model.thinking_enabled
     thinking_level = config.model.thinking_level
 
-    console.print(f"Current model: [info]{current}[/info]")
+    if agent is not None:
+        try:
+            target_agent = _normalize_agent(agent)
+        except ValueError as exc:
+            console.print(f"[error]{exc}[/error]")
+            sys.exit(1)
 
+        if target_agent == "main":
+            console.print(f"Current model: [info]{current}[/info]")
+            if thinking_enabled:
+                console.print(
+                    "Thinking: [success]enabled[/success] "
+                    f"([info]{thinking_level.value}[/info])"
+                )
+            else:
+                console.print("Thinking: [dim]disabled[/dim]")
+        else:
+            override = config.model.get_subagent_model(target_agent)
+            effective_model = override or current
+            console.print(
+                f"{target_agent.title()} model: [info]{effective_model}[/info]"
+            )
+            if override:
+                console.print(f"Override: [info]{override}[/info]")
+            else:
+                console.print("Override: [dim]not set (uses main)[/dim]")
+            console.print(f"Main model: [dim]{current}[/dim]")
+
+        logger.info(
+            "models.current",
+            model=current,
+            thinking_enabled=thinking_enabled,
+            thinking_level=thinking_level.value,
+            agent=target_agent,
+        )
+        return
+
+    console.print(f"Current model: [info]{current}[/info]")
     if thinking_enabled:
         console.print(
             f"Thinking: [success]enabled[/success] ([info]{thinking_level.value}[/info])"
@@ -332,35 +419,77 @@ def current_model() -> None:
     else:
         console.print("Thinking: [dim]disabled[/dim]")
 
+    subagents = config.model.get_subagent_models()
+    console.print("\nSubagent overrides:")
+    for subagent in SUBAGENT_KEYS:
+        override = subagents.get(subagent)
+        if override:
+            console.print(f"- {subagent}: {override}")
+        else:
+            console.print(f"- {subagent}: (uses main)")
+
     logger.info(
         "models.current",
         model=current,
         thinking_enabled=thinking_enabled,
         thinking_level=thinking_level.value,
+        agent="all",
     )
 
 
 @models_app.command(name="reset")
-def reset_model_command() -> None:
+def reset_model_command(
+    agent: Annotated[
+        str,
+        cyclopts.Parameter(
+            ["--agent"],
+            help="Reset model for agent (main, handoff, viz)",
+        ),
+    ] = "main",
+) -> None:
     """Reset to the default model."""
     logger.info("models.reset.start")
 
+    try:
+        target_agent = _normalize_agent(agent)
+    except ValueError as exc:
+        console.print(f"[error]{exc}[/error]")
+        sys.exit(1)
+
     async def interactive_reset() -> None:
-        if await questionary.confirm(
-            f"Reset to default model ({ModelManager.DEFAULT_MODEL})?"
-        ).ask_async():
-            if model_manager.reset_model():
-                console.print(
-                    f"[success]✓ Model reset to default: {ModelManager.DEFAULT_MODEL}[/success]"
-                )
-                logger.info("models.reset.done", model=ModelManager.DEFAULT_MODEL)
+        if target_agent == "main":
+            if await questionary.confirm(
+                f"Reset to default model ({ModelManager.DEFAULT_MODEL})?"
+            ).ask_async():
+                if model_manager.reset_model():
+                    console.print(
+                        f"[success]✓ Model reset to default: {ModelManager.DEFAULT_MODEL}[/success]"
+                    )
+                    logger.info(
+                        "models.reset.done",
+                        model=ModelManager.DEFAULT_MODEL,
+                        agent=target_agent,
+                    )
+                else:
+                    console.print("[error]✗ Failed to reset model[/error]")
+                    logger.error("models.reset.failed", agent=target_agent)
+                    sys.exit(1)
             else:
-                console.print("[error]✗ Failed to reset model[/error]")
-                logger.error("models.reset.failed")
-                sys.exit(1)
+                console.print("[warning]Operation cancelled[/warning]")
+                logger.info("models.reset.cancelled", agent=target_agent)
         else:
-            console.print("[warning]Operation cancelled[/warning]")
-            logger.info("models.reset.cancelled")
+            if await questionary.confirm(
+                f"Clear {target_agent} model override (use main model)?"
+            ).ask_async():
+                config = Config()
+                config.model.set_subagent_model(target_agent, None)
+                console.print(
+                    f"[success]✓ {target_agent.title()} model override cleared[/success]"
+                )
+                logger.info("models.reset.subagent", agent=target_agent)
+            else:
+                console.print("[warning]Operation cancelled[/warning]")
+                logger.info("models.reset.cancelled", agent=target_agent)
 
     asyncio.run(interactive_reset())
 

@@ -3211,7 +3211,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "plotext", specifier = ">=5.3.0" },
-    { name = "sqlsaber", specifier = ">=0.54.0" },
+    { name = "sqlsaber", specifier = ">=0.55.1" },
 ]
 
 [package.metadata.requires-dev]
