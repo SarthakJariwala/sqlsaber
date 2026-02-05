@@ -24,7 +24,11 @@ class SpecAgent:
         self.agent = self._build_agent()
 
     def _build_agent(self):
-        model_name = self._model_name_override or self.config.model.name
+        model_name = (
+            self._model_name_override
+            or self.config.model.get_subagent_model("viz")
+            or self.config.model.name
+        )
         model_name_only = (
             model_name.split(":", 1)[1] if ":" in model_name else model_name
         )

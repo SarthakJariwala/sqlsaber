@@ -53,6 +53,18 @@ This interactive command lets you:
   This list is long - type to search and filter the list.
 </Aside>
 
+#### Subagent Overrides
+
+You can override the model used by subagents like handoff and viz without changing
+the main model:
+
+```bash
+saber models set --agent handoff
+saber models set --agent viz
+```
+
+If no override is set, the subagent uses the main model.
+
 #### Reset to Default
 
 Return to the original default (Claude Opus 4):

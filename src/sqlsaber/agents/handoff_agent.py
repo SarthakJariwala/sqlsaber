@@ -40,7 +40,11 @@ class HandoffAgent:
 
     def _build_agent(self) -> Agent:
         """Create the pydantic-ai Agent with no tools."""
-        model_name = self._model_name_override or self.config.model.name
+        model_name = (
+            self._model_name_override
+            or self.config.model.get_subagent_model("handoff")
+            or self.config.model.name
+        )
         model_name_only = (
             model_name.split(":", 1)[1] if ":" in model_name else model_name
         )

@@ -55,6 +55,32 @@ class TestModelConfigManager:
         new_manager.config_file = model_manager.config_file
         assert new_manager.get_model() == test_model
 
+    def test_get_subagent_model_unset(self, model_manager):
+        """Test getting a subagent model when unset."""
+        assert model_manager.get_subagent_model("handoff") is None
+
+    def test_set_and_clear_subagent_model(self, model_manager):
+        """Test setting and clearing subagent model overrides."""
+        handoff_model = "openai:gpt-4o-mini"
+        viz_model = "anthropic:claude-sonnet-4-5-20250929"
+
+        model_manager.set_subagent_model("handoff", handoff_model)
+        model_manager.set_subagent_model("viz", viz_model)
+
+        assert model_manager.get_subagent_model("handoff") == handoff_model
+        assert model_manager.get_subagent_model("viz") == viz_model
+
+        config = model_manager._load_config()
+        assert config["subagents"] == {"handoff": handoff_model, "viz": viz_model}
+
+        model_manager.set_subagent_model("handoff", None)
+        config = model_manager._load_config()
+        assert config["subagents"] == {"viz": viz_model}
+
+        model_manager.set_subagent_model("viz", None)
+        config = model_manager._load_config()
+        assert "subagents" not in config
+
     def test_config_file_format(self, model_manager):
         """Test the config file is properly formatted (v2 format)."""
         test_model = "anthropic:claude-sonnet-4"

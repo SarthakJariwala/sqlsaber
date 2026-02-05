@@ -320,6 +320,10 @@ Set the default model and configure thinking level.
 saber models set
 ```
 
+**Options:**
+
+- `--agent` - Target agent to configure (`main`, `handoff`, `viz`). Defaults to `main`.
+
 #### `saber models current`
 
 Show the currently configured model and thinking settings.
@@ -330,6 +334,10 @@ Show the currently configured model and thinking settings.
 saber models current
 ```
 
+**Options:**
+
+- `--agent` - Show model for a specific agent (`main`, `handoff`, `viz`).
+
 #### `saber models reset`
 
 Reset to the default model (Claude Sonnet 4).
@@ -339,6 +347,10 @@ Reset to the default model (Claude Sonnet 4).
 ```bash
 saber models reset
 ```
+
+**Options:**
+
+- `--agent` - Reset a specific agent (`main`, `handoff`, `viz`). Defaults to `main`.
 
 ---
 
