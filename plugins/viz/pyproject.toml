@@ -1,6 +1,6 @@
 [project]
 name = "sqlsaber-viz"
-version = "0.1.0"
+version = "0.1.1"
 description = "SQLsaber terminal visualization plugin"
 readme = "README.md"
 requires-python = ">=3.12"
