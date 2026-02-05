@@ -3201,7 +3201,7 @@ dev = [
 
 [[package]]
 name = "sqlsaber-viz"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "plugins/viz" }
 dependencies = [
     { name = "plotext" },
