@@ -9,6 +9,19 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.55.1](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.55.0...sqlsaber-v0.55.1) (2026-02-05)
+
+
+### Features
+
+* first plugins release ([bd1a5b5](https://github.com/SarthakJariwala/sqlsaber/commit/bd1a5b5079d6eaff2a52bdf4b8812d54ea8c2783))
+* implement mobile menu in docs navigation ([#17](https://github.com/SarthakJariwala/sqlsaber/issues/17)) ([69ca964](https://github.com/SarthakJariwala/sqlsaber/commit/69ca9644d93e4ada3924529b584fc47247181b02))
+
+
+### Bug Fixes
+
+* make final thinking blocks render Markdown ([#48](https://github.com/SarthakJariwala/sqlsaber/issues/48)) ([9e8ca2a](https://github.com/SarthakJariwala/sqlsaber/commit/9e8ca2ac9567c0d0df5b172301b03699d496cfbb))
+
 ### v0.55.0
 
 #### Added
