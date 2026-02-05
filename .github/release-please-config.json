@@ -6,24 +6,21 @@
       "release-type": "python",
       "component": "sqlsaber",
       "changelog-path": "docs/src/content/docs/changelog.md",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true
+      "bump-minor-pre-major": true
     },
     "plugins/viz": {
       "package-name": "sqlsaber-viz",
       "release-type": "python",
       "component": "sqlsaber-viz",
       "changelog-path": "CHANGELOG.md",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true
+      "bump-minor-pre-major": true
     },
     "plugins/sandbox": {
       "package-name": "sqlsaber-sandbox",
       "release-type": "python",
       "component": "sqlsaber-sandbox",
       "changelog-path": "CHANGELOG.md",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true
+      "bump-minor-pre-major": true
     }
   },
   "separate-pull-requests": true
