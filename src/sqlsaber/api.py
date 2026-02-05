@@ -87,6 +87,8 @@ class SQLSaber:
         api_key: str | None = None,
         memory: str | Path | None = None,
         system_prompt: str | Path | None = None,
+        viz_model_name: str | None = None,
+        viz_api_key: str | None = None,
     ):
         """Initialize SQLSaber.
 
@@ -119,6 +121,12 @@ class SQLSaber:
                 database memories for this session.
             system_prompt: Custom system prompt text to replace SQLSaber's default.
                 If this points to an existing file path, its contents are read.
+            viz_model_name: Override model for the visualization tool's internal
+                spec agent (format: 'provider:model'). When set, the viz tool
+                uses this model instead of the main agent's model. Useful for
+                using a cheaper/faster model for chart generation.
+            viz_api_key: API key for the viz model provider. Only needed when
+                viz_model_name uses a different provider than the main agent.
         """
 
         self._config_manager = DatabaseConfigManager()
@@ -157,6 +165,8 @@ class SQLSaber:
             api_key=api_key,
             memory=memory_text,
             system_prompt=system_prompt_text,
+            viz_model_name=viz_model_name,
+            viz_api_key=viz_api_key,
         )
 
     async def query(

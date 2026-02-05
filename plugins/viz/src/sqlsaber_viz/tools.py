@@ -39,6 +39,18 @@ class VizTool(Tool):
         self._last_rows: list[dict] | None = None
         self._last_file: str | None = None
         self._replay_messages: list | None = None
+        self._viz_model_name: str | None = None
+        self._viz_api_key: str | None = None
+
+    def set_viz_model(self, model_name: str | None, api_key: str | None = None) -> None:
+        """Set the model used by the internal SpecAgent for viz generation.
+
+        Args:
+            model_name: Model override (format: 'provider:model'). None to use default.
+            api_key: Optional API key for the model provider.
+        """
+        self._viz_model_name = model_name
+        self._viz_api_key = api_key
 
     def set_replay_messages(self, messages: list) -> None:
         """Set message history for replay scenarios (e.g., threads show)."""
@@ -87,7 +99,9 @@ class VizTool(Tool):
         self._last_rows = rows
         self._last_file = file
 
-        agent = _get_spec_agent_cls()()
+        agent = _get_spec_agent_cls()(
+            model_name=self._viz_model_name, api_key=self._viz_api_key
+        )
 
         try:
             spec = await asyncio.wait_for(
