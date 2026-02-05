@@ -3224,7 +3224,7 @@ wheels = [
 
 [[package]]
 name = "sqlsaber"
-version = "0.51.0"
+version = "0.54.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiomysql" },
@@ -3244,14 +3244,14 @@ dependencies = [
     { name = "structlog" },
     { name = "tabulate" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bf/37/7193eb200274c7fb3310404e3086036fcbb3830014dddbca978314bc4fb2/sqlsaber-0.51.0.tar.gz", hash = "sha256:d37cd814c6509132fb5e7b819a408f1a82a65c6499cada9b059f20774ba2487f", size = 6328995, upload-time = "2026-01-29T00:52:01.042Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/1e/14cc18ebb1a221b7863350922beea8b4d5e06ee5d540c188d4ca6e8b1a54/sqlsaber-0.54.0.tar.gz", hash = "sha256:8c4744591b14e374f53679d49448904d265a90686e13adc75cd6ade44abdcc07", size = 8133371, upload-time = "2026-02-04T02:26:30.972Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/48/b0/1c5c13eed4652e0e7530ff4a22c6fbb28d0eeb30312df45c768afaea2d64/sqlsaber-0.51.0-py3-none-any.whl", hash = "sha256:7a4a7d6e755fed37d320d3afd99395904dab9819796003761d00b144940be2c6", size = 132090, upload-time = "2026-01-29T00:51:59.384Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/3a/5b15e2b589b3c866db2966cd80239b99be40a3441db6de4fce691fe32308/sqlsaber-0.54.0-py3-none-any.whl", hash = "sha256:72455830f968ce9e91f581ff28469c5d3589d8d817bbac5b1c8ffc13905c0b50", size = 137833, upload-time = "2026-02-04T02:26:28.661Z" },
 ]
 
 [[package]]
 name = "sqlsaber-sandbox"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "cased-sandboxes" },
@@ -3267,7 +3267,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "cased-sandboxes", specifier = ">=0.5.0" },
-    { name = "sqlsaber" },
+    { name = "sqlsaber", specifier = ">=0.54.0" },
 ]
 
 [package.metadata.requires-dev]
