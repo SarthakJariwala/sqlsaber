@@ -1,6 +1,6 @@
 """Transform pipeline tests."""
 
-from sqlsaber_viz.spec import FilterConfig, FilterTransform, LimitTransform, SortItem, SortTransform
+from sqlsaber_viz.spec import FilterConfig, LimitTransform, SortItem, SortTransform
 from sqlsaber_viz.transforms import apply_filter, apply_sort, apply_transforms
 
 

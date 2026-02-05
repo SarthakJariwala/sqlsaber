@@ -205,7 +205,9 @@ class PlotextRenderer:
         plt.box(labels, data)
         return None
 
-    def _render_histogram(self, chart: HistogramChart, rows: list[dict], plt) -> str | None:
+    def _render_histogram(
+        self, chart: HistogramChart, rows: list[dict], plt
+    ) -> str | None:
         field = chart.histogram.field
         bins = chart.histogram.bins
 

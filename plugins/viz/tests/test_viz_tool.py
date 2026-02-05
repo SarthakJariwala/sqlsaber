@@ -7,7 +7,6 @@ from types import SimpleNamespace
 import pytest
 from rich.console import Console
 
-import sqlsaber.tools  # Ensure plugin discovery runs before importing viz tool.
 import sqlsaber_viz.tools as tools
 from sqlsaber_viz.spec import VizSpec
 from sqlsaber_viz.tools import VizTool
@@ -24,7 +23,7 @@ def _make_ctx(payload: dict, tool_call_id: str) -> SimpleNamespace:
 
 
 class DummyAgent:
-    def __init__(self):
+    def __init__(self, model_name: str | None = None, api_key: str | None = None):
         pass
 
     async def generate_spec(
@@ -52,7 +51,9 @@ class DummyAgent:
 
 
 @pytest.mark.asyncio
-async def test_viz_tool_execute_adds_bar_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_viz_tool_execute_adds_bar_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(tools, "_get_spec_agent_cls", lambda: DummyAgent)
 
     payload = {

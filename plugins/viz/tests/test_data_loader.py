@@ -23,4 +23,3 @@ def test_extract_data_summary_types() -> None:
 
 def test_infer_column_type_nulls() -> None:
     assert infer_column_type([None, None]) == "null"
-

@@ -40,6 +40,8 @@ class SQLSaberAgent:
         allow_dangerous: bool = False,
         memory: str | None = None,
         system_prompt: str | None = None,
+        viz_model_name: str | None = None,
+        viz_api_key: str | None = None,
     ):
         self.db_connection = db_connection
         self.database_name = database_name
@@ -54,6 +56,9 @@ class SQLSaberAgent:
         self._api_key_override = api_key
         self.db_type = self.db_connection.display_name
         self.allow_dangerous = allow_dangerous
+
+        self._viz_model_name = viz_model_name
+        self._viz_api_key = viz_api_key
 
         self.schema_manager = SchemaManager(self.db_connection)
 
@@ -79,6 +84,12 @@ class SQLSaberAgent:
             if isinstance(tool, SQLTool):
                 tool.set_connection(self.db_connection, self.schema_manager)
                 tool.allow_dangerous = self.allow_dangerous
+
+        if self._viz_model_name and "viz" in tool_registry.list_tools():
+            viz_tool = tool_registry.get_tool("viz")
+            setter = getattr(viz_tool, "set_viz_model", None)
+            if setter is not None:
+                setter(self._viz_model_name, self._viz_api_key)
 
     def _build_agent(self) -> Agent:
         """Create and configure the pydantic-ai Agent."""
