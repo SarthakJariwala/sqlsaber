@@ -24,6 +24,27 @@ jobs:
           config-file: .github/release-please-config.json
           manifest-file: .github/release-please-manifest.json
 
+      - name: Trigger publish workflow
+        if: steps.release.outputs.releases_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASES='${{ steps.release.outputs.paths_released }}'
+          for path in $(echo "$RELEASES" | jq -r '.[]'); do
+            case "$path" in
+              ".")
+                TAG="sqlsaber-v${{ fromJSON(steps.release.outputs)['.--version'] }}"
+                ;;
+              "plugins/viz")
+                TAG="sqlsaber-viz-v${{ fromJSON(steps.release.outputs)['plugins/viz--version'] }}"
+                ;;
+              "plugins/sandbox")
+                TAG="sqlsaber-sandbox-v${{ fromJSON(steps.release.outputs)['plugins/sandbox--version'] }}"
+                ;;
+            esac
+            gh workflow run publish.yml -f tag="$TAG"
+          done
+
       - name: Install uv
         if: steps.release.outputs.prs_created == 'true'
         uses: astral-sh/setup-uv@v5

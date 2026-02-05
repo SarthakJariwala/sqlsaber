@@ -3,6 +3,12 @@ name: Build and Publish Package
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish (e.g., sqlsaber-v0.55.0)'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -26,7 +32,7 @@ jobs:
       - name: Determine package to publish
         id: package
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${{ github.event.inputs.tag || github.event.release.tag_name }}"
           if [[ "$TAG" == sqlsaber-viz-v* ]]; then
             echo "name=sqlsaber-viz" >> $GITHUB_OUTPUT
             echo "dir=plugins/viz" >> $GITHUB_OUTPUT
