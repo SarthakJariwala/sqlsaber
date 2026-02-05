@@ -3119,7 +3119,7 @@ wheels = [
 
 [[package]]
 name = "sqlsaber"
-version = "0.55.0"
+version = "0.55.1"
 source = { editable = "." }
 dependencies = [
     { name = "aiomysql" },
@@ -3190,7 +3190,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cased-sandboxes", specifier = ">=0.5.0" },
-    { name = "sqlsaber" },
+    { name = "sqlsaber", specifier = ">=0.54.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -3211,7 +3211,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "plotext", specifier = ">=5.3.0" },
-    { name = "sqlsaber" },
+    { name = "sqlsaber", specifier = ">=0.54.0" },
 ]
 
 [package.metadata.requires-dev]
