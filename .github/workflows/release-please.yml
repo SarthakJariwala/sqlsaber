@@ -1,0 +1,58 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: .github/release-please-config.json
+          manifest-file: .github/release-please-manifest.json
+
+      - name: Install uv
+        if: steps.release.outputs.prs_created == 'true'
+        uses: astral-sh/setup-uv@v5
+
+      - name: Update lockfiles
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the PR branch name from the release-please output
+          PR_DATA='${{ steps.release.outputs.prs }}'
+          if [ -n "$PR_DATA" ] && [ "$PR_DATA" != "[]" ]; then
+            BRANCH=$(echo "$PR_DATA" | jq -r '.[0].headBranchName')
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+
+            # Update root lockfile
+            uv lock
+
+            # Update plugin lockfiles
+            for plugin_dir in plugins/*/; do
+              if [ -f "$plugin_dir/pyproject.toml" ]; then
+                (cd "$plugin_dir" && uv lock)
+              fi
+            done
+
+            # Commit and push if there are changes
+            if ! git diff --quiet; then
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git add uv.lock plugins/*/uv.lock
+              git commit -m "chore: update lockfiles"
+              git push origin "$BRANCH"
+            fi
+          fi

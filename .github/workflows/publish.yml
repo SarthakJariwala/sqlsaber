@@ -1,8 +1,11 @@
 name: Build and Publish Package
 
 on:
-  release:
-    types: [created]
+  push:
+    tags:
+      - "sqlsaber-v*"
+      - "sqlsaber-viz-v*"
+      - "sqlsaber-sandbox-v*"
 
 permissions:
   contents: read
@@ -23,11 +26,32 @@ jobs:
         with:
           python-version-file: "pyproject.toml"
 
+      - name: Determine package to publish
+        id: package
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [[ "$TAG" == sqlsaber-viz-v* ]]; then
+            echo "name=sqlsaber-viz" >> $GITHUB_OUTPUT
+            echo "dir=plugins/viz" >> $GITHUB_OUTPUT
+          elif [[ "$TAG" == sqlsaber-sandbox-v* ]]; then
+            echo "name=sqlsaber-sandbox" >> $GITHUB_OUTPUT
+            echo "dir=plugins/sandbox" >> $GITHUB_OUTPUT
+          elif [[ "$TAG" == sqlsaber-v* ]]; then
+            echo "name=sqlsaber" >> $GITHUB_OUTPUT
+            echo "dir=." >> $GITHUB_OUTPUT
+          else
+            echo "Unknown tag pattern: $TAG"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: uv sync --all-extras --dev
+        working-directory: ${{ steps.package.outputs.dir }}
 
       - name: Build package
         run: uv build
+        working-directory: ${{ steps.package.outputs.dir }}
 
       - name: Publish to PyPI
         run: uv publish
+        working-directory: ${{ steps.package.outputs.dir }}
