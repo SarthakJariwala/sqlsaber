@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "SQLsaber terminal visualization plugin"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["sqlsaber", "plotext>=5.3.0"]
+dependencies = ["sqlsaber>=0.54.0", "plotext>=5.3.0"]
 
 [project.entry-points."sqlsaber.tools"]
 viz = "sqlsaber_viz:register_tools"

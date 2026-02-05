@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "SQLsaber sandbox tool plugin"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["sqlsaber", "cased-sandboxes>=0.5.0"]
+dependencies = ["sqlsaber>=0.54.0", "cased-sandboxes>=0.5.0"]
 
 [project.entry-points."sqlsaber.tools"]
 sandbox = "sqlsaber_sandbox:register_tools"
