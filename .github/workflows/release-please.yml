@@ -34,13 +34,13 @@ jobs:
           for path in $(echo "$RELEASES" | jq -r '.[]'); do
             case "$path" in
               ".")
-                TAG="sqlsaber-v${{ fromJSON(steps.release.outputs)['.--version'] }}"
+                TAG="sqlsaber-v${{ steps.release.outputs['.--version'] }}"
                 ;;
               "plugins/viz")
-                TAG="sqlsaber-viz-v${{ fromJSON(steps.release.outputs)['plugins/viz--version'] }}"
+                TAG="sqlsaber-viz-v${{ steps.release.outputs['plugins/viz--version'] }}"
                 ;;
               "plugins/sandbox")
-                TAG="sqlsaber-sandbox-v${{ fromJSON(steps.release.outputs)['plugins/sandbox--version'] }}"
+                TAG="sqlsaber-sandbox-v${{ steps.release.outputs['plugins/sandbox--version'] }}"
                 ;;
             esac
             gh workflow run publish.yml -f tag="$TAG"
