@@ -1,10 +1,13 @@
 """Tests for SQLSaberAgent overrides and memory injection."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.database.sqlite import SQLiteConnection
 from sqlsaber.memory.manager import MemoryManager
+from sqlsaber.overrides import ToolRunDeps
 
 
 @pytest.fixture
@@ -80,3 +83,58 @@ class TestSQLSaberAgentMemory:
 
         prompt = agent.system_prompt_text(include_memory=True)
         assert "saved-memory" not in prompt
+
+
+class TestSQLSaberAgentDeps:
+    @pytest.mark.asyncio
+    async def test_run_passes_tool_overides_via_deps(self, in_memory_db, monkeypatch):
+        agent = SQLSaberAgent(
+            db_connection=in_memory_db,
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+            tool_overides={
+                "viz": {
+                    "model_name": "openai:gpt-5-mini",
+                    "api_key": "override-api-key",
+                }
+            },
+        )
+
+        captured: dict[str, object] = {}
+
+        async def fake_run(prompt: str, **kwargs):
+            _ = prompt
+            captured.update(kwargs)
+            return SimpleNamespace(output="ok")
+
+        monkeypatch.setattr(agent.agent, "run", fake_run)
+
+        await agent.run("hello")
+        deps = captured.get("deps")
+        assert isinstance(deps, ToolRunDeps)
+        assert deps.tool_overides["viz"].model_name == "openai:gpt-5-mini"
+        assert deps.tool_overides["viz"].api_key == "override-api-key"
+
+    @pytest.mark.asyncio
+    async def test_run_passes_empty_tool_overides_when_unset(
+        self, in_memory_db, monkeypatch
+    ):
+        agent = SQLSaberAgent(
+            db_connection=in_memory_db,
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+        )
+
+        captured: dict[str, object] = {}
+
+        async def fake_run(prompt: str, **kwargs):
+            _ = prompt
+            captured.update(kwargs)
+            return SimpleNamespace(output="ok")
+
+        monkeypatch.setattr(agent.agent, "run", fake_run)
+
+        await agent.run("hello")
+        deps = captured.get("deps")
+        assert isinstance(deps, ToolRunDeps)
+        assert deps.tool_overides == {}

@@ -17,6 +17,7 @@ from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.config.settings import ThinkingLevel
 from sqlsaber.database import DatabaseConnection
 from sqlsaber.database.resolver import resolve_database
+from sqlsaber.overrides import ToolOveridesInput
 from sqlsaber.utils.text_input import resolve_text_input
 
 
@@ -87,8 +88,7 @@ class SQLSaber:
         api_key: str | None = None,
         memory: str | Path | None = None,
         system_prompt: str | Path | None = None,
-        viz_model_name: str | None = None,
-        viz_api_key: str | None = None,
+        tool_overides: ToolOveridesInput | None = None,
     ):
         """Initialize SQLSaber.
 
@@ -121,12 +121,9 @@ class SQLSaber:
                 database memories for this session.
             system_prompt: Custom system prompt text to replace SQLSaber's default.
                 If this points to an existing file path, its contents are read.
-            viz_model_name: Override model for the visualization tool's internal
-                spec agent (format: 'provider:model'). When set, the viz tool
-                uses this model instead of the main agent's model. Useful for
-                using a cheaper/faster model for chart generation.
-            viz_api_key: API key for the viz model provider. Only needed when
-                viz_model_name uses a different provider than the main agent.
+            tool_overides: Optional runtime model/api-key overrides per tool name.
+                Example:
+                {"viz": ModelOverides(model_name="openai:gpt-5-mini")}
         """
 
         self._config_manager = DatabaseConfigManager()
@@ -165,8 +162,7 @@ class SQLSaber:
             api_key=api_key,
             memory=memory_text,
             system_prompt=system_prompt_text,
-            viz_model_name=viz_model_name,
-            viz_api_key=viz_api_key,
+            tool_overides=tool_overides,
         )
 
     async def query(

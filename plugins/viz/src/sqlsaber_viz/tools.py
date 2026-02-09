@@ -6,12 +6,14 @@ import asyncio
 import json
 import re
 from html import escape
+from typing import cast
 
 from pydantic import ValidationError
 from pydantic_ai import RunContext
 from rich.console import Console
 from rich.text import Text
 
+from sqlsaber.overrides import get_tool_model_overide_from_ctx
 from sqlsaber.tools.base import Tool
 from sqlsaber.utils.json_utils import json_dumps
 
@@ -39,18 +41,6 @@ class VizTool(Tool):
         self._last_rows: list[dict] | None = None
         self._last_file: str | None = None
         self._replay_messages: list | None = None
-        self._viz_model_name: str | None = None
-        self._viz_api_key: str | None = None
-
-    def set_viz_model(self, model_name: str | None, api_key: str | None = None) -> None:
-        """Set the model used by the internal SpecAgent for viz generation.
-
-        Args:
-            model_name: Model override (format: 'provider:model'). None to use default.
-            api_key: Optional API key for the model provider.
-        """
-        self._viz_model_name = model_name
-        self._viz_api_key = api_key
 
     def set_replay_messages(self, messages: list) -> None:
         """Set message history for replay scenarios (e.g., threads show)."""
@@ -99,8 +89,10 @@ class VizTool(Tool):
         self._last_rows = rows
         self._last_file = file
 
+        overide = get_tool_model_overide_from_ctx(ctx, self.name)
         agent = _get_spec_agent_cls()(
-            model_name=self._viz_model_name, api_key=self._viz_api_key
+            model_name=overide.model_name if overide else None,
+            api_key=overide.api_key if overide else None,
         )
 
         try:
@@ -176,10 +168,11 @@ class VizTool(Tool):
         data = self._parse_result(result)
         if not isinstance(data, dict):
             return None
-        if "error" in data and data["error"]:
+        mapping = cast(dict[str, object], data)
+        if mapping.get("error"):
             return None
         try:
-            return VizSpec.model_validate(data)
+            return VizSpec.model_validate(mapping)
         except ValidationError:
             return None
 

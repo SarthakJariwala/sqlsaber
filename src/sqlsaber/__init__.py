@@ -4,8 +4,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .api import SQLSaber
+    from .overrides import ModelOverides
 
-__all__ = ["SQLSaber"]
+__all__ = ["SQLSaber", "ModelOverides"]
 
 
 def __getattr__(name: str):
@@ -14,4 +15,8 @@ def __getattr__(name: str):
         from .api import SQLSaber
 
         return SQLSaber
+    if name == "ModelOverides":
+        from .overrides import ModelOverides
+
+        return ModelOverides
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

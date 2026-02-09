@@ -8,23 +8,30 @@ import pytest
 from rich.console import Console
 
 import sqlsaber_viz.tools as tools
+from sqlsaber.overrides import ModelOverides, build_tool_run_deps
 from sqlsaber_viz.spec import VizSpec
 from sqlsaber_viz.tools import VizTool
 
 
-def _make_ctx(payload: dict, tool_call_id: str) -> SimpleNamespace:
+def _make_ctx(
+    payload: dict, tool_call_id: str, deps: object | None = None
+) -> SimpleNamespace:
     part = SimpleNamespace(
         part_kind="tool-return",
         tool_call_id=tool_call_id,
         content=payload,
     )
     msg = SimpleNamespace(parts=[part])
-    return SimpleNamespace(messages=[msg])
+    return SimpleNamespace(messages=[msg], deps=deps)
 
 
 class DummyAgent:
+    last_model_name: str | None = None
+    last_api_key: str | None = None
+
     def __init__(self, model_name: str | None = None, api_key: str | None = None):
-        pass
+        type(self).last_model_name = model_name
+        type(self).last_api_key = api_key
 
     async def generate_spec(
         self,
@@ -107,3 +114,37 @@ def test_viz_tool_render_result(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert rendered is True
     assert buffer.getvalue().strip()
+
+
+@pytest.mark.asyncio
+async def test_viz_tool_uses_deps_model_overide(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tools, "_get_spec_agent_cls", lambda: DummyAgent)
+
+    payload = {
+        "row_count": 2,
+        "results": [
+            {"name": "A", "value": 1},
+            {"name": "B", "value": 2},
+        ],
+    }
+    ctx = _make_ctx(
+        payload,
+        "call-2",
+        deps=build_tool_run_deps(
+            {
+                "viz": ModelOverides(
+                    model_name="openai:gpt-5-mini", api_key="override-api-key"
+                )
+            }
+        ),
+    )
+    tool = VizTool()
+
+    result = await tool.execute(ctx, request="show values", file="result_call-2.json")
+
+    parsed = json.loads(result)
+    assert parsed["chart"]["type"] == "bar"
+    assert DummyAgent.last_model_name == "openai:gpt-5-mini"
+    assert DummyAgent.last_api_key == "override-api-key"
