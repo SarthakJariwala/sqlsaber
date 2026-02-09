@@ -9,6 +9,14 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.57.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.56.0...sqlsaber-v0.57.0) (2026-02-09)
+
+
+### Features
+
+* Implement a generic model/API-key override approach for tools ([#122](https://github.com/SarthakJariwala/sqlsaber/issues/122)) ([8dcf785](https://github.com/SarthakJariwala/sqlsaber/commit/8dcf7856bffca5f7fe1b85a78f1636988f568598))
+* Implement a generic model/API-key override approach for tools ([#122](https://github.com/SarthakJariwala/sqlsaber/issues/122)) ([b880d5e](https://github.com/SarthakJariwala/sqlsaber/commit/b880d5e3674d0d3bb08392d29113c00cb1aa6a0f))
+
 ## [0.56.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.55.1...sqlsaber-v0.56.0) (2026-02-05)
 
 
