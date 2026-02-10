@@ -9,6 +9,13 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.58.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.57.0...sqlsaber-v0.58.0) (2026-02-10)
+
+
+### Features
+
+* registry stores tool classes, agents own tool instances ([#125](https://github.com/SarthakJariwala/sqlsaber/issues/125)) ([f8d340d](https://github.com/SarthakJariwala/sqlsaber/commit/f8d340d60e8deb58bbc3240f96e92d91237fe7a8))
+
 ## [0.57.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.56.0...sqlsaber-v0.57.0) (2026-02-09)
 
 
