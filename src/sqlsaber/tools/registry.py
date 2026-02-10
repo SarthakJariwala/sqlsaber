@@ -20,7 +20,6 @@ class ToolRegistry:
     def __init__(self):
         """Initialize the registry."""
         self._tools: dict[str, Type[Tool]] = {}
-        self._instances: dict[str, Tool] = {}
 
     def register(self, tool_class: Type[Tool]) -> None:
         """Register a tool class.
@@ -45,11 +44,47 @@ class ToolRegistry:
         """
         if name in self._tools:
             del self._tools[name]
-        if name in self._instances:
-            del self._instances[name]
+
+    def get_tool_class(self, name: str) -> Type[Tool]:
+        """Get a tool class by name.
+
+        Args:
+            name: Name of the tool
+
+        Returns:
+            Tool class
+
+        Raises:
+            KeyError: If tool is not found
+        """
+        if name not in self._tools:
+            raise KeyError(f"Tool '{name}' not found in registry")
+
+        return self._tools[name]
+
+    def create_tool(self, name: str) -> Tool:
+        """Create a fresh tool instance by name.
+
+        Args:
+            name: Name of the tool
+
+        Returns:
+            A new Tool instance
+
+        Raises:
+            KeyError: If tool is not found
+        """
+        return self.get_tool_class(name)()
+
+    def create_all_tools(self) -> list[Tool]:
+        """Create fresh instances of all registered tools."""
+        return [self.create_tool(name) for name in self.list_tools()]
 
     def get_tool(self, name: str) -> Tool:
         """Get a tool instance by name.
+
+        Returns a fresh instance each time. For per-agent isolation,
+        prefer ``create_tool`` explicitly.
 
         Args:
             name: Name of the tool
@@ -60,14 +95,7 @@ class ToolRegistry:
         Raises:
             KeyError: If tool is not found
         """
-        if name not in self._tools:
-            raise KeyError(f"Tool '{name}' not found in registry")
-
-        # Create instance if not already created (singleton pattern)
-        if name not in self._instances:
-            self._instances[name] = self._tools[name]()
-
-        return self._instances[name]
+        return self.create_tool(name)
 
     def list_tools(self) -> list[str]:
         """List all registered tool names."""

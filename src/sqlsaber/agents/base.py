@@ -7,7 +7,7 @@ from typing import Any, AsyncIterator
 
 from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.schema import SchemaManager
-from sqlsaber.tools import SQLTool, tool_registry
+from sqlsaber.tools import SQLTool, Tool, tool_registry
 
 
 class BaseSQLAgent(ABC):
@@ -20,6 +20,12 @@ class BaseSQLAgent(ABC):
     ):
         self.db = db_connection
         self.schema_manager = schema_manager or SchemaManager(db_connection)
+
+        # Create private tool instances so we don't mutate the shared registry
+        self._tools: dict[str, Tool] = {
+            name: tool_registry.create_tool(name)
+            for name in tool_registry.list_tools()
+        }
 
         # Initialize SQL tools with database connection
         self._init_tools()
@@ -42,9 +48,7 @@ class BaseSQLAgent(ABC):
 
     def _init_tools(self) -> None:
         """Initialize SQL tools with database connection."""
-        # Get all SQL tools and set their database connection
-        for tool_name in tool_registry.list_tools():
-            tool = tool_registry.get_tool(tool_name)
+        for tool in self._tools.values():
             if isinstance(tool, SQLTool):
                 tool.set_connection(self.db, self.schema_manager)
 
@@ -53,7 +57,7 @@ class BaseSQLAgent(ABC):
     ) -> str:
         """Process a tool call and return the result."""
         try:
-            tool = tool_registry.get_tool(tool_name)
+            tool = self._tools[tool_name]
             return await tool.execute(**tool_input)
         except KeyError:
             return json.dumps({"error": f"Unknown tool: {tool_name}"})
