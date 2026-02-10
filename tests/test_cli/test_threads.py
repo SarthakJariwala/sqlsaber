@@ -112,7 +112,7 @@ class TestThreadsCLI:
 
     def test_list_threads_function_call(self, sample_threads):
         """Test the list_threads functionality via ThreadStorage."""
-        with patch("sqlsaber.cli.threads.ThreadStorage") as mock_storage_class:
+        with patch("sqlsaber.threads.ThreadStorage") as mock_storage_class:
             # Use MagicMock instead of AsyncMock
             mock_storage = MagicMock()
             mock_storage_class.return_value = mock_storage
@@ -131,7 +131,7 @@ class TestThreadsCLI:
 
     def test_list_threads_empty(self):
         """Test listing threads when no threads exist."""
-        with patch("sqlsaber.cli.threads.ThreadStorage") as mock_storage_class:
+        with patch("sqlsaber.threads.ThreadStorage") as mock_storage_class:
             mock_storage = MagicMock()
             mock_storage_class.return_value = mock_storage
 
@@ -146,7 +146,7 @@ class TestThreadsCLI:
 
     def test_show_thread_not_found(self):
         """Test showing a thread that doesn't exist."""
-        with patch("sqlsaber.cli.threads.ThreadStorage") as mock_storage_class:
+        with patch("sqlsaber.threads.ThreadStorage") as mock_storage_class:
             mock_storage = MagicMock()
             mock_storage_class.return_value = mock_storage
 
@@ -165,7 +165,7 @@ class TestThreadsCLI:
         """Test showing a thread that exists."""
         thread = sample_threads[0]
 
-        with patch("sqlsaber.cli.threads.ThreadStorage") as mock_storage_class:
+        with patch("sqlsaber.threads.ThreadStorage") as mock_storage_class:
             mock_storage = MagicMock()
             mock_storage_class.return_value = mock_storage
 
@@ -313,7 +313,7 @@ class TestThreadsCLI:
             store.get_thread_messages = AsyncMock(return_value=sample_messages)
 
             with (
-                patch("sqlsaber.cli.threads.ThreadStorage", return_value=store),
+                patch("sqlsaber.threads.ThreadStorage", return_value=store),
                 patch("sqlsaber.database.resolver") as mock_resolve,
                 patch("sqlsaber.database.DatabaseConnection") as mock_db_conn_class,
                 patch(
@@ -415,7 +415,7 @@ class TestThreadsCLI:
 
     def test_export_thread_not_found(self):
         """Test exporting a thread that doesn't exist."""
-        with patch("sqlsaber.cli.threads.ThreadStorage") as mock_storage_class:
+        with patch("sqlsaber.threads.ThreadStorage") as mock_storage_class:
             mock_storage = MagicMock()
             mock_storage.get_thread = AsyncMock(return_value=None)
             mock_storage_class.return_value = mock_storage

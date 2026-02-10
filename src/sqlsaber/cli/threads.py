@@ -1,13 +1,14 @@
 """Threads CLI: list, show, and resume threads (pydantic-ai message snapshots)."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import time
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import cyclopts
-from pydantic_ai.messages import ModelMessage
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -16,7 +17,9 @@ from rich.table import Table
 from sqlsaber.cli.html_export import render_thread_html
 from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console, get_theme_manager
-from sqlsaber.threads import ThreadStorage
+
+if TYPE_CHECKING:
+    from pydantic_ai.messages import ModelMessage
 
 # Globals consistent with other CLI modules
 console = create_console()
@@ -165,6 +168,8 @@ def list_threads(
     ] = 50,
 ):
     """List threads (optionally filtered by database)."""
+    from sqlsaber.threads import ThreadStorage
+
     logger.info("threads.cli.list.start", database=database, limit=limit)
     store = ThreadStorage()
     threads = asyncio.run(store.list_threads(database_name=database, limit=limit))
@@ -195,6 +200,8 @@ def show(
     thread_id: Annotated[str, cyclopts.Parameter(help="Thread ID")],
 ):
     """Show thread metadata and render the full transcript."""
+    from sqlsaber.threads import ThreadStorage
+
     logger.info("threads.cli.show.start", thread_id=thread_id)
     store = ThreadStorage()
     thread = asyncio.run(store.get_thread(thread_id))
@@ -227,6 +234,8 @@ def resume(
     ] = None,
 ):
     """Render transcript, then resume thread in interactive mode."""
+    from sqlsaber.threads import ThreadStorage
+
     logger.info("threads.cli.resume.start", thread_id=thread_id, database=database)
     store = ThreadStorage()
 
@@ -308,6 +317,8 @@ def prune(
     ] = 30,
 ):
     """Prune old threads by last activity timestamp."""
+    from sqlsaber.threads import ThreadStorage
+
     logger.info("threads.cli.prune.start", days=days)
     store = ThreadStorage()
 
@@ -331,6 +342,8 @@ def export(
     ] = None,
 ):
     """Export a thread transcript as a standalone HTML file."""
+    from sqlsaber.threads import ThreadStorage
+
     logger.info(
         "threads.cli.export.start",
         thread_id=thread_id,
