@@ -27,6 +27,7 @@ from sqlsaber.prompts.claude import SONNET_4_5
 from sqlsaber.prompts.dangerous_mode import DANGEROUS_MODE
 from sqlsaber.prompts.memory import MEMORY_ADDITION
 from sqlsaber.prompts.openai import GPT_5
+from sqlsaber.tools.base import Tool
 from sqlsaber.tools.registry import tool_registry
 from sqlsaber.tools.sql_tools import SQLTool
 
@@ -77,13 +78,17 @@ class SQLSaberAgent:
             else self.config.model.thinking_level
         )
 
+        self._tools: dict[str, Tool] = {
+            name: tool_registry.create_tool(name)
+            for name in tool_registry.list_tools()
+        }
+
         self._configure_sql_tools()
         self.agent = self._build_agent()
 
     def _configure_sql_tools(self) -> None:
         """Ensure SQL tools receive the active database connection and session config."""
-        for tool_name in tool_registry.list_tools():
-            tool = tool_registry.get_tool(tool_name)
+        for tool in self._tools.values():
             if isinstance(tool, SQLTool):
                 tool.set_connection(self.db_connection, self.schema_manager)
                 tool.allow_dangerous = self.allow_dangerous
@@ -171,8 +176,7 @@ class SQLSaberAgent:
 
     def _register_tools(self, agent: Agent) -> None:
         """Register all the SQL tools with the agent."""
-        for tool_name in tool_registry.list_tools():
-            tool = tool_registry.get_tool(tool_name)
+        for tool in self._tools.values():
             register = agent.tool if tool.requires_ctx else agent.tool_plain
             register(name=tool.name)(tool.execute)
 
