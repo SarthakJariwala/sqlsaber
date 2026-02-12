@@ -50,6 +50,9 @@ class StreamingQueryHandler:
         """
 
         async for event in event_stream:
+            messages = getattr(ctx, "messages", None)
+            if isinstance(messages, list):
+                self.display.set_replay_messages(messages)
             await self.on_event(event, ctx)
 
     # --- Event routing via singledispatchmethod ---------------------------------------
