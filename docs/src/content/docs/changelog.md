@@ -9,6 +9,13 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.58.1](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.58.0...sqlsaber-v0.58.1) (2026-02-12)
+
+
+### Bug Fixes
+
+* propagates ctx.messages into DisplayManager on each streamed event ([#127](https://github.com/SarthakJariwala/sqlsaber/issues/127)) ([defe62f](https://github.com/SarthakJariwala/sqlsaber/commit/defe62f196299e5f5c5f828a146d13dfc120628d))
+
 ## [0.58.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.57.0...sqlsaber-v0.58.0) (2026-02-10)
 
 
