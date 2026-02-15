@@ -45,6 +45,7 @@ export default defineConfig({
 						{ label: "Running Queries", slug: "guides/queries" },
 						{ label: "Conversation Threads", slug: "guides/threads" },
 						{ label: "Memory Management", slug: "guides/memory" },
+						{ label: "Knowledge Base", slug: "guides/knowledge" },
 					],
 				},
 				{

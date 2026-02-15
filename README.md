@@ -65,6 +65,7 @@ saber -d mydb "count active subscriptions"
 |---------|-------------|
 | **Schema introspection** | Discovers tables, columns, and relationships automatically |
 | **Conversation memory** | Add context like "dates are stored as Unix timestamps" |
+| **Structured knowledge base** | Store searchable KPI definitions, SQL patterns, and domain notes per database |
 | **Thread history** | Resume past conversations with `saber threads resume` |
 | **Extended thinking** | Enable `--thinking` for complex analytical queries |
 | **Multiple AI providers** | Anthropic, OpenAI, Google, Groq (Claude Opus 4.5 by default) |
@@ -97,6 +98,19 @@ saber memory add "customer_id in orders table references users.id"
 saber memory add "all timestamps are UTC"
 ```
 
+### Add knowledge (searchable KPI/query references)
+
+```bash
+# Add a structured knowledge entry
+saber knowledge add "Revenue KPI" "Recognized revenue from shipped orders only" --sql "SELECT SUM(amount) FROM orders WHERE status = 'shipped'" --source "finance-wiki"
+
+# Long description/SQL from files
+saber knowledge add "Revenue definition" "$(cat ./knowledge/revenue_definition.md)" --sql "$(cat ./sql/revenue.sql)"
+
+# Search saved knowledge
+saber knowledge search "revenue shipped orders"
+```
+
 ## How It Works
 
 1. **Discovery** — Lists tables and identifies relevant ones based on your question
@@ -112,6 +126,7 @@ Full docs at [sqlsaber.com](https://sqlsaber.com):
 - [Installation](https://sqlsaber.com/installation/)
 - [Getting Started](https://sqlsaber.com/guides/getting-started/)
 - [Database Setup](https://sqlsaber.com/guides/database-setup/)
+- [Knowledge Base](https://sqlsaber.com/guides/knowledge/)
 - [Command Reference](https://sqlsaber.com/reference/commands/)
 
 ## Contributing

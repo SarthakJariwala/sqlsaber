@@ -6,8 +6,11 @@ import pytest
 
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.database.sqlite import SQLiteConnection
+from sqlsaber.knowledge.manager import KnowledgeManager
+from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
 from sqlsaber.memory.manager import MemoryManager
 from sqlsaber.overrides import ToolRunDeps
+from sqlsaber.tools.knowledge_tool import SearchKnowledgeTool
 
 
 @pytest.fixture
@@ -85,6 +88,21 @@ class TestSQLSaberAgentMemory:
         assert "saved-memory" not in prompt
 
 
+class TestSQLSaberAgentKnowledge:
+    def test_knowledge_tool_context_configured(self, in_memory_db):
+        agent = SQLSaberAgent(
+            db_connection=in_memory_db,
+            database_name="test-db",
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+        )
+
+        tool = agent._tools.get("search_knowledge")
+        assert isinstance(tool, SearchKnowledgeTool)
+        assert tool.database_name == "test-db"
+        assert tool.knowledge_manager is agent.knowledge_manager
+
+
 class TestSQLSaberAgentDeps:
     @pytest.mark.asyncio
     async def test_run_passes_tool_overides_via_deps(self, in_memory_db, monkeypatch):
@@ -138,3 +156,55 @@ class TestSQLSaberAgentDeps:
         deps = captured.get("deps")
         assert isinstance(deps, ToolRunDeps)
         assert deps.tool_overides == {}
+
+
+class TestSQLSaberAgentLifecycle:
+    @pytest.mark.asyncio
+    async def test_close_does_not_close_injected_knowledge_manager(
+        self, in_memory_db, temp_dir, monkeypatch
+    ):
+        manager = KnowledgeManager(
+            store=SQLiteKnowledgeStore(db_path=temp_dir / "knowledge.db")
+        )
+        agent = SQLSaberAgent(
+            db_connection=in_memory_db,
+            database_name="test-db",
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+            knowledge_manager=manager,
+        )
+
+        close_calls = 0
+
+        async def _track_close() -> None:
+            nonlocal close_calls
+            close_calls += 1
+
+        monkeypatch.setattr(manager, "close", _track_close)
+        await agent.close()
+
+        assert close_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_close_closes_owned_knowledge_manager_once(
+        self, in_memory_db, monkeypatch
+    ):
+        agent = SQLSaberAgent(
+            db_connection=in_memory_db,
+            database_name="test-db",
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+        )
+
+        close_calls = 0
+
+        async def _track_close() -> None:
+            nonlocal close_calls
+            close_calls += 1
+
+        monkeypatch.setattr(agent.knowledge_manager, "close", _track_close)
+
+        await agent.close()
+        await agent.close()
+
+        assert close_calls == 1
