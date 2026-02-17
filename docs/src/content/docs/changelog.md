@@ -9,6 +9,13 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.59.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.58.1...sqlsaber-v0.59.0) (2026-02-17)
+
+
+### Features
+
+* pluggable knowledge management system that allows storing and searching it ([#129](https://github.com/SarthakJariwala/sqlsaber/issues/129)) ([e151a34](https://github.com/SarthakJariwala/sqlsaber/commit/e151a34ad6d9939ee7abd3170ac625b6fc08fa08))
+
 ## [0.58.1](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.58.0...sqlsaber-v0.58.1) (2026-02-12)
 
 
