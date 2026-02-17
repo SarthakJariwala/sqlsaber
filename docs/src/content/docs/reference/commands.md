@@ -206,6 +206,148 @@ saber db remove my-database
 
 ---
 
+### `saber knowledge`
+
+Manage database-specific knowledge entries used by the `search_knowledge` tool.
+
+Knowledge entries are scoped per database and support optional SQL snippets and source references.
+
+#### `saber knowledge add`
+
+Add a new knowledge entry.
+
+**Usage:**
+
+```bash
+saber knowledge add "Name" "Description" [OPTIONS]
+```
+
+**Parameters:**
+
+- `NAME` - Knowledge entry name (required)
+- `DESCRIPTION` - Knowledge description (required)
+
+**Options:**
+
+- `-d, --database` - Database connection name (uses default if not specified)
+- `--sql` - Optional SQL query or pattern
+- `--source` - Optional source reference (wiki, URL, etc.)
+
+**Examples:**
+
+```bash
+# Add to default database
+saber knowledge add "Revenue KPI" "Recognized revenue from shipped orders only"
+
+# Include SQL pattern
+saber knowledge add "Monthly revenue rollup" "Use shipped orders for monthly revenue" --sql "SELECT date_trunc('month', shipped_at), SUM(amount) FROM orders WHERE status = 'shipped' GROUP BY 1"
+
+# Include a source reference
+saber knowledge add "NRR definition" "Exclude new logo revenue from NRR" --source "finance-wiki"
+
+# Use files for long content
+saber knowledge add "Revenue definition" "$(cat ./knowledge/revenue_definition.md)"
+saber knowledge add "Monthly revenue rollup" "$(cat ./knowledge/monthly_revenue_notes.md)" --sql "$(cat ./sql/monthly_revenue_rollup.sql)"
+```
+
+#### `saber knowledge list`
+
+List all knowledge entries for a database.
+
+**Usage:**
+
+```bash
+saber knowledge list [OPTIONS]
+```
+
+**Options:**
+
+- `-d, --database` - Database connection name (uses default if not specified)
+
+**Output shows:**
+
+- Knowledge ID
+- Name
+- Description preview
+- Last updated timestamp
+
+#### `saber knowledge show`
+
+Show a full knowledge entry by ID.
+
+**Usage:**
+
+```bash
+saber knowledge show ENTRY_ID [OPTIONS]
+```
+
+**Parameters:**
+
+- `ENTRY_ID` - Knowledge ID from `saber knowledge list` output
+
+**Options:**
+
+- `-d, --database` - Database connection name (uses default if not specified)
+
+#### `saber knowledge search`
+
+Search knowledge entries for a database.
+
+**Usage:**
+
+```bash
+saber knowledge search "QUERY" [OPTIONS]
+```
+
+**Parameters:**
+
+- `QUERY` - Keyword query to search for
+
+**Options:**
+
+- `-d, --database` - Database connection name (uses default if not specified)
+- `--limit` - Maximum number of entries to return (default: 10)
+
+**Notes:**
+
+- Results are ranked by full-text relevance.
+- Search is database-scoped.
+
+#### `saber knowledge remove`
+
+Remove a specific knowledge entry.
+
+**Usage:**
+
+```bash
+saber knowledge remove ENTRY_ID [OPTIONS]
+```
+
+**Parameters:**
+
+- `ENTRY_ID` - Knowledge ID from `saber knowledge list` output
+
+**Options:**
+
+- `-d, --database` - Database connection name (uses default if not specified)
+
+#### `saber knowledge clear`
+
+Remove all knowledge entries for a database.
+
+**Usage:**
+
+```bash
+saber knowledge clear [OPTIONS]
+```
+
+**Options:**
+
+- `-d, --database` - Database connection name (uses default if not specified)
+- `-f, --force` - Skip confirmation prompt
+
+---
+
 ### `saber memory`
 
 Manage database-specific memories and context.

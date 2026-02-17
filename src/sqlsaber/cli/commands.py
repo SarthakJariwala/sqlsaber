@@ -14,6 +14,7 @@ from rich.panel import Panel
 
 from sqlsaber.cli.auth import create_auth_app
 from sqlsaber.cli.database import create_db_app
+from sqlsaber.cli.knowledge import create_knowledge_app
 from sqlsaber.cli.memory import create_memory_app
 from sqlsaber.cli.models import create_models_app
 from sqlsaber.cli.onboarding import needs_onboarding, run_onboarding
@@ -47,6 +48,7 @@ app = cyclopts.App(
 
 app.command(create_auth_app(), name="auth")
 app.command(create_db_app(), name="db")
+app.command(create_knowledge_app(), name="knowledge")
 app.command(create_memory_app(), name="memory")
 app.command(create_models_app(), name="models")
 app.command(create_theme_app(), name="theme")

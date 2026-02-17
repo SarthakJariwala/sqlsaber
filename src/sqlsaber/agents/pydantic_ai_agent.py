@@ -16,6 +16,7 @@ from sqlsaber.config import providers
 from sqlsaber.config.settings import Config, ThinkingLevel
 from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.schema import SchemaManager
+from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.memory.manager import MemoryManager
 from sqlsaber.overrides import (
     ToolRunDeps,
@@ -28,6 +29,7 @@ from sqlsaber.prompts.dangerous_mode import DANGEROUS_MODE
 from sqlsaber.prompts.memory import MEMORY_ADDITION
 from sqlsaber.prompts.openai import GPT_5
 from sqlsaber.tools.base import Tool
+from sqlsaber.tools.knowledge_tool import KnowledgeTool
 from sqlsaber.tools.registry import tool_registry
 from sqlsaber.tools.sql_tools import SQLTool
 
@@ -40,6 +42,7 @@ class SQLSaberAgent:
         db_connection: BaseDatabaseConnection,
         database_name: str | None = None,
         memory_manager: MemoryManager | None = None,
+        knowledge_manager: KnowledgeManager | None = None,
         thinking_enabled: bool | None = None,
         thinking_level: ThinkingLevel | None = None,
         model_name: str | None = None,
@@ -53,6 +56,8 @@ class SQLSaberAgent:
         self.database_name = database_name
         self.config = Config()
         self.memory_manager = memory_manager or MemoryManager()
+        self._owns_knowledge_manager = knowledge_manager is None
+        self.knowledge_manager = knowledge_manager or KnowledgeManager()
         self.memory_override = memory
         if system_prompt is not None and not system_prompt.strip():
             self.system_prompt_override = None
@@ -79,11 +84,11 @@ class SQLSaberAgent:
         )
 
         self._tools: dict[str, Tool] = {
-            name: tool_registry.create_tool(name)
-            for name in tool_registry.list_tools()
+            name: tool_registry.create_tool(name) for name in tool_registry.list_tools()
         }
 
         self._configure_sql_tools()
+        self._configure_knowledge_tools()
         self.agent = self._build_agent()
 
     def _configure_sql_tools(self) -> None:
@@ -92,6 +97,12 @@ class SQLSaberAgent:
             if isinstance(tool, SQLTool):
                 tool.set_connection(self.db_connection, self.schema_manager)
                 tool.allow_dangerous = self.allow_dangerous
+
+    def _configure_knowledge_tools(self) -> None:
+        """Ensure knowledge tools receive database and manager context."""
+        for tool in self._tools.values():
+            if isinstance(tool, KnowledgeTool):
+                tool.set_context(self.database_name, self.knowledge_manager)
 
     def _build_agent(self) -> Agent:
         """Create and configure the pydantic-ai Agent."""
@@ -210,3 +221,9 @@ class SQLSaberAgent:
             event_stream_handler=event_stream_handler,
             deps=build_tool_run_deps(self._tool_overides),
         )
+
+    async def close(self) -> None:
+        """Close resources owned by the agent."""
+        if self._owns_knowledge_manager:
+            await self.knowledge_manager.close()
+            self._owns_knowledge_manager = False

@@ -11,6 +11,7 @@ from .display import (
     TableConfig,
     ToolDisplaySpec,
 )
+from .knowledge_tool import KnowledgeTool, SearchKnowledgeTool
 from .registry import ToolRegistry, discover_plugins, register_tool, tool_registry
 
 # Import concrete tools to register them
@@ -37,4 +38,6 @@ __all__ = [
     "ListTablesTool",
     "IntrospectSchemaTool",
     "ExecuteSQLTool",
+    "KnowledgeTool",
+    "SearchKnowledgeTool",
 ]

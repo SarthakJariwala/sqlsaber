@@ -23,8 +23,7 @@ class BaseSQLAgent(ABC):
 
         # Create private tool instances so we don't mutate the shared registry
         self._tools: dict[str, Tool] = {
-            name: tool_registry.create_tool(name)
-            for name in tool_registry.list_tools()
+            name: tool_registry.create_tool(name) for name in tool_registry.list_tools()
         }
 
         # Initialize SQL tools with database connection

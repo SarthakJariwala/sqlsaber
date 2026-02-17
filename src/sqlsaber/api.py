@@ -7,7 +7,7 @@ allowing you to run natural language queries against databases from Python code.
 from collections.abc import AsyncIterable, Awaitable, Sequence
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Callable, Protocol, Self
+from typing import TYPE_CHECKING, Any, Callable, Protocol, Self
 
 from pydantic_ai import RunContext
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
@@ -19,6 +19,9 @@ from sqlsaber.database import DatabaseConnection
 from sqlsaber.database.resolver import resolve_database
 from sqlsaber.overrides import ToolOveridesInput
 from sqlsaber.utils.text_input import resolve_text_input
+
+if TYPE_CHECKING:
+    from sqlsaber.knowledge.manager import KnowledgeManager
 
 
 class SQLSaberRunResult(Protocol):
@@ -89,6 +92,7 @@ class SQLSaber:
         memory: str | Path | None = None,
         system_prompt: str | Path | None = None,
         tool_overides: ToolOveridesInput | None = None,
+        knowledge_manager: "KnowledgeManager | None" = None,
     ):
         """Initialize SQLSaber.
 
@@ -124,6 +128,8 @@ class SQLSaber:
             tool_overides: Optional runtime model/api-key overrides per tool name.
                 Example:
                 {"viz": ModelOverides(model_name="openai:gpt-5-mini")}
+            knowledge_manager: Optional knowledge manager dependency to use for
+                knowledge tool operations.
         """
 
         self._config_manager = DatabaseConfigManager()
@@ -163,6 +169,7 @@ class SQLSaber:
             memory=memory_text,
             system_prompt=system_prompt_text,
             tool_overides=tool_overides,
+            knowledge_manager=knowledge_manager,
         )
 
     async def query(
@@ -205,6 +212,7 @@ class SQLSaber:
 
     async def close(self) -> None:
         """Close the database connection."""
+        await self.agent.close()
         await self.connection.close()
 
     async def __aenter__(self) -> Self:
