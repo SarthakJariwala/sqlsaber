@@ -5,13 +5,19 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from pydantic import ValidationError
 from sqlsaber.agents.provider_factory import ProviderFactory
 from sqlsaber.config import providers
+from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import Config
 
 from .prompts import VIZ_SYSTEM_PROMPT
 from .spec import VizSpec
 from .templates import ChartType, list_chart_types, vizspec_template
+
+logger = get_logger(__name__)
+
+MAX_RETRIES = 2
 
 
 class SpecAgent:
@@ -94,7 +100,22 @@ class SpecAgent:
         file: str,
         chart_type_hint: str | None = None,
     ) -> VizSpec:
-        """Generate a VizSpec from user request and data summary."""
+        """Generate a VizSpec from user request and data summary.
+
+        Uses a retry loop that feeds validation errors back into the
+        agent conversation so it can self-correct without losing context
+        (e.g. the template it fetched and the chart type it chose).
+
+        Args:
+            request: Natural language viz request.
+            columns: Column metadata from the data summary.
+            row_count: Number of rows in the result set.
+            file: Result file key.
+            chart_type_hint: Optional chart type hint.
+
+        Returns:
+            A validated VizSpec.
+        """
 
         prompt = self._build_prompt(
             request=request,
@@ -104,10 +125,34 @@ class SpecAgent:
             chart_type_hint=chart_type_hint,
         )
 
-        result = await self.agent.run(prompt)
-        output = str(result.output).strip()
-        parsed = _parse_json(output)
-        return VizSpec.model_validate(parsed)
+        message_history = None
+
+        for attempt in range(MAX_RETRIES + 1):
+            result = await self.agent.run(prompt, message_history=message_history)
+            output = str(result.output).strip()
+
+            try:
+                parsed = _parse_json(output)
+                return VizSpec.model_validate(parsed)
+            except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+                if attempt == MAX_RETRIES:
+                    raise
+                logger.debug(
+                    "Spec validation failed (attempt %d/%d): %s",
+                    attempt + 1,
+                    MAX_RETRIES + 1,
+                    exc,
+                )
+                # Preserve the full conversation so the agent sees its
+                # prior tool calls, reasoning, and failed output.
+                message_history = result.all_messages()
+                prompt = (
+                    f"The spec you returned failed validation:\n{exc}\n\n"
+                    "Fix the JSON and return ONLY the corrected spec."
+                )
+
+        # Unreachable, but satisfies type checkers.
+        raise RuntimeError("Exhausted retries without raising")
 
     def _build_prompt(
         self,
