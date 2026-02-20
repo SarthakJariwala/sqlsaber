@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.3.0...sqlsaber-viz-v0.4.0) (2026-02-20)
+
+
+### Features
+
+* add self-correction retry loop to SpecAgent ([#131](https://github.com/SarthakJariwala/sqlsaber/issues/131)) ([0287c54](https://github.com/SarthakJariwala/sqlsaber/commit/0287c54a7b9beee4f3ed679f965fc35ca9f39232))
+
 ## [0.3.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.2.0...sqlsaber-viz-v0.3.0) (2026-02-09)
 
 
