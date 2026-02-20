@@ -9,6 +9,13 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.60.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.59.0...sqlsaber-v0.60.0) (2026-02-20)
+
+
+### Features
+
+* add self-correction retry loop to SpecAgent ([#131](https://github.com/SarthakJariwala/sqlsaber/issues/131)) ([0287c54](https://github.com/SarthakJariwala/sqlsaber/commit/0287c54a7b9beee4f3ed679f965fc35ca9f39232))
+
 ## [0.59.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.58.1...sqlsaber-v0.59.0) (2026-02-17)
 
 

@@ -1,6 +1,6 @@
 [project]
 name = "sqlsaber"
-version = "0.59.0"
+version = "0.60.0"
 description = "SQLsaber - Open-source agentic SQL assistant"
 readme = "README.md"
 requires-python = ">=3.12"
