@@ -40,9 +40,8 @@ class DummyAgent:
         row_count: int,
         file: str,
         chart_type_hint: str | None = None,
-        error_hint: str | None = None,
     ) -> VizSpec:
-        _ = request, columns, row_count, chart_type_hint, error_hint
+        _ = request, columns, row_count, chart_type_hint
         spec = {
             "version": "1",
             "data": {"source": {"file": file}},
