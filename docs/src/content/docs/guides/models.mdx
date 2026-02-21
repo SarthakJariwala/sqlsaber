@@ -11,16 +11,15 @@ This guide covers model selection, configuration, and recommendations for the be
 
 ### Default Model
 
-SQLsaber uses **Claude Opus 4.5** by default, which provides excellent SQL generation capabilities with good speed and accuracy.
+SQLsaber uses **Claude Opus 4.6** by default, which provides excellent SQL generation capabilities with good speed and accuracy.
 
 ### Recommended Models
 
 While SQLsaber supports a lot of models, we recommend the following for best results:
 
-- Claude Opus 4.5, 4.1
-- GPT-5.2, 5.1, 5.2 Codex, 5.1 Codex
-- Claude Sonnet 4.5, 4.0
-- Gemini 3 Pro
+- Claude Opus 4.5, 4.6, Sonnet 4.6
+- Gemini 3 Pro, 3.1 Pro
+- Codex-5.2, 5.3
 
 <Aside type="tip">
   Consider using one of the recommended models for best results.
@@ -67,7 +66,7 @@ If no override is set, the subagent uses the main model.
 
 #### Reset to Default
 
-Return to the original default (Claude Opus 4):
+Return to the original default (Claude Opus 4.6):
 
 ```bash
 saber models reset
