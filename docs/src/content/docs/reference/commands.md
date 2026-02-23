@@ -1,6 +1,6 @@
 ---
 title: Command Reference
-description: Complete reference for all SQLsaber commands
+description: "Complete CLI reference for SQLsaber commands. Database management, authentication, models, memory, knowledge, threads, and query options."
 ---
 
 This is a comprehensive reference for all SQLsaber commands and their options.

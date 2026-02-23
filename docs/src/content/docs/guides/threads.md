@@ -1,6 +1,6 @@
 ---
 title: Conversation Threads
-description: Manage and resume your SQLsaber conversations
+description: "Save, resume, and manage conversation threads in SQLsaber. Continue past database analysis sessions with full context preserved."
 ---
 
 SQLsaber automatically saves your conversations locally so that you can view, resume, and manage them.

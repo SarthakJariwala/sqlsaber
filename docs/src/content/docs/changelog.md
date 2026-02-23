@@ -1,6 +1,6 @@
 ---
 title: Changelog
-description: Release history and notable changes to SQLsaber
+description: "SQLsaber release history. New features, bug fixes, and changes across all versions of the AI SQL assistant."
 ---
 
 All notable changes to SQLsaber will be documented here.
