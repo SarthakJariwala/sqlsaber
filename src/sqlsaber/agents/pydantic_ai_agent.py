@@ -19,12 +19,12 @@ from sqlsaber.database.schema import SchemaManager
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.memory.manager import MemoryManager
 from sqlsaber.overrides import (
-    ToolRunDeps,
     ToolOveridesInput,
+    ToolRunDeps,
     build_tool_run_deps,
     normalize_tool_overides,
 )
-from sqlsaber.prompts.claude import SONNET_4_5
+from sqlsaber.prompts.claude import CLAUDE
 from sqlsaber.prompts.dangerous_mode import DANGEROUS_MODE
 from sqlsaber.prompts.memory import MEMORY_ADDITION
 from sqlsaber.prompts.openai import GPT_5
@@ -168,7 +168,7 @@ class SQLSaberAgent:
             return self.system_prompt_override
         if use_gpt5:
             return GPT_5.format(db=self.db_type)
-        return SONNET_4_5.format(db=self.db_type)
+        return CLAUDE.format(db=self.db_type)
 
     def _apply_prompt_extras(self, base: str, *, include_memory: bool) -> str:
         prompt = base
