@@ -1,5 +1,6 @@
 """SQL query validation and security using sqlglot AST analysis."""
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -58,30 +59,123 @@ try:
 except AttributeError:
     pass
 
-# Dangerous functions by dialect that can read files or execute commands
+# Dangerous functions by dialect that can read files, execute commands,
+# alter session/server state, or otherwise introduce side effects.
 DANGEROUS_FUNCTIONS_BY_DIALECT: dict[str, set[str]] = {
     "postgres": {
+        # File/system access
         "pg_read_file",
         "pg_read_binary_file",
         "pg_ls_dir",
         "pg_stat_file",
         "pg_logdir_ls",
+        "pg_ls_logdir",
+        "pg_ls_waldir",
+        "pg_ls_archive_statusdir",
+        "pg_write_file",
+        "pg_append_file",
+        "lo_import",
+        "lo_export",
+        # External execution / remote calls
         "dblink",
         "dblink_exec",
+        # Process/server/session side effects
+        "pg_terminate_backend",
+        "pg_cancel_backend",
+        "pg_reload_conf",
+        "pg_rotate_logfile",
+        "pg_notify",
+        "set_config",
+        # Advisory locks
+        "pg_advisory_lock",
+        "pg_try_advisory_lock",
+        "pg_advisory_xact_lock",
+        "pg_advisory_lock_shared",
+        "pg_try_advisory_lock_shared",
     },
     "mysql": {
+        # File/system access
         "load_file",
         "sys_eval",
         "sys_exec",
+        # Resource/session/locking side effects
+        "sleep",
+        "benchmark",
+        "get_lock",
+        "release_lock",
     },
     "sqlite": {
+        # File access
         "readfile",
         "writefile",
+        # Extension loading
+        "load_extension",
+    },
+    "duckdb": {
+        # File-reading table functions
+        "read_csv_auto",
+        "read_csv",
+        "read_json_auto",
+        "read_json",
+        "read_parquet",
+        "parquet_scan",
+        # Text/binary file reading
+        "read_text",
+        "read_blob",
+        # NDJSON/JSONL readers
+        "read_ndjson",
+        "read_ndjson_auto",
+        "read_ndjson_objects",
+        # Filesystem enumeration
+        "glob",
+        # External database access
+        "sqlite_scan",
+        "postgres_scan",
+        "mysql_scan",
+        "postgres_query",
+        "mysql_query",
+        # Extension management
+        "load_extension",
+        "install_extension",
+        # Additional format readers
+        "iceberg_scan",
+        "delta_scan",
+        "excel_scan",
+        "st_read",
     },
     "tsql": {
         "xp_cmdshell",
     },
 }
+
+# In dangerous mode, we run fail-closed and only allow these root statement types.
+DANGEROUS_ALLOWED_ROOT_NODES: tuple[type[exp.Expression], ...] = (
+    exp.Select,
+    exp.Union,
+    exp.Except,
+    exp.Intersect,
+    exp.Insert,
+    exp.Update,
+    exp.Delete,
+    exp.Create,
+    exp.Alter,
+    exp.AlterRename,
+)
+
+# In dangerous mode, CREATE is further constrained by explicit kind allowlist.
+ALLOWED_DANGEROUS_CREATE_KINDS: set[str] = {
+    "TABLE",
+    "VIEW",
+    "INDEX",
+}
+
+
+_MYSQL_VERSION_COMMENT_RE = re.compile(r"/\*!")
+
+
+def _has_mysql_version_comments(sql: str) -> bool:
+    """Detect MySQL version comments that create parser divergence."""
+    return bool(_MYSQL_VERSION_COMMENT_RE.search(sql))
 
 
 @dataclass
@@ -95,15 +189,22 @@ class GuardResult:
     has_limit: bool = False
 
 
+def _unwrap_root(stmt: exp.Expression) -> exp.Expression:
+    """Return the effective statement root (unwrap WITH)."""
+    root = stmt
+    if isinstance(root, exp.With):
+        inner = root.this
+        if inner is not None:
+            root = inner
+    return root
+
+
 def is_select_like(stmt: exp.Expression) -> bool:
     """Check if statement is a SELECT-like query.
 
     Handles CTEs (WITH) and set operations (UNION/INTERSECT/EXCEPT).
     """
-    root = stmt
-    # WITH wraps another statement
-    if isinstance(root, exp.With):
-        root = root.this
+    root = _unwrap_root(stmt)
     return isinstance(root, (exp.Select, exp.Union, exp.Except, exp.Intersect))
 
 
@@ -119,9 +220,7 @@ def classify_statement(stmt: exp.Expression) -> str:
     if is_select_like(stmt):
         return "select"
 
-    root = stmt
-    if isinstance(root, exp.With):
-        root = root.this
+    root = _unwrap_root(stmt)
 
     if isinstance(root, (exp.Insert, exp.Update, exp.Delete, exp.Merge, exp.Replace)):
         return "dml"
@@ -202,18 +301,127 @@ def has_prohibited_nodes(
     return None
 
 
+def _normalize_symbol(name: str) -> str:
+    """Normalize SQL identifiers for resilient matching.
+
+    Normalization is intentionally conservative to reduce false positives.
+    """
+    return name.strip().strip('"`[]').lower()
+
+
+def _compact_symbol(name: str) -> str:
+    """Compacted normalization used only as a fallback for AST key matching.
+
+    This bridges representations like ``read_parquet`` and ``readparquet``.
+    """
+    return "".join(ch for ch in name.lower() if ch.isalnum())
+
+
+def _function_name_tokens(fn: exp.Func) -> list[tuple[str, str]]:
+    """Collect normalized tokens and their source for a function node."""
+    tokens: list[tuple[str, str]] = []
+
+    if fn.name:
+        tokens.append(("name", _normalize_symbol(fn.name)))
+
+    sql_name = ""
+    try:
+        sql_name = fn.sql_name() or ""
+    except (AttributeError, TypeError, ValueError):
+        sql_name = ""
+    if sql_name:
+        tokens.append(("sql_name", _normalize_symbol(sql_name)))
+
+    key = getattr(fn, "key", "") or ""
+    if key:
+        tokens.append(("key", _normalize_symbol(key)))
+
+    return tokens
+
+
 def has_dangerous_functions(stmt: exp.Expression, dialect: str) -> str | None:
     """Check for dangerous functions that can read files or execute commands."""
     deny_set = DANGEROUS_FUNCTIONS_BY_DIALECT.get(dialect)
     if not deny_set:
         return None
 
-    deny_lower = {f.lower() for f in deny_set}
+    deny_exact = {_normalize_symbol(name) for name in deny_set}
+    deny_compact = {_compact_symbol(name) for name in deny_set}
 
     for fn in stmt.find_all(exp.Func):
-        name = fn.name
-        if name and name.lower() in deny_lower:
-            return f"Use of dangerous function '{name}' is not allowed"
+        tokens = _function_name_tokens(fn)
+        exact_tokens = {value for _, value in tokens if value}
+
+        if exact_tokens & deny_exact:
+            display_name = fn.name or ""
+            if not display_name:
+                try:
+                    display_name = fn.sql_name() or ""
+                except (AttributeError, TypeError, ValueError):
+                    display_name = ""
+            if not display_name:
+                display_name = getattr(fn, "key", "unknown_function")
+            return f"Use of dangerous function '{display_name}' is not allowed"
+
+        # Fallback: sqlglot key names can be compact (e.g. readparquet).
+        key_tokens = [value for source, value in tokens if source == "key" and value]
+        if any(_compact_symbol(value) in deny_compact for value in key_tokens):
+            display_name = fn.name or ""
+            if not display_name:
+                try:
+                    display_name = fn.sql_name() or ""
+                except (AttributeError, TypeError, ValueError):
+                    display_name = ""
+            if not display_name:
+                display_name = getattr(fn, "key", "unknown_function")
+            return f"Use of dangerous function '{display_name}' is not allowed"
+
+    return None
+
+
+def has_disallowed_dangerous_mode_statement(stmt: exp.Expression) -> str | None:
+    """Fail-closed statement allowlist checks for dangerous mode."""
+    root = _unwrap_root(stmt)
+
+    if not isinstance(root, DANGEROUS_ALLOWED_ROOT_NODES):
+        return (
+            "Only SELECT, INSERT, UPDATE, DELETE, and restricted CREATE/ALTER "
+            "statements are allowed in dangerous mode"
+        )
+
+    if isinstance(root, exp.Create):
+        kind = str(root.args.get("kind") or "").upper()
+        if kind not in ALLOWED_DANGEROUS_CREATE_KINDS:
+            return f"CREATE {kind or '<unknown>'} is not allowed in dangerous mode"
+
+        target = root.args.get("this")
+        expression = root.args.get("expression")
+
+        # Additional defensive checks to avoid dialect/parser gaps.
+        if kind == "TABLE":
+            if target is not None and not isinstance(target, (exp.Table, exp.Schema)):
+                return "Only CREATE TABLE statements are allowed in dangerous mode"
+        elif kind == "VIEW":
+            if target is not None and not isinstance(target, exp.Table):
+                return "Only CREATE VIEW statements are allowed in dangerous mode"
+            if expression is not None and not is_select_like(expression):
+                return "CREATE VIEW must be based on a SELECT-like expression"
+        elif kind == "INDEX":
+            if target is not None and not isinstance(target, exp.Index):
+                return "Only CREATE INDEX statements are allowed in dangerous mode"
+
+        if isinstance(target, exp.UserDefinedFunction):
+            return "CREATE FUNCTION-like statements are not allowed in dangerous mode"
+
+    if isinstance(root, exp.Alter):
+        kind = str(root.args.get("kind") or "TABLE").upper()
+        if kind != "TABLE":
+            return f"ALTER {kind or '<unknown>'} is not allowed in dangerous mode"
+
+    if isinstance(root, exp.AlterRename):
+        target = root.args.get("this")
+        if target is not None and not isinstance(target, exp.Table):
+            return "Only ALTER TABLE style rename statements are allowed"
 
     return None
 
@@ -237,6 +445,12 @@ def validate_read_only(sql: str, dialect: str = "ansi") -> GuardResult:
     Returns:
         GuardResult with validation outcome
     """
+    if dialect == "mysql" and _has_mysql_version_comments(sql):
+        return GuardResult(
+            False,
+            "MySQL version comments (/*!...*/) are not allowed (parser divergence risk)",
+        )
+
     try:
         statements = sqlglot.parse(sql, read=dialect)
     except ParseError as e:
@@ -284,21 +498,29 @@ def validate_sql(
     """Validate SQL with optional write/DDL allowance.
 
     In read-only mode (default): same behavior as validate_read_only.
-    In dangerous mode: allow DML/DDL, but still enforce:
+    In dangerous mode: fail-closed allowlist + additional guardrails:
       - single statement
       - parseability
       - no dangerous functions (file IO, command exec, etc.)
+      - only allowlisted statement classes/kinds
+      - no always-blocked nodes
 
     Args:
         sql: SQL query to validate
         dialect: SQL dialect (postgres, mysql, sqlite, tsql, etc.)
-        allow_dangerous: If True, allow DML/DDL statements
+        allow_dangerous: If True, allow selected DML/DDL statements
 
     Returns:
         GuardResult with validation outcome
     """
     if not allow_dangerous:
         return validate_read_only(sql, dialect)
+
+    if dialect == "mysql" and _has_mysql_version_comments(sql):
+        return GuardResult(
+            False,
+            "MySQL version comments (/*!...*/) are not allowed (parser divergence risk)",
+        )
 
     try:
         statements = sqlglot.parse(sql, read=dialect)
@@ -317,13 +539,18 @@ def validate_sql(
     if stmt is None:
         return GuardResult(False, "Unable to parse query - empty statement")
 
-    # Still enforce function-level sandbox even in dangerous mode
+    # Enforce function-level sandbox in dangerous mode too
     reason = has_dangerous_functions(stmt, dialect)
     if reason:
         return GuardResult(False, reason)
 
-    # Still enforce always-blocked operations (COPY, LOAD DATA, SET, PRAGMA, etc.)
+    # Enforce always-blocked operations and lock/SELECT INTO checks
     reason = has_prohibited_nodes(stmt, allow_dangerous=True)
+    if reason:
+        return GuardResult(False, reason)
+
+    # Strict fail-closed statement policy in dangerous mode
+    reason = has_disallowed_dangerous_mode_statement(stmt)
     if reason:
         return GuardResult(False, reason)
 

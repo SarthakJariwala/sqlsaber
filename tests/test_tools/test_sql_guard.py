@@ -1,10 +1,12 @@
 """Tests for SQL query validation and security."""
 
 import sqlglot
+from sqlglot import exp
 
 from sqlsaber.tools.sql_guard import (
     add_limit,
     classify_statement,
+    has_disallowed_dangerous_mode_statement,
     validate_read_only,
     validate_sql,
 )
@@ -372,6 +374,31 @@ class TestValidateSql:
         )
         assert result.allowed
         assert not result.is_select
+
+    def test_merge_blocked_in_dangerous_mode(self):
+        """MERGE should be blocked in dangerous mode (not in allowlist)."""
+        result = validate_sql(
+            """
+            MERGE INTO target t
+            USING source s ON t.id = s.id
+            WHEN MATCHED THEN UPDATE SET t.value = s.value
+            WHEN NOT MATCHED THEN INSERT (id, value) VALUES (s.id, s.value)
+            """,
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+
+    def test_replace_blocked_in_dangerous_mode(self):
+        """REPLACE should be blocked in dangerous mode (not in allowlist)."""
+        result = validate_sql(
+            "REPLACE INTO users(id, name) VALUES (1, 'x')",
+            "mysql",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
 
     def test_create_table_allowed_in_dangerous_mode(self):
         """CREATE TABLE should be allowed when allow_dangerous=True."""
@@ -777,3 +804,37 @@ class TestAlterSubOperations:
         )
         assert result.allowed
         assert result.query_type == "ddl"
+
+
+class TestDangerousModeCreateValidation:
+    """Tests for CREATE statement subtype hardening in dangerous mode."""
+
+    def test_create_view_requires_select_expression(self):
+        """CREATE VIEW should only allow SELECT-like expressions."""
+        table = exp.Table(this=exp.to_identifier("v"))
+        insert_expr = sqlglot.parse_one("INSERT INTO t VALUES (1)", read="postgres")
+        assert insert_expr
+
+        stmt = exp.Create(kind="VIEW", this=table, expression=insert_expr)
+        reason = has_disallowed_dangerous_mode_statement(stmt)
+
+        assert reason
+        assert "CREATE VIEW must be based on a SELECT-like expression" in reason
+
+    def test_create_index_requires_index_target(self):
+        """CREATE INDEX should reject non-index AST targets."""
+        stmt = exp.Create(kind="INDEX", this=exp.Table(this=exp.to_identifier("idx")))
+
+        reason = has_disallowed_dangerous_mode_statement(stmt)
+
+        assert reason
+        assert "Only CREATE INDEX statements" in reason
+
+    def test_create_table_requires_table_or_schema_target(self):
+        """CREATE TABLE should reject malformed AST targets."""
+        stmt = exp.Create(kind="TABLE", this=exp.Literal.string("bad_target"))
+
+        reason = has_disallowed_dangerous_mode_statement(stmt)
+
+        assert reason
+        assert "Only CREATE TABLE statements" in reason

@@ -110,7 +110,7 @@ saber db remove my-database
 
 SQLsaber blocks all write operations (INSERT, UPDATE, DELETE, DDL) by default. Only SELECT queries are allowed unless you explicitly enable dangerous mode with `--allow-dangerous`.
 
-Even in dangerous mode, destructive operations like DROP, TRUNCATE, and GRANT/REVOKE are always blocked.
+Even in dangerous mode, destructive operations like DROP/TRUNCATE and admin/security operations (for example GRANT/REVOKE, CREATE FUNCTION/USER/ROLE/DATABASE) are always blocked.
 
 #### Read-only Database Role
 

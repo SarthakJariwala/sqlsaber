@@ -84,7 +84,12 @@ class DuckDBConnection(BaseDatabaseConnection):
         pass
 
     async def execute_query(
-        self, query: str, *args, timeout: float | None = None, commit: bool = False
+        self,
+        query: str,
+        *args,
+        timeout: float | None = None,
+        commit: bool = False,
+        read_only: bool = False,
     ) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
@@ -98,7 +103,11 @@ class DuckDBConnection(BaseDatabaseConnection):
         args_tuple = tuple(args) if args else tuple()
 
         def _run_query() -> list[dict[str, Any]]:
-            conn = duckdb.connect(self.database_path)
+            connect_kwargs: dict[str, Any] = {}
+            if read_only and self.database_path != ":memory:":
+                connect_kwargs["read_only"] = True
+
+            conn = duckdb.connect(self.database_path, **connect_kwargs)
             try:
                 return _execute_duckdb_transaction(conn, query, args_tuple, commit)
             finally:

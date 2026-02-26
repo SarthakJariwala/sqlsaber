@@ -19,6 +19,7 @@ class MockDatabaseConnection(SQLiteConnection):
     def __init__(self):
         self.queries = []
         self.commits = []
+        self.read_only_flags = []
         self.mock_results = []
 
     def to_connection_string(self) -> str:
@@ -28,10 +29,16 @@ class MockDatabaseConnection(SQLiteConnection):
         return True
 
     async def execute_query(
-        self, query: str, *args, timeout: float | None = None, commit: bool = False
+        self,
+        query: str,
+        *args,
+        timeout: float | None = None,
+        commit: bool = False,
+        read_only: bool = False,
     ) -> list[dict]:
         self.queries.append(query)
         self.commits.append(commit)
+        self.read_only_flags.append(read_only)
         return self.mock_results
 
     async def get_pool(self):
@@ -190,6 +197,39 @@ class TestExecuteSQLTool:
         assert data["row_count"] == 10
         assert len(data["results"]) == 10
         assert db.queries[-1] == "SELECT * FROM users LIMIT 5"
+
+    @pytest.mark.asyncio
+    async def test_select_runs_in_read_only_mode_when_not_dangerous(self):
+        """SELECT queries in safe mode should execute with read_only=True."""
+        tool = ExecuteSQLTool()
+        db = MockDatabaseConnection()
+        db.mock_results = [{"id": 1}]
+        tool.db = db
+
+        result = await tool.execute(
+            SimpleNamespace(tool_call_id=None), "SELECT * FROM users"
+        )
+        data = json.loads(result)
+
+        assert data["success"] is True
+        assert db.read_only_flags[-1] is True
+
+    @pytest.mark.asyncio
+    async def test_writes_not_forced_read_only_in_dangerous_mode(self):
+        """Write statements in dangerous mode should not execute as read-only."""
+        tool = ExecuteSQLTool()
+        tool.allow_dangerous = True
+        db = MockDatabaseConnection()
+        tool.db = db
+
+        result = await tool.execute(
+            SimpleNamespace(tool_call_id=None),
+            "INSERT INTO users VALUES (1, 'test')",
+        )
+        data = json.loads(result)
+
+        assert data["success"] is True
+        assert db.read_only_flags[-1] is False
 
     @pytest.mark.asyncio
     async def test_block_write_operations(self):

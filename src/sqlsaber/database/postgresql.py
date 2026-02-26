@@ -99,7 +99,12 @@ class PostgreSQLConnection(BaseDatabaseConnection):
             self._pool = None
 
     async def execute_query(
-        self, query: str, *args, timeout: float | None = None, commit: bool = False
+        self,
+        query: str,
+        *args,
+        timeout: float | None = None,
+        commit: bool = False,
+        read_only: bool = False,
     ) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
@@ -117,6 +122,9 @@ class PostgreSQLConnection(BaseDatabaseConnection):
             success = False
 
             try:
+                if read_only:
+                    await conn.execute("SET TRANSACTION READ ONLY")
+
                 # Set server-side timeout if specified
                 if effective_timeout:
                     # Clamp timeout to sane range (10ms to 5 minutes) and validate

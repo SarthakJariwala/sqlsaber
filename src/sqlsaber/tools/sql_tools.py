@@ -630,7 +630,11 @@ class ExecuteSQLTool(SQLTool):
             commit = bool(self.allow_dangerous and query_type in {"dml", "ddl"})
 
             # Execute the query
-            results = await self.db.execute_query(query, commit=commit)
+            results = await self.db.execute_query(
+                query,
+                commit=commit,
+                read_only=not self.allow_dangerous,
+            )
 
             # Format response based on query type
             tool_call_id = ctx.tool_call_id

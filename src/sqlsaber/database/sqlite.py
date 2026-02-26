@@ -40,7 +40,12 @@ class SQLiteConnection(BaseDatabaseConnection):
         pass
 
     async def execute_query(
-        self, query: str, *args, timeout: float | None = None, commit: bool = False
+        self,
+        query: str,
+        *args,
+        timeout: float | None = None,
+        commit: bool = False,
+        read_only: bool = False,
     ) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
@@ -53,6 +58,11 @@ class SQLiteConnection(BaseDatabaseConnection):
 
         async with aiosqlite.connect(self.database_path) as conn:
             conn.row_factory = aiosqlite.Row
+
+            if read_only:
+                await conn.execute("PRAGMA query_only = ON")
+            else:
+                await conn.execute("PRAGMA query_only = OFF")
 
             await conn.execute("BEGIN")
             success = False

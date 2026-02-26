@@ -30,7 +30,7 @@ saber -d "postgresql://user:pass@host:5432/db" "User statistics for 2024"
 - `QUERY-TEXT` - SQL query in natural language (optional, starts interactive mode if not provided)
 - `-d, --database` - Database connection name, file path (CSV/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://)
 - `--thinking` / `--no-thinking` - Enable/disable extended thinking/reasoning mode
-- `--allow-dangerous` - Allow INSERT/UPDATE/DELETE/DDL statements (DROP/TRUNCATE always blocked; UPDATE/DELETE require WHERE clause)
+- `--allow-dangerous` - Allow INSERT/UPDATE/DELETE and restricted DDL (CREATE TABLE/VIEW/INDEX, ALTER TABLE). DROP/TRUNCATE and admin/security operations remain blocked; UPDATE/DELETE require WHERE.
 - `--system-prompt` - Custom system prompt text or path to a file (overrides built-in prompt)
 
 **Global Options:**

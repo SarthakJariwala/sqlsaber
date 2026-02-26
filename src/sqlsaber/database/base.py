@@ -90,7 +90,12 @@ class BaseDatabaseConnection(ABC):
 
     @abstractmethod
     async def execute_query(
-        self, query: str, *args, timeout: float | None = None, commit: bool = False
+        self,
+        query: str,
+        *args,
+        timeout: float | None = None,
+        commit: bool = False,
+        read_only: bool = False,
     ) -> list[dict[str, Any]]:
         """Execute a query and return results as list of dicts.
 
@@ -105,6 +110,7 @@ class BaseDatabaseConnection(ABC):
             *args: Query parameters
             timeout: Query timeout in seconds (overrides default_timeout)
             commit: If True, commit the transaction on success instead of rolling back
+            read_only: If True, enforce read-only execution at the DB/session level
         """
         pass
 
