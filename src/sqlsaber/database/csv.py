@@ -129,7 +129,12 @@ class CSVConnection(BaseDatabaseConnection):
         conn.execute(create_view_sql)
 
     async def execute_query(
-        self, query: str, *args, timeout: float | None = None, commit: bool = False
+        self,
+        query: str,
+        *args,
+        timeout: float | None = None,
+        commit: bool = False,
+        read_only: bool = False,
     ) -> list[dict[str, Any]]:
         effective_timeout = timeout or DEFAULT_QUERY_TIMEOUT
         args_tuple = tuple(args) if args else tuple()

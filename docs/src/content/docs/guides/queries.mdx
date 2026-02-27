@@ -206,14 +206,18 @@ saber --allow-dangerous
 ```
 
 <Aside type="caution">
-  This mode allows INSERT, UPDATE, DELETE, CREATE, and ALTER operations. Use
-  with caution as these can modify your data.
+  This mode allows data modifications and a restricted subset of DDL. Use with
+  caution as these can modify your data.
 </Aside>
 
 **What's allowed in dangerous mode:**
 
-- DML: INSERT, UPDATE, DELETE, MERGE, REPLACE
-- DDL: CREATE, ALTER
+- DML: INSERT, UPDATE, DELETE (UPDATE/DELETE require `WHERE`)
+- Restricted DDL:
+  - CREATE TABLE
+  - CREATE VIEW
+  - CREATE INDEX
+  - ALTER TABLE
 
 **What's always blocked (even in dangerous mode):**
 
@@ -221,6 +225,8 @@ saber --allow-dangerous
 - Transaction control (BEGIN, COMMIT, ROLLBACK)
 - Security operations (GRANT, REVOKE)
 - Database operations (ATTACH, DETACH)
+- Admin/executable schema objects (e.g., CREATE FUNCTION/PROCEDURE/TRIGGER,
+  CREATE USER/ROLE/DATABASE)
 
 ### Database Selection
 
