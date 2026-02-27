@@ -9,6 +9,13 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.61.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.60.0...sqlsaber-v0.61.0) (2026-02-27)
+
+
+### Features
+
+* harden SQL guard with side-effect-free safe mode and strict dangerous allowlist ([#137](https://github.com/SarthakJariwala/sqlsaber/issues/137)) ([1b9028d](https://github.com/SarthakJariwala/sqlsaber/commit/1b9028d9e076c162acfd5a96fa5a1ecb91682a24))
+
 ## [0.60.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.59.0...sqlsaber-v0.60.0) (2026-02-24)
 
 
