@@ -4,9 +4,10 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .api import SQLSaber
+    from .options import SQLSaberOptions
     from .overrides import ModelOverides
 
-__all__ = ["SQLSaber", "ModelOverides"]
+__all__ = ["SQLSaber", "SQLSaberOptions", "ModelOverides"]
 
 
 def __getattr__(name: str):
@@ -15,6 +16,10 @@ def __getattr__(name: str):
         from .api import SQLSaber
 
         return SQLSaber
+    if name == "SQLSaberOptions":
+        from .options import SQLSaberOptions
+
+        return SQLSaberOptions
     if name == "ModelOverides":
         from .overrides import ModelOverides
 

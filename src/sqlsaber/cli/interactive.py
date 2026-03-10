@@ -34,10 +34,9 @@ from sqlsaber.database import (
 )
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.theme.manager import get_theme_manager
-from sqlsaber.threads.manager import ThreadManager
 
 if TYPE_CHECKING:
-    from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
+    from sqlsaber.session import SQLSaberSession
 
 
 class InteractiveSession:
@@ -46,17 +45,15 @@ class InteractiveSession:
     def __init__(
         self,
         console: Console,
-        sqlsaber_agent: "SQLSaberAgent",
-        db_conn,
-        database_name: str,
+        session: "SQLSaberSession",
         *,
-        initial_thread_id: str | None = None,
         initial_history: list | None = None,
     ):
         self.console = console
-        self.sqlsaber_agent = sqlsaber_agent
-        self.db_conn = db_conn
-        self.database_name = database_name
+        self.session = session
+        self.sqlsaber_agent = session.agent
+        self.db_conn = session.connection
+        self.database_name = session.db_name
         self.display = DisplayManager(console)
         self.streaming_handler = StreamingQueryHandler(console)
         self.current_task: asyncio.Task | None = None
@@ -66,7 +63,11 @@ class InteractiveSession:
         self.tm = get_theme_manager()
 
         # Component Managers
-        self.thread_manager = ThreadManager(initial_thread_id)
+        if session.thread_manager is None:
+            raise ValueError(
+                "InteractiveSession requires SQLSaberSession with thread_manager set."
+            )
+        self.thread_manager = session.thread_manager
         self.command_processor = SlashCommandProcessor()
         self.session_usage = SessionUsage()
 
@@ -281,25 +282,18 @@ class InteractiveSession:
         query_task = asyncio.create_task(
             self.streaming_handler.execute_streaming_query(
                 user_query,
-                self.sqlsaber_agent,
-                self.cancellation_token,
-                self.message_history,
+                run_query=self.session.query,
+                cancellation_token=self.cancellation_token,
+                message_history=self.message_history,
             )
         )
         self.current_task = query_task
 
         try:
             run_result = await query_task
-            # Persist message history from this run using pydantic-ai API
+            # SQLSaberSession persists thread snapshots; we only keep local history.
             if run_result is not None:
-                self.message_history = await self.thread_manager.save_run(
-                    run_result=run_result,
-                    database_name=self.database_name,
-                    user_query=user_query,
-                    model_name=getattr(
-                        self.sqlsaber_agent.agent.model, "model_name", "Unknown"
-                    ),
-                )
+                self.message_history = run_result.all_messages()
                 # Track usage for session summary
                 # Use result.response.usage for the FINAL request's context size
                 final_context = run_result.response.usage.input_tokens

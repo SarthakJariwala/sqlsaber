@@ -41,6 +41,7 @@ class SQLSaberAgent:
         self,
         db_connection: BaseDatabaseConnection,
         database_name: str | None = None,
+        settings: Config | None = None,
         memory_manager: MemoryManager | None = None,
         knowledge_manager: KnowledgeManager | None = None,
         thinking_enabled: bool | None = None,
@@ -54,7 +55,7 @@ class SQLSaberAgent:
     ):
         self.db_connection = db_connection
         self.database_name = database_name
-        self.config = Config()
+        self.config = settings or Config()
         self.memory_manager = memory_manager or MemoryManager()
         self._owns_knowledge_manager = knowledge_manager is None
         self.knowledge_manager = knowledge_manager or KnowledgeManager()

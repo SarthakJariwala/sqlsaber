@@ -241,14 +241,11 @@ def resume(
 
     async def _run() -> None:
         # Lazy imports to avoid heavy modules at CLI startup
-        from sqlsaber.agents import SQLSaberAgent
         from sqlsaber.cli.interactive import InteractiveSession
-        from sqlsaber.config.database import DatabaseConfigManager
-        from sqlsaber.database import DatabaseConnection
-        from sqlsaber.database.resolver import (
-            DatabaseResolutionError,
-            resolve_database,
-        )
+        from sqlsaber.database.resolver import DatabaseResolutionError
+        from sqlsaber.options import SQLSaberOptions
+        from sqlsaber.session import SQLSaberSession
+        from sqlsaber.threads.manager import ThreadManager
 
         thread = await store.get_thread(thread_id)
         if not thread:
@@ -262,11 +259,19 @@ def resume(
             )
             logger.error("threads.cli.resume.no_database", thread_id=thread_id)
             return
+        history = await store.get_thread_messages(thread_id)
+        session_thread_manager = ThreadManager(
+            initial_thread_id=thread_id, storage=store
+        )
+
+        sqlsaber_session: SQLSaberSession | None = None
         try:
-            config_manager = DatabaseConfigManager()
-            resolved = resolve_database(db_selector, config_manager)
-            connection_string = resolved.connection_string
-            db_name = resolved.name
+            sqlsaber_session = SQLSaberSession(
+                SQLSaberOptions(
+                    database=db_selector,
+                    thread_manager=session_thread_manager,
+                )
+            )
         except DatabaseResolutionError as e:
             console.print(f"[error]Database resolution error:[/error] {e}")
             logger.error(
@@ -274,12 +279,7 @@ def resume(
             )
             return
 
-        db_conn = DatabaseConnection(
-            connection_string, excluded_schemas=resolved.excluded_schemas
-        )
         try:
-            sqlsaber_agent = SQLSaberAgent(db_conn, db_name)
-            history = await store.get_thread_messages(thread_id)
             if console.is_terminal:
                 console.print(
                     Panel.fit(
@@ -290,17 +290,14 @@ def resume(
             else:
                 console.print(f"# Thread: {thread.id}\n")
             _render_transcript(console, history, None)
-            session = InteractiveSession(
+            interactive_session = InteractiveSession(
                 console=console,
-                sqlsaber_agent=sqlsaber_agent,
-                db_conn=db_conn,
-                database_name=db_name,
-                initial_thread_id=thread_id,
+                session=sqlsaber_session,
                 initial_history=history,
             )
-            await session.run()
+            await interactive_session.run()
         finally:
-            await db_conn.close()
+            await sqlsaber_session.close()
             console.print("\n[success]Goodbye![/success]")
             logger.info("threads.cli.resume.closed")
 
