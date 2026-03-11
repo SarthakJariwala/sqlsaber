@@ -9,6 +9,14 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.62.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.61.0...sqlsaber-v0.62.0) (2026-03-11)
+
+
+### Features
+
+* trigger release ([81cb7d8](https://github.com/SarthakJariwala/sqlsaber/commit/81cb7d859788fec8d34b3672dfd45db3907568eb))
+* trigger release ([145d163](https://github.com/SarthakJariwala/sqlsaber/commit/145d163c91989e62b722a266842b13e9145be638))
+
 ## [0.61.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.60.0...sqlsaber-v0.61.0) (2026-02-27)
 
 
