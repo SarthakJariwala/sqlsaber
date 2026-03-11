@@ -104,7 +104,6 @@ class InteractiveSession:
         return dedent("""
                     - Use `/` for slash commands
                     - Type `@` to get table name completions
-                    - Start message with `#` to add something to agent's memory
                     - Use `Ctrl+C` to interrupt and `Ctrl+D` to exit
                     """)
 
@@ -146,25 +145,6 @@ class InteractiveSession:
             self.console.print(
                 f"[muted]Resuming thread:[/muted] {self.thread_manager.current_thread_id}\n"
             )
-
-    async def _handle_memory(self, content: str):
-        """Handle memory addition command."""
-        if not content:
-            self.console.print("[warning]Empty memory content after '#'[/warning]\n")
-            return
-
-        try:
-            mm = self.sqlsaber_agent.memory_manager
-            if mm and self.database_name:
-                memory = mm.add_memory(self.database_name, content)
-                self.console.print(f"[success]✓ Memory added:[/success] {content}")
-                self.console.print(f"[muted]Memory ID: {memory.id}[/muted]\n")
-            else:
-                self.console.print(
-                    "[warning]Could not add memory (no database context)[/warning]\n"
-                )
-        except Exception as exc:
-            self.console.print(f"[warning]Could not add memory:[/warning] {exc}\n")
 
     async def _update_table_cache(self):
         """Update the table completer cache with fresh data."""
@@ -353,11 +333,6 @@ class InteractiveSession:
                     continue
 
                 if cmd_result.handled:
-                    continue
-
-                # Handle memory addition
-                if user_query.strip().startswith("#"):
-                    await self._handle_memory(user_query[1:].strip())
                     continue
 
                 # Execute query with cancellation support

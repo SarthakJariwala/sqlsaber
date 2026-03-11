@@ -13,7 +13,6 @@ from sqlsaber.overrides import ToolOveridesInput
 if TYPE_CHECKING:
     from sqlsaber.config.settings import Config
     from sqlsaber.knowledge.manager import KnowledgeManager
-    from sqlsaber.memory.manager import MemoryManager
     from sqlsaber.threads.manager import ThreadManager
 
 
@@ -32,13 +31,11 @@ class SQLSaberOptions:
 
     # Prompt
     system_prompt: str | Path | None = None
-    memory: str | Path | None = None
 
     # Injectable components
     settings: Config | None = None
     tools: object | None = None
     providers: object | None = None
-    memory_manager: MemoryManager | None = None
     knowledge_manager: KnowledgeManager | None = None
     thread_manager: ThreadManager | None = None
     hooks: Sequence[object] = ()

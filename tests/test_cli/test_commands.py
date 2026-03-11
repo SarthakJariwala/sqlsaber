@@ -43,6 +43,5 @@ class TestCLICommands:
         captured = capsys.readouterr()
         assert "db" in captured.out
         assert "knowledge" in captured.out
-        assert "memory" in captured.out
         assert "models" in captured.out
         assert "auth" in captured.out

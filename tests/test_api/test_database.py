@@ -1,15 +1,11 @@
 import pytest
 
-from sqlsaber import SQLSaber
+from sqlsaber import SQLSaber, SQLSaberOptions
+from sqlsaber.config.settings import Config
 
 
 @pytest.mark.asyncio
-async def test_api_multiple_csvs_create_multiple_views(temp_dir, monkeypatch):
-    config_dir = temp_dir / "config"
-    monkeypatch.setattr(
-        "platformdirs.user_config_dir", lambda *args, **kwargs: str(config_dir)
-    )
-
+async def test_api_multiple_csvs_create_multiple_views(temp_dir):
     users = temp_dir / "users.csv"
     orders = temp_dir / "orders.csv"
 
@@ -17,9 +13,13 @@ async def test_api_multiple_csvs_create_multiple_views(temp_dir, monkeypatch):
     orders.write_text("id,user_id,total\n10,1,9.99\n11,2,20.00\n", encoding="utf-8")
 
     saber = SQLSaber(
-        database=[str(users), str(orders)],
-        model_name="anthropic:claude-3-5-sonnet",
-        api_key="test-key",
+        options=SQLSaberOptions(
+            database=[str(users), str(orders)],
+            settings=Config.in_memory(
+                model_name="anthropic:claude-3-5-sonnet",
+                api_keys={"anthropic": "test-key"},
+            ),
+        )
     )
 
     try:

@@ -9,13 +9,11 @@ from pydantic_ai import RunContext
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
-from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import Config, ThinkingLevel
 from sqlsaber.database import DatabaseConnection
 from sqlsaber.database.resolver import resolve_database
 from sqlsaber.knowledge.manager import KnowledgeManager
-from sqlsaber.memory.manager import MemoryManager
 from sqlsaber.options import SQLSaberOptions
 from sqlsaber.utils.text_input import resolve_text_input
 
@@ -29,22 +27,20 @@ class SQLSaberSession:
         self.options = options
         self._closed = False
 
-        self._config_manager = DatabaseConfigManager()
         database_spec: str | list[str] | None
         if isinstance(options.database, tuple):
             database_spec = list(options.database)
         else:
             database_spec = options.database
 
-        self._resolved = resolve_database(database_spec, self._config_manager)
+        self._resolved = resolve_database(database_spec)
         self.db_name = self._resolved.name
         self.connection = DatabaseConnection(
             self._resolved.connection_string,
             excluded_schemas=self._resolved.excluded_schemas,
         )
 
-        self.settings = options.settings or Config()
-        self.memory_manager = options.memory_manager or MemoryManager()
+        self.settings = options.settings or Config.default()
         self.knowledge_manager = options.knowledge_manager or KnowledgeManager()
         self.thread_manager = options.thread_manager
         self._owns_knowledge_manager = options.knowledge_manager is None
@@ -60,21 +56,18 @@ class SQLSaberSession:
                 resolved_thinking_level = options.thinking_level
             thinking_enabled = True
 
-        memory_text = resolve_text_input(options.memory)
         system_prompt_text = resolve_text_input(options.system_prompt)
 
         self.agent = SQLSaberAgent(
             self.connection,
             self.db_name,
             settings=self.settings,
-            memory_manager=self.memory_manager,
             knowledge_manager=self.knowledge_manager,
             thinking_enabled=thinking_enabled,
             thinking_level=resolved_thinking_level,
             model_name=options.model_name,
             api_key=options.api_key,
             allow_dangerous=options.allow_dangerous,
-            memory=memory_text,
             system_prompt=system_prompt_text,
             tool_overides=options.tool_overrides,
         )

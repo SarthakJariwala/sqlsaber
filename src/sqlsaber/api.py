@@ -86,7 +86,6 @@ class SQLSaber:
         thinking_level: ThinkingLevel | str | None = None,
         model_name: str | None = None,
         api_key: str | None = None,
-        memory: str | Path | None = None,
         system_prompt: str | Path | None = None,
         tool_overrides: ToolOveridesInput | None = None,
         knowledge_manager: "KnowledgeManager | None" = None,
@@ -118,10 +117,6 @@ class SQLSaber:
             model_name: Override model (format: 'provider:model',
                 e.g., 'anthropic:claude-sonnet-4-20250514').
             api_key: Override API key for the model provider.
-            memory: Optional extra context to inject into the system prompt.
-                If this points to an existing file path, its contents are read.
-                If provided (even as an empty string), it overrides any saved
-                database memories for this session.
             system_prompt: Custom system prompt text to replace SQLSaber's default.
                 If this points to an existing file path, its contents are read.
             tool_overrides: Optional runtime model/api-key overrides per tool name.
@@ -140,7 +135,6 @@ class SQLSaber:
                 api_key=api_key,
                 thinking_enabled=thinking,
                 thinking_level=thinking_level,
-                memory=memory,
                 system_prompt=system_prompt,
                 tool_overrides=tool_overrides,
                 knowledge_manager=knowledge_manager,

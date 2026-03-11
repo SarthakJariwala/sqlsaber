@@ -22,7 +22,7 @@ async def test_api_system_prompt_text_override(temp_dir, monkeypatch):
     )
 
     try:
-        prompt = saber.agent.system_prompt_text(include_memory=True)
+        prompt = saber.agent.system_prompt_text()
         assert custom_prompt in prompt
         assert "You are a helpful SQL assistant" not in prompt
     finally:
@@ -47,7 +47,7 @@ async def test_api_system_prompt_file_override(temp_dir, monkeypatch):
     )
 
     try:
-        prompt = saber.agent.system_prompt_text(include_memory=True)
+        prompt = saber.agent.system_prompt_text()
         assert "prompt from file" in prompt
         assert "You are a helpful SQL assistant" not in prompt
     finally:
@@ -71,7 +71,7 @@ async def test_api_system_prompt_whitespace_falls_back_to_default(
     )
 
     try:
-        prompt = saber.agent.system_prompt_text(include_memory=True)
+        prompt = saber.agent.system_prompt_text()
         assert "You are a helpful SQL assistant" in prompt
     finally:
         await saber.close()

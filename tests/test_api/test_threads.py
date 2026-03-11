@@ -13,6 +13,7 @@ from pydantic_ai.messages import (
 )
 
 from sqlsaber import SQLSaber, SQLSaberOptions
+from sqlsaber.config.settings import Config
 from sqlsaber.threads.manager import ThreadManager
 from sqlsaber.threads.storage import ThreadStorage
 
@@ -60,18 +61,15 @@ class OutputOnlyRunResult:
 async def test_api_thread_manager_persists_queries_and_ends_on_close(
     temp_dir, monkeypatch
 ):
-    config_dir = temp_dir / "config"
-    monkeypatch.setattr(
-        "platformdirs.user_config_dir", lambda *args, **kwargs: str(config_dir)
-    )
-
     storage = ThreadStorage()
     storage.db_path = temp_dir / "threads.db"
     thread_manager = ThreadManager(storage=storage)
     options = SQLSaberOptions(
         database="sqlite:///:memory:",
-        model_name="anthropic:claude-3-5-sonnet",
-        api_key="test-key",
+        settings=Config.in_memory(
+            model_name="anthropic:claude-3-5-sonnet",
+            api_keys={"anthropic": "test-key"},
+        ),
         thread_manager=thread_manager,
     )
     saber = SQLSaber(options=options)
@@ -117,18 +115,16 @@ async def test_api_thread_manager_persists_queries_and_ends_on_close(
 
 @pytest.mark.asyncio
 async def test_api_without_thread_manager_does_not_require_run_snapshot_methods(
-    temp_dir, monkeypatch
+    monkeypatch
 ):
-    config_dir = temp_dir / "config"
-    monkeypatch.setattr(
-        "platformdirs.user_config_dir", lambda *args, **kwargs: str(config_dir)
-    )
-
-    saber = SQLSaber(
+    options = SQLSaberOptions(
         database="sqlite:///:memory:",
-        model_name="anthropic:claude-3-5-sonnet",
-        api_key="test-key",
+        settings=Config.in_memory(
+            model_name="anthropic:claude-3-5-sonnet",
+            api_keys={"anthropic": "test-key"},
+        ),
     )
+    saber = SQLSaber(options=options)
 
     async def fake_run(prompt: str, **kwargs):
         _ = prompt, kwargs
@@ -158,17 +154,14 @@ class _FailingThreadManager:
 
 
 @pytest.mark.asyncio
-async def test_api_thread_persistence_failures_do_not_fail_query(temp_dir, monkeypatch):
-    config_dir = temp_dir / "config"
-    monkeypatch.setattr(
-        "platformdirs.user_config_dir", lambda *args, **kwargs: str(config_dir)
-    )
-
+async def test_api_thread_persistence_failures_do_not_fail_query(monkeypatch):
     failing_manager = _FailingThreadManager()
     options = SQLSaberOptions(
         database="sqlite:///:memory:",
-        model_name="anthropic:claude-3-5-sonnet",
-        api_key="test-key",
+        settings=Config.in_memory(
+            model_name="anthropic:claude-3-5-sonnet",
+            api_keys={"anthropic": "test-key"},
+        ),
         thread_manager=failing_manager,
     )
     saber = SQLSaber(options=options)

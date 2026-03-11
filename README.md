@@ -64,7 +64,7 @@ saber -d mydb "count active subscriptions"
 | Feature | Description |
 |---------|-------------|
 | **Schema introspection** | Discovers tables, columns, and relationships automatically |
-| **Conversation memory** | Add context like "dates are stored as Unix timestamps" |
+| **Knowledge discovery** | Discovers relevant saved knowledge automatically |
 | **Structured knowledge base** | Store searchable KPI definitions, SQL patterns, and domain notes per database |
 | **Thread history** | Resume past conversations with `saber threads resume` |
 | **Extended thinking** | Enable `--thinking` for complex analytical queries |
@@ -89,13 +89,6 @@ saber -d "postgresql://user:pass@localhost:5432/mydb" "count users"
 
 ```bash
 saber models set
-```
-
-### Add memory (context for your database)
-
-```bash
-saber memory add "customer_id in orders table references users.id"
-saber memory add "all timestamps are UTC"
 ```
 
 ### Add knowledge (searchable KPI/query references)
