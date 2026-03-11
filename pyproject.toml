@@ -1,3 +1,4 @@
+# SQLsaber project configuration
 [project]
 name = "sqlsaber"
 version = "0.61.0"
