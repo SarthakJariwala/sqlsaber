@@ -9,6 +9,16 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.62.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.61.0...sqlsaber-v0.62.0) (2026-03-11)
+
+
+### Features
+
+* feat: Refactor SDK Around SQLSaberOptions/SQLSaberSession and Remove Memory Subsystem in Favor of Knowledge Subsystem (#139)
+  * options dataclass that acts as a typed bag for all configuration, and a `SQLSaberSession` class that owns the full lifecycle
+  * remove memory subsystem and introduce in-memory Config mode: removes SQLSaber's memory feature end-to-end in favor of knowledege system and consolidates runtime settings injection around Config with explicit constructor modes.
+  * Python API constructor now accepts only `options`: use `SQLSaber(options=SQLSaberOptions(...))`   
+
 ## [0.61.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.60.0...sqlsaber-v0.61.0) (2026-02-27)
 
 
