@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlsaber import SQLSaber
+from sqlsaber import SQLSaber, SQLSaberOptions
 
 
 @pytest.mark.asyncio
@@ -15,10 +15,12 @@ async def test_api_system_prompt_text_override(temp_dir, monkeypatch):
     custom_prompt = "CUSTOM SYSTEM PROMPT"
 
     saber = SQLSaber(
-        database="sqlite:///:memory:",
-        model_name="anthropic:claude-3-5-sonnet",
-        api_key="test-key",
-        system_prompt=custom_prompt,
+        options=SQLSaberOptions(
+            database="sqlite:///:memory:",
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+            system_prompt=custom_prompt,
+        )
     )
 
     try:
@@ -40,10 +42,12 @@ async def test_api_system_prompt_file_override(temp_dir, monkeypatch):
     prompt_file.write_text("prompt from file", encoding="utf-8")
 
     saber = SQLSaber(
-        database="sqlite:///:memory:",
-        model_name="anthropic:claude-3-5-sonnet",
-        api_key="test-key",
-        system_prompt=prompt_file,
+        options=SQLSaberOptions(
+            database="sqlite:///:memory:",
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+            system_prompt=prompt_file,
+        )
     )
 
     try:
@@ -64,10 +68,12 @@ async def test_api_system_prompt_whitespace_falls_back_to_default(
     )
 
     saber = SQLSaber(
-        database="sqlite:///:memory:",
-        model_name="anthropic:claude-3-5-sonnet",
-        api_key="test-key",
-        system_prompt="   \n\t",
+        options=SQLSaberOptions(
+            database="sqlite:///:memory:",
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+            system_prompt="   \n\t",
+        )
     )
 
     try:

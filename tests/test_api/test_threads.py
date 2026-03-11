@@ -115,7 +115,7 @@ async def test_api_thread_manager_persists_queries_and_ends_on_close(
 
 @pytest.mark.asyncio
 async def test_api_without_thread_manager_does_not_require_run_snapshot_methods(
-    monkeypatch
+    monkeypatch,
 ):
     options = SQLSaberOptions(
         database="sqlite:///:memory:",

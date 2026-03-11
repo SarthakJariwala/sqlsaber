@@ -19,9 +19,7 @@ async def test_event_stream_updates_replay_messages(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(handler, "on_event", on_event)
 
     set_replay_messages = Mock(wraps=handler.display.set_replay_messages)
-    monkeypatch.setattr(
-        handler.display, "set_replay_messages", set_replay_messages
-    )
+    monkeypatch.setattr(handler.display, "set_replay_messages", set_replay_messages)
 
     messages = [SimpleNamespace(parts=[])]
     ctx = SimpleNamespace(messages=messages)

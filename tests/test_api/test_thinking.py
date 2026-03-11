@@ -2,22 +2,24 @@ from __future__ import annotations
 
 import pytest
 
-from sqlsaber import SQLSaber
+from sqlsaber import SQLSaber, SQLSaberOptions
 
 
 @pytest.mark.asyncio
 async def test_api_thinking_enabled(temp_dir, monkeypatch):
-    """Test that thinking=True enables thinking mode on the agent."""
+    """Test that thinking_enabled=True enables thinking mode on the agent."""
     config_dir = temp_dir / "config"
     monkeypatch.setattr(
         "platformdirs.user_config_dir", lambda *args, **kwargs: str(config_dir)
     )
 
     saber = SQLSaber(
-        database="sqlite:///:memory:",
-        model_name="anthropic:claude-3-5-sonnet",
-        api_key="test-key",
-        thinking=True,
+        options=SQLSaberOptions(
+            database="sqlite:///:memory:",
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+            thinking_enabled=True,
+        )
     )
 
     try:
@@ -35,9 +37,11 @@ async def test_api_thinking_disabled_by_default(temp_dir, monkeypatch):
     )
 
     saber = SQLSaber(
-        database="sqlite:///:memory:",
-        model_name="anthropic:claude-3-5-sonnet",
-        api_key="test-key",
+        options=SQLSaberOptions(
+            database="sqlite:///:memory:",
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+        )
     )
 
     try:
@@ -48,17 +52,19 @@ async def test_api_thinking_disabled_by_default(temp_dir, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_api_thinking_explicit_false(temp_dir, monkeypatch):
-    """Test that thinking=False explicitly disables thinking mode."""
+    """Test that thinking_enabled=False explicitly disables thinking mode."""
     config_dir = temp_dir / "config"
     monkeypatch.setattr(
         "platformdirs.user_config_dir", lambda *args, **kwargs: str(config_dir)
     )
 
     saber = SQLSaber(
-        database="sqlite:///:memory:",
-        model_name="anthropic:claude-3-5-sonnet",
-        api_key="test-key",
-        thinking=False,
+        options=SQLSaberOptions(
+            database="sqlite:///:memory:",
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+            thinking_enabled=False,
+        )
     )
 
     try:

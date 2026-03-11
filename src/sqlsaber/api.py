@@ -5,20 +5,14 @@ allowing you to run natural language queries against databases from Python code.
 """
 
 from collections.abc import AsyncIterable, Awaitable, Sequence
-from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Callable, Protocol, Self
+from typing import Any, Callable, Protocol, Self
 
 from pydantic_ai import RunContext
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 
-from sqlsaber.config.settings import ThinkingLevel
 from sqlsaber.options import SQLSaberOptions
-from sqlsaber.overrides import ToolOveridesInput
 from sqlsaber.session import SQLSaberSession
-
-if TYPE_CHECKING:
-    from sqlsaber.knowledge.manager import KnowledgeManager
 
 
 class SQLSaberRunResult(Protocol):
@@ -67,11 +61,12 @@ class SQLSaber:
     """Main entry point for the SQLSaber Python API.
 
     Example:
-        >>> from sqlsaber import SQLSaber
+        >>> from sqlsaber import SQLSaber, SQLSaberOptions
         >>> import asyncio
         >>>
         >>> async def main():
-        ...     async with SQLSaber(database="sqlite:///my.db") as saber:
+        ...     options = SQLSaberOptions(database="sqlite:///my.db")
+        ...     async with SQLSaber(options=options) as saber:
         ...         result = await saber.query("Show me the top 5 users")
         ...         print(result)  # Prints the answer
         ...         print(result.usage)  # Prints token usage
@@ -81,66 +76,15 @@ class SQLSaber:
 
     def __init__(
         self,
-        database: str | list[str] | tuple[str, ...] | None = None,
-        thinking: bool = False,
-        thinking_level: ThinkingLevel | str | None = None,
-        model_name: str | None = None,
-        api_key: str | None = None,
-        system_prompt: str | Path | None = None,
-        tool_overrides: ToolOveridesInput | None = None,
-        knowledge_manager: "KnowledgeManager | None" = None,
         *,
-        options: SQLSaberOptions | None = None,
+        options: SQLSaberOptions,
     ):
         """Initialize SQLSaber.
 
         Args:
-            database: Database connection string, name, or file path.
-                If None, uses the default configured database.
-
-                You can also pass multiple CSVs by providing a list/tuple of CSV
-                file paths or CSV connection strings. Each CSV becomes its own
-                DuckDB view (named after the file stem).
-
-                Examples:
-                - "postgresql://user:pass@localhost/db"
-                - "sqlite:///data.db"
-                - "my-saved-db"
-                - ["users.csv", "orders.csv"]
-                - ("csv:///users.csv", "csv:///orders.csv")
-            thinking: Whether to enable "thinking" mode for supported models.
-                Automatically set to True if thinking_level is provided.
-            thinking_level: The thinking level for extended thinking models.
-                Can be a ThinkingLevel enum value or a string ("minimal", "low",
-                "medium", "high", "maximum"). If provided, thinking is automatically
-                enabled. Defaults to the configured level (or "medium" if unset).
-            model_name: Override model (format: 'provider:model',
-                e.g., 'anthropic:claude-sonnet-4-20250514').
-            api_key: Override API key for the model provider.
-            system_prompt: Custom system prompt text to replace SQLSaber's default.
-                If this points to an existing file path, its contents are read.
-            tool_overrides: Optional runtime model/api-key overrides per tool name.
-                Example:
-                {"viz": ModelOverides(model_name="openai:gpt-5-mini")}
-            knowledge_manager: Optional knowledge manager dependency to use for
-                knowledge tool operations.
-            options: Optional session options bag. If provided, this takes
-                precedence over all other constructor arguments.
+            options: Session options bag used to build the SQLSaber session.
         """
-        resolved_options = options
-        if resolved_options is None:
-            resolved_options = SQLSaberOptions(
-                database=database,
-                model_name=model_name,
-                api_key=api_key,
-                thinking_enabled=thinking,
-                thinking_level=thinking_level,
-                system_prompt=system_prompt,
-                tool_overrides=tool_overrides,
-                knowledge_manager=knowledge_manager,
-            )
-
-        self._session = SQLSaberSession(resolved_options)
+        self._session = SQLSaberSession(options)
         self.db_name = self._session.db_name
         self.connection = self._session.connection
         self.agent = self._session.agent

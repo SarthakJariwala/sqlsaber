@@ -99,7 +99,7 @@ You can inject your own knowledge manager/store via the Python API:
 ```python
 import asyncio
 
-from sqlsaber import SQLSaber
+from sqlsaber import SQLSaber, SQLSaberOptions
 from sqlsaber.knowledge import KnowledgeManager, SQLiteKnowledgeStore
 
 async def main() -> None:
@@ -113,10 +113,12 @@ async def main() -> None:
     )
 
     async with SQLSaber(
-        database="analytics",
-        model_name="anthropic:claude-sonnet-4-5-20250929",
-        api_key="YOUR_API_KEY",
-        knowledge_manager=manager,
+        options=SQLSaberOptions(
+            database="analytics",
+            model_name="anthropic:claude-sonnet-4-5-20250929",
+            api_key="YOUR_API_KEY",
+            knowledge_manager=manager,
+        )
     ) as saber:
         answer = await saber.query("How do we define gross margin?")
         print(answer)

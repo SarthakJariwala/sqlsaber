@@ -8,32 +8,31 @@ from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
 
 
-@pytest.mark.asyncio
-async def test_api_options_preferred_over_legacy_args():
-    options = SQLSaberOptions(
-        database="sqlite:///:memory:",
-        model_name="anthropic:claude-3-5-sonnet",
-        api_key="options-key",
-        thinking_enabled=False,
-        settings=Config.in_memory(
-            model_name="openai:gpt-5-mini",
-            api_keys={"openai": "legacy-key"},
-        ),
-    )
+def test_api_options_are_required() -> None:
+    kwargs: dict[str, object] = {}
+    with pytest.raises(TypeError, match="options"):
+        SQLSaber(**kwargs)
 
-    saber = SQLSaber(
-        database="definitely-not-a-valid-config-name",
-        model_name="openai:gpt-5-mini",
-        api_key="legacy-key",
-        thinking=True,
-        options=options,
-    )
 
-    try:
-        assert saber.agent.agent.model.model_name == "claude-3-5-sonnet"
-        assert saber.agent.thinking_enabled is False
-    finally:
-        await saber.close()
+@pytest.mark.parametrize(
+    ("legacy_kw", "value"),
+    [
+        ("database", "sqlite:///:memory:"),
+        ("thinking", True),
+        ("thinking_level", "high"),
+        ("model_name", "anthropic:claude-3-5-sonnet"),
+        ("api_key", "test-key"),
+        ("system_prompt", "custom system prompt"),
+        ("tool_overrides", {"viz": {"model_name": "openai:gpt-5-mini"}}),
+        ("knowledge_manager", object()),
+    ],
+)
+def test_api_legacy_constructor_kwargs_are_rejected(
+    legacy_kw: str, value: object
+) -> None:
+    kwargs: dict[str, object] = {legacy_kw: value}
+    with pytest.raises(TypeError, match=legacy_kw):
+        SQLSaber(**kwargs)
 
 
 @pytest.mark.asyncio
