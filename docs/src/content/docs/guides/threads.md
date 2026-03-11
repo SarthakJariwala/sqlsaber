@@ -63,7 +63,6 @@ saber threads resume --help
 
 Now that you understand conversation threads:
 
-1. [Set up memory](/guides/memory) for persistent context across threads
-2. [Learn advanced querying techniques](/guides/queries)
-3. [Explore model selection](/guides/models) for different thread purposes
-4. [Review the command reference](/reference/commands) for all thread options
+1. [Learn advanced querying techniques](/guides/queries)
+2. [Explore model selection](/guides/models) for different thread purposes
+3. [Review the command reference](/reference/commands) for all thread options

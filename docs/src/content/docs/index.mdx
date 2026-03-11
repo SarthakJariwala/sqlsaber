@@ -1,6 +1,6 @@
 ---
 title: "SQLsaber: AI SQL Assistant for Natural Language Database Queries"
-description: "Open-source CLI tool that converts natural language to SQL. Query PostgreSQL, MySQL, SQLite, and DuckDB databases by asking questions in plain English. Schema-aware, read-only by default, with memory and conversation threads."
+description: "Open-source CLI tool that converts natural language to SQL. Query PostgreSQL, MySQL, SQLite, and DuckDB databases by asking questions in plain English. Schema-aware, read-only by default, with knowledge retrieval and conversation threads."
 template: splash
 hero:
   tagline: Ask questions in plain English. SQLsaber reads your schema, writes SQL, runs it securely, and explains the results.
@@ -48,11 +48,10 @@ import {
         alter your data.
       </p>
     </Card>
-    <Card title="Memory + knowledge" icon="document">
+    <Card title="Knowledge base" icon="document">
       <p class="text-lg text-muted-foreground">
-        Teach it your database quirks: <code>"dates are Unix timestamps"</code>,{" "}
-        <code>"user_id references accounts.id"</code>, and reusable KPI/query
-        definitions with <code>saber knowledge add</code>.
+        Store reusable KPI/query definitions and business semantics with{" "}
+        <code>saber knowledge add</code> so answers stay consistent.
       </p>
     </Card>
     <Card title="Conversation threads" icon="comment-alt">

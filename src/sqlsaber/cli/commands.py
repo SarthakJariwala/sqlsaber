@@ -5,6 +5,8 @@ from sqlsaber.config.logging import setup_logging
 
 setup_logging()
 
+# ruff: noqa: E402
+
 import asyncio
 import sys
 from typing import Annotated
@@ -15,18 +17,13 @@ from rich.panel import Panel
 from sqlsaber.cli.auth import create_auth_app
 from sqlsaber.cli.database import create_db_app
 from sqlsaber.cli.knowledge import create_knowledge_app
-from sqlsaber.cli.memory import create_memory_app
 from sqlsaber.cli.models import create_models_app
 from sqlsaber.cli.onboarding import needs_onboarding, run_onboarding
 from sqlsaber.cli.theme import create_theme_app
 from sqlsaber.cli.threads import create_threads_app
 from sqlsaber.cli.update_check import schedule_update_check
-
-# Lazy imports - only import what's needed for CLI parsing
-from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console
-from sqlsaber.utils.text_input import resolve_text_input
 
 DANGEROUS_MODE_WARNING = (
     "The assistant can execute INSERT/UPDATE/DELETE and restricted DDL "
@@ -50,13 +47,11 @@ app = cyclopts.App(
 app.command(create_auth_app(), name="auth")
 app.command(create_db_app(), name="db")
 app.command(create_knowledge_app(), name="knowledge")
-app.command(create_memory_app(), name="memory")
 app.command(create_models_app(), name="models")
 app.command(create_theme_app(), name="theme")
 app.command(create_threads_app(), name="threads")
 
 console = create_console()
-config_manager = DatabaseConfigManager()
 
 
 @app.meta.default
@@ -161,16 +156,14 @@ def query(
         )
         # Import heavy dependencies only when actually running a query
         # This is only done to speed up startup time
-        from sqlsaber.agents import SQLSaberAgent
         from sqlsaber.cli.display import DisplayManager
         from sqlsaber.cli.interactive import InteractiveSession
         from sqlsaber.cli.streaming import StreamingQueryHandler
         from sqlsaber.cli.usage import SessionUsage
-        from sqlsaber.database import (
-            DatabaseConnection,
-        )
-        from sqlsaber.database.resolver import DatabaseResolutionError, resolve_database
-        from sqlsaber.threads import ThreadStorage
+        from sqlsaber.database.resolver import DatabaseResolutionError
+        from sqlsaber.options import SQLSaberOptions
+        from sqlsaber.session import SQLSaberSession
+        from sqlsaber.threads.manager import ThreadManager
 
         # Check if query_text is None and stdin has data
         actual_query = query_text
@@ -192,49 +185,33 @@ def query(
                     "Setup incomplete. Please configure your database and try again."
                 )
             log.info("cli.onboarding.complete", success=True)
-
-        # Resolve database from CLI input
+        thread_manager = ThreadManager()
         try:
-            resolved = resolve_database(database, config_manager)
-            connection_string = resolved.connection_string
-            db_name = resolved.name
-            log.info(
-                "db.resolve.success",
-                name=db_name,
+            session = SQLSaberSession(
+                SQLSaberOptions(
+                    database=database,
+                    thinking_enabled=thinking,
+                    allow_dangerous=allow_dangerous,
+                    system_prompt=system_prompt,
+                    thread_manager=thread_manager,
+                )
             )
+            db_name = session.db_name
+            log.info("db.resolve.success", name=db_name)
+            log.info("db.connection.created", db_type=type(session.connection).__name__)
         except DatabaseResolutionError as e:
             log.error("db.resolve.error", error=str(e))
             raise CLIError(str(e))
-
-        # Create database connection
-        try:
-            db_conn = DatabaseConnection(
-                connection_string, excluded_schemas=resolved.excluded_schemas
-            )
-            log.info("db.connection.created", db_type=type(db_conn).__name__)
-        except Exception as e:
+        except (ValueError, OSError) as e:
             log.exception("db.connection.error", error=str(e))
             raise CLIError(f"Error creating database connection: {e}")
-
-        # Create pydantic-ai agent instance with database name for memory context
-        try:
-            resolved_system_prompt = resolve_text_input(system_prompt)
-        except (ValueError, OSError) as e:
-            raise CLIError(str(e))
-        sqlsaber_agent = SQLSaberAgent(
-            db_conn,
-            db_name,
-            thinking_enabled=thinking,
-            allow_dangerous=allow_dangerous,
-            system_prompt=resolved_system_prompt,
-        )
 
         try:
             if actual_query:
                 # Single query mode with streaming
                 streaming_handler = StreamingQueryHandler(console)
-                db_type = sqlsaber_agent.db_type
-                model_name = sqlsaber_agent.config.model.name
+                db_type = session.agent.db_type
+                model_name = session.agent.config.model.name
                 console.print(
                     f"[primary]Connected to:[/primary] {db_name} ({db_type})\n"
                     f"[primary]Model:[/primary] {model_name}\n"
@@ -249,7 +226,8 @@ def query(
                     )
                 log.info("query.execute.start", db_name=db_name, db_type=db_type)
                 run = await streaming_handler.execute_streaming_query(
-                    actual_query, sqlsaber_agent
+                    actual_query,
+                    run_query=session.query,
                 )
 
                 # Track and display session usage
@@ -260,33 +238,12 @@ def query(
                     display = DisplayManager(console)
                     display.show_session_summary(session_usage)
 
-                # Persist non-interactive run as a thread snapshot so it can be resumed later
-                threads: ThreadStorage | None = None
-                try:
-                    if run is not None:
-                        threads = ThreadStorage()
-
-                        thread_id = await threads.save_snapshot(
-                            messages_json=run.all_messages_json(),
-                            database_name=db_name,
-                        )
-                        await threads.save_metadata(
-                            thread_id=thread_id,
-                            title=actual_query,
-                            model_name=sqlsaber_agent.config.model.name,
-                        )
-                        await threads.end_thread(thread_id)
-                        console.print(
-                            f"[dim]You can continue this thread using:[/dim] saber threads resume {thread_id}"
-                        )
-                        log.info("thread.save.success", thread_id=thread_id)
-                except Exception:
-                    # best-effort persistence; don't fail the CLI on storage errors
-                    log.warning("thread.save.failed", exc_info=True)
-                    pass
-                finally:
-                    if threads is not None:
-                        await threads.prune_threads()
+                thread_id = thread_manager.current_thread_id
+                if thread_id:
+                    console.print(
+                        f"[dim]You can continue this thread using:[/dim] saber threads resume {thread_id}"
+                    )
+                    log.info("thread.save.success", thread_id=thread_id)
             else:
                 # Interactive mode
                 if allow_dangerous:
@@ -297,12 +254,14 @@ def query(
                             style="warning",
                         )
                     )
-                session = InteractiveSession(console, sqlsaber_agent, db_conn, db_name)
-                await session.run()
+                interactive_session = InteractiveSession(
+                    console=console, session=session
+                )
+                await interactive_session.run()
 
         finally:
             # Clean up
-            await db_conn.close()
+            await session.close()
             log.info("db.connection.closed")
             console.print("\n[success]Goodbye![/success]")
 

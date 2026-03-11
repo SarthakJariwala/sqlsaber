@@ -1,4 +1,4 @@
-"""Tests for SQLSaberAgent overrides and memory injection."""
+"""Tests for SQLSaberAgent overrides and lifecycle behavior."""
 
 from types import SimpleNamespace
 
@@ -8,7 +8,6 @@ from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.database.sqlite import SQLiteConnection
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
-from sqlsaber.memory.manager import MemoryManager
 from sqlsaber.overrides import ToolRunDeps
 from sqlsaber.tools.knowledge_tool import SearchKnowledgeTool
 
@@ -37,55 +36,6 @@ class TestSQLSaberAgentOverrides:
         assert agent is not None
         assert agent.agent is not None
         assert agent.agent.model.model_name == "claude-3-5-sonnet"
-
-
-class TestSQLSaberAgentMemory:
-    def test_memory_override_supersedes_saved_memories(
-        self, in_memory_db, temp_dir, monkeypatch
-    ):
-        config_dir = temp_dir / "config"
-        monkeypatch.setattr(
-            "platformdirs.user_config_dir", lambda *args, **kwargs: str(config_dir)
-        )
-
-        memory_manager = MemoryManager()
-        memory_manager.add_memory("test-db", "saved-memory")
-
-        agent = SQLSaberAgent(
-            db_connection=in_memory_db,
-            database_name="test-db",
-            memory_manager=memory_manager,
-            model_name="anthropic:claude-3-5-sonnet",
-            api_key="test-key",
-            memory="override-memory",
-        )
-
-        prompt = agent.system_prompt_text(include_memory=True)
-        assert "override-memory" in prompt
-        assert "saved-memory" not in prompt
-
-    def test_memory_override_empty_disables_saved_memories(
-        self, in_memory_db, temp_dir, monkeypatch
-    ):
-        config_dir = temp_dir / "config"
-        monkeypatch.setattr(
-            "platformdirs.user_config_dir", lambda *args, **kwargs: str(config_dir)
-        )
-
-        memory_manager = MemoryManager()
-        memory_manager.add_memory("test-db", "saved-memory")
-
-        agent = SQLSaberAgent(
-            db_connection=in_memory_db,
-            database_name="test-db",
-            memory_manager=memory_manager,
-            model_name="anthropic:claude-3-5-sonnet",
-            api_key="test-key",
-            memory="",
-        )
-
-        prompt = agent.system_prompt_text(include_memory=True)
-        assert "saved-memory" not in prompt
 
 
 class TestSQLSaberAgentKnowledge:

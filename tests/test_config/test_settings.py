@@ -183,6 +183,34 @@ class TestConfig:
         with pytest.raises(ValueError, match="Anthropic API key not found"):
             config.validate()
 
+    def test_in_memory_config_avoids_platformdirs(self, monkeypatch):
+        """Config.in_memory should not touch filesystem-backed platformdirs paths."""
+
+        def _fail(*args, **kwargs):
+            _ = args, kwargs
+            raise AssertionError("platformdirs.user_config_dir should not be called")
+
+        monkeypatch.setattr("platformdirs.user_config_dir", _fail)
+
+        config = Config.in_memory(
+            model_name="openai:gpt-5-mini",
+            thinking_enabled=True,
+            thinking_level=ThinkingLevel.HIGH,
+            api_keys={"openai": "test-api-key"},
+        )
+
+        assert config.model_name == "openai:gpt-5-mini"
+        assert config.model.thinking_enabled is True
+        assert config.model.thinking_level == ThinkingLevel.HIGH
+        assert config.api_key == "test-api-key"
+
+    def test_in_memory_config_validate_errors_without_api_key(self, monkeypatch):
+        """In-memory config should fail validation when no API key is provided."""
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        config = Config.in_memory(model_name="openai:gpt-5-mini")
+        with pytest.raises(ValueError, match="Openai API key not found"):
+            config.validate()
+
 
 class TestThinkingLevel:
     """Test the ThinkingLevel enum."""

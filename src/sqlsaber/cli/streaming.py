@@ -6,8 +6,9 @@ rendered via DisplayManager helpers.
 """
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from functools import singledispatchmethod
-from typing import TYPE_CHECKING, AsyncIterable
+from typing import Any, AsyncIterable
 
 from pydantic_ai import RunContext
 from pydantic_ai.messages import (
@@ -25,9 +26,6 @@ from rich.console import Console
 
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.config.logging import get_logger
-
-if TYPE_CHECKING:
-    from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 
 
 class StreamingQueryHandler:
@@ -119,7 +117,7 @@ class StreamingQueryHandler:
     async def execute_streaming_query(
         self,
         user_query: str,
-        sqlsaber_agent: "SQLSaberAgent",
+        run_query: Callable[..., Awaitable[Any]],
         cancellation_token: asyncio.Event | None = None,
         message_history: list | None = None,
     ):
@@ -128,7 +126,7 @@ class StreamingQueryHandler:
             self.log.info("streaming.execute.start")
             self.display.live.start_status("Crunching data...")
 
-            run = await sqlsaber_agent.run(
+            run = await run_query(
                 user_query,
                 message_history=message_history,
                 event_stream_handler=self._event_stream_handler,

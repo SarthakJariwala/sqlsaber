@@ -83,14 +83,16 @@ def _resolve_multiple_csvs(specs: list[str]) -> ResolvedDatabase:
 
 
 def resolve_database(
-    spec: str | list[str] | None, config_mgr: DatabaseConfigManager
+    spec: str | list[str] | None, config_mgr: DatabaseConfigManager | None = None
 ) -> ResolvedDatabase:
     """Turn user CLI input into resolved database connection info.
 
     Args:
         spec: User input - None (default), configured name, connection string, file path,
             or a list of CSV file paths/CSV connection strings.
-        config_mgr: Database configuration manager for looking up configured connections
+        config_mgr: Optional database configuration manager for looking up configured
+            connections. If omitted, one is created only when needed for configured
+            name/default lookup.
 
     Returns:
         ResolvedDatabase with name and canonical connection string
@@ -99,6 +101,7 @@ def resolve_database(
         DatabaseResolutionError: If the spec cannot be resolved to a valid database connection
     """
     if spec is None:
+        config_mgr = config_mgr or DatabaseConfigManager()
         db_cfg = config_mgr.get_default_database()
         if not db_cfg:
             raise DatabaseResolutionError(
@@ -153,6 +156,7 @@ def resolve_database(
         )
 
     # 3. Must be a configured name
+    config_mgr = config_mgr or DatabaseConfigManager()
     db_cfg: DatabaseConfig | None = config_mgr.get_database(spec)
     if not db_cfg:
         raise DatabaseResolutionError(

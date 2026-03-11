@@ -4,9 +4,10 @@ import json
 import os
 import platform
 import stat
+from collections.abc import Mapping
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import platformdirs
 
@@ -252,11 +253,82 @@ class ModelConfigManager:
         self._save_config(config)
 
 
+class ModelConfigManagerProtocol(Protocol):
+    """Protocol for model config manager implementations."""
+
+    def get_model(self) -> str: ...
+    def set_model(self, model: str) -> None: ...
+    def get_subagent_model(self, agent: str) -> str | None: ...
+    def set_subagent_model(self, agent: str, model: str | None) -> None: ...
+    def get_subagent_models(self) -> dict[str, str]: ...
+    def get_thinking_enabled(self) -> bool: ...
+    def set_thinking_enabled(self, enabled: bool) -> None: ...
+    def get_thinking_level(self) -> ThinkingLevel: ...
+    def set_thinking_level(self, level: ThinkingLevel) -> None: ...
+    def set_thinking(self, enabled: bool, level: ThinkingLevel) -> None: ...
+
+
+class InMemoryModelConfigManager:
+    """In-memory model config manager for SDK/tests without file I/O."""
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        thinking_enabled: bool,
+        thinking_level: ThinkingLevel,
+        subagents: Mapping[str, str] | None = None,
+    ) -> None:
+        self._model = model
+        self._thinking_enabled = thinking_enabled
+        self._thinking_level = thinking_level
+        self._subagents: dict[str, str] = {
+            key: value
+            for key, value in (subagents or {}).items()
+            if key in SUBAGENT_KEYS and value
+        }
+
+    def get_model(self) -> str:
+        return self._model
+
+    def set_model(self, model: str) -> None:
+        self._model = model
+
+    def get_subagent_model(self, agent: str) -> str | None:
+        model = self._subagents.get(agent)
+        return model if model else None
+
+    def set_subagent_model(self, agent: str, model: str | None) -> None:
+        if not model:
+            self._subagents.pop(agent, None)
+            return
+        self._subagents[agent] = model
+
+    def get_subagent_models(self) -> dict[str, str]:
+        return dict(self._subagents)
+
+    def get_thinking_enabled(self) -> bool:
+        return self._thinking_enabled
+
+    def set_thinking_enabled(self, enabled: bool) -> None:
+        self._thinking_enabled = enabled
+
+    def get_thinking_level(self) -> ThinkingLevel:
+        return self._thinking_level
+
+    def set_thinking_level(self, level: ThinkingLevel) -> None:
+        self._thinking_level = level
+
+    def set_thinking(self, enabled: bool, level: ThinkingLevel) -> None:
+        self._thinking_enabled = enabled
+        self._thinking_level = level
+
+
 class ModelConfig:
     """Configuration specific to the model."""
 
-    def __init__(self):
-        self._manager = ModelConfigManager()
+    def __init__(self, manager: ModelConfigManagerProtocol | None = None):
+        self._manager = manager or ModelConfigManager()
 
     @property
     def name(self) -> str:
@@ -341,12 +413,94 @@ class AuthConfig:
             os.environ[env_var] = api_key
 
 
+class AuthConfigProtocol(Protocol):
+    """Protocol for auth config implementations."""
+
+    def get_api_key(self, model_name: str) -> str | None: ...
+    def validate(self, model_name: str) -> None: ...
+
+
+class InMemoryAuthConfig:
+    """In-memory auth config that avoids keyring prompts and file I/O."""
+
+    def __init__(self, api_keys: Mapping[str, str] | None = None) -> None:
+        self._api_keys = {
+            key.strip().lower(): value.strip()
+            for key, value in (api_keys or {}).items()
+            if key.strip() and value.strip()
+        }
+
+    def get_api_key(self, model_name: str) -> str | None:
+        model = model_name or ""
+        provider_key = providers.provider_from_model(model)
+        if provider_key not in set(providers.all_keys()):
+            return None
+
+        env_var = providers.env_var_name(provider_key)
+        env_key = os.getenv(env_var)
+        if env_key:
+            return env_key
+
+        api_key = self._api_keys.get(provider_key)
+        if api_key and not env_key:
+            os.environ[env_var] = api_key
+        return api_key
+
+    def validate(self, model_name: str) -> None:
+        model = model_name or ""
+        provider_key = providers.provider_from_model(model)
+        if not provider_key:
+            return
+
+        api_key = self.get_api_key(model_name)
+        if not api_key:
+            provider_name = provider_key.capitalize()
+            raise ValueError(f"{provider_name} API key not found.")
+
+
 class Config:
     """Configuration class for SQLSaber."""
 
-    def __init__(self):
-        self.model = ModelConfig()
-        self.auth = AuthConfig()
+    def __init__(
+        self,
+        *,
+        model: ModelConfig | None = None,
+        auth: AuthConfigProtocol | None = None,
+    ) -> None:
+        self.model = model or ModelConfig()
+        self.auth = auth or AuthConfig()
+
+    @classmethod
+    def default(cls) -> "Config":
+        """Create a default file-backed Config."""
+        return cls()
+
+    @classmethod
+    def in_memory(
+        cls,
+        *,
+        model_name: str | None = None,
+        thinking_enabled: bool = False,
+        thinking_level: ThinkingLevel | str = ThinkingLevel.MEDIUM,
+        subagent_models: Mapping[str, str] | None = None,
+        api_keys: Mapping[str, str] | None = None,
+    ) -> "Config":
+        """Create an in-memory Config for SDK/tests without filesystem writes."""
+        resolved_level = (
+            ThinkingLevel.from_string(thinking_level)
+            if isinstance(thinking_level, str)
+            else thinking_level
+        )
+        model_manager = InMemoryModelConfigManager(
+            model=model_name or ModelConfigManager.DEFAULT_MODEL,
+            thinking_enabled=thinking_enabled,
+            thinking_level=resolved_level,
+            subagents=subagent_models,
+        )
+        return cls(
+            model=ModelConfig(manager=model_manager),
+            auth=InMemoryAuthConfig(api_keys=api_keys),
+        )
 
     @property
     def model_name(self) -> str:

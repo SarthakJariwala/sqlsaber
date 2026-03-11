@@ -314,7 +314,7 @@ class TestThreadsCLI:
 
             with (
                 patch("sqlsaber.threads.ThreadStorage", return_value=store),
-                patch("sqlsaber.database.resolver") as mock_resolve,
+                patch("sqlsaber.database.resolver.resolve_database") as mock_resolve,
                 patch("sqlsaber.database.DatabaseConnection") as mock_db_conn_class,
                 patch(
                     "sqlsaber.agents.pydantic_ai_agent.SQLSaberAgent"

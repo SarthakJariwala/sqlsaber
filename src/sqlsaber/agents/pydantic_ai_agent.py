@@ -17,7 +17,6 @@ from sqlsaber.config.settings import Config, ThinkingLevel
 from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.knowledge.manager import KnowledgeManager
-from sqlsaber.memory.manager import MemoryManager
 from sqlsaber.overrides import (
     ToolOveridesInput,
     ToolRunDeps,
@@ -26,7 +25,6 @@ from sqlsaber.overrides import (
 )
 from sqlsaber.prompts.claude import CLAUDE
 from sqlsaber.prompts.dangerous_mode import DANGEROUS_MODE
-from sqlsaber.prompts.memory import MEMORY_ADDITION
 from sqlsaber.prompts.openai import GPT_5
 from sqlsaber.tools.base import Tool
 from sqlsaber.tools.knowledge_tool import KnowledgeTool
@@ -41,24 +39,21 @@ class SQLSaberAgent:
         self,
         db_connection: BaseDatabaseConnection,
         database_name: str | None = None,
-        memory_manager: MemoryManager | None = None,
+        settings: Config | None = None,
         knowledge_manager: KnowledgeManager | None = None,
         thinking_enabled: bool | None = None,
         thinking_level: ThinkingLevel | None = None,
         model_name: str | None = None,
         api_key: str | None = None,
         allow_dangerous: bool = False,
-        memory: str | None = None,
         system_prompt: str | None = None,
         tool_overides: ToolOveridesInput | None = None,
     ):
         self.db_connection = db_connection
         self.database_name = database_name
-        self.config = Config()
-        self.memory_manager = memory_manager or MemoryManager()
+        self.config = settings or Config.default()
         self._owns_knowledge_manager = knowledge_manager is None
         self.knowledge_manager = knowledge_manager or KnowledgeManager()
-        self.memory_override = memory
         if system_prompt is not None and not system_prompt.strip():
             self.system_prompt_override = None
         else:
@@ -137,21 +132,6 @@ class SQLSaberAgent:
         self._register_tools(agent)
         return agent
 
-    def _prompt_memory_text(self, include_memory: bool = True) -> str | None:
-        if not include_memory:
-            return None
-
-        if self.memory_override is not None:
-            mem = self.memory_override.strip()
-            return mem or None
-
-        if self.database_name:
-            mem = self.memory_manager.format_memories_for_prompt(self.database_name)
-            mem = mem.strip()
-            return mem or None
-
-        return None
-
     def _setup_system_prompt(self, agent: Agent) -> None:
         """Configure the agent's system prompt using a simple prompt string."""
 
@@ -161,7 +141,7 @@ class SQLSaberAgent:
                 isinstance(agent.model, Model) and "gpt-5" in agent.model.model_name
             )
             base = self._base_system_prompt(use_gpt5=use_gpt5)
-            return self._apply_prompt_extras(base, include_memory=True)
+            return self._apply_prompt_extras(base)
 
     def _base_system_prompt(self, *, use_gpt5: bool) -> str:
         if self.system_prompt_override is not None:
@@ -170,20 +150,16 @@ class SQLSaberAgent:
             return GPT_5.format(db=self.db_type)
         return CLAUDE.format(db=self.db_type)
 
-    def _apply_prompt_extras(self, base: str, *, include_memory: bool) -> str:
+    def _apply_prompt_extras(self, base: str) -> str:
         prompt = base
         if self.allow_dangerous:
             prompt += DANGEROUS_MODE
-
-        mem = self._prompt_memory_text(include_memory=include_memory)
-        if mem:
-            prompt = f"{prompt}\n\n{MEMORY_ADDITION}\n\n{mem}"
         return prompt
 
-    def system_prompt_text(self, include_memory: bool = True) -> str:
+    def system_prompt_text(self) -> str:
         """Return the SQLSaber system prompt as a single string."""
         base = self._base_system_prompt(use_gpt5=False)
-        return self._apply_prompt_extras(base, include_memory=include_memory)
+        return self._apply_prompt_extras(base)
 
     def _register_tools(self, agent: Agent) -> None:
         """Register all the SQL tools with the agent."""
