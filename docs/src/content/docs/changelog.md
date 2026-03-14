@@ -9,6 +9,13 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.62.1](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.62.0...sqlsaber-v0.62.1) (2026-03-14)
+
+
+### Bug Fixes
+
+* Modify wording for allow-dangerous banner ([#145](https://github.com/SarthakJariwala/sqlsaber/issues/145)) ([529d43a](https://github.com/SarthakJariwala/sqlsaber/commit/529d43af506ea89e86d5bb2e9b4ad066a9e4f2ed))
+
 ## [0.62.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.61.0...sqlsaber-v0.62.0) (2026-03-11)
 
 
