@@ -25,10 +25,14 @@ from sqlsaber.cli.update_check import schedule_update_check
 from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console
 
-DANGEROUS_MODE_WARNING = (
-    "The assistant can execute INSERT/UPDATE/DELETE and restricted DDL "
-    "(CREATE TABLE/VIEW/INDEX, ALTER TABLE)."
+DANGEROUS_MODE_SCOPE = (
+    "INSERT/UPDATE/DELETE and restricted DDL (CREATE TABLE/VIEW/INDEX, ALTER "
+    "TABLE). DROP/TRUNCATE and admin/security operations stay blocked; "
+    "UPDATE/DELETE require WHERE."
 )
+
+DANGEROUS_MODE_WARNING = f"The assistant can execute {DANGEROUS_MODE_SCOPE}"
+DANGEROUS_MODE_HELP = f"Allow {DANGEROUS_MODE_SCOPE}"
 
 
 class CLIError(Exception):
@@ -109,7 +113,7 @@ def query(
         bool,
         cyclopts.Parameter(
             ["--allow-dangerous"],
-            help="Allow INSERT/UPDATE/DELETE and restricted DDL (CREATE TABLE/VIEW/INDEX, ALTER TABLE). DROP/TRUNCATE and admin/security operations stay blocked; UPDATE/DELETE require WHERE",
+            help=DANGEROUS_MODE_HELP,
         ),
     ] = False,
     system_prompt: Annotated[
