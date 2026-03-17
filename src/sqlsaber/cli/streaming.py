@@ -16,11 +16,14 @@ from pydantic_ai.messages import (
     FunctionToolCallEvent,
     FunctionToolResultEvent,
     PartDeltaEvent,
+    PartEndEvent,
     PartStartEvent,
     TextPart,
     TextPartDelta,
     ThinkingPart,
     ThinkingPartDelta,
+    ToolCallPart,
+    ToolCallPartDelta,
 )
 from rich.console import Console
 
@@ -39,6 +42,7 @@ class StreamingQueryHandler:
         self.console = console
         self.display = DisplayManager(console)
         self.log = get_logger(__name__)
+        self._tool_call_names: dict[int, str] = {}
 
     async def _event_stream_handler(
         self, ctx: RunContext, event_stream: AsyncIterable[AgentStreamEvent]
@@ -68,6 +72,9 @@ class StreamingQueryHandler:
         elif isinstance(event.part, ThinkingPart):
             self.display.live.ensure_segment(ThinkingPart)
             self.display.live.append(event.part.content)
+        elif isinstance(event.part, ToolCallPart):
+            self._tool_call_names[event.index] = event.part.tool_name
+            self._maybe_start_sql_generation_status(event.part.tool_name)
 
     @on_event.register
     async def _(self, event: PartDeltaEvent, ctx: RunContext) -> None:
@@ -82,6 +89,16 @@ class StreamingQueryHandler:
             if delta:
                 self.display.live.ensure_segment(ThinkingPart)
                 self.display.live.append(delta)
+        elif isinstance(d, ToolCallPartDelta):
+            if d.tool_name_delta:
+                current_name = self._tool_call_names.get(event.index, "")
+                updated_name = f"{current_name}{d.tool_name_delta}"
+                self._tool_call_names[event.index] = updated_name
+                self._maybe_start_sql_generation_status(updated_name)
+
+    @on_event.register
+    async def _(self, event: PartEndEvent, ctx: RunContext) -> None:
+        self._tool_call_names.pop(event.index, None)
 
     @on_event.register
     async def _(self, event: FunctionToolCallEvent, ctx: RunContext) -> None:
@@ -99,6 +116,10 @@ class StreamingQueryHandler:
             self.display.show_tool_executing(event.part.tool_name, args)
             if event.part.tool_name == "viz":
                 self.display.live.start_status("Generating visualization...")
+
+    def _maybe_start_sql_generation_status(self, tool_name: str) -> None:
+        if tool_name == "execute_sql":
+            self.display.live.start_status("Generating SQL...")
 
     @on_event.register
     async def _(self, event: FunctionToolResultEvent, ctx: RunContext) -> None:
@@ -121,6 +142,7 @@ class StreamingQueryHandler:
         cancellation_token: asyncio.Event | None = None,
         message_history: list | None = None,
     ):
+        self._tool_call_names.clear()
         self.display.live.prepare_code_blocks()
         try:
             self.log.info("streaming.execute.start")
@@ -143,3 +165,4 @@ class StreamingQueryHandler:
                 self.display.live.end_status()
             finally:
                 self.display.live.end_if_active()
+                self._tool_call_names.clear()
