@@ -721,6 +721,118 @@ class TestAlwaysBlockedInDangerousMode:
         assert result.reason
         assert "DELETE without WHERE" in result.reason
 
+    def test_update_with_where_true_blocked_in_dangerous_mode(self):
+        """UPDATE with tautological WHERE TRUE should be blocked in dangerous mode."""
+        result = validate_sql(
+            "UPDATE users SET active = false WHERE TRUE",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_update_with_where_one_equals_one_blocked_in_dangerous_mode(self):
+        """UPDATE with tautological WHERE 1=1 should be blocked in dangerous mode."""
+        result = validate_sql(
+            "UPDATE users SET active = false WHERE 1 = 1",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_delete_with_where_true_blocked_in_dangerous_mode(self):
+        """DELETE with tautological WHERE TRUE should be blocked in dangerous mode."""
+        result = validate_sql(
+            "DELETE FROM users WHERE TRUE", "postgres", allow_dangerous=True
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_delete_with_where_one_equals_one_blocked_in_dangerous_mode(self):
+        """DELETE with tautological WHERE 1=1 should be blocked in dangerous mode."""
+        result = validate_sql(
+            "DELETE FROM users WHERE 1 = 1", "postgres", allow_dangerous=True
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_update_with_nested_parenthesized_true_blocked_in_dangerous_mode(self):
+        """Deeply parenthesized tautologies should still be blocked."""
+        result = validate_sql(
+            "UPDATE users SET active = false WHERE (((TRUE)))",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_delete_with_nested_parenthesized_one_equals_one_blocked_in_dangerous_mode(
+        self,
+    ):
+        """Deeply parenthesized 1=1 should still be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE ((((1 = 1))))",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_update_with_tautological_or_clause_blocked_in_dangerous_mode(self):
+        """Tautological OR should be treated as unfiltered mutation."""
+        result = validate_sql(
+            "UPDATE users SET active = false WHERE (1 = 1) OR id > 0",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_update_with_tautological_and_filter_allowed_in_dangerous_mode(self):
+        """A tautological AND with a real filter should remain allowed."""
+        result = validate_sql(
+            "UPDATE users SET active = false WHERE (1 = 1) AND id > 0",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_mysql_update_with_where_one_blocked_in_dangerous_mode(self):
+        """MySQL truthy numeric predicates should be blocked."""
+        result = validate_sql(
+            "UPDATE users SET active = 0 WHERE 1", "mysql", allow_dangerous=True
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_mysql_delete_with_parenthesized_where_one_blocked_in_dangerous_mode(self):
+        """MySQL parenthesized numeric truthy predicates should be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE (1)", "mysql", allow_dangerous=True
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_sqlite_delete_with_where_not_zero_blocked_in_dangerous_mode(self):
+        """SQLite numeric boolean syntax like NOT 0 should be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE NOT 0", "sqlite", allow_dangerous=True
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
     def test_update_with_where_allowed_in_dangerous_mode(self):
         """UPDATE with WHERE should be allowed in dangerous mode."""
         result = validate_sql(
@@ -735,6 +847,147 @@ class TestAlwaysBlockedInDangerousMode:
         """DELETE with WHERE should be allowed in dangerous mode."""
         result = validate_sql(
             "DELETE FROM users WHERE id = 1", "postgres", allow_dangerous=True
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+
+class TestDangerousModeTautologyHardening:
+    """Additional tautology hardening tests for dangerous mode mutations."""
+
+    def test_update_with_constant_in_predicate_blocked(self):
+        """Constant IN predicate evaluating to true should be blocked."""
+        result = validate_sql(
+            "UPDATE users SET active = false WHERE 1 IN (1)",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_delete_with_constant_exists_predicate_blocked(self):
+        """Constant EXISTS predicate evaluating to true should be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE EXISTS (SELECT 1)",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_mysql_update_with_abs_constant_predicate_blocked(self):
+        """Deterministic constant function predicates should be blocked."""
+        result = validate_sql(
+            "UPDATE users SET active = 0 WHERE ABS(1)",
+            "mysql",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_mysql_delete_with_coalesce_constant_predicate_blocked(self):
+        """Constant COALESCE predicates should be blocked when truthy."""
+        result = validate_sql(
+            "DELETE FROM users WHERE COALESCE(NULL, 1)",
+            "mysql",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_mysql_delete_with_truthy_string_literal_blocked(self):
+        """MySQL truthy numeric strings in WHERE should be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE '1'",
+            "mysql",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_sqlite_delete_with_truthy_hex_literal_blocked(self):
+        """SQLite truthy hex literals in WHERE should be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE 0x1",
+            "sqlite",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_update_with_constant_in_false_allowed(self):
+        """Constant IN predicate evaluating to false should remain allowed."""
+        result = validate_sql(
+            "UPDATE users SET active = false WHERE 1 IN (2)",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_delete_with_constant_exists_false_allowed(self):
+        """EXISTS with constant false subquery should remain allowed."""
+        result = validate_sql(
+            "DELETE FROM users WHERE EXISTS (SELECT 1 WHERE FALSE)",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_mysql_update_with_falsey_coalesce_allowed(self):
+        """Falsey constant COALESCE predicate should remain allowed."""
+        result = validate_sql(
+            "UPDATE users SET active = 0 WHERE COALESCE(NULL, 0)",
+            "mysql",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_mysql_delete_with_falsey_string_literal_allowed(self):
+        """MySQL falsey numeric strings in WHERE should remain allowed."""
+        result = validate_sql(
+            "DELETE FROM users WHERE '0'",
+            "mysql",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_mysql_update_with_dynamic_abs_predicate_allowed(self):
+        """Dynamic function predicates should remain allowed."""
+        result = validate_sql(
+            "UPDATE users SET active = 0 WHERE ABS(id)",
+            "mysql",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_update_with_exists_or_clause_blocked(self):
+        """Tautological EXISTS in OR should be blocked as unfiltered."""
+        result = validate_sql(
+            "UPDATE users SET active = false WHERE EXISTS (SELECT 1) OR id = 1",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_update_with_exists_and_filter_allowed(self):
+        """Tautological EXISTS in AND should preserve filtering behavior."""
+        result = validate_sql(
+            "UPDATE users SET active = false WHERE EXISTS (SELECT 1) AND id = 1",
+            "postgres",
+            allow_dangerous=True,
         )
         assert result.allowed
         assert result.query_type == "dml"

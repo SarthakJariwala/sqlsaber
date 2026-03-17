@@ -3,6 +3,7 @@
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 
 import sqlglot
 from sqlglot import exp
@@ -170,6 +171,16 @@ ALLOWED_DANGEROUS_CREATE_KINDS: set[str] = {
 }
 
 
+NUMERIC_TRUTHY_PREDICATE_DIALECTS: set[str] = {
+    "mysql",
+    "sqlite",
+}
+
+
+_UNKNOWN_SCALAR_VALUE = object()
+_SQL_NULL_SCALAR_VALUE = object()
+
+
 _MYSQL_VERSION_COMMENT_RE = re.compile(r"/\*!")
 
 
@@ -238,27 +249,345 @@ def classify_statement(stmt: exp.Expression) -> str:
     return "other"
 
 
-def has_unfiltered_mutation(stmt: exp.Expression) -> str | None:
-    """Check for UPDATE/DELETE without WHERE clause.
+def _unwrap_parens(expr: exp.Expression | None) -> exp.Expression | None:
+    """Unwrap nested parentheses from an expression."""
+    while isinstance(expr, exp.Paren):
+        inner = expr.this
+        if inner is None:
+            break
+        expr = inner
+    return expr
 
-    These operations are dangerous because they affect all rows in a table.
+
+def _numeric_literal_value(expr: exp.Expression | None, dialect: str) -> Decimal | None:
+    """Return Decimal value for numeric/hex literals, with unary minus support."""
+    expr = _unwrap_parens(expr)
+    if expr is None:
+        return None
+
+    sign = 1
+    while isinstance(expr, exp.Neg):
+        sign *= -1
+        expr = _unwrap_parens(expr.this)
+        if expr is None:
+            return None
+
+    value: Decimal | None = None
+
+    if isinstance(expr, exp.Literal):
+        if expr.is_string:
+            return None
+        try:
+            value = Decimal(str(expr.this))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+    if isinstance(expr, exp.HexString):
+        if dialect not in NUMERIC_TRUTHY_PREDICATE_DIALECTS:
+            return None
+        try:
+            value = Decimal(int(str(expr.this), 16))
+        except (TypeError, ValueError):
+            return None
+
+    if value is None:
+        return None
+
+    if sign < 0:
+        value = -value
+
+    return value
+
+
+def _numeric_string_value(value: str) -> Decimal | None:
+    """Parse a numeric-looking string literal safely."""
+    stripped = value.strip()
+    if not stripped:
+        return None
+
+    try:
+        return Decimal(stripped)
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _constant_scalar_value(
+    expr: exp.Expression | None,
+    dialect: str,
+) -> Decimal | str | bool | object:
+    """Evaluate expression to a constant scalar when safely possible."""
+    expr = _unwrap_parens(expr)
+    if expr is None:
+        return _UNKNOWN_SCALAR_VALUE
+
+    if isinstance(expr, exp.Boolean):
+        return bool(expr.this)
+
+    if isinstance(expr, exp.Null):
+        return _SQL_NULL_SCALAR_VALUE
+
+    numeric_value = _numeric_literal_value(expr, dialect)
+    if numeric_value is not None:
+        return numeric_value
+
+    if isinstance(expr, exp.Literal) and expr.is_string:
+        return str(expr.this)
+
+    if isinstance(expr, exp.Abs):
+        inner = _constant_scalar_value(expr.this, dialect)
+        if isinstance(inner, Decimal):
+            return abs(inner)
+        return _UNKNOWN_SCALAR_VALUE
+
+    if isinstance(expr, exp.Coalesce):
+        args: list[exp.Expression] = []
+        first = expr.this
+        if isinstance(first, exp.Expression):
+            args.append(first)
+        args.extend(expr.expressions)
+
+        for arg in args:
+            value = _constant_scalar_value(arg, dialect)
+            if value is _UNKNOWN_SCALAR_VALUE:
+                return _UNKNOWN_SCALAR_VALUE
+            if value is not _SQL_NULL_SCALAR_VALUE:
+                return value
+
+        return _SQL_NULL_SCALAR_VALUE
+
+    return _UNKNOWN_SCALAR_VALUE
+
+
+def _predicate_truthiness_from_scalar(
+    value: Decimal | str | bool | object,
+    dialect: str,
+) -> bool | None:
+    """Interpret scalar values as predicate truthiness when semantics are clear."""
+    if value is _UNKNOWN_SCALAR_VALUE:
+        return None
+
+    if value is _SQL_NULL_SCALAR_VALUE:
+        return False
+
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, Decimal):
+        if dialect not in NUMERIC_TRUTHY_PREDICATE_DIALECTS:
+            return None
+        return value != 0
+
+    if isinstance(value, str):
+        if dialect not in NUMERIC_TRUTHY_PREDICATE_DIALECTS:
+            return None
+        numeric_value = _numeric_string_value(value)
+        if numeric_value is None:
+            return None
+        return numeric_value != 0
+
+    return None
+
+
+def _constant_scalar_equals(
+    left: Decimal | str | bool | object,
+    right: Decimal | str | bool | object,
+) -> bool | None:
+    """Compare constant scalar values when type-compatible."""
+    if (
+        left is _UNKNOWN_SCALAR_VALUE
+        or right is _UNKNOWN_SCALAR_VALUE
+        or left is _SQL_NULL_SCALAR_VALUE
+        or right is _SQL_NULL_SCALAR_VALUE
+    ):
+        return None
+
+    if isinstance(left, Decimal) and isinstance(right, Decimal):
+        return left == right
+
+    if isinstance(left, bool) and isinstance(right, bool):
+        return left == right
+
+    if isinstance(left, str) and isinstance(right, str):
+        return left == right
+
+    return None
+
+
+def _constant_in_predicate_truthiness(expr: exp.In, dialect: str) -> bool | None:
+    """Evaluate constant IN predicates when possible."""
+    left_value = _constant_scalar_value(expr.this, dialect)
+    if left_value in {_UNKNOWN_SCALAR_VALUE, _SQL_NULL_SCALAR_VALUE}:
+        return None
+
+    if expr.args.get("query") is not None:
+        return None
+
+    saw_unknown = False
+    for option in expr.expressions:
+        option_value = _constant_scalar_value(option, dialect)
+        equals = _constant_scalar_equals(left_value, option_value)
+
+        if equals is True:
+            return True
+        if equals is None:
+            saw_unknown = True
+
+    if saw_unknown:
+        return None
+
+    return False
+
+
+def _constant_exists_predicate_truthiness(
+    expr: exp.Exists, dialect: str
+) -> bool | None:
+    """Evaluate simple row-invariant EXISTS predicates safely."""
+    subquery = expr.this
+    if isinstance(subquery, exp.Subquery):
+        subquery = subquery.this
+
+    if not isinstance(subquery, exp.Select):
+        return None
+
+    if subquery.args.get("from") is not None:
+        return None
+
+    where_clause = subquery.args.get("where")
+    if isinstance(where_clause, exp.Where):
+        where_truth = _constant_predicate_truthiness(where_clause.this, dialect)
+        if where_truth is False:
+            return False
+        if where_truth is None:
+            return None
+
+    limit_clause = subquery.args.get("limit")
+    if isinstance(limit_clause, exp.Limit):
+        limit_expression = limit_clause.expression or limit_clause.this
+        limit_value = _constant_scalar_value(limit_expression, dialect)
+        if limit_value is _UNKNOWN_SCALAR_VALUE:
+            return None
+        if isinstance(limit_value, Decimal) and limit_value <= 0:
+            return False
+
+    return True
+
+
+def _constant_predicate_truthiness(
+    expr: exp.Expression | None,
+    dialect: str,
+) -> bool | None:
+    """Evaluate obvious constant truthiness in boolean predicate position."""
+    expr = _unwrap_parens(expr)
+
+    if expr is None:
+        return True
+
+    if isinstance(expr, exp.Not):
+        inner = _constant_predicate_truthiness(expr.this, dialect)
+        if inner is None:
+            return None
+        return not inner
+
+    if isinstance(expr, exp.And):
+        left = _constant_predicate_truthiness(expr.this, dialect)
+        right = _constant_predicate_truthiness(expr.expression, dialect)
+
+        if left is False or right is False:
+            return False
+        if left is True and right is True:
+            return True
+        if left is True:
+            return right
+        if right is True:
+            return left
+        return None
+
+    if isinstance(expr, exp.Or):
+        left = _constant_predicate_truthiness(expr.this, dialect)
+        right = _constant_predicate_truthiness(expr.expression, dialect)
+
+        if left is True or right is True:
+            return True
+        if left is False and right is False:
+            return False
+        if left is False:
+            return right
+        if right is False:
+            return left
+        return None
+
+    if isinstance(expr, exp.In):
+        in_truth = _constant_in_predicate_truthiness(expr, dialect)
+        if in_truth is not None:
+            return in_truth
+
+    if isinstance(expr, exp.Exists):
+        exists_truth = _constant_exists_predicate_truthiness(expr, dialect)
+        if exists_truth is not None:
+            return exists_truth
+
+    scalar_value = _constant_scalar_value(expr, dialect)
+    return _predicate_truthiness_from_scalar(scalar_value, dialect)
+
+
+def _is_tautological_where(where: exp.Where, dialect: str = "ansi") -> bool:
+    """Return True when a WHERE predicate is effectively always true."""
+    predicate = where.this
+    if predicate is None:
+        return True
+
+    candidates: list[exp.Expression] = [predicate]
+
+    try:
+        from sqlglot.optimizer.simplify import simplify
+
+        candidates.insert(0, simplify(predicate.copy()))
+    except Exception:
+        pass
+
+    return any(
+        _constant_predicate_truthiness(candidate, dialect) is True
+        for candidate in candidates
+    )
+
+
+def has_unfiltered_mutation(stmt: exp.Expression, dialect: str = "ansi") -> str | None:
+    """Check for UPDATE/DELETE without restrictive WHERE clause.
+
+    These operations are dangerous because they can affect all rows in a table.
     """
     for node in stmt.walk():
         if isinstance(node, exp.Update):
-            if not node.args.get("where"):
+            where = node.args.get("where")
+            if not where:
                 return (
                     "UPDATE without WHERE clause is not allowed (would affect all rows)"
                 )
+            if isinstance(where, exp.Where) and _is_tautological_where(where, dialect):
+                return (
+                    "UPDATE with tautological WHERE clause is not allowed "
+                    "(would affect all rows)"
+                )
+
         if isinstance(node, exp.Delete):
-            if not node.args.get("where"):
+            where = node.args.get("where")
+            if not where:
                 return (
                     "DELETE without WHERE clause is not allowed (would affect all rows)"
                 )
+            if isinstance(where, exp.Where) and _is_tautological_where(where, dialect):
+                return (
+                    "DELETE with tautological WHERE clause is not allowed "
+                    "(would affect all rows)"
+                )
+
     return None
 
 
 def has_prohibited_nodes(
-    stmt: exp.Expression, allow_dangerous: bool = False
+    stmt: exp.Expression,
+    allow_dangerous: bool = False,
+    dialect: str = "ansi",
 ) -> str | None:
     """Walk AST to find any prohibited operations.
 
@@ -271,7 +600,7 @@ def has_prohibited_nodes(
     In dangerous mode (allow_dangerous=True):
       - Allow DML/DDL
       - Still block ALWAYS_BLOCKED_NODES, SELECT INTO, locking clauses
-      - Block UPDATE/DELETE without WHERE clause
+      - Block UPDATE/DELETE without restrictive WHERE clause
     """
     for node in stmt.walk():
         # Operations that are never allowed
@@ -294,7 +623,7 @@ def has_prohibited_nodes(
 
     # In dangerous mode, block unfiltered mutations
     if allow_dangerous:
-        reason = has_unfiltered_mutation(stmt)
+        reason = has_unfiltered_mutation(stmt, dialect)
         if reason:
             return reason
 
@@ -474,7 +803,7 @@ def validate_read_only(sql: str, dialect: str = "ansi") -> GuardResult:
         return GuardResult(False, "Only SELECT-like statements are allowed")
 
     # Check for prohibited operations in the AST
-    reason = has_prohibited_nodes(stmt)
+    reason = has_prohibited_nodes(stmt, dialect=dialect)
     if reason:
         return GuardResult(False, reason)
 
@@ -545,7 +874,7 @@ def validate_sql(
         return GuardResult(False, reason)
 
     # Enforce always-blocked operations and lock/SELECT INTO checks
-    reason = has_prohibited_nodes(stmt, allow_dangerous=True)
+    reason = has_prohibited_nodes(stmt, allow_dangerous=True, dialect=dialect)
     if reason:
         return GuardResult(False, reason)
 
