@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.4.0...sqlsaber-viz-v0.5.0) (2026-03-17)
+
+
+### Features
+
+* trigger release ([145d163](https://github.com/SarthakJariwala/sqlsaber/commit/145d163c91989e62b722a266842b13e9145be638))
+
 ## [0.4.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.3.0...sqlsaber-viz-v0.4.0) (2026-02-20)
 
 
