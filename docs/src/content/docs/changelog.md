@@ -9,6 +9,13 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.63.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.62.1...sqlsaber-v0.63.0) (2026-03-17)
+
+
+### Features
+
+* show sql generation status for long SQL generation ([#149](https://github.com/SarthakJariwala/sqlsaber/issues/149)) ([87e5b6f](https://github.com/SarthakJariwala/sqlsaber/commit/87e5b6fe4199c5bd17613c8ddb7d21afcbc0fdef))
+
 ## [0.62.1](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.62.0...sqlsaber-v0.62.1) (2026-03-14)
 
 
