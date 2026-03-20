@@ -2,6 +2,8 @@
 
 import re
 from collections.abc import Callable
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
@@ -268,6 +270,33 @@ POSTGRES_SET_RETURNING_ANONYMOUS_FUNCTIONS: set[str] = {
     "unnest",
 }
 
+# Simplify should only run on manageable predicate shapes.
+PREDICATE_SIMPLIFY_MAX_NODES = 300
+PREDICATE_SIMPLIFY_MAX_DEPTH = 36
+PREDICATE_SIMPLIFY_MAX_BOOLEAN_OPERATORS = 180
+
+# Per-validation guardrail against CPU amplification on adversarial predicates.
+ANALYSIS_BUDGET_MAX_STEPS = 50_000
+
+
+class _AnalysisBudgetExceeded(RecursionError):
+    """Raised when validation exceeds allowed analysis step budget."""
+
+
+@dataclass
+class _AnalysisContext:
+    """Per-validation mutable analysis state (budget + memoization caches)."""
+
+    remaining_steps: int
+    predicate_truthiness_cache: dict[tuple[int, str, int], set[bool | None]]
+    simplify_gate_cache: dict[int, bool]
+
+
+_ANALYSIS_CONTEXT: ContextVar[_AnalysisContext | None] = ContextVar(
+    "sql_guard_analysis_context",
+    default=None,
+)
+
 
 _UNKNOWN_SCALAR_VALUE = object()
 _SQL_NULL_SCALAR_VALUE = object()
@@ -402,6 +431,98 @@ def _is_row_stable_expression(expr: exp.Expression | None) -> bool:
             return False
 
     return True
+
+
+def _consume_analysis_budget(steps: int = 1) -> None:
+    """Consume analysis steps; raise when validation budget is exhausted."""
+    context = _ANALYSIS_CONTEXT.get()
+    if context is None:
+        return
+
+    context.remaining_steps -= steps
+    if context.remaining_steps < 0:
+        raise _AnalysisBudgetExceeded()
+
+
+@contextmanager
+def _analysis_session(max_steps: int | None = None):
+    """Run validation under a bounded analysis budget and per-call caches."""
+    if max_steps is None:
+        max_steps = ANALYSIS_BUDGET_MAX_STEPS
+
+    token = _ANALYSIS_CONTEXT.set(
+        _AnalysisContext(
+            remaining_steps=max_steps,
+            predicate_truthiness_cache={},
+            simplify_gate_cache={},
+        )
+    )
+    try:
+        yield
+    finally:
+        _ANALYSIS_CONTEXT.reset(token)
+
+
+def _predicate_expression_complexity(
+    expression: exp.Expression,
+) -> tuple[int, int, int]:
+    """Return (node_count, max_depth, boolean_operator_count)."""
+    node_count = 0
+    max_depth = 0
+    boolean_operator_count = 0
+    stack: list[tuple[exp.Expression, int]] = [(expression, 1)]
+
+    while stack:
+        node, depth = stack.pop()
+        _consume_analysis_budget()
+
+        node_count += 1
+        if depth > max_depth:
+            max_depth = depth
+
+        if isinstance(node, (exp.And, exp.Or, exp.Not, exp.If, exp.Case, exp.Coalesce)):
+            boolean_operator_count += 1
+
+        child_depth = depth + 1
+        for argument in node.args.values():
+            if isinstance(argument, exp.Expression):
+                stack.append((argument, child_depth))
+            elif isinstance(argument, list):
+                for list_item in argument:
+                    if isinstance(list_item, exp.Expression):
+                        stack.append((list_item, child_depth))
+
+        if (
+            node_count > PREDICATE_SIMPLIFY_MAX_NODES
+            or max_depth > PREDICATE_SIMPLIFY_MAX_DEPTH
+            or boolean_operator_count > PREDICATE_SIMPLIFY_MAX_BOOLEAN_OPERATORS
+        ):
+            return node_count, max_depth, boolean_operator_count
+
+    return node_count, max_depth, boolean_operator_count
+
+
+def _should_attempt_predicate_simplify(expression: exp.Expression) -> bool:
+    """Return True when predicate is small enough for sqlglot simplify."""
+    context = _ANALYSIS_CONTEXT.get()
+    cache_key = id(expression)
+
+    if context is not None and cache_key in context.simplify_gate_cache:
+        return context.simplify_gate_cache[cache_key]
+
+    node_count, max_depth, boolean_operator_count = _predicate_expression_complexity(
+        expression
+    )
+    should_simplify = (
+        node_count <= PREDICATE_SIMPLIFY_MAX_NODES
+        and max_depth <= PREDICATE_SIMPLIFY_MAX_DEPTH
+        and boolean_operator_count <= PREDICATE_SIMPLIFY_MAX_BOOLEAN_OPERATORS
+    )
+
+    if context is not None:
+        context.simplify_gate_cache[cache_key] = should_simplify
+
+    return should_simplify
 
 
 def _numeric_literal_value(
@@ -1204,10 +1325,14 @@ def _has_set_returning_projection(
 ) -> bool:
     """Return True when a FROM-less SELECT projection may emit multiple rows."""
     for projection in select.expressions:
+        _consume_analysis_budget()
+
         if not isinstance(projection, exp.Expression):
             continue
 
         for node in projection.walk():
+            _consume_analysis_budget()
+
             if isinstance(node, SET_RETURNING_PROJECTION_NODE_TYPES):
                 return True
 
@@ -1231,6 +1356,8 @@ def _has_global_aggregate_without_group(select: exp.Select) -> bool:
         )
 
     for node in select.walk(prune=should_prune):
+        _consume_analysis_budget()
+
         if not isinstance(node, exp.AggFunc):
             continue
 
@@ -1238,6 +1365,7 @@ def _has_global_aggregate_without_group(select: exp.Select) -> bool:
         parent = node.parent
         inside_window = False
         while isinstance(parent, exp.Expression) and parent is not select:
+            _consume_analysis_budget()
             if isinstance(parent, exp.Window):
                 inside_window = True
                 break
@@ -1255,6 +1383,8 @@ def _constant_select_without_from_row_count(
     source_sql: str | None = None,
 ) -> int | None:
     """Return deterministic row count (0 or 1) for simple SELECT without FROM."""
+    _consume_analysis_budget()
+
     if select.args.get("from_") is not None or select.args.get("from") is not None:
         return None
 
@@ -2008,14 +2138,12 @@ def _coalesce_predicate_truthiness_possibilities(
     return outcomes
 
 
-def _predicate_truthiness_possibilities(
+def _predicate_truthiness_possibilities_uncached(
     expr: exp.Expression | None,
     dialect: str,
     source_sql: str | None = None,
 ) -> set[bool | None]:
-    """Return possible truthiness outcomes in predicate position."""
-    expr = _unwrap_parens(expr)
-
+    """Return possible truthiness outcomes in predicate position (uncached)."""
     if expr is None:
         return {True}
 
@@ -2119,6 +2247,35 @@ def _predicate_truthiness_possibilities(
     return {True, False, None}
 
 
+def _predicate_truthiness_possibilities(
+    expr: exp.Expression | None,
+    dialect: str,
+    source_sql: str | None = None,
+) -> set[bool | None]:
+    """Return possible truthiness outcomes in predicate position."""
+    _consume_analysis_budget()
+
+    expr = _unwrap_parens(expr)
+    if expr is None:
+        return {True}
+
+    context = _ANALYSIS_CONTEXT.get()
+    source_key = id(source_sql) if source_sql is not None else 0
+    cache_key = (id(expr), dialect, source_key)
+
+    if context is not None:
+        cached = context.predicate_truthiness_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+    outcomes = _predicate_truthiness_possibilities_uncached(expr, dialect, source_sql)
+
+    if context is not None:
+        context.predicate_truthiness_cache[cache_key] = outcomes
+
+    return outcomes
+
+
 def _constant_predicate_truthiness(
     expr: exp.Expression | None,
     dialect: str,
@@ -2142,23 +2299,25 @@ def _is_tautological_where(
     source_sql: str | None = None,
 ) -> bool:
     """Return True when a WHERE predicate is effectively always true."""
-    predicate = where.this
+    predicate = _unwrap_parens(where.this)
     if predicate is None:
         return True
 
-    candidates: list[exp.Expression] = [predicate]
+    direct_truth = _constant_predicate_truthiness(predicate, dialect, source_sql)
+    if direct_truth is True:
+        return True
+    if direct_truth is False:
+        return False
 
-    try:
-        from sqlglot.optimizer.simplify import simplify
+    simplified_predicate = _simplified_predicate_expression(predicate)
+    if simplified_predicate is predicate:
+        return False
 
-        candidates.insert(0, simplify(predicate.copy()))
-    except Exception:
-        pass
-
-    return any(
-        _constant_predicate_truthiness(candidate, dialect, source_sql) is True
-        for candidate in candidates
-    )
+    return _constant_predicate_truthiness(
+        simplified_predicate,
+        dialect,
+        source_sql,
+    ) is True
 
 
 def _mutation_target_symbols(node: exp.Expression) -> set[str]:
@@ -2233,6 +2392,8 @@ def _expression_references_target_symbols(
         )
 
     for node in expression.walk(prune=should_prune):
+        _consume_analysis_budget()
+
         if not isinstance(node, exp.Column):
             continue
 
@@ -2260,6 +2421,8 @@ def _expression_references_target_symbols_reachable(
     allow_unqualified_outer: bool,
 ) -> bool:
     """Return True when reachable evaluation paths reference target symbols."""
+    _consume_analysis_budget()
+
     expression = _unwrap_parens(expression)
     if expression is None:
         return False
@@ -2417,7 +2580,14 @@ def _expression_references_target_symbols_reachable(
 
 
 def _simplified_predicate_expression(expression: exp.Expression) -> exp.Expression:
-    """Return simplified predicate when sqlglot optimizer is available."""
+    """Return simplified predicate when sqlglot optimizer is available and safe."""
+    normalized = _unwrap_parens(expression)
+    if isinstance(normalized, exp.Expression):
+        expression = normalized
+
+    if not _should_attempt_predicate_simplify(expression):
+        return expression
+
     try:
         from sqlglot.optimizer.simplify import simplify
 
@@ -2439,6 +2609,8 @@ def _predicate_effectively_references_target_symbols_impl(
     allow_unqualified_outer: bool,
 ) -> bool:
     """Return True when target refs constrain predicate truthiness."""
+    _consume_analysis_budget()
+
     expression = _unwrap_parens(expression)
     if expression is None:
         return False
@@ -2561,10 +2733,23 @@ def _predicate_effectively_references_target_symbols(
     if expression is None:
         return False
 
-    # Normalize boolean structure before correlation analysis so tautological
-    # outer-reference predicates (e.g. u.id IS NULL OR u.id IS NOT NULL) don't
-    # count as row-restrictive.
+    direct_effective = _predicate_effectively_references_target_symbols_impl(
+        expression,
+        target_symbols,
+        local_symbols,
+        dialect,
+        source_sql,
+        allow_unqualified_outer,
+    )
+
+    if not direct_effective:
+        return False
+
+    # Normalize only when needed and only for manageable predicates. This keeps
+    # tautology-neutralization behavior while avoiding unconditional simplify cost.
     normalized_expression = _simplified_predicate_expression(expression)
+    if normalized_expression is expression:
+        return True
 
     return _predicate_effectively_references_target_symbols_impl(
         normalized_expression,
@@ -2753,6 +2938,8 @@ def _is_reachable_predicate_branch(
     node: exp.Expression = expression
 
     while True:
+        _consume_analysis_budget()
+
         parent = node.parent
         if not isinstance(parent, exp.Expression):
             return True
@@ -2858,6 +3045,8 @@ def _has_uncorrelated_exists_subquery(
         return False
 
     for exists_predicate in where.find_all(exp.Exists):
+        _consume_analysis_budget()
+
         if not _is_reachable_predicate_branch(
             exists_predicate,
             root_expression,
@@ -3260,25 +3449,32 @@ def validate_sql(
         return GuardResult(False, "Unable to parse query - empty statement")
 
     try:
-        # Enforce function-level sandbox in dangerous mode too
-        reason = has_dangerous_functions(stmt, dialect)
-        if reason:
-            return GuardResult(False, reason)
+        with _analysis_session():
+            # Enforce function-level sandbox in dangerous mode too
+            reason = has_dangerous_functions(stmt, dialect)
+            if reason:
+                return GuardResult(False, reason)
 
-        # Enforce always-blocked operations and lock/SELECT INTO checks
-        reason = has_prohibited_nodes(
-            stmt,
-            allow_dangerous=True,
-            dialect=dialect,
-            source_sql=sql,
+            # Enforce always-blocked operations and lock/SELECT INTO checks
+            reason = has_prohibited_nodes(
+                stmt,
+                allow_dangerous=True,
+                dialect=dialect,
+                source_sql=sql,
+            )
+            if reason:
+                return GuardResult(False, reason)
+
+            # Strict fail-closed statement policy in dangerous mode
+            reason = has_disallowed_dangerous_mode_statement(stmt)
+            if reason:
+                return GuardResult(False, reason)
+    except _AnalysisBudgetExceeded:
+        return GuardResult(
+            False,
+            "Query is too complex to validate safely "
+            "(analysis budget exceeded)",
         )
-        if reason:
-            return GuardResult(False, reason)
-
-        # Strict fail-closed statement policy in dangerous mode
-        reason = has_disallowed_dangerous_mode_statement(stmt)
-        if reason:
-            return GuardResult(False, reason)
     except RecursionError:
         return GuardResult(
             False,

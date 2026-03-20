@@ -5,7 +5,9 @@ import sys
 import sqlglot
 from sqlglot import exp
 
+import sqlsaber.tools.sql_guard as sql_guard_module
 from sqlsaber.tools.sql_guard import (
+    _should_attempt_predicate_simplify,
     add_limit,
     classify_statement,
     has_disallowed_dangerous_mode_statement,
@@ -1689,6 +1691,42 @@ class TestDangerousModeTautologyHardening:
         assert not result.allowed
         assert result.reason
         assert "too complex to validate safely" in result.reason
+
+    def test_predicate_simplify_gate_skips_large_boolean_chains(self):
+        """Large predicates should skip simplify via structural complexity gating."""
+        predicate = " OR ".join(f"id = {index}" for index in range(400))
+        statement = sqlglot.parse_one(
+            f"DELETE FROM users WHERE {predicate}",
+            read="postgres",
+        )
+        where = statement.args.get("where")
+        assert isinstance(where, exp.Where)
+        assert not _should_attempt_predicate_simplify(where.this)
+
+    def test_predicate_simplify_gate_allows_small_predicates(self):
+        """Small predicates should remain eligible for simplify."""
+        statement = sqlglot.parse_one(
+            "DELETE FROM users WHERE id = 1 OR id = 2",
+            read="postgres",
+        )
+        where = statement.args.get("where")
+        assert isinstance(where, exp.Where)
+        assert _should_attempt_predicate_simplify(where.this)
+
+    def test_validation_analysis_budget_exceeded_fails_closed(self, monkeypatch):
+        """Validation should fail closed when the per-query analysis budget is exhausted."""
+        monkeypatch.setattr(sql_guard_module, "ANALYSIS_BUDGET_MAX_STEPS", 25)
+
+        predicate = " OR ".join(f"id = {index}" for index in range(200))
+        result = validate_sql(
+            f"DELETE FROM users WHERE {predicate}",
+            "postgres",
+            allow_dangerous=True,
+        )
+
+        assert not result.allowed
+        assert result.reason
+        assert "analysis budget exceeded" in result.reason
 
     def test_mysql_delete_using_alias_exists_reference_blocked_conservatively(self):
         """USING-only aliases are intentionally treated as non-correlating (fail closed)."""
