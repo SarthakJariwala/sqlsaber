@@ -5,7 +5,9 @@ import sys
 import sqlglot
 from sqlglot import exp
 
+import sqlsaber.tools.sql_guard as sql_guard_module
 from sqlsaber.tools.sql_guard import (
+    _should_attempt_predicate_simplify,
     add_limit,
     classify_statement,
     has_disallowed_dangerous_mode_statement,
@@ -1122,6 +1124,36 @@ class TestDangerousModeTautologyHardening:
         assert result.allowed
         assert result.query_type == "dml"
 
+    def test_delete_with_correlated_exists_or_not_exists_blocked(self):
+        """EXISTS OR NOT EXISTS partitions should be blocked as tautological."""
+        result = validate_sql(
+            (
+                "DELETE FROM users u WHERE "
+                "EXISTS (SELECT 1 FROM audit a WHERE a.user_id = u.id) "
+                "OR NOT EXISTS (SELECT 1 FROM audit a WHERE a.user_id = u.id)"
+            ),
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_delete_with_correlated_exists_or_exists_is_false_blocked(self):
+        """EXISTS OR EXISTS IS FALSE should be blocked as tautological."""
+        result = validate_sql(
+            (
+                "DELETE FROM users u WHERE "
+                "EXISTS (SELECT 1 FROM audit a WHERE a.user_id = u.id) "
+                "OR (EXISTS (SELECT 1 FROM audit a WHERE a.user_id = u.id) IS FALSE)"
+            ),
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
     def test_delete_with_values_exists_predicate_blocked(self):
         """EXISTS over VALUES should be blocked as non-row-restrictive."""
         result = validate_sql(
@@ -1690,6 +1722,63 @@ class TestDangerousModeTautologyHardening:
         assert result.reason
         assert "too complex to validate safely" in result.reason
 
+    def test_predicate_simplify_gate_skips_large_boolean_chains(self):
+        """Large predicates should skip simplify via structural complexity gating."""
+        predicate = " OR ".join(f"id = {index}" for index in range(400))
+        statement = sqlglot.parse_one(
+            f"DELETE FROM users WHERE {predicate}",
+            read="postgres",
+        )
+        where = statement.args.get("where")
+        assert isinstance(where, exp.Where)
+        assert not _should_attempt_predicate_simplify(where.this)
+
+    def test_large_or_not_partition_tautology_blocked_when_simplify_skipped(self):
+        """Large p OR NOT p chains must stay blocked even without simplify()."""
+        disjunct = "(u.id IS NULL OR NOT (u.id IS NULL))"
+        predicate = " OR ".join(disjunct for _ in range(40))
+        statement = sqlglot.parse_one(
+            f"DELETE FROM users u WHERE {predicate}",
+            read="postgres",
+        )
+        where = statement.args.get("where")
+        assert isinstance(where, exp.Where)
+        assert not _should_attempt_predicate_simplify(where.this)
+
+        result = validate_sql(
+            f"DELETE FROM users u WHERE {predicate}",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_predicate_simplify_gate_allows_small_predicates(self):
+        """Small predicates should remain eligible for simplify."""
+        statement = sqlglot.parse_one(
+            "DELETE FROM users WHERE id = 1 OR id = 2",
+            read="postgres",
+        )
+        where = statement.args.get("where")
+        assert isinstance(where, exp.Where)
+        assert _should_attempt_predicate_simplify(where.this)
+
+    def test_validation_analysis_budget_exceeded_fails_closed(self, monkeypatch):
+        """Validation should fail closed when the per-query analysis budget is exhausted."""
+        monkeypatch.setattr(sql_guard_module, "ANALYSIS_BUDGET_MAX_STEPS", 25)
+
+        predicate = " OR ".join(f"id = {index}" for index in range(200))
+        result = validate_sql(
+            f"DELETE FROM users WHERE {predicate}",
+            "postgres",
+            allow_dangerous=True,
+        )
+
+        assert not result.allowed
+        assert result.reason
+        assert "analysis budget exceeded" in result.reason
+
     def test_mysql_delete_using_alias_exists_reference_blocked_conservatively(self):
         """USING-only aliases are intentionally treated as non-correlating (fail closed)."""
         result = validate_sql(
@@ -1928,6 +2017,90 @@ class TestDangerousModeTautologyHardening:
         assert result.reason
         assert "tautological WHERE" in result.reason
 
+    def test_sqlite_delete_with_cast_truthy_string_boolean_blocked(self):
+        """SQLite truthy string->BOOLEAN casts should be blocked as tautological."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST('1' AS BOOLEAN)",
+            "sqlite",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_sqlite_delete_with_cast_falsey_string_boolean_allowed(self):
+        """SQLite falsey string->BOOLEAN casts should remain allowed."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST('0' AS BOOLEAN)",
+            "sqlite",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_sqlite_delete_with_cast_numeric_text_truthy_blocked(self):
+        """SQLite CAST(... AS TEXT) truthy constants should be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST(1 AS TEXT)",
+            "sqlite",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_sqlite_delete_with_cast_numeric_text_falsey_allowed(self):
+        """SQLite CAST(... AS TEXT) falsey constants should remain allowed."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST(0 AS TEXT)",
+            "sqlite",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_postgres_delete_with_cast_truthy_string_boolean_blocked(self):
+        """Postgres truthy string->BOOLEAN casts should be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST('true' AS BOOLEAN)",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_postgres_delete_with_cast_falsey_string_boolean_allowed(self):
+        """Postgres falsey string->BOOLEAN casts should remain allowed."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST('false' AS BOOLEAN)",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_mysql_delete_with_cast_truthy_string_boolean_blocked(self):
+        """MySQL truthy string->BOOLEAN casts should be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST('1' AS BOOLEAN)",
+            "mysql",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_mysql_delete_with_cast_falsey_string_boolean_allowed(self):
+        """MySQL falsey string->BOOLEAN casts should remain allowed."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST('0' AS BOOLEAN)",
+            "mysql",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
     def test_mysql_delete_with_cast_numeric_truthy_blocked(self):
         """MySQL truthy numeric CAST wrappers should be blocked as tautological."""
         result = validate_sql(
@@ -1944,6 +2117,121 @@ class TestDangerousModeTautologyHardening:
         result = validate_sql(
             "DELETE FROM users WHERE CAST(0 AS SIGNED)",
             "mysql",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_duckdb_delete_with_cast_numeric_varchar_truthy_blocked(self):
+        """DuckDB CAST(... AS VARCHAR) truthy constants should be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST(1 AS VARCHAR)",
+            "duckdb",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_duckdb_delete_with_cast_numeric_varchar_falsey_allowed(self):
+        """DuckDB CAST(... AS VARCHAR) falsey constants should remain allowed."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST(0 AS VARCHAR)",
+            "duckdb",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_sqlite_delete_with_try_cast_truthy_string_boolean_blocked(self):
+        """SQLite TRY_CAST truthy string->BOOLEAN should be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE TRY_CAST('1' AS BOOLEAN)",
+            "sqlite",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_sqlite_delete_with_try_cast_falsey_string_boolean_allowed(self):
+        """SQLite TRY_CAST falsey string->BOOLEAN should remain allowed."""
+        result = validate_sql(
+            "DELETE FROM users WHERE TRY_CAST('0' AS BOOLEAN)",
+            "sqlite",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_postgres_delete_with_try_cast_truthy_string_boolean_blocked(self):
+        """Postgres TRY_CAST truthy string->BOOLEAN should be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE TRY_CAST('true' AS BOOLEAN)",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_postgres_delete_with_try_cast_falsey_string_boolean_allowed(self):
+        """Postgres TRY_CAST falsey string->BOOLEAN should remain allowed."""
+        result = validate_sql(
+            "DELETE FROM users WHERE TRY_CAST('false' AS BOOLEAN)",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_mysql_delete_with_try_cast_truthy_string_boolean_blocked(self):
+        """MySQL TRY_CAST truthy string->BOOLEAN should be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE TRY_CAST('1' AS BOOLEAN)",
+            "mysql",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_mysql_delete_with_try_cast_falsey_string_boolean_allowed(self):
+        """MySQL TRY_CAST falsey string->BOOLEAN should remain allowed."""
+        result = validate_sql(
+            "DELETE FROM users WHERE TRY_CAST('0' AS BOOLEAN)",
+            "mysql",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_duckdb_delete_with_try_cast_numeric_varchar_truthy_blocked(self):
+        """DuckDB TRY_CAST(... AS VARCHAR) truthy constants should be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE TRY_CAST(1 AS VARCHAR)",
+            "duckdb",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_duckdb_delete_with_try_cast_numeric_varchar_falsey_allowed(self):
+        """DuckDB TRY_CAST(... AS VARCHAR) falsey constants should remain allowed."""
+        result = validate_sql(
+            "DELETE FROM users WHERE TRY_CAST(0 AS VARCHAR)",
+            "duckdb",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_duckdb_delete_with_try_cast_invalid_boolean_string_allowed(self):
+        """DuckDB invalid TRY_CAST string->BOOLEAN should fold to NULL and stay allowed."""
+        result = validate_sql(
+            "DELETE FROM users WHERE TRY_CAST('abc' AS BOOLEAN)",
+            "duckdb",
             allow_dangerous=True,
         )
         assert result.allowed
