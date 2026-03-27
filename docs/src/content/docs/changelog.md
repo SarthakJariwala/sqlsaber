@@ -9,6 +9,19 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.63.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.62.1...sqlsaber-v0.63.0) (2026-03-27)
+
+
+### Features
+
+* block more postgres functions ([#154](https://github.com/SarthakJariwala/sqlsaber/issues/154)) ([6de1291](https://github.com/SarthakJariwala/sqlsaber/commit/6de12913a940d512a9eba19409657b8af2704649))
+* show sql generation status for long SQL generation ([#149](https://github.com/SarthakJariwala/sqlsaber/issues/149)) ([87e5b6f](https://github.com/SarthakJariwala/sqlsaber/commit/87e5b6fe4199c5bd17613c8ddb7d21afcbc0fdef))
+
+
+### Bug Fixes
+
+* WHERE clause validation in sql guard ([#153](https://github.com/SarthakJariwala/sqlsaber/issues/153)) ([e0df811](https://github.com/SarthakJariwala/sqlsaber/commit/e0df811ae3e84b74e9bbd6ee2dfe5a5f00b53c43))
+
 ## [0.62.1](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.62.0...sqlsaber-v0.62.1) (2026-03-14)
 
 
