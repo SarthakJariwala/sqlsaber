@@ -66,22 +66,35 @@ except AttributeError:
 # alter session/server state, or otherwise introduce side effects.
 DANGEROUS_FUNCTIONS_BY_DIALECT: dict[str, set[str]] = {
     "postgres": {
-        # File/system access
+        # File/system access and filesystem enumeration
         "pg_read_file",
         "pg_read_binary_file",
         "pg_ls_dir",
-        "pg_stat_file",
-        "pg_logdir_ls",
+        "pg_ls_tmpdir",
         "pg_ls_logdir",
         "pg_ls_waldir",
         "pg_ls_archive_statusdir",
+        "pg_ls_logicalmapdir",
+        "pg_ls_logicalsnapdir",
+        "pg_ls_replslotdir",
+        "pg_stat_file",
+        "pg_logdir_ls",
         "pg_write_file",
         "pg_append_file",
+        "pg_relation_filepath",
+        "pg_tablespace_location",
+        "pg_current_logfile",
         "lo_import",
         "lo_export",
         # External execution / remote calls
         "dblink",
         "dblink_exec",
+        "dblink_connect",
+        "dblink_connect_u",
+        # Resource exhaustion / server sleep primitives
+        "pg_sleep",
+        "pg_sleep_for",
+        "pg_sleep_until",
         # Process/server/session side effects
         "pg_terminate_backend",
         "pg_cancel_backend",
@@ -89,12 +102,40 @@ DANGEROUS_FUNCTIONS_BY_DIALECT: dict[str, set[str]] = {
         "pg_rotate_logfile",
         "pg_notify",
         "set_config",
+        "pg_log_backend_memory_contexts",
+        "pg_backup_start",
+        "pg_backup_stop",
+        "pg_start_backup",
+        "pg_stop_backup",
+        "pg_switch_wal",
+        "pg_create_restore_point",
+        "pg_promote",
+        "pg_wal_replay_pause",
+        "pg_wal_replay_resume",
+        # Server metadata leakage
+        "inet_server_addr",
+        "inet_server_port",
+        "inet_client_addr",
+        "inet_client_port",
+        "current_setting",
+        # Statistics reset side effects
+        "pg_stat_reset",
+        "pg_stat_reset_shared",
+        "pg_stat_reset_single_table_counters",
+        "pg_stat_reset_slru",
+        "pg_stat_reset_replication_slot",
+        "pg_stat_clear_snapshot",
         # Advisory locks
         "pg_advisory_lock",
         "pg_try_advisory_lock",
         "pg_advisory_xact_lock",
         "pg_advisory_lock_shared",
         "pg_try_advisory_lock_shared",
+        "pg_try_advisory_xact_lock",
+        "pg_try_advisory_xact_lock_shared",
+        "pg_advisory_unlock",
+        "pg_advisory_unlock_shared",
+        "pg_advisory_unlock_all",
     },
     "mysql": {
         # File/system access
@@ -148,6 +189,20 @@ DANGEROUS_FUNCTIONS_BY_DIALECT: dict[str, set[str]] = {
     },
     "tsql": {
         "xp_cmdshell",
+    },
+}
+
+# Function-family deny prefixes (dialect scoped).
+# Used to fail closed on dangerous function families where all variants are unsafe.
+DANGEROUS_FUNCTION_PREFIXES_BY_DIALECT: dict[str, set[str]] = {
+    "postgres": {
+        "dblink",
+        "pg_advisory_",
+        "pg_ls_",
+        "pg_sleep",
+        "pg_stat_reset",
+        "inet_server_",
+        "inet_client_",
     },
 }
 
@@ -3513,42 +3568,57 @@ def _function_name_tokens(fn: exp.Func) -> list[tuple[str, str]]:
     return tokens
 
 
+def _display_function_name(fn: exp.Func) -> str:
+    """Best-effort display name for error messages."""
+    display_name = fn.name or ""
+    if not display_name:
+        try:
+            display_name = fn.sql_name() or ""
+        except (AttributeError, TypeError, ValueError):
+            display_name = ""
+    if not display_name:
+        display_name = str(getattr(fn, "key", "unknown_function"))
+    return display_name
+
+
 def has_dangerous_functions(stmt: exp.Expression, dialect: str) -> str | None:
     """Check for dangerous functions that can read files or execute commands."""
-    deny_set = DANGEROUS_FUNCTIONS_BY_DIALECT.get(dialect)
-    if not deny_set:
+    deny_set = DANGEROUS_FUNCTIONS_BY_DIALECT.get(dialect, set())
+    deny_prefix_set = DANGEROUS_FUNCTION_PREFIXES_BY_DIALECT.get(dialect, set())
+    if not deny_set and not deny_prefix_set:
         return None
 
     deny_exact = {_normalize_symbol(name) for name in deny_set}
     deny_compact = {_compact_symbol(name) for name in deny_set}
+    deny_prefixes = tuple(_normalize_symbol(prefix) for prefix in deny_prefix_set)
 
     for fn in stmt.find_all(exp.Func):
         tokens = _function_name_tokens(fn)
         exact_tokens = {value for _, value in tokens if value}
 
         if exact_tokens & deny_exact:
-            display_name = fn.name or ""
-            if not display_name:
-                try:
-                    display_name = fn.sql_name() or ""
-                except (AttributeError, TypeError, ValueError):
-                    display_name = ""
-            if not display_name:
-                display_name = getattr(fn, "key", "unknown_function")
-            return f"Use of dangerous function '{display_name}' is not allowed"
+            return (
+                f"Use of dangerous function '{_display_function_name(fn)}' "
+                "is not allowed"
+            )
+
+        if deny_prefixes and any(
+            token.startswith(prefix)
+            for token in exact_tokens
+            for prefix in deny_prefixes
+        ):
+            return (
+                f"Use of dangerous function '{_display_function_name(fn)}' "
+                "is not allowed"
+            )
 
         # Fallback: sqlglot key names can be compact (e.g. readparquet).
         key_tokens = [value for source, value in tokens if source == "key" and value]
         if any(_compact_symbol(value) in deny_compact for value in key_tokens):
-            display_name = fn.name or ""
-            if not display_name:
-                try:
-                    display_name = fn.sql_name() or ""
-                except (AttributeError, TypeError, ValueError):
-                    display_name = ""
-            if not display_name:
-                display_name = getattr(fn, "key", "unknown_function")
-            return f"Use of dangerous function '{display_name}' is not allowed"
+            return (
+                f"Use of dangerous function '{_display_function_name(fn)}' "
+                "is not allowed"
+            )
 
     return None
 
