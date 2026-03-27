@@ -53,6 +53,11 @@ SAFE_MODE_SIDE_EFFECT_CASES = [
     ("mysql", "SELECT BENCHMARK(1000000, SHA2('x', 512))"),
     ("mysql", "SELECT GET_LOCK('lockname', 10)"),
     ("mysql", "SELECT RELEASE_LOCK('lockname')"),
+    ("mysql", "SELECT RELEASE_ALL_LOCKS()"),
+    ("mysql", "SELECT MASTER_POS_WAIT('mysql-bin.000001', 4)"),
+    ("mysql", "SELECT SOURCE_POS_WAIT('mysql-bin.000001', 4)"),
+    ("mysql", "SELECT WAIT_FOR_EXECUTED_GTID_SET('uuid:1-10', 5)"),
+    ("mysql", "SELECT WAIT_UNTIL_SQL_THREAD_AFTER_GTIDS('uuid:1-10', 5)"),
     # SQLite extension loading
     ("sqlite", "SELECT load_extension('/tmp/ext.so')"),
     # DuckDB file-read table/functions (including typed sqlglot nodes)
@@ -60,6 +65,10 @@ SAFE_MODE_SIDE_EFFECT_CASES = [
     ("duckdb", "SELECT * FROM read_json_auto('/etc/passwd')"),
     ("duckdb", "SELECT * FROM parquet_scan('/etc/passwd')"),
     ("duckdb", "SELECT * FROM read_parquet('/etc/passwd')"),
+    ("duckdb", "SELECT * FROM parquet_metadata('/etc/passwd')"),
+    ("duckdb", "SELECT * FROM parquet_schema('/etc/passwd')"),
+    ("duckdb", "SELECT * FROM parquet_file_metadata('/etc/passwd')"),
+    ("duckdb", "SELECT * FROM parquet_kv_metadata('/etc/passwd')"),
     # MySQL version comment parser divergence — sqlglot strips these as comments
     # but MySQL server executes the content inside /*!NNNNN ... */
     ("mysql", "SELECT 1, /*!50000 LOAD_FILE('/etc/passwd') */ FROM dual LIMIT 10"),
@@ -70,9 +79,15 @@ SAFE_MODE_SIDE_EFFECT_CASES = [
     # DuckDB — missing file/network/extension functions
     ("duckdb", "SELECT * FROM read_text('/etc/passwd')"),
     ("duckdb", "SELECT * FROM read_blob('/etc/shadow')"),
+    ("duckdb", "SELECT * FROM read_json_objects('file.json')"),
+    ("duckdb", "SELECT * FROM read_xml('file.xml')"),
+    ("duckdb", "SELECT * FROM read_avro('file.avro')"),
+    ("duckdb", "SELECT * FROM read_ipc('file.arrow')"),
+    ("duckdb", "SELECT * FROM read_feather('file.feather')"),
     ("duckdb", "SELECT * FROM read_ndjson('file.ndjson')"),
     ("duckdb", "SELECT * FROM read_ndjson_auto('file.ndjson')"),
     ("duckdb", "SELECT * FROM read_ndjson_objects('file.ndjson')"),
+    ("duckdb", "SELECT * FROM read_csv_objects('file.csv')"),
     ("duckdb", "SELECT * FROM glob('/etc/*')"),
     ("duckdb", "SELECT * FROM sqlite_scan('db.sqlite', 'table1')"),
     ("duckdb", "SELECT * FROM postgres_scan('connstr', 'public', 'table')"),
@@ -84,6 +99,7 @@ SAFE_MODE_SIDE_EFFECT_CASES = [
     ("duckdb", "SELECT * FROM iceberg_scan('path')"),
     ("duckdb", "SELECT * FROM delta_scan('path')"),
     ("duckdb", "SELECT * FROM excel_scan('file.xlsx')"),
+    ("duckdb", "SELECT * FROM read_xlsx('file.xlsx')"),
     ("duckdb", "SELECT * FROM st_read('file.geojson')"),
 ]
 

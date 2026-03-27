@@ -147,6 +147,12 @@ DANGEROUS_FUNCTIONS_BY_DIALECT: dict[str, set[str]] = {
         "benchmark",
         "get_lock",
         "release_lock",
+        "release_all_locks",
+        # Replication wait primitives (can stall sessions/worker threads)
+        "master_pos_wait",
+        "source_pos_wait",
+        "wait_for_executed_gtid_set",
+        "wait_until_sql_thread_after_gtids",
     },
     "sqlite": {
         # File access
@@ -161,11 +167,20 @@ DANGEROUS_FUNCTIONS_BY_DIALECT: dict[str, set[str]] = {
         "read_csv",
         "read_json_auto",
         "read_json",
+        "read_json_objects",
         "read_parquet",
         "parquet_scan",
+        "parquet_metadata",
+        "parquet_schema",
+        "parquet_file_metadata",
+        "parquet_kv_metadata",
         # Text/binary file reading
         "read_text",
         "read_blob",
+        "read_xml",
+        "read_avro",
+        "read_ipc",
+        "read_feather",
         # NDJSON/JSONL readers
         "read_ndjson",
         "read_ndjson_auto",
@@ -185,6 +200,7 @@ DANGEROUS_FUNCTIONS_BY_DIALECT: dict[str, set[str]] = {
         "iceberg_scan",
         "delta_scan",
         "excel_scan",
+        "read_xlsx",
         "st_read",
     },
     "tsql": {
@@ -203,6 +219,19 @@ DANGEROUS_FUNCTION_PREFIXES_BY_DIALECT: dict[str, set[str]] = {
         "pg_stat_reset",
         "inet_server_",
         "inet_client_",
+    },
+    "duckdb": {
+        "parquet_",
+        "read_avro",
+        "read_blob",
+        "read_csv",
+        "read_feather",
+        "read_ipc",
+        "read_json",
+        "read_ndjson",
+        "read_parquet",
+        "read_text",
+        "read_xml",
     },
 }
 
