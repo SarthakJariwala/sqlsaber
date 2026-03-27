@@ -1475,6 +1475,79 @@ class TestDangerousModeTautologyHardening:
         assert result.reason
         assert "uncorrelated EXISTS subquery" in result.reason
 
+    def test_delete_with_null_and_correlated_exists_predicate_blocked(self):
+        """NULL AND correlated predicates must not create effective correlation."""
+        predicates = (
+            "NULL AND a.user_id = u.id",
+            "a.user_id = u.id AND NULL",
+        )
+        for predicate in predicates:
+            result = validate_sql(
+                (
+                    "DELETE FROM users u WHERE NOT EXISTS "
+                    f"(SELECT 1 FROM audit a WHERE {predicate})"
+                ),
+                "postgres",
+                allow_dangerous=True,
+            )
+            assert not result.allowed
+            assert result.reason
+            assert "uncorrelated EXISTS subquery" in result.reason
+
+    def test_delete_with_correlated_or_null_exists_predicate_allowed(self):
+        """Correlated predicates OR NULL should remain row-restrictive."""
+        predicates = (
+            "a.user_id = u.id OR NULL",
+            "NULL OR a.user_id = u.id",
+        )
+        for predicate in predicates:
+            result = validate_sql(
+                (
+                    "DELETE FROM users u WHERE EXISTS "
+                    f"(SELECT 1 FROM audit a WHERE {predicate})"
+                ),
+                "postgres",
+                allow_dangerous=True,
+            )
+            assert result.allowed
+            assert result.query_type == "dml"
+
+    def test_delete_with_correlated_and_true_exists_predicate_allowed(self):
+        """p AND TRUE should preserve correlated row-restrictive behavior."""
+        predicates = (
+            "a.user_id = u.id AND TRUE",
+            "TRUE AND a.user_id = u.id",
+        )
+        for predicate in predicates:
+            result = validate_sql(
+                (
+                    "DELETE FROM users u WHERE EXISTS "
+                    f"(SELECT 1 FROM audit a WHERE {predicate})"
+                ),
+                "postgres",
+                allow_dangerous=True,
+            )
+            assert result.allowed
+            assert result.query_type == "dml"
+
+    def test_delete_with_correlated_or_false_exists_predicate_allowed(self):
+        """p OR FALSE should preserve correlated row-restrictive behavior."""
+        predicates = (
+            "a.user_id = u.id OR FALSE",
+            "FALSE OR a.user_id = u.id",
+        )
+        for predicate in predicates:
+            result = validate_sql(
+                (
+                    "DELETE FROM users u WHERE EXISTS "
+                    f"(SELECT 1 FROM audit a WHERE {predicate})"
+                ),
+                "postgres",
+                allow_dangerous=True,
+            )
+            assert result.allowed
+            assert result.query_type == "dml"
+
     def test_delete_with_tautological_outer_reference_exists_predicate_blocked(self):
         """Outer-reference tautologies should not count as effective correlation."""
         result = validate_sql(
@@ -1801,6 +1874,27 @@ class TestDangerousModeTautologyHardening:
         assert result.reason
         assert "uncorrelated EXISTS subquery" in result.reason
 
+    def test_delete_with_null_and_uncorrelated_exists_predicate_allowed(self):
+        """NULL AND should make uncorrelated EXISTS branches unreachable."""
+        result = validate_sql(
+            "DELETE FROM users WHERE NULL AND EXISTS (SELECT 1 FROM audit)",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_delete_with_null_or_uncorrelated_exists_predicate_blocked(self):
+        """NULL OR should still keep uncorrelated EXISTS reachable and blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE NULL OR EXISTS (SELECT 1 FROM audit)",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "uncorrelated EXISTS subquery" in result.reason
+
     def test_update_with_correlated_exists_from_subquery_allowed(self):
         """Correlated EXISTS FROM in UPDATE should remain allowed."""
         result = validate_sql(
@@ -2038,6 +2132,48 @@ class TestDangerousModeTautologyHardening:
         assert result.allowed
         assert result.query_type == "dml"
 
+    def test_sqlite_delete_with_cast_fractional_numeric_int_truthy_blocked(self):
+        """SQLite fractional numeric->INT casts should be folded deterministically."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST(1.2 AS INT)",
+            "sqlite",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_sqlite_delete_with_cast_fractional_string_int_truthy_blocked(self):
+        """SQLite fractional string->INT casts should be folded deterministically."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST('1.2' AS INT)",
+            "sqlite",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_sqlite_delete_with_cast_half_numeric_int_falsey_allowed(self):
+        """SQLite INT casts should truncate toward zero for fractional halves."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST(0.5 AS INT)",
+            "sqlite",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_sqlite_delete_with_cast_negative_half_numeric_int_falsey_allowed(self):
+        """SQLite INT casts should keep negative half fractions falsey via truncation."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST(-0.5 AS INT)",
+            "sqlite",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
     def test_sqlite_delete_with_cast_numeric_text_truthy_blocked(self):
         """SQLite CAST(... AS TEXT) truthy constants should be blocked."""
         result = validate_sql(
@@ -2142,6 +2278,50 @@ class TestDangerousModeTautologyHardening:
         )
         assert result.allowed
         assert result.query_type == "dml"
+
+    def test_duckdb_delete_with_cast_fractional_numeric_int_truthy_blocked(self):
+        """DuckDB fractional numeric->INT casts should be folded deterministically."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST(1.2 AS INT)",
+            "duckdb",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_duckdb_delete_with_cast_fractional_string_int_truthy_blocked(self):
+        """DuckDB fractional string->INT casts should be folded deterministically."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST('1.2' AS INT)",
+            "duckdb",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_duckdb_delete_with_cast_half_numeric_int_truthy_blocked(self):
+        """DuckDB INT casts should round halves away from zero in predicates."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST(0.5 AS INT)",
+            "duckdb",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_duckdb_delete_with_cast_negative_half_numeric_int_truthy_blocked(self):
+        """DuckDB negative half INT casts should round away from zero as truthy."""
+        result = validate_sql(
+            "DELETE FROM users WHERE CAST(-0.5 AS INT)",
+            "duckdb",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
 
     def test_sqlite_delete_with_try_cast_truthy_string_boolean_blocked(self):
         """SQLite TRY_CAST truthy string->BOOLEAN should be blocked."""
@@ -2388,6 +2568,28 @@ class TestDangerousModeTautologyHardening:
         assert result.reason
         assert "tautological WHERE" in result.reason
 
+    def test_delete_with_constant_exists_boolean_equality_blocked(self):
+        """Boolean EXISTS comparisons should fold to constant TRUE and be blocked."""
+        result = validate_sql(
+            "DELETE FROM users WHERE (EXISTS (SELECT 1)) = TRUE",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_delete_with_constant_in_boolean_inequality_blocked(self):
+        """Boolean IN comparisons should fold through <> FALSE tautology checks."""
+        result = validate_sql(
+            "DELETE FROM users WHERE (TRUE IN (TRUE)) <> FALSE",
+            "postgres",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
     def test_delete_with_constant_is_distinct_from_true_blocked(self):
         """Constant IS DISTINCT FROM true predicates should be blocked."""
         result = validate_sql(
@@ -2443,6 +2645,38 @@ class TestDangerousModeTautologyHardening:
         result = validate_sql(
             "DELETE FROM users WHERE 1 IS DISTINCT FROM 1",
             "postgres",
+            allow_dangerous=True,
+        )
+        assert result.allowed
+        assert result.query_type == "dml"
+
+    def test_sqlite_delete_with_string_bool_inequality_blocked(self):
+        """SQLite string<>bool constants should be folded and blocked when true."""
+        result = validate_sql(
+            "DELETE FROM users WHERE '0' <> FALSE",
+            "sqlite",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_sqlite_delete_with_string_is_not_distinct_from_true_blocked(self):
+        """SQLite string IS NOT DISTINCT FROM TRUE should use boolean IS semantics."""
+        result = validate_sql(
+            "DELETE FROM users WHERE '1' IS NOT DISTINCT FROM TRUE",
+            "sqlite",
+            allow_dangerous=True,
+        )
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_sqlite_delete_with_true_is_not_distinct_from_string_allowed(self):
+        """SQLite TRUE IS NOT DISTINCT FROM '1' should stay non-tautological."""
+        result = validate_sql(
+            "DELETE FROM users WHERE TRUE IS NOT DISTINCT FROM '1'",
+            "sqlite",
             allow_dangerous=True,
         )
         assert result.allowed

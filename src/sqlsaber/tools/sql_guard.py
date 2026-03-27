@@ -5,7 +5,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, InvalidOperation
 
 import sqlglot
 from sqlglot import exp
@@ -179,6 +179,17 @@ NUMERIC_TRUTHY_PREDICATE_DIALECTS: set[str] = {
     "sqlite",
 }
 
+# Dialects where CAST(... AS INT/INTEGER/...) truncates toward zero.
+INTEGER_CAST_TRUNCATE_DIALECTS: set[str] = {
+    "mysql",
+    "sqlite",
+}
+
+# Dialects where CAST(... AS INT/INTEGER/...) rounds half away from zero.
+INTEGER_CAST_HALF_AWAY_FROM_ZERO_DIALECTS: set[str] = {
+    "duckdb",
+}
+
 # Dialects that coerce strings to numbers via leading numeric prefix
 # (e.g., '1abc' -> 1, 'abc' -> 0) in numeric/boolean contexts.
 NUMERIC_PREFIX_STRING_COERCION_DIALECTS: set[str] = {
@@ -209,6 +220,10 @@ BOOL_STRING_CROSS_TYPE_COMPARISON_DIALECTS: set[str] = {
 
 # Dialects where bool↔string equality is resolved via numeric coercion
 # (e.g., MySQL TRUE = '1', FALSE = '0').
+#
+# SQLite is intentionally excluded: ``=``/``<>`` behave differently from
+# ``IS``/``IS [NOT] DISTINCT FROM`` for bool↔string literals, so it is
+# modeled in operator-specific comparison logic.
 BOOL_STRING_NUMERIC_COERCION_DIALECTS: set[str] = {
     "mysql",
 }
@@ -630,6 +645,20 @@ def _numeric_string_value(value: str, dialect: str) -> Decimal | None:
         return None
 
 
+def _integer_cast_decimal_value(value: Decimal, dialect: str) -> Decimal | None:
+    """Return deterministic integer-cast result for numeric constants."""
+    if value == value.to_integral_value():
+        return value
+
+    if dialect in INTEGER_CAST_TRUNCATE_DIALECTS:
+        return value.to_integral_value(rounding=ROUND_DOWN)
+
+    if dialect in INTEGER_CAST_HALF_AWAY_FROM_ZERO_DIALECTS:
+        return value.to_integral_value(rounding=ROUND_HALF_UP)
+
+    return None
+
+
 def _duckdb_string_predicate_truthiness(value: str) -> bool | None:
     """Evaluate DuckDB string literals in predicate context when deterministic."""
     lowered = value.lower()
@@ -753,8 +782,11 @@ def _cast_scalar_value(
 
     if is_numeric_target:
         if isinstance(inner_value, Decimal):
-            if is_integer_target and inner_value != inner_value.to_integral_value():
-                return cast_failed()
+            if is_integer_target:
+                integer_value = _integer_cast_decimal_value(inner_value, dialect)
+                if integer_value is None:
+                    return cast_failed()
+                return integer_value
             return inner_value
 
         if isinstance(inner_value, bool):
@@ -766,8 +798,13 @@ def _cast_scalar_value(
             numeric_value = _numeric_string_value(inner_value, dialect)
             if numeric_value is None:
                 return cast_failed()
-            if is_integer_target and numeric_value != numeric_value.to_integral_value():
-                return cast_failed()
+
+            if is_integer_target:
+                integer_value = _integer_cast_decimal_value(numeric_value, dialect)
+                if integer_value is None:
+                    return cast_failed()
+                return integer_value
+
             return numeric_value
 
         return cast_failed()
@@ -972,6 +1009,13 @@ def _constant_scalar_equals(
     if isinstance(left, str) and isinstance(right, str):
         return left == right
 
+    if dialect == "sqlite" and (
+        (isinstance(left, bool) and isinstance(right, str))
+        or (isinstance(left, str) and isinstance(right, bool))
+    ):
+        # SQLite keeps bool↔string ``=`` comparisons false for literals.
+        return False
+
     if dialect in BOOL_NUMERIC_CROSS_TYPE_COMPARISON_DIALECTS:
         if isinstance(left, bool) and isinstance(right, Decimal):
             return Decimal(int(left)) == right
@@ -1053,6 +1097,57 @@ def _comparison_decimal_operands(
     return left_decimal, right_decimal
 
 
+def _constant_comparison_operand_value(
+    expr: exp.Expression | None,
+    dialect: str,
+    source_sql: str | None = None,
+) -> Decimal | str | bool | object:
+    """Return constant value for comparison operands when determinable."""
+    scalar_value = _constant_scalar_value(expr, dialect, source_sql)
+    if scalar_value is not _UNKNOWN_SCALAR_VALUE:
+        return scalar_value
+
+    if not isinstance(expr, exp.Expression):
+        return _UNKNOWN_SCALAR_VALUE
+
+    outcomes = _predicate_truthiness_possibilities(expr, dialect, source_sql)
+    if outcomes == {True}:
+        return True
+    if outcomes == {False}:
+        return False
+    if outcomes == {None}:
+        return _SQL_NULL_SCALAR_VALUE
+
+    return _UNKNOWN_SCALAR_VALUE
+
+
+def _boolean_is_comparison_truthiness(
+    left_expression: exp.Expression | None,
+    left_value: Decimal | str | bool | object,
+    right_boolean: bool,
+    dialect: str,
+    source_sql: str | None = None,
+) -> bool | None:
+    """Evaluate ``<expr> IS <boolean>`` semantics when deterministic."""
+    left_truth = _constant_predicate_truthiness(left_expression, dialect, source_sql)
+    if left_truth is not None:
+        return left_truth == right_boolean
+
+    if left_value is _SQL_NULL_SCALAR_VALUE:
+        return False
+    if left_value is _UNKNOWN_SCALAR_VALUE:
+        return None
+
+    if isinstance(left_value, bool):
+        return left_value == right_boolean
+
+    scalar_truth = _predicate_truthiness_from_scalar(left_value, dialect)
+    if scalar_truth is None:
+        return None
+
+    return scalar_truth == right_boolean
+
+
 def _constant_comparison_predicate_truthiness(
     expr: exp.Expression,
     dialect: str,
@@ -1076,11 +1171,15 @@ def _constant_comparison_predicate_truthiness(
         return None
 
     if isinstance(expr, exp.Is):
-        right_value = _constant_scalar_value(expr.expression, dialect, source_sql)
+        right_value = _constant_comparison_operand_value(
+            expr.expression,
+            dialect,
+            source_sql,
+        )
         if right_value is _UNKNOWN_SCALAR_VALUE:
             return None
 
-        left_value = _constant_scalar_value(expr.this, dialect, source_sql)
+        left_value = _constant_comparison_operand_value(expr.this, dialect, source_sql)
 
         if right_value is _SQL_NULL_SCALAR_VALUE:
             if left_value is not _UNKNOWN_SCALAR_VALUE:
@@ -1092,26 +1191,22 @@ def _constant_comparison_predicate_truthiness(
             return False
 
         if isinstance(right_value, bool):
-            left_truth = _constant_predicate_truthiness(expr.this, dialect, source_sql)
-            if left_truth is not None:
-                return left_truth == right_value
-
-            if left_value is _SQL_NULL_SCALAR_VALUE:
-                return False
-            if left_value is _UNKNOWN_SCALAR_VALUE:
-                return None
-            if isinstance(left_value, bool):
-                return left_value == right_value
-
-            scalar_truth = _predicate_truthiness_from_scalar(left_value, dialect)
-            if scalar_truth is None:
-                return None
-            return scalar_truth == right_value
+            return _boolean_is_comparison_truthiness(
+                expr.this,
+                left_value,
+                right_value,
+                dialect,
+                source_sql,
+            )
 
         return None
 
-    left_value = _constant_scalar_value(expr.this, dialect, source_sql)
-    right_value = _constant_scalar_value(expr.expression, dialect, source_sql)
+    left_value = _constant_comparison_operand_value(expr.this, dialect, source_sql)
+    right_value = _constant_comparison_operand_value(
+        expr.expression,
+        dialect,
+        source_sql,
+    )
 
     if left_value is _UNKNOWN_SCALAR_VALUE or right_value is _UNKNOWN_SCALAR_VALUE:
         return None
@@ -1128,6 +1223,15 @@ def _constant_comparison_predicate_truthiness(
         ):
             return False
 
+        if dialect == "sqlite" and isinstance(right_value, bool):
+            return _boolean_is_comparison_truthiness(
+                expr.this,
+                left_value,
+                right_value,
+                dialect,
+                source_sql,
+            )
+
         return _constant_scalar_equals(left_value, right_value, dialect)
 
     if isinstance(expr, exp.NullSafeNEQ):
@@ -1142,7 +1246,17 @@ def _constant_comparison_predicate_truthiness(
         ):
             return True
 
-        equals = _constant_scalar_equals(left_value, right_value, dialect)
+        if dialect == "sqlite" and isinstance(right_value, bool):
+            equals = _boolean_is_comparison_truthiness(
+                expr.this,
+                left_value,
+                right_value,
+                dialect,
+                source_sql,
+            )
+        else:
+            equals = _constant_scalar_equals(left_value, right_value, dialect)
+
         if equals is None:
             return None
         return not equals
@@ -1515,9 +1629,7 @@ def _constant_select_without_from_row_count(
         offset_value = _constant_scalar_value(offset_expression, dialect, source_sql)
 
         if isinstance(offset_value, Decimal):
-            if offset_value != offset_value.to_integral_value():
-                has_uncertain_row_bound = True
-            elif offset_value < 0:
+            if offset_value != offset_value.to_integral_value() or offset_value < 0:
                 has_uncertain_row_bound = True
             elif offset_value > 0:
                 if has_set_returning_projection:
@@ -1616,6 +1728,31 @@ def _or_predicate_truthiness(
     if left is False and right is False:
         return False
     return None
+
+
+def _predicate_outcomes_can_be_true(outcomes: set[bool | None]) -> bool:
+    """Return True when predicate outcomes include SQL TRUE."""
+    return True in outcomes
+
+
+def _predicate_outcomes_can_be_non_true(outcomes: set[bool | None]) -> bool:
+    """Return True when outcomes include FALSE or UNKNOWN (NULL)."""
+    return False in outcomes or None in outcomes
+
+
+def _predicate_outcomes_can_be_unknown(outcomes: set[bool | None]) -> bool:
+    """Return True when predicate outcomes include SQL UNKNOWN."""
+    return None in outcomes
+
+
+def _predicate_outcomes_are_definitely_true(outcomes: set[bool | None]) -> bool:
+    """Return True when predicate outcomes are constant SQL TRUE."""
+    return outcomes == {True}
+
+
+def _predicate_outcomes_are_definitely_false(outcomes: set[bool | None]) -> bool:
+    """Return True when predicate outcomes are constant SQL FALSE."""
+    return outcomes == {False}
 
 
 def _self_comparison_predicate_truthiness_possibilities(
@@ -1875,7 +2012,7 @@ def _is_or_boolean_partition_tautology(
 
     def is_non_nullable_boolean(predicate: exp.Expression) -> bool:
         outcomes = _predicate_truthiness_possibilities(predicate, dialect, source_sql)
-        return None not in outcomes
+        return not _predicate_outcomes_can_be_unknown(outcomes)
 
     if _expressions_are_logical_negations(left_expr, right_expr):
         left_normalized = _unwrap_parens(left_expr)
@@ -2371,10 +2508,10 @@ def _constant_predicate_truthiness(
     """Evaluate obvious constant truthiness in boolean predicate position."""
     outcomes = _predicate_truthiness_possibilities(expr, dialect, source_sql)
 
-    if outcomes == {True}:
+    if _predicate_outcomes_are_definitely_true(outcomes):
         return True
 
-    if outcomes == {False}:
+    if _predicate_outcomes_are_definitely_false(outcomes):
         return False
 
     return None
@@ -2560,7 +2697,7 @@ def _expression_references_target_symbols_reachable(
             return True
 
         false_branch = expression.args.get("false")
-        if (
+        return (
             False in condition_outcomes or None in condition_outcomes
         ) and _expression_references_target_symbols_reachable(
             false_branch,
@@ -2569,10 +2706,7 @@ def _expression_references_target_symbols_reachable(
             dialect,
             source_sql,
             allow_unqualified_outer,
-        ):
-            return True
-
-        return False
+        )
 
     if isinstance(expression, exp.Case):
         case_operand = expression.args.get("this")
@@ -2629,17 +2763,14 @@ def _expression_references_target_symbols_reachable(
                 False in condition_outcomes or None in condition_outcomes
             )
 
-        if can_fallthrough and _expression_references_target_symbols_reachable(
+        return can_fallthrough and _expression_references_target_symbols_reachable(
             expression.args.get("default"),
             target_symbols,
             local_symbols,
             dialect,
             source_sql,
             allow_unqualified_outer,
-        ):
-            return True
-
-        return False
+        )
 
     if isinstance(expression, exp.Coalesce):
         can_fallthrough = True
@@ -2716,7 +2847,9 @@ def _predicate_effectively_references_target_symbols_impl(
         source_sql,
     )
 
-    if truthiness_outcomes == {True} or truthiness_outcomes == {False}:
+    if _predicate_outcomes_are_definitely_true(
+        truthiness_outcomes,
+    ) or _predicate_outcomes_are_definitely_false(truthiness_outcomes):
         return False
 
     if isinstance(expression, exp.Not):
@@ -2733,8 +2866,16 @@ def _predicate_effectively_references_target_symbols_impl(
         left_expr = expression.this
         right_expr = expression.expression
 
-        left_truth = _constant_predicate_truthiness(left_expr, dialect, source_sql)
-        right_truth = _constant_predicate_truthiness(right_expr, dialect, source_sql)
+        left_outcomes = _predicate_truthiness_possibilities(
+            left_expr,
+            dialect,
+            source_sql,
+        )
+        right_outcomes = _predicate_truthiness_possibilities(
+            right_expr,
+            dialect,
+            source_sql,
+        )
 
         left_effective = _predicate_effectively_references_target_symbols_impl(
             left_expr,
@@ -2753,11 +2894,16 @@ def _predicate_effectively_references_target_symbols_impl(
             allow_unqualified_outer,
         )
 
-        if left_truth is False or right_truth is False:
+        # ``p AND q`` can only be TRUE when both sides can be TRUE.
+        if not _predicate_outcomes_can_be_true(
+            left_outcomes,
+        ) or not _predicate_outcomes_can_be_true(right_outcomes):
             return False
-        if left_truth is True:
+
+        if _predicate_outcomes_are_definitely_true(left_outcomes):
             return right_effective
-        if right_truth is True:
+
+        if _predicate_outcomes_are_definitely_true(right_outcomes):
             return left_effective
 
         return left_effective or right_effective
@@ -2766,8 +2912,16 @@ def _predicate_effectively_references_target_symbols_impl(
         left_expr = expression.this
         right_expr = expression.expression
 
-        left_truth = _constant_predicate_truthiness(left_expr, dialect, source_sql)
-        right_truth = _constant_predicate_truthiness(right_expr, dialect, source_sql)
+        left_outcomes = _predicate_truthiness_possibilities(
+            left_expr,
+            dialect,
+            source_sql,
+        )
+        right_outcomes = _predicate_truthiness_possibilities(
+            right_expr,
+            dialect,
+            source_sql,
+        )
 
         left_effective = _predicate_effectively_references_target_symbols_impl(
             left_expr,
@@ -2786,11 +2940,17 @@ def _predicate_effectively_references_target_symbols_impl(
             allow_unqualified_outer,
         )
 
-        if left_truth is True or right_truth is True:
+        if _predicate_outcomes_are_definitely_true(
+            left_outcomes,
+        ) or _predicate_outcomes_are_definitely_true(right_outcomes):
             return False
-        if left_truth is False:
+
+        # ``p OR q`` with one branch that can never be TRUE behaves like the
+        # other branch for row restriction.
+        if not _predicate_outcomes_can_be_true(left_outcomes):
             return right_effective
-        if right_truth is False:
+
+        if not _predicate_outcomes_can_be_true(right_outcomes):
             return left_effective
 
         # OR is row-restrictive only when both sides are row-restrictive.
@@ -2799,10 +2959,10 @@ def _predicate_effectively_references_target_symbols_impl(
     # Fallback correlation requires potential row filtering behavior:
     # the predicate must be able to evaluate TRUE for some rows and non-TRUE
     # (FALSE/UNKNOWN) for others.
-    if True not in truthiness_outcomes:
+    if not _predicate_outcomes_can_be_true(truthiness_outcomes):
         return False
 
-    if False not in truthiness_outcomes and None not in truthiness_outcomes:
+    if not _predicate_outcomes_can_be_non_true(truthiness_outcomes):
         return False
 
     return _expression_references_target_symbols_reachable(
@@ -3046,8 +3206,12 @@ def _is_reachable_predicate_branch(
             elif node is parent.expression:
                 sibling = _unwrap_parens(parent.this)
 
-            sibling_truth = _constant_predicate_truthiness(sibling, dialect, source_sql)
-            if sibling_truth is False:
+            sibling_outcomes = _predicate_truthiness_possibilities(
+                sibling,
+                dialect,
+                source_sql,
+            )
+            if not _predicate_outcomes_can_be_true(sibling_outcomes):
                 return False
 
         elif isinstance(parent, exp.Or):
@@ -3057,8 +3221,12 @@ def _is_reachable_predicate_branch(
             elif node is parent.expression:
                 sibling = _unwrap_parens(parent.this)
 
-            sibling_truth = _constant_predicate_truthiness(sibling, dialect, source_sql)
-            if sibling_truth is True:
+            sibling_outcomes = _predicate_truthiness_possibilities(
+                sibling,
+                dialect,
+                source_sql,
+            )
+            if _predicate_outcomes_are_definitely_true(sibling_outcomes):
                 return False
 
         elif isinstance(parent, exp.If):
@@ -3080,11 +3248,13 @@ def _is_reachable_predicate_branch(
             true_branch = parent.args.get("true")
             false_branch = parent.args.get("false")
 
-            if node is true_branch and True not in condition_outcomes:
+            if node is true_branch and not _predicate_outcomes_can_be_true(
+                condition_outcomes,
+            ):
                 return False
 
-            if node is false_branch and (
-                False not in condition_outcomes and None not in condition_outcomes
+            if node is false_branch and not _predicate_outcomes_can_be_non_true(
+                condition_outcomes,
             ):
                 return False
 
@@ -3103,7 +3273,7 @@ def _is_reachable_predicate_branch(
                         dialect,
                         source_sql,
                     )
-                    if None not in previous_outcomes:
+                    if not _predicate_outcomes_can_be_unknown(previous_outcomes):
                         return False
 
         elif isinstance(parent, exp.Case) and not _is_reachable_case_child(
@@ -3410,9 +3580,12 @@ def has_disallowed_dangerous_mode_statement(stmt: exp.Expression) -> str | None:
                 return "Only CREATE VIEW statements are allowed in dangerous mode"
             if expression is not None and not is_select_like(expression):
                 return "CREATE VIEW must be based on a SELECT-like expression"
-        elif kind == "INDEX":
-            if target is not None and not isinstance(target, exp.Index):
-                return "Only CREATE INDEX statements are allowed in dangerous mode"
+        elif (
+            kind == "INDEX"
+            and target is not None
+            and not isinstance(target, exp.Index)
+        ):
+            return "Only CREATE INDEX statements are allowed in dangerous mode"
 
         if isinstance(target, exp.UserDefinedFunction):
             return "CREATE FUNCTION-like statements are not allowed in dangerous mode"
