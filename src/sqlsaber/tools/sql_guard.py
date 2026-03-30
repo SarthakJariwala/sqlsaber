@@ -3439,6 +3439,46 @@ def _has_uncorrelated_exists_subquery(
     return False
 
 
+def _unfiltered_mutation_reason(
+    node: exp.Update | exp.Delete,
+    dialect: str,
+    source_sql: str | None,
+) -> str | None:
+    """Return blocking reason for UPDATE/DELETE that is not row-restrictive."""
+    operation = "UPDATE" if isinstance(node, exp.Update) else "DELETE"
+
+    where_clause = node.args.get("where")
+    if not where_clause:
+        return f"{operation} without WHERE clause is not allowed (would affect all rows)"
+
+    if not isinstance(where_clause, exp.Where):
+        return None
+
+    if _is_tautological_where(
+        where_clause,
+        dialect,
+        source_sql,
+    ):
+        return (
+            f"{operation} with tautological WHERE clause is not allowed "
+            "(would affect all rows)"
+        )
+
+    target_symbols = _mutation_target_symbols(node)
+    if _has_uncorrelated_exists_subquery(
+        where_clause,
+        target_symbols,
+        dialect,
+        source_sql,
+    ):
+        return (
+            f"{operation} with uncorrelated EXISTS subquery is not allowed "
+            "(predicate is not row-restrictive)"
+        )
+
+    return None
+
+
 def has_unfiltered_mutation(
     stmt: exp.Expression,
     dialect: str = "ansi",
@@ -3449,65 +3489,10 @@ def has_unfiltered_mutation(
     These operations are dangerous because they can affect all rows in a table.
     """
     for node in stmt.walk():
-        if isinstance(node, exp.Update):
-            where = node.args.get("where")
-            if not where:
-                return (
-                    "UPDATE without WHERE clause is not allowed (would affect all rows)"
-                )
-
-            target_symbols = _mutation_target_symbols(node)
-
-            if isinstance(where, exp.Where) and _is_tautological_where(
-                where,
-                dialect,
-                source_sql,
-            ):
-                return (
-                    "UPDATE with tautological WHERE clause is not allowed "
-                    "(would affect all rows)"
-                )
-
-            if isinstance(where, exp.Where) and _has_uncorrelated_exists_subquery(
-                where,
-                target_symbols,
-                dialect,
-                source_sql,
-            ):
-                return (
-                    "UPDATE with uncorrelated EXISTS subquery is not allowed "
-                    "(predicate is not row-restrictive)"
-                )
-
-        if isinstance(node, exp.Delete):
-            where = node.args.get("where")
-            if not where:
-                return (
-                    "DELETE without WHERE clause is not allowed (would affect all rows)"
-                )
-
-            target_symbols = _mutation_target_symbols(node)
-
-            if isinstance(where, exp.Where) and _is_tautological_where(
-                where,
-                dialect,
-                source_sql,
-            ):
-                return (
-                    "DELETE with tautological WHERE clause is not allowed "
-                    "(would affect all rows)"
-                )
-
-            if isinstance(where, exp.Where) and _has_uncorrelated_exists_subquery(
-                where,
-                target_symbols,
-                dialect,
-                source_sql,
-            ):
-                return (
-                    "DELETE with uncorrelated EXISTS subquery is not allowed "
-                    "(predicate is not row-restrictive)"
-                )
+        if isinstance(node, (exp.Update, exp.Delete)):
+            reason = _unfiltered_mutation_reason(node, dialect, source_sql)
+            if reason is not None:
+                return reason
 
     return None
 
