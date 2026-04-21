@@ -61,6 +61,7 @@ def test_anthropic_strategy_real(monkeypatch):
 
     settings = agent.model_settings
     assert settings
+    assert settings.get("anthropic_cache") is True
     assert settings.get("anthropic_thinking", {}).get("type") == "enabled"
 
 
@@ -172,7 +173,7 @@ class TestAnthropicThinkingLevels:
         )
 
     def test_anthropic_thinking_disabled(self, monkeypatch):
-        """Test that disabling thinking skips configuration."""
+        """Test that disabling thinking still keeps prompt caching enabled."""
         strategy = AnthropicProviderStrategy()
         monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
 
@@ -183,7 +184,9 @@ class TestAnthropicThinkingLevels:
         )
 
         settings = agent.model_settings
-        assert not settings or "anthropic_thinking" not in settings
+        assert settings
+        assert settings.get("anthropic_cache") is True
+        assert "anthropic_thinking" not in settings
 
     def test_budget_map_completeness(self):
         """Test that all levels have budget mappings."""
