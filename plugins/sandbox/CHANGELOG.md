@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-sandbox-v0.2.0...sqlsaber-sandbox-v0.3.0) (2026-04-24)
+
+
+### Features
+
+* trigger release ([145d163](https://github.com/SarthakJariwala/sqlsaber/commit/145d163c91989e62b722a266842b13e9145be638))
+
 ## [0.2.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-sandbox-v0.1.1...sqlsaber-sandbox-v0.2.0) (2026-02-06)
 
 
