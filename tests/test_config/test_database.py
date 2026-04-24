@@ -109,6 +109,7 @@ class TestDatabaseConfig:
             "ssl_cert": None,
             "ssl_key": None,
             "exclude_schemas": [],
+            "description": None,
         }
 
     def test_config_from_dict(self):
@@ -130,6 +131,61 @@ class TestDatabaseConfig:
         assert config.username == "admin"
         assert config.database == "production"
         assert config.exclude_schemas == []
+
+
+def test_config_description_round_trips() -> None:
+    config = DatabaseConfig(
+        name="warehouse",
+        type="postgresql",
+        host="localhost",
+        port=5432,
+        username="user",
+        password="pass",
+        database="analytics",
+        description="Analytics warehouse with customers and revenue facts.",
+    )
+
+    data = config.to_dict()
+    assert data["description"] == "Analytics warehouse with customers and revenue facts."
+
+    restored = DatabaseConfig.from_dict(data)
+    assert restored.description == "Analytics warehouse with customers and revenue facts."
+
+
+def test_config_from_old_dict_defaults_description_to_none() -> None:
+    config = DatabaseConfig.from_dict(
+        {
+            "name": "legacy",
+            "type": "mysql",
+            "host": "localhost",
+            "port": 3306,
+            "username": "root",
+            "database": "app",
+        }
+    )
+
+    assert config.description is None
+
+
+def test_config_preserves_positional_exclude_schemas_compatibility() -> None:
+    config = DatabaseConfig(
+        "warehouse",
+        "postgresql",
+        "localhost",
+        5432,
+        "analytics",
+        "user",
+        "pass",
+        None,
+        None,
+        None,
+        None,
+        None,
+        ["information_schema"],
+    )
+
+    assert config.exclude_schemas == ["information_schema"]
+    assert config.description is None
 
 
 class TestDatabaseConfigManager:

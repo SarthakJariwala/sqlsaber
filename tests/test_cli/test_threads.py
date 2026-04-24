@@ -1,3 +1,4 @@
+import asyncio
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -25,6 +26,34 @@ from sqlsaber.cli.threads import (
 )
 from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.threads.storage import Thread, ThreadStorage
+
+
+def test_threads_show_renders_child_thread_metadata(capsys, temp_dir, monkeypatch):
+    from sqlsaber.cli.threads import show
+    from sqlsaber.threads.storage import ThreadStorage
+
+    store = ThreadStorage()
+    store.db_path = temp_dir / "threads.db"
+    monkeypatch.setattr("sqlsaber.threads.ThreadStorage", lambda: store)
+
+    async def _create() -> str:
+        return await store.save_snapshot(
+            messages_json=b"[]",
+            database_name="warehouse + billing",
+            extra_metadata=(
+                '{"kind":"multi_database_parent","child_threads":'
+                '[{"database_id":"billing","database_name":"billing","thread_id":"child-1"}]}'
+            ),
+        )
+
+    thread_id = asyncio.run(_create())
+
+    show(thread_id)
+
+    captured = capsys.readouterr()
+    assert "Child threads" in captured.out
+    assert "billing" in captured.out
+    assert "child-1" in captured.out
 
 
 class TestThreadsCLI:

@@ -1,5 +1,7 @@
 """Tests for ThreadStorage (pydantic-ai snapshot threads)."""
 
+import json
+import sqlite3
 import tempfile
 from pathlib import Path
 
@@ -13,6 +15,14 @@ from pydantic_ai.messages import (
 )
 
 from sqlsaber.threads.storage import ThreadStorage
+
+
+@pytest.fixture
+def temp_storage():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = ThreadStorage()
+        store.db_path = Path(tmp) / "threads.db"
+        yield store
 
 
 def _messages_bytes(user_text: str, *assistant_texts: str) -> bytes:
@@ -87,3 +97,88 @@ async def test_list_end_delete_threads():
         assert deleted
         remaining = await store.list_threads()
         assert len(remaining) == 1
+
+
+@pytest.mark.asyncio
+async def test_save_snapshot_stores_extra_metadata(temp_storage) -> None:
+    thread_id = await temp_storage.save_snapshot(
+        messages_json=b"[]",
+        database_name="warehouse",
+        extra_metadata=json.dumps({"kind": "multi_database_parent"}),
+    )
+
+    thread = await temp_storage.get_thread(thread_id)
+    assert thread is not None
+    assert thread.extra_metadata == '{"kind": "multi_database_parent"}'
+
+
+@pytest.mark.asyncio
+async def test_save_metadata_updates_only_provided_fields(temp_storage) -> None:
+    thread_id = await temp_storage.save_snapshot(
+        messages_json=b"[]",
+        database_name="warehouse",
+    )
+    await temp_storage.save_metadata(
+        thread_id=thread_id,
+        title="first title",
+        model_name="first model",
+        extra_metadata='{"kind": "single"}',
+    )
+
+    await temp_storage.save_metadata(thread_id=thread_id, model_name="second model")
+
+    thread = await temp_storage.get_thread(thread_id)
+    assert thread is not None
+    assert thread.title == "first title"
+    assert thread.model_name == "second model"
+    assert thread.extra_metadata == '{"kind": "single"}'
+
+
+@pytest.mark.asyncio
+async def test_init_db_migrates_old_threads_table_for_extra_metadata(
+    temp_storage,
+) -> None:
+    temp_storage.db_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(temp_storage.db_path) as db:
+        db.execute(
+            """
+            CREATE TABLE threads (
+                id TEXT PRIMARY KEY,
+                database_name TEXT,
+                title TEXT,
+                created_at REAL NOT NULL,
+                ended_at REAL,
+                last_activity_at REAL NOT NULL,
+                model_name TEXT,
+                messages_json BLOB NOT NULL
+            )
+            """
+        )
+
+    thread_id = await temp_storage.save_snapshot(
+        messages_json=b"[]",
+        database_name="warehouse",
+        extra_metadata='{"kind": "parent"}',
+    )
+
+    thread = await temp_storage.get_thread(thread_id)
+    assert thread is not None
+    assert thread.extra_metadata == '{"kind": "parent"}'
+
+    await temp_storage.save_metadata(
+        thread_id=thread_id,
+        extra_metadata='{"kind": "updated"}',
+    )
+    await temp_storage.save_snapshot(
+        messages_json=b"[]",
+        database_name="warehouse",
+        thread_id=thread_id,
+    )
+
+    updated = await temp_storage.get_thread(thread_id)
+    assert updated is not None
+    assert updated.extra_metadata == '{"kind": "updated"}'
+
+    listed = await temp_storage.list_threads()
+    assert len(listed) == 1
+    assert listed[0].extra_metadata == '{"kind": "updated"}'

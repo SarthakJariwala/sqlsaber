@@ -39,6 +39,45 @@ def _human_readable(timestamp: float | None) -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
 
 
+def _render_thread_metadata(console: Console, raw_metadata: str | None) -> None:
+    if not raw_metadata:
+        return
+
+    try:
+        metadata = json.loads(raw_metadata)
+    except json.JSONDecodeError:
+        console.print(f"Metadata: {raw_metadata}")
+        return
+
+    if not isinstance(metadata, dict):
+        console.print(f"Metadata: {metadata}")
+        return
+
+    kind = metadata.get("kind")
+    if kind:
+        console.print(f"Kind: {kind}")
+
+    child_threads = metadata.get("child_threads")
+    if isinstance(child_threads, list) and child_threads:
+        table = Table(title="Child threads")
+        table.add_column("Database ID", style=tm.style("info"))
+        table.add_column("Database", style=tm.style("accent"))
+        table.add_column("Thread ID", style=tm.style("success"))
+        for child in child_threads:
+            if not isinstance(child, dict):
+                continue
+            table.add_row(
+                str(child.get("database_id") or "-"),
+                str(child.get("database_name") or "-"),
+                str(child.get("thread_id") or "-"),
+            )
+        console.print(table)
+
+    parent_thread_id = metadata.get("parent_thread_id")
+    if parent_thread_id:
+        console.print(f"Parent thread: {parent_thread_id}")
+
+
 def _render_transcript(
     console: Console, all_msgs: list[ModelMessage], last_n: int | None = None
 ) -> None:
@@ -216,6 +255,7 @@ def show(
     console.print(f"Title: {thread.title}")
     console.print(f"Last activity: {_human_readable(thread.last_activity_at)}")
     console.print(f"Model: {thread.model_name}")
+    _render_thread_metadata(console, getattr(thread, "extra_metadata", None))
     console.print("")
 
     _render_transcript(console, msgs, None)
