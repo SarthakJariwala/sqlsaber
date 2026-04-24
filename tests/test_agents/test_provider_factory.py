@@ -1,4 +1,5 @@
 import pytest
+from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.google import GoogleModel
@@ -16,6 +17,10 @@ from sqlsaber.agents.provider_factory import (
     ProviderFactory,
 )
 from sqlsaber.config.settings import ThinkingLevel
+
+
+class StructuredResult(BaseModel):
+    value: str
 
 
 @pytest.fixture
@@ -107,6 +112,18 @@ def test_factory_create_agent_integration(factory, monkeypatch):
     )
     assert isinstance(agent.model, GoogleModel)
     assert agent.model.model_name == "gemini-pro"
+
+
+def test_factory_create_agent_accepts_output_type(factory):
+    """Test factory forwards structured output type to pydantic-ai Agent."""
+    agent = factory.create_agent(
+        provider="unknown",
+        model_name="test",
+        full_model_str="test",
+        output_type=StructuredResult,
+    )
+
+    assert agent.output_type is StructuredResult
 
 
 def test_anthropic_strategy_with_explicit_api_key():

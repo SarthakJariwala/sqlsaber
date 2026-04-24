@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
+from pydantic import BaseModel
 
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.database.sqlite import SQLiteConnection
@@ -10,6 +11,10 @@ from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
 from sqlsaber.overrides import ToolRunDeps
 from sqlsaber.tools.knowledge_tool import SearchKnowledgeTool
+
+
+class StructuredResult(BaseModel):
+    value: str
 
 
 @pytest.fixture
@@ -51,6 +56,17 @@ class TestSQLSaberAgentKnowledge:
         assert isinstance(tool, SearchKnowledgeTool)
         assert tool.database_name == "test-db"
         assert tool.knowledge_manager is agent.knowledge_manager
+
+
+def test_sqlsaber_agent_passes_output_type_to_pydantic_agent(in_memory_db):
+    agent = SQLSaberAgent(
+        db_connection=in_memory_db,
+        model_name="anthropic:claude-3-5-sonnet",
+        api_key="test-key",
+        output_type=StructuredResult,
+    )
+
+    assert agent.agent.output_type is StructuredResult
 
 
 class TestSQLSaberAgentDeps:
@@ -106,6 +122,38 @@ class TestSQLSaberAgentDeps:
         deps = captured.get("deps")
         assert isinstance(deps, ToolRunDeps)
         assert deps.tool_overides == {}
+
+    @pytest.mark.asyncio
+    async def test_sqlsaber_agent_forwards_usage_to_pydantic_run(
+        self, in_memory_db, monkeypatch
+    ):
+        agent = SQLSaberAgent(
+            db_connection=in_memory_db,
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+            tool_overides={
+                "viz": {
+                    "model_name": "openai:gpt-5-mini",
+                    "api_key": "override-api-key",
+                }
+            },
+        )
+        usage = object()
+        captured: dict[str, object] = {}
+
+        async def fake_run(prompt: str, **kwargs):
+            _ = prompt
+            captured.update(kwargs)
+            return SimpleNamespace(output="ok")
+
+        monkeypatch.setattr(agent.agent, "run", fake_run)
+
+        await agent.run("hello", usage=usage)
+
+        assert captured["usage"] is usage
+        deps = captured.get("deps")
+        assert isinstance(deps, ToolRunDeps)
+        assert deps.tool_overides["viz"].model_name == "openai:gpt-5-mini"
 
 
 class TestSQLSaberAgentLifecycle:
