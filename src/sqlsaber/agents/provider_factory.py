@@ -119,19 +119,21 @@ class AnthropicProviderStrategy(AgentProviderStrategy):
         else:
             model_obj = AnthropicModel(model_name)
 
+        settings_kwargs: dict[str, Any] = {"anthropic_cache": True}
+
         if thinking_enabled:
             budget_tokens = ANTHROPIC_BUDGET_MAP.get(thinking_level, 8192)
             # max_tokens must be >= budget_tokens
             max_tokens = max(budget_tokens + 4096, 8192)
-            settings = AnthropicModelSettings(
+            settings_kwargs.update(
                 anthropic_thinking=cast(
                     Any, {"type": "enabled", "budget_tokens": budget_tokens}
                 ),
                 max_tokens=max_tokens,
             )
-            return Agent(model_obj, name="sqlsaber", model_settings=settings)
 
-        return Agent(model_obj, name="sqlsaber")
+        settings = AnthropicModelSettings(**settings_kwargs)
+        return Agent(model_obj, name="sqlsaber", model_settings=settings)
 
 
 class OpenAIProviderStrategy(AgentProviderStrategy):
