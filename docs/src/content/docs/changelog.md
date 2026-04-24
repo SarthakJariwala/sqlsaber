@@ -9,6 +9,13 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.64.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.63.0...sqlsaber-v0.64.0) (2026-04-24)
+
+
+### Features
+
+* Enable caching for Anthropic models ([#160](https://github.com/SarthakJariwala/sqlsaber/issues/160)) ([62f2cde](https://github.com/SarthakJariwala/sqlsaber/commit/62f2cdeabc1829518b700fab489b59059400f706))
+
 ## [0.63.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.62.1...sqlsaber-v0.63.0) (2026-03-27)
 
 
