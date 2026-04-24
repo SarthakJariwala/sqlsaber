@@ -18,6 +18,9 @@ class ResolvedDatabase:
     name: str  # Human-readable name for display/logging
     connection_string: str  # Canonical connection string for DatabaseConnection factory
     excluded_schemas: list[str]
+    type: str
+    description: str | None = None
+    id: str | None = None
 
 
 SUPPORTED_SCHEMES = {"postgresql", "mysql", "sqlite", "duckdb", "csv", "csvs"}
@@ -36,6 +39,29 @@ def _csv_stem_from_connection_string(connection_string: str) -> str:
     parsed = urlparse(connection_string)
     stem = Path(parsed.path).stem
     return stem or "csv"
+
+
+def _is_csv_spec(spec: str) -> bool:
+    if _is_connection_string(spec):
+        return urlparse(spec).scheme == "csv"
+    return Path(spec).suffix.lower() == ".csv"
+
+
+def _config_description(db_cfg: DatabaseConfig) -> str | None:
+    description = vars(db_cfg).get("description")
+    if isinstance(description, str) or description is None:
+        return description
+    return None
+
+
+def _assign_database_ids(databases: list[ResolvedDatabase]) -> list[ResolvedDatabase]:
+    seen: dict[str, int] = {}
+    for database in databases:
+        base_id = database.name or "database"
+        count = seen.get(base_id, 0) + 1
+        seen[base_id] = count
+        database.id = base_id if count == 1 else f"{base_id}_{count}"
+    return databases
 
 
 def _resolve_multiple_csvs(specs: list[str]) -> ResolvedDatabase:
@@ -78,7 +104,10 @@ def _resolve_multiple_csvs(specs: list[str]) -> ResolvedDatabase:
         name = f"{stems[0]} + {len(stems) - 1} more"
 
     return ResolvedDatabase(
-        name=name, connection_string=f"csvs:///?{query}", excluded_schemas=[]
+        name=name,
+        connection_string=f"csvs:///?{query}",
+        excluded_schemas=[],
+        type="csvs",
     )
 
 
@@ -112,6 +141,8 @@ def resolve_database(
             name=db_cfg.name,
             connection_string=db_cfg.to_connection_string(),
             excluded_schemas=list(db_cfg.exclude_schemas),
+            type=db_cfg.type,
+            description=_config_description(db_cfg),
         )
 
     if isinstance(spec, list):
@@ -131,7 +162,7 @@ def resolve_database(
         else:  # should not happen because of SUPPORTED_SCHEMES
             db_name = "database"
         return ResolvedDatabase(
-            name=db_name, connection_string=spec, excluded_schemas=[]
+            name=db_name, connection_string=spec, excluded_schemas=[], type=scheme
         )
 
     # 2. Raw file path?
@@ -140,19 +171,28 @@ def resolve_database(
         if not path.exists():
             raise DatabaseResolutionError(f"CSV file '{spec}' not found.")
         return ResolvedDatabase(
-            name=path.stem, connection_string=f"csv:///{path}", excluded_schemas=[]
+            name=path.stem,
+            connection_string=f"csv:///{path}",
+            excluded_schemas=[],
+            type="csv",
         )
     if path.suffix.lower() in {".db", ".sqlite", ".sqlite3"}:
         if not path.exists():
             raise DatabaseResolutionError(f"SQLite file '{spec}' not found.")
         return ResolvedDatabase(
-            name=path.stem, connection_string=f"sqlite:///{path}", excluded_schemas=[]
+            name=path.stem,
+            connection_string=f"sqlite:///{path}",
+            excluded_schemas=[],
+            type="sqlite",
         )
     if path.suffix.lower() in {".duckdb", ".ddb"}:
         if not path.exists():
             raise DatabaseResolutionError(f"DuckDB file '{spec}' not found.")
         return ResolvedDatabase(
-            name=path.stem, connection_string=f"duckdb:///{path}", excluded_schemas=[]
+            name=path.stem,
+            connection_string=f"duckdb:///{path}",
+            excluded_schemas=[],
+            type="duckdb",
         )
 
     # 3. Must be a configured name
@@ -167,4 +207,27 @@ def resolve_database(
         name=db_cfg.name,
         connection_string=db_cfg.to_connection_string(),
         excluded_schemas=list(db_cfg.exclude_schemas),
+        type=db_cfg.type,
+        description=_config_description(db_cfg),
+    )
+
+
+def resolve_databases(
+    spec: str | list[str] | None, config_mgr: DatabaseConfigManager | None = None
+) -> list[ResolvedDatabase]:
+    """Turn user CLI input into one or more resolved database connections."""
+    if not isinstance(spec, list):
+        return _assign_database_ids([resolve_database(spec, config_mgr)])
+
+    if len(spec) == 0:
+        resolve_database(spec, config_mgr)
+
+    if len(spec) == 1:
+        return _assign_database_ids([resolve_database(spec[0], config_mgr)])
+
+    if all(_is_csv_spec(item) for item in spec):
+        return _assign_database_ids([_resolve_multiple_csvs(spec)])
+
+    return _assign_database_ids(
+        [resolve_database(database_spec, config_mgr) for database_spec in spec]
     )
