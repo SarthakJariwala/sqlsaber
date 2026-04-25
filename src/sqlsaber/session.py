@@ -12,7 +12,7 @@ from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import Config, ThinkingLevel
 from sqlsaber.database import DatabaseConnection
-from sqlsaber.database.resolver import resolve_database
+from sqlsaber.database.resolver import resolve_database, resolve_databases
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.options import SQLSaberOptions
 from sqlsaber.utils.text_input import resolve_text_input
@@ -83,6 +83,20 @@ class SQLSaberSession:
         | None = None,
     ) -> Any:
         """Run a natural language query against the configured database."""
+        if (
+            self.thread_manager is not None
+            and getattr(self.thread_manager, "current_thread_id", None) is None
+            and hasattr(self.thread_manager, "ensure_thread")
+        ):
+            try:
+                await self.thread_manager.ensure_thread(
+                    database_name=self.db_name,
+                    title=prompt,
+                    model_name=self._model_name(),
+                )
+            except Exception as exc:
+                logger.warning("sdk.thread.ensure_failed", error=str(exc))
+
         run_result = await self.agent.run(
             prompt,
             message_history=message_history,
@@ -91,15 +105,11 @@ class SQLSaberSession:
 
         if self.thread_manager is not None:
             try:
-                resolved_model_name = getattr(self.agent.agent.model, "model_name", "")
-                if not isinstance(resolved_model_name, str) or not resolved_model_name:
-                    resolved_model_name = self.agent.config.model.name
-
                 await self.thread_manager.save_run(
                     run_result=run_result,
                     database_name=self.db_name,
                     user_query=prompt,
-                    model_name=resolved_model_name,
+                    model_name=self._model_name(),
                 )
             except Exception as exc:
                 logger.warning("sdk.thread.save_failed", error=str(exc))
@@ -138,3 +148,25 @@ class SQLSaberSession:
 
         if errors:
             raise errors[0]
+
+    def _model_name(self) -> str:
+        resolved_model_name = getattr(self.agent.agent.model, "model_name", "")
+        if not isinstance(resolved_model_name, str) or not resolved_model_name:
+            resolved_model_name = self.agent.config.model.name
+        return resolved_model_name
+
+
+def create_session(options: SQLSaberOptions) -> SQLSaberSession:
+    """Create a single or multi-database session for the given options."""
+    database_spec: str | list[str] | None
+    if isinstance(options.database, tuple):
+        database_spec = list(options.database)
+    else:
+        database_spec = options.database
+
+    resolved = resolve_databases(database_spec)
+    if len(resolved) > 1:
+        from sqlsaber.multi_session import MultiDatabaseSession
+
+        return MultiDatabaseSession(options)  # type: ignore[return-value]
+    return SQLSaberSession(options)
