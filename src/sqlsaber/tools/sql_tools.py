@@ -649,7 +649,7 @@ class ExecuteSQLTool(SQLTool):
                     payload["file"] = f"result_{tool_call_id}.json"
                 return json_dumps(payload)
             if query_type in {"dml", "ddl"}:
-                payload = {"success": True}
+                payload: dict[str, Any] = {"success": True}
                 if tool_call_id:
                     payload["file"] = f"result_{tool_call_id}.json"
                 return json_dumps(payload)

@@ -105,7 +105,7 @@ class CSVConnection(BaseDatabaseConnection):
 
     def _create_view(self, conn: duckdb.DuckDBPyConnection) -> None:
         header_literal = "TRUE" if self.has_header else "FALSE"
-        option_parts = [f"HEADER={header_literal}"]
+        option_parts: list[str] = [f"HEADER={header_literal}"]
 
         if self.delimiter:
             option_parts.append(f"DELIM={self._quote_literal(self.delimiter)}")

@@ -146,10 +146,14 @@ def test_config_description_round_trips() -> None:
     )
 
     data = config.to_dict()
-    assert data["description"] == "Analytics warehouse with customers and revenue facts."
+    assert (
+        data["description"] == "Analytics warehouse with customers and revenue facts."
+    )
 
     restored = DatabaseConfig.from_dict(data)
-    assert restored.description == "Analytics warehouse with customers and revenue facts."
+    assert (
+        restored.description == "Analytics warehouse with customers and revenue facts."
+    )
 
 
 def test_config_from_old_dict_defaults_description_to_none() -> None:

@@ -322,5 +322,7 @@ class TestDatabaseResolver:
         """Test empty list raises the same error as resolve_database."""
         config_mgr = Mock()
 
-        with pytest.raises(DatabaseResolutionError, match="Empty database argument list"):
+        with pytest.raises(
+            DatabaseResolutionError, match="Empty database argument list"
+        ):
             resolve_databases([], config_mgr)

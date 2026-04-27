@@ -76,7 +76,9 @@ async def test_multi_database_api_exposes_connections_and_rejects_single_connect
     try:
         assert saber.db_name == "a + b"
         assert set(saber.connections or {}) == {"a", "b"}
-        with pytest.raises(RuntimeError, match=r"multiple database connections.*connections"):
+        with pytest.raises(
+            RuntimeError, match=r"multiple database connections.*connections"
+        ):
             _ = saber.connection
     finally:
         await saber.close()
@@ -99,8 +101,7 @@ async def test_all_csv_list_stays_single_connection(temp_dir):
     try:
         assert saber.connections is None
         rows = await saber.connection.execute_query(
-            'SELECT u.name, o.total FROM "users" u '
-            'JOIN "orders" o ON u.id = o.user_id'
+            'SELECT u.name, o.total FROM "users" u JOIN "orders" o ON u.id = o.user_id'
         )
         assert rows == [{"name": "Alice", "total": 9.99}]
     finally:
@@ -151,9 +152,10 @@ async def test_multi_session_precreates_threads_and_saves_parent_run(
         assert parent.title == "compare counts"
         parent_metadata = json.loads(parent.extra_metadata or "{}")
         assert parent_metadata["kind"] == "multi_database_parent"
-        assert {
-            item["database_id"] for item in parent_metadata["child_threads"]
-        } == {"a", "b"}
+        assert {item["database_id"] for item in parent_metadata["child_threads"]} == {
+            "a",
+            "b",
+        }
 
         child_ids = {
             item["database_id"]: item["thread_id"]
@@ -176,9 +178,7 @@ async def test_multi_session_precreates_threads_and_saves_parent_run(
 
 
 @pytest.mark.asyncio
-async def test_multi_session_close_ends_parent_and_child_threads(
-    temp_dir, monkeypatch
-):
+async def test_multi_session_close_ends_parent_and_child_threads(temp_dir, monkeypatch):
     storage = ThreadStorage()
     storage.db_path = temp_dir / "threads.db"
     thread_manager = ThreadManager(storage=storage)
@@ -211,9 +211,7 @@ async def test_multi_session_close_ends_parent_and_child_threads(
     parent = await storage.get_thread(parent_id)
     assert parent is not None
     parent_metadata = json.loads(parent.extra_metadata or "{}")
-    child_ids = [
-        item["thread_id"] for item in parent_metadata["child_threads"]
-    ]
+    child_ids = [item["thread_id"] for item in parent_metadata["child_threads"]]
     assert all(child_ids)
 
     await saber.close()

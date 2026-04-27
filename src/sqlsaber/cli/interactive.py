@@ -53,7 +53,9 @@ class InteractiveSession:
         self.session = session
         self.sqlsaber_agent = session.agent
         self.connections = getattr(session, "connections", None)
-        self.db_conn = None if self.connections else getattr(session, "connection", None)
+        self.db_conn = (
+            None if self.connections else getattr(session, "connection", None)
+        )
         self.database_name = session.db_name
         self.display = DisplayManager(console)
         self.streaming_handler = StreamingQueryHandler(console)

@@ -116,7 +116,9 @@ def test_database_answer_uses_specified_fields_only() -> None:
     }
 
 
-def test_database_descriptor_schema_and_system_prompt_include_database_metadata() -> None:
+def test_database_descriptor_schema_and_system_prompt_include_database_metadata() -> (
+    None
+):
     coordinator = MultiDatabaseCoordinator(
         children={
             "warehouse": DatabaseChild(
@@ -280,7 +282,9 @@ async def test_ask_database_direct_returns_failed_answer_when_child_run_raises(
     assert answer.database_name == "Orders"
     assert answer.thread_id is not None
     assert answer.evidence == []
-    assert answer.limitations == ["Child agent failed: structured output validation failed"]
+    assert answer.limitations == [
+        "Child agent failed: structured output validation failed"
+    ]
     assert child.message_history == []
 
     stored_thread = await temp_storage.get_thread(answer.thread_id)

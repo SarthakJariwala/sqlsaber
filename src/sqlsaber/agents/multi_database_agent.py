@@ -133,7 +133,9 @@ class MultiDatabaseCoordinator:
         typed_agent = cast(Agent[MultiDatabaseDeps, Any], agent)
 
         @typed_agent.system_prompt(dynamic=True)
-        async def multi_database_system_prompt(ctx: RunContext[MultiDatabaseDeps]) -> str:
+        async def multi_database_system_prompt(
+            ctx: RunContext[MultiDatabaseDeps],
+        ) -> str:
             _ = ctx
             return self.system_prompt_text()
 

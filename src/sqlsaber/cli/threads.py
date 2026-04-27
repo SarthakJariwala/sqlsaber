@@ -14,7 +14,6 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from sqlsaber.cli.html_export import render_thread_html
 from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console, get_theme_manager
 
@@ -389,6 +388,8 @@ def export(
     store = ThreadStorage()
 
     async def _run() -> None:
+        from sqlsaber.cli.html_export import render_thread_html
+
         thread = await store.get_thread(thread_id)
         if not thread:
             console.print(f"[error]Thread not found:[/error] {thread_id}")

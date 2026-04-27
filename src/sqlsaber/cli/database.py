@@ -354,7 +354,9 @@ def describe(
         raise SystemExit(1)
 
     if set_description is not None and clear:
-        console.print("[bold error]Error: Specify only one of --set or --clear[/bold error]")
+        console.print(
+            "[bold error]Error: Specify only one of --set or --clear[/bold error]"
+        )
         logger.error("db.describe.multiple_actions", name=name)
         raise SystemExit(1)
 
