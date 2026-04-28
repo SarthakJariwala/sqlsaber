@@ -85,6 +85,26 @@ async def test_multi_database_api_exposes_connections_and_rejects_single_connect
 
 
 @pytest.mark.asyncio
+async def test_multi_session_child_agents_use_plain_text_output(temp_dir):
+    a = temp_dir / "a.db"
+    b = temp_dir / "b.db"
+
+    saber = SQLSaber(
+        options=SQLSaberOptions(
+            database=[_sqlite_uri(a), _sqlite_uri(b)],
+            settings=_settings(),
+        )
+    )
+
+    try:
+        assert all(
+            child.agent.output_type is str for child in saber._session.children.values()
+        )
+    finally:
+        await saber.close()
+
+
+@pytest.mark.asyncio
 async def test_all_csv_list_stays_single_connection(temp_dir):
     users = temp_dir / "users.csv"
     orders = temp_dir / "orders.csv"

@@ -18,8 +18,6 @@ from pydantic_ai.messages import (
 )
 
 from sqlsaber.agents.multi_database_agent import (
-    ChildAnswerPayload,
-    DatabaseAnswer,
     DatabaseChild,
     DatabaseDescriptor,
     MultiDatabaseCoordinator,
@@ -45,7 +43,7 @@ def _messages(user_text: str, assistant_text: str) -> list[ModelMessage]:
 
 
 class FakeChildAgent:
-    def __init__(self, outputs: list[ChildAnswerPayload]) -> None:
+    def __init__(self, outputs: list[str]) -> None:
         self.outputs = outputs
         self.calls: list[dict[str, Any]] = []
         self.agent = SimpleNamespace(model=SimpleNamespace(model_name="fake-child"))
@@ -67,7 +65,7 @@ class FakeChildAgent:
         output = self.outputs.pop(0)
         messages = [
             *(message_history or []),
-            *_messages(prompt, output.summary),
+            *_messages(prompt, output),
         ]
         return SimpleNamespace(
             output=output,
@@ -94,7 +92,13 @@ class InvalidOutputChildAgent:
     async def run(self, *args: Any, **kwargs: Any) -> Any:
         _ = args
         _ = kwargs
-        return SimpleNamespace(output="not structured")
+        output = SimpleNamespace(summary="not structured")
+        messages = _messages("How many orders?", str(output))
+        return SimpleNamespace(
+            output=output,
+            all_messages=lambda: messages,
+            all_messages_json=lambda: ModelMessagesTypeAdapter.dump_json(messages),
+        )
 
 
 class AsyncClosableChildAgent:
@@ -105,15 +109,24 @@ class AsyncClosableChildAgent:
         self.closed = True
 
 
-def test_database_answer_uses_specified_fields_only() -> None:
-    assert set(DatabaseAnswer.model_fields) == {
-        "database_id",
-        "database_name",
-        "thread_id",
-        "summary",
-        "evidence",
-        "limitations",
-    }
+def test_child_prompt_requests_markdown_sections() -> None:
+    coordinator = MultiDatabaseCoordinator(
+        children={},
+        database_label="analytics",
+        model_name="anthropic:claude-3-5-sonnet",
+        api_key="test-key",
+    )
+    prompt = coordinator._child_prompt(
+        DatabaseDescriptor(id="orders", name="Orders", type="sqlite"),
+        "How many orders?",
+    )
+
+    assert "Answer using only database 'Orders'" in prompt
+    assert "## Answer" in prompt
+    assert "## Evidence" in prompt
+    assert "## SQL" in prompt
+    assert "## Limitations" in prompt
+    assert "ChildAnswerPayload" not in prompt
 
 
 def test_database_descriptor_schema_and_system_prompt_include_database_metadata() -> (
@@ -160,15 +173,17 @@ async def test_ask_database_direct_routes_reuses_thread_history_and_preserves_pa
 ) -> None:
     child_agent = FakeChildAgent(
         outputs=[
-            ChildAnswerPayload(
-                summary="Orders total is 42.",
-                evidence=["SELECT count(*) FROM orders"],
-                limitations=["Only completed orders were included."],
+            (
+                "## Answer\nOrders total is 42.\n\n"
+                "## Evidence\n- `SELECT count(*) FROM orders`\n\n"
+                "## SQL\n```sql\nSELECT count(*) FROM orders;\n```\n\n"
+                "## Limitations\n- Only completed orders were included."
             ),
-            ChildAnswerPayload(
-                summary="Revenue total is 99.",
-                evidence=["SELECT sum(total) FROM orders"],
-                limitations=["Refund data is unavailable."],
+            (
+                "## Answer\nRevenue total is 99.\n\n"
+                "## Evidence\n- `SELECT sum(total) FROM orders`\n\n"
+                "## SQL\n```sql\nSELECT sum(total) FROM orders;\n```\n\n"
+                "## Limitations\n- Refund data is unavailable."
             ),
         ]
     )
@@ -200,29 +215,34 @@ async def test_ask_database_direct_routes_reuses_thread_history_and_preserves_pa
         "orders", "What revenue?", usage=usage
     )
 
-    assert isinstance(first, DatabaseAnswer)
-    assert first.database_id == "orders"
-    assert first.database_name == "Orders"
-    assert first.thread_id is not None
-    assert first.summary == "Orders total is 42."
-    assert first.evidence == ["SELECT count(*) FROM orders"]
-    assert first.limitations == ["Only completed orders were included."]
+    assert isinstance(first, str)
+    assert "Database: Orders (id: orders)" in first
+    assert child.thread_manager.current_thread_id is not None
+    assert f"Child thread ID: {child.thread_manager.current_thread_id}" in first
+    assert "## Answer\nOrders total is 42." in first
+    assert "`SELECT count(*) FROM orders`" in first
+    assert "Only completed orders were included." in first
 
-    assert second.thread_id == first.thread_id
-    assert second.summary == "Revenue total is 99."
-    assert second.evidence == ["SELECT sum(total) FROM orders"]
-    assert second.limitations == ["Refund data is unavailable."]
+    assert f"Child thread ID: {child.thread_manager.current_thread_id}" in second
+    assert "## Answer\nRevenue total is 99." in second
+    assert "`SELECT sum(total) FROM orders`" in second
+    assert "Refund data is unavailable." in second
 
-    assert child.descriptor.thread_id == first.thread_id
+    assert child.descriptor.thread_id == child.thread_manager.current_thread_id
     assert child_agent.calls[0]["message_history"] == []
     assert child_agent.calls[0]["usage"] is usage
     assert child_agent.calls[1]["message_history"] == child.message_history[:2]
     assert child_agent.calls[1]["usage"] is usage
     assert len(child.message_history) == 4
 
-    stored_messages = await temp_storage.get_thread_messages(first.thread_id)
+    assert child.thread_manager.current_thread_id is not None
+    stored_messages = await temp_storage.get_thread_messages(
+        child.thread_manager.current_thread_id
+    )
     assert len(stored_messages) == 4
-    stored_thread = await temp_storage.get_thread(first.thread_id)
+    stored_thread = await temp_storage.get_thread(
+        child.thread_manager.current_thread_id
+    )
     assert stored_thread.title == "[Orders] How many orders?"
     assert stored_thread.model_name == "fake-child"
     assert json.loads(stored_thread.extra_metadata) == {
@@ -242,13 +262,13 @@ async def test_ask_database_direct_returns_limitation_for_unknown_database() -> 
 
     answer = await coordinator.ask_database_direct("missing", "What is here?")
 
-    assert answer == DatabaseAnswer(
-        database_id="missing",
-        database_name="missing",
-        thread_id=None,
-        summary="Unable to answer from database 'missing'.",
-        evidence=[],
-        limitations=["Unknown database id 'missing'."],
+    assert answer == (
+        "Database: missing (id: missing)\n"
+        "Child thread ID: unavailable\n\n"
+        "## Answer\n"
+        "Unable to answer from database 'missing'.\n\n"
+        "## Limitations\n"
+        "- Unknown database id 'missing'."
     )
 
 
@@ -278,16 +298,19 @@ async def test_ask_database_direct_returns_failed_answer_when_child_run_raises(
 
     answer = await coordinator.ask_database_direct("orders", "How many orders?")
 
-    assert answer.database_id == "orders"
-    assert answer.database_name == "Orders"
-    assert answer.thread_id is not None
-    assert answer.evidence == []
-    assert answer.limitations == [
-        "Child agent failed: structured output validation failed"
-    ]
+    assert "Database: Orders (id: orders)" in answer
+    assert child.thread_manager.current_thread_id is not None
+    assert f"Child thread ID: {child.thread_manager.current_thread_id}" in answer
+    assert "## Answer\nUnable to answer from database 'orders'." in answer
+    assert (
+        "## Limitations\n- Child agent failed: structured output validation failed"
+        in answer
+    )
     assert child.message_history == []
 
-    stored_thread = await temp_storage.get_thread(answer.thread_id)
+    stored_thread = await temp_storage.get_thread(
+        child.thread_manager.current_thread_id
+    )
     assert stored_thread.title == "[Orders] How many orders?"
     assert stored_thread.model_name == "fake-child"
     assert json.loads(stored_thread.extra_metadata) == {
@@ -297,7 +320,7 @@ async def test_ask_database_direct_returns_failed_answer_when_child_run_raises(
 
 
 @pytest.mark.asyncio
-async def test_ask_database_direct_returns_limitation_when_child_output_is_invalid(
+async def test_ask_database_direct_stringifies_non_string_child_output(
     temp_storage,
 ) -> None:
     child = DatabaseChild(
@@ -322,19 +345,9 @@ async def test_ask_database_direct_returns_limitation_when_child_output_is_inval
 
     answer = await coordinator.ask_database_direct("orders", "How many orders?")
 
-    assert answer.database_id == "orders"
-    assert answer.database_name == "Orders"
-    assert answer.thread_id is not None
-    assert answer.summary == (
-        "Unable to answer from database 'orders' because the child agent returned "
-        "invalid structured output."
-    )
-    assert answer.evidence == []
-    assert answer.limitations == [
-        "Child agent did not return ChildAnswerPayload structured output."
-    ]
-    assert not hasattr(answer, "success")
-    assert child.message_history == []
+    assert "Database: Orders (id: orders)" in answer
+    assert "namespace(summary='not structured')" in answer
+    assert child.message_history
 
 
 @pytest.mark.asyncio
@@ -353,18 +366,11 @@ async def test_registered_ask_database_tool_forwards_usage(monkeypatch) -> None:
         question: str,
         *,
         usage: Any | None = None,
-    ) -> DatabaseAnswer:
+    ) -> str:
         captured["database_id"] = database_id
         captured["question"] = question
         captured["usage"] = usage
-        return DatabaseAnswer(
-            database_id=database_id,
-            database_name="Orders",
-            thread_id="thread-1",
-            summary="ok",
-            evidence=[],
-            limitations=[],
-        )
+        return "ok"
 
     monkeypatch.setattr(coordinator, "ask_database_direct", fake_ask_database_direct)
     ask_tool = coordinator.agent._function_toolset.tools["ask_database"]
@@ -375,7 +381,7 @@ async def test_registered_ask_database_tool_forwards_usage(monkeypatch) -> None:
         "How many orders?",
     )
 
-    assert answer.summary == "ok"
+    assert answer == "ok"
     assert captured == {
         "database_id": "orders",
         "question": "How many orders?",

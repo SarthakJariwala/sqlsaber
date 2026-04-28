@@ -10,7 +10,6 @@ from pydantic_ai import RunContext
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 
 from sqlsaber.agents.multi_database_agent import (
-    ChildAnswerPayload,
     DatabaseChild,
     DatabaseDescriptor,
     MultiDatabaseCoordinator,
@@ -88,7 +87,7 @@ class MultiDatabaseSession:
                 allow_dangerous=options.allow_dangerous,
                 system_prompt=system_prompt_text,
                 tool_overides=options.tool_overrides,
-                output_type=ChildAnswerPayload,
+                output_type=str,
             )
             descriptor = DatabaseDescriptor(
                 id=database_id,

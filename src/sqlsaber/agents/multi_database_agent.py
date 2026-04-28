@@ -8,7 +8,7 @@ from collections.abc import AsyncIterable, Awaitable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Callable, cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 
@@ -27,25 +27,6 @@ class DatabaseDescriptor(BaseModel):
     description: str | None = None
     summary: str | None = None
     thread_id: str | None = None
-
-
-class DatabaseAnswer(BaseModel):
-    """Answer returned by a child database agent."""
-
-    database_id: str
-    database_name: str
-    thread_id: str | None = None
-    summary: str
-    evidence: list[str] = Field(default_factory=list)
-    limitations: list[str] = Field(default_factory=list)
-
-
-class ChildAnswerPayload(BaseModel):
-    """Structured output contract for SQLSaber child agents."""
-
-    summary: str
-    evidence: list[str] = Field(default_factory=list)
-    limitations: list[str] = Field(default_factory=list)
 
 
 @dataclass
@@ -154,7 +135,7 @@ class MultiDatabaseCoordinator:
             ctx: RunContext[MultiDatabaseDeps],
             database_id: str,
             question: str,
-        ) -> DatabaseAnswer:
+        ) -> str:
             return await self.ask_database_direct(
                 database_id,
                 question,
@@ -199,17 +180,20 @@ class MultiDatabaseCoordinator:
         question: str,
         *,
         usage: Any | None = None,
-    ) -> DatabaseAnswer:
-        """Ask a specific child database agent and normalize its structured answer."""
+    ) -> str:
+        """Ask a specific child database agent and return its text answer."""
         child = self.children.get(database_id)
         if child is None:
-            return DatabaseAnswer(
-                database_id=database_id,
-                database_name=database_id,
+            return self._format_child_answer(
+                database_id,
+                database_id,
                 thread_id=None,
-                summary=f"Unable to answer from database '{database_id}'.",
-                evidence=[],
-                limitations=[f"Unknown database id '{database_id}'."],
+                answer_text=(
+                    "## Answer\n"
+                    f"Unable to answer from database '{database_id}'.\n\n"
+                    "## Limitations\n"
+                    f"- Unknown database id '{database_id}'."
+                ),
             )
 
         model_name = self._child_model_name(child)
@@ -239,34 +223,19 @@ class MultiDatabaseCoordinator:
                 usage=usage,
             )
         except Exception as exc:
-            return DatabaseAnswer(
-                database_id=child.descriptor.id,
-                database_name=child.database_name,
+            return self._format_child_answer(
+                child.descriptor.id,
+                child.database_name,
                 thread_id=thread_id,
-                summary=(
-                    f"Unable to answer from database '{child.descriptor.id}' because "
-                    "the child agent failed."
+                answer_text=(
+                    "## Answer\n"
+                    f"Unable to answer from database '{child.descriptor.id}'.\n\n"
+                    "## Limitations\n"
+                    f"- Child agent failed: {exc}"
                 ),
-                evidence=[],
-                limitations=[f"Child agent failed: {exc}"],
             )
 
-        output = self._run_output(run_result)
-
-        if not isinstance(output, ChildAnswerPayload):
-            return DatabaseAnswer(
-                database_id=child.descriptor.id,
-                database_name=child.database_name,
-                thread_id=thread_id,
-                summary=(
-                    f"Unable to answer from database '{child.descriptor.id}' because "
-                    "the child agent returned invalid structured output."
-                ),
-                evidence=[],
-                limitations=[
-                    "Child agent did not return ChildAnswerPayload structured output."
-                ],
-            )
+        answer_text = self._coerce_child_answer_text(self._run_output(run_result))
 
         child.message_history = await child.thread_manager.save_run(
             run_result=run_result,
@@ -275,21 +244,60 @@ class MultiDatabaseCoordinator:
             model_name=model_name,
         )
 
-        return DatabaseAnswer(
-            database_id=child.descriptor.id,
-            database_name=child.database_name,
+        return self._format_child_answer(
+            child.descriptor.id,
+            child.database_name,
             thread_id=thread_id,
-            summary=output.summary,
-            evidence=output.evidence,
-            limitations=output.limitations,
+            answer_text=answer_text,
         )
 
     def _child_prompt(self, descriptor: DatabaseDescriptor, question: str) -> str:
         return (
             f"Answer using only database '{descriptor.name}' "
             f"(id: {descriptor.id}, type: {descriptor.type}).\n"
-            "Return ChildAnswerPayload with summary, evidence, and limitations.\n\n"
+            "Return plain markdown with these sections when they apply:\n"
+            "## Answer\n"
+            "## Evidence\n"
+            "## SQL\n"
+            "## Limitations\n\n"
+            "Evidence should include result excerpts or schema facts used. SQL should "
+            "include executed queries, or `None` if no SQL was executed. Limitations "
+            "should state missing data, ambiguity, or single-database constraints.\n\n"
             f"Question: {question}"
+        )
+
+    def _format_child_answer(
+        self,
+        database_id: str,
+        database_name: str,
+        *,
+        thread_id: str | None,
+        answer_text: str,
+    ) -> str:
+        thread_label = thread_id or "unavailable"
+        return (
+            f"Database: {database_name} (id: {database_id})\n"
+            f"Child thread ID: {thread_label}\n\n"
+            f"{answer_text.strip()}"
+        )
+
+    def _coerce_child_answer_text(self, output: Any) -> str:
+        if output is None:
+            return (
+                "## Answer\n"
+                "No answer was returned.\n\n"
+                "## Limitations\n"
+                "- Child agent returned no text."
+            )
+        text = output if isinstance(output, str) else str(output)
+        text = text.strip()
+        if text:
+            return text
+        return (
+            "## Answer\n"
+            "No answer was returned.\n\n"
+            "## Limitations\n"
+            "- Child agent returned an empty response."
         )
 
     def _run_output(self, run_result: Any) -> Any:
