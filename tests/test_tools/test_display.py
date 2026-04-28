@@ -170,6 +170,116 @@ class TestDisplayManagerResolution:
         assert "```json" in output
         assert "value" in output
 
+    def test_render_ask_database_executing_uses_readable_summary(self):
+        console, buffer = self._make_console()
+        display = DisplayManager(console)
+
+        display.show_tool_executing(
+            "ask_database",
+            {"database_id": "orders", "question": "How many orders?"},
+        )
+
+        output = buffer.getvalue()
+        assert "Asking database orders" in output
+        assert "Question:" in output
+        assert "How many orders?" in output
+        assert "```json" not in output
+        assert '"database_id"' not in output
+
+    def test_render_ask_database_result_uses_matching_tool_call_question(self):
+        console, buffer = self._make_console()
+        display = DisplayManager(console)
+        display.show_tool_executing(
+            "ask_database",
+            {"database_id": "spock-data", "question": "Question for spock"},
+            tool_call_id="call-spock",
+        )
+        display.show_tool_executing(
+            "ask_database",
+            {"database_id": "ocean-local", "question": "Question for ocean"},
+            tool_call_id="call-ocean",
+        )
+
+        display.show_tool_result(
+            "ask_database",
+            "Database: spock-data (id: spock-data)\n"
+            "Child thread ID: thread-spock\n\n"
+            "## Answer\nSpock answer.",
+            tool_call_id="call-spock",
+        )
+        display.show_tool_result(
+            "ask_database",
+            "Database: ocean-local (id: ocean-local)\n"
+            "Child thread ID: thread-ocean\n\n"
+            "## Answer\nOcean answer.",
+            tool_call_id="call-ocean",
+        )
+
+        output = buffer.getvalue()
+        spock_question_index = output.index("Question for spock")
+        spock_answer_index = output.index("Spock answer.")
+        ocean_question_index = output.index("Question for ocean")
+        ocean_answer_index = output.index("Ocean answer.")
+        assert spock_question_index < spock_answer_index
+        assert ocean_question_index < ocean_answer_index
+        assert output.count("Question for spock") == 2
+        assert output.count("Question for ocean") == 2
+
+    def test_render_ask_database_result_as_bounded_markdown_panel(self):
+        console, buffer = self._make_console()
+        display = DisplayManager(console)
+        display.show_tool_executing(
+            "ask_database",
+            {"database_id": "orders", "question": "How many orders?"},
+        )
+
+        display.show_tool_result(
+            "ask_database",
+            (
+                "Database: Orders (id: orders)\n"
+                "Child thread ID: thread-1\n\n"
+                "## Answer\n"
+                "There are 42 orders.\n\n"
+                "## SQL\n"
+                "```sql\nSELECT count(*) FROM orders;\n```"
+            ),
+        )
+
+        output = buffer.getvalue()
+        assert "Subagent answer: Orders" in output
+        assert "orders" in output
+        assert "thread-1" in output
+        assert "Question" in output
+        assert "How many orders?" in output
+        assert "There are 42 orders." in output
+        assert "SELECT count(*) FROM orders;" in output
+        assert "Database: Orders" not in output
+        assert "Child thread ID:" not in output
+        assert "```" not in output
+
+    def test_render_connected_databases_as_readable_list(self):
+        console, buffer = self._make_console()
+        display = DisplayManager(console)
+
+        display.show_tool_result(
+            "list_connected_databases",
+            [
+                {
+                    "id": "orders",
+                    "name": "Orders",
+                    "type": "sqlite",
+                    "description": "Order records",
+                }
+            ],
+        )
+
+        output = buffer.getvalue()
+        assert "Connected databases" in output
+        assert "orders" in output
+        assert "Orders" in output
+        assert "sqlite" in output
+        assert "```json" not in output
+
     def test_render_result_html_from_spec(self):
         class HtmlTool(Tool):
             display_spec = ToolDisplaySpec(
