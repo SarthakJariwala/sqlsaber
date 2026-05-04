@@ -162,14 +162,11 @@ class MultiDatabaseCoordinator:
             database_lines = "- No databases are currently connected."
 
         return (
-            "You are the SQLSaber multi-database coordinator for "
-            f"'{self.database_label}'. Route questions to the database-specific "
-            "child agents using the available tools.\n\n"
+            "You are a helpful multi-database SQL orchestrator and coordinator"
+            f"designed to help users query their {self.database_label} databases "
+            "using natural language.\n\n"
             "Connected databases:\n"
             f"{database_lines}\n\n"
-            "cross-database SQL joins cannot be executed. query databases "
-            "independently and state limitations when an answer requires comparing "
-            "or combining data across databases.\n"
             "Thread IDs are traceability metadata. Include relevant child thread "
             "IDs in answers, but do not treat transcript references as evidence."
         )
@@ -253,8 +250,6 @@ class MultiDatabaseCoordinator:
 
     def _child_prompt(self, descriptor: DatabaseDescriptor, question: str) -> str:
         return (
-            f"Answer using only database '{descriptor.name}' "
-            f"(id: {descriptor.id}, type: {descriptor.type}).\n"
             "Return plain markdown with these sections when they apply:\n"
             "## Answer\n"
             "## Evidence\n"
@@ -262,7 +257,7 @@ class MultiDatabaseCoordinator:
             "## Limitations\n\n"
             "Evidence should include result excerpts or schema facts used. SQL should "
             "include executed queries, or `None` if no SQL was executed. Limitations "
-            "should state missing data, ambiguity, or single-database constraints.\n\n"
+            "should state any missing data, ambiguity, or other relevant constraints, if present.\n\n"
             f"Question: {question}"
         )
 

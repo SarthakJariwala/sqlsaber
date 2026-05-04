@@ -133,7 +133,9 @@ class MultiDatabaseSession:
             child_was_new = child.thread_manager.current_thread_id is None
             child_thread_id = await child.thread_manager.ensure_thread(
                 database_name=child.database_name,
-                title=f"[{child.database_name}] {prompt}" if child_was_new else None,
+                title=f"[{child.database_name}] |-> {prompt}"
+                if child_was_new
+                else None,
                 model_name=model_name if child_was_new else None,
                 extra_metadata=json.dumps(
                     {
