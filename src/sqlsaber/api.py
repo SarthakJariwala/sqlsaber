@@ -11,8 +11,9 @@ from typing import Any, Callable, Protocol, Self
 from pydantic_ai import RunContext
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 
+from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.options import SQLSaberOptions
-from sqlsaber.session import SQLSaberSession
+from sqlsaber.session import create_session
 
 
 class SQLSaberRunResult(Protocol):
@@ -84,10 +85,21 @@ class SQLSaber:
         Args:
             options: Session options bag used to build the SQLSaber session.
         """
-        self._session = SQLSaberSession(options)
+        self._session = create_session(options)
         self.db_name = self._session.db_name
-        self.connection = self._session.connection
         self.agent = self._session.agent
+        self.connections = getattr(self._session, "connections", None)
+
+    @property
+    def connection(self) -> BaseDatabaseConnection:
+        """Return the single active connection, or require .connections for multi-db."""
+        connection = getattr(self._session, "connection", None)
+        if connection is None:
+            raise RuntimeError(
+                "This SQLSaber instance has multiple database connections; "
+                "use .connections to access them by database id."
+            )
+        return connection
 
     async def query(
         self,

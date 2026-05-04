@@ -33,6 +33,11 @@ DANGEROUS_MODE_SCOPE = (
 
 DANGEROUS_MODE_WARNING = f"The assistant can execute {DANGEROUS_MODE_SCOPE}"
 DANGEROUS_MODE_HELP = f"Allow {DANGEROUS_MODE_SCOPE}"
+DATABASE_HELP = (
+    "Database connection name, file path (CSV/SQLite/DuckDB), connection string "
+    "(postgresql://, mysql://, duckdb://), multiple databases via repeated -d, "
+    "or multiple CSV files via repeated -d (uses default if not specified)"
+)
 
 
 class CLIError(Exception):
@@ -64,7 +69,7 @@ def meta_handler(
         list[str] | None,
         cyclopts.Parameter(
             ["--database", "-d"],
-            help="Database connection name, file path (CSV/SQLite/DuckDB), connection string (postgresql://, mysql://, duckdb://), or one/more CSV files via repeated -d (uses default if not specified)",
+            help=DATABASE_HELP,
         ),
     ] = None,
 ):
@@ -99,7 +104,7 @@ def query(
         list[str] | None,
         cyclopts.Parameter(
             ["--database", "-d"],
-            help="Database connection name, file path (CSV/SQLite/DuckDB), connection string (postgresql://, mysql://, duckdb://), or one/more CSV files via repeated -d (uses default if not specified)",
+            help=DATABASE_HELP,
         ),
     ] = None,
     thinking: Annotated[
@@ -166,7 +171,7 @@ def query(
         from sqlsaber.cli.usage import SessionUsage
         from sqlsaber.database.resolver import DatabaseResolutionError
         from sqlsaber.options import SQLSaberOptions
-        from sqlsaber.session import SQLSaberSession
+        from sqlsaber.session import create_session
         from sqlsaber.threads.manager import ThreadManager
 
         # Check if query_text is None and stdin has data
@@ -191,7 +196,7 @@ def query(
             log.info("cli.onboarding.complete", success=True)
         thread_manager = ThreadManager()
         try:
-            session = SQLSaberSession(
+            session = create_session(
                 SQLSaberOptions(
                     database=database,
                     thinking_enabled=thinking,
@@ -202,7 +207,19 @@ def query(
             )
             db_name = session.db_name
             log.info("db.resolve.success", name=db_name)
-            log.info("db.connection.created", db_type=type(session.connection).__name__)
+            connections = getattr(session, "connections", None)
+            if connections:
+                log.info(
+                    "db.connection.created",
+                    db_type="multi-database",
+                    database_count=len(connections),
+                )
+            else:
+                connection = getattr(session, "connection", None)
+                log.info(
+                    "db.connection.created",
+                    db_type=type(connection).__name__ if connection else "unknown",
+                )
         except DatabaseResolutionError as e:
             log.error("db.resolve.error", error=str(e))
             raise CLIError(str(e))
@@ -214,12 +231,18 @@ def query(
             if actual_query:
                 # Single query mode with streaming
                 streaming_handler = StreamingQueryHandler(console)
-                db_type = session.agent.db_type
+                db_type = getattr(session.agent, "db_type", "multi-database")
                 model_name = session.agent.config.model.name
                 console.print(
                     f"[primary]Connected to:[/primary] {db_name} ({db_type})\n"
                     f"[primary]Model:[/primary] {model_name}\n"
                 )
+                connections = getattr(session, "connections", None)
+                if connections:
+                    console.print("[primary]Databases:[/primary]")
+                    for database_id, connection in connections.items():
+                        console.print(f"  - {database_id}: {connection.display_name}")
+                    console.print()
                 if allow_dangerous:
                     console.print(
                         Panel(

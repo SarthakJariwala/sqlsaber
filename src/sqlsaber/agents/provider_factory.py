@@ -59,6 +59,7 @@ class AgentProviderStrategy(abc.ABC):
         api_key: str | None = None,
         thinking_enabled: bool = False,
         thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
+        output_type: Any = str,
     ) -> Agent:
         """Create and configure an Agent for this provider.
 
@@ -67,6 +68,7 @@ class AgentProviderStrategy(abc.ABC):
             api_key: Optional API key override.
             thinking_enabled: Whether thinking/reasoning is enabled.
             thinking_level: The thinking level to use (maps to provider-specific settings).
+            output_type: Pydantic-AI output type contract for the agent.
         """
 
 
@@ -80,6 +82,7 @@ class GoogleProviderStrategy(AgentProviderStrategy):
         api_key: str | None = None,
         thinking_enabled: bool = False,
         thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
+        output_type: Any = str,
     ) -> Agent:
         if api_key:
             model_obj = GoogleModel(
@@ -96,9 +99,14 @@ class GoogleProviderStrategy(AgentProviderStrategy):
                     "thinking_level": google_level,
                 }
             )
-            return Agent(model_obj, name="sqlsaber", model_settings=settings)
+            return Agent(
+                model_obj,
+                name="sqlsaber",
+                model_settings=settings,
+                output_type=output_type,
+            )
 
-        return Agent(model_obj, name="sqlsaber")
+        return Agent(model_obj, name="sqlsaber", output_type=output_type)
 
 
 class AnthropicProviderStrategy(AgentProviderStrategy):
@@ -111,6 +119,7 @@ class AnthropicProviderStrategy(AgentProviderStrategy):
         api_key: str | None = None,
         thinking_enabled: bool = False,
         thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
+        output_type: Any = str,
     ) -> Agent:
         if api_key:
             model_obj = AnthropicModel(
@@ -133,7 +142,12 @@ class AnthropicProviderStrategy(AgentProviderStrategy):
             )
 
         settings = AnthropicModelSettings(**settings_kwargs)
-        return Agent(model_obj, name="sqlsaber", model_settings=settings)
+        return Agent(
+            model_obj,
+            name="sqlsaber",
+            model_settings=settings,
+            output_type=output_type,
+        )
 
 
 class OpenAIProviderStrategy(AgentProviderStrategy):
@@ -146,6 +160,7 @@ class OpenAIProviderStrategy(AgentProviderStrategy):
         api_key: str | None = None,
         thinking_enabled: bool = False,
         thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
+        output_type: Any = str,
     ) -> Agent:
         if api_key:
             model_obj = OpenAIResponsesModel(
@@ -160,9 +175,14 @@ class OpenAIProviderStrategy(AgentProviderStrategy):
                 openai_reasoning_effort=cast(Any, reasoning_effort),
                 openai_reasoning_summary=cast(Any, "auto"),
             )
-            return Agent(model_obj, name="sqlsaber", model_settings=settings)
+            return Agent(
+                model_obj,
+                name="sqlsaber",
+                model_settings=settings,
+                output_type=output_type,
+            )
 
-        return Agent(model_obj, name="sqlsaber")
+        return Agent(model_obj, name="sqlsaber", output_type=output_type)
 
 
 class GroqProviderStrategy(AgentProviderStrategy):
@@ -179,13 +199,19 @@ class GroqProviderStrategy(AgentProviderStrategy):
         api_key: str | None = None,
         thinking_enabled: bool = False,
         thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
+        output_type: Any = str,
     ) -> Agent:
         # Groq only supports binary reasoning.
         if thinking_enabled:
             settings = GroqModelSettings(groq_reasoning_format="parsed")
-            return Agent(model_name, name="sqlsaber", model_settings=settings)
+            return Agent(
+                model_name,
+                name="sqlsaber",
+                model_settings=settings,
+                output_type=output_type,
+            )
 
-        return Agent(model_name, name="sqlsaber")
+        return Agent(model_name, name="sqlsaber", output_type=output_type)
 
 
 class DefaultProviderStrategy(AgentProviderStrategy):
@@ -198,8 +224,9 @@ class DefaultProviderStrategy(AgentProviderStrategy):
         api_key: str | None = None,
         thinking_enabled: bool = False,
         thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
+        output_type: Any = str,
     ) -> Agent:
-        return Agent(model_name, name="sqlsaber")
+        return Agent(model_name, name="sqlsaber", output_type=output_type)
 
 
 class ProviderFactory:
@@ -226,6 +253,7 @@ class ProviderFactory:
         api_key: str | None = None,
         thinking_enabled: bool = False,
         thinking_level: ThinkingLevel = ThinkingLevel.MEDIUM,
+        output_type: Any = str,
     ) -> Agent:
         """Create an agent using the appropriate strategy.
 
@@ -236,6 +264,7 @@ class ProviderFactory:
             api_key: Optional API key.
             thinking_enabled: Whether to enable thinking/reasoning features.
             thinking_level: The thinking level to use (maps to provider-specific settings).
+            output_type: Pydantic-AI output type contract for the agent.
         """
         strategy = self.get_strategy(provider)
 
@@ -251,4 +280,5 @@ class ProviderFactory:
             api_key=api_key,
             thinking_enabled=thinking_enabled,
             thinking_level=thinking_level,
+            output_type=output_type,
         )

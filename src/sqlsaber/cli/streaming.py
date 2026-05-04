@@ -74,7 +74,7 @@ class StreamingQueryHandler:
             self.display.live.append(event.part.content)
         elif isinstance(event.part, ToolCallPart):
             self._tool_call_names[event.index] = event.part.tool_name
-            self._maybe_start_sql_generation_status(event.part.tool_name)
+            self._maybe_start_tool_status(event.part.tool_name)
 
     @on_event.register
     async def _(self, event: PartDeltaEvent, ctx: RunContext) -> None:
@@ -94,7 +94,7 @@ class StreamingQueryHandler:
                 current_name = self._tool_call_names.get(event.index, "")
                 updated_name = f"{current_name}{d.tool_name_delta}"
                 self._tool_call_names[event.index] = updated_name
-                self._maybe_start_sql_generation_status(updated_name)
+                self._maybe_start_tool_status(updated_name)
 
     @on_event.register
     async def _(self, event: PartEndEvent, ctx: RunContext) -> None:
@@ -113,13 +113,35 @@ class StreamingQueryHandler:
             if isinstance(query, str) and query.strip():
                 self.display.live.start_sql_block(query)
         else:
-            self.display.show_tool_executing(event.part.tool_name, args)
-            if event.part.tool_name == "viz":
-                self.display.live.start_status("Generating visualization...")
+            self.display.show_tool_executing(
+                event.part.tool_name,
+                args,
+                tool_call_id=event.part.tool_call_id,
+            )
+            status = self._tool_execution_status(event.part.tool_name, args)
+            if status:
+                self.display.live.start_status(status)
 
-    def _maybe_start_sql_generation_status(self, tool_name: str) -> None:
+    def _maybe_start_tool_status(self, tool_name: str) -> None:
+        status = self._tool_execution_status(tool_name, {})
+        if status:
+            self.display.live.start_status(status)
+
+    def _tool_execution_status(
+        self, tool_name: str, args: dict[str, Any]
+    ) -> str | None:
         if tool_name == "execute_sql":
-            self.display.live.start_status("Generating SQL...")
+            return "Generating SQL..."
+        if tool_name == "ask_database":
+            database_id = str(args.get("database_id") or "").strip()
+            if database_id:
+                return f"Querying database {database_id}..."
+            return "Querying database..."
+        if tool_name == "list_connected_databases":
+            return "Inspecting connected databases..."
+        if tool_name == "viz":
+            return "Generating visualization..."
+        return None
 
     @on_event.register
     async def _(self, event: FunctionToolResultEvent, ctx: RunContext) -> None:
@@ -129,7 +151,8 @@ class StreamingQueryHandler:
         content = event.result.content
         if tool_name is None:
             return
-        self.display.show_tool_result(tool_name, content)
+        tool_call_id = getattr(event.result, "tool_call_id", None)
+        self.display.show_tool_result(tool_name, content, tool_call_id=tool_call_id)
         # Add a blank line after tool output to separate from next segment
         self.display.show_newline()
         # Show status while agent sends a follow-up request to the model

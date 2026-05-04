@@ -55,6 +55,34 @@ async def test_init_with_id(temp_storage):
 
 
 @pytest.mark.asyncio
+async def test_ensure_thread_precreates_thread(thread_manager, temp_storage) -> None:
+    thread_id = await thread_manager.ensure_thread(
+        database_name="warehouse",
+        title="Compare customers",
+        model_name="claude",
+        extra_metadata='{"kind": "multi_database_parent"}',
+    )
+
+    assert thread_manager.current_thread_id == thread_id
+    assert thread_manager.first_message is False
+
+    thread = await temp_storage.get_thread(thread_id)
+    assert thread is not None
+    assert thread.database_name == "warehouse"
+    assert thread.title == "Compare customers"
+    assert thread.model_name == "claude"
+    assert thread.extra_metadata == '{"kind": "multi_database_parent"}'
+
+
+@pytest.mark.asyncio
+async def test_ensure_thread_reuses_existing_thread(thread_manager) -> None:
+    first_id = await thread_manager.ensure_thread(database_name="warehouse")
+    second_id = await thread_manager.ensure_thread(database_name="warehouse")
+
+    assert second_id == first_id
+
+
+@pytest.mark.asyncio
 async def test_end_current_thread_active(thread_manager, temp_storage):
     """Test ending an active thread."""
     # Create a thread first

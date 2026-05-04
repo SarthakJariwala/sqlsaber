@@ -52,7 +52,10 @@ class InteractiveSession:
         self.console = console
         self.session = session
         self.sqlsaber_agent = session.agent
-        self.db_conn = session.connection
+        self.connections = getattr(session, "connections", None)
+        self.db_conn = (
+            None if self.connections else getattr(session, "connection", None)
+        )
         self.database_name = session.db_name
         self.display = DisplayManager(console)
         self.streaming_handler = StreamingQueryHandler(console)
@@ -109,6 +112,11 @@ class InteractiveSession:
 
     def _db_type_name(self) -> str:
         """Get human-readable database type name."""
+        if self.connections:
+            return "multi-database"
+        if self.db_conn is None:
+            return "database"
+
         mapping = {
             PostgreSQLConnection: "PostgreSQL",
             MySQLConnection: "MySQL",
@@ -148,6 +156,10 @@ class InteractiveSession:
 
     async def _update_table_cache(self):
         """Update the table completer cache with fresh data."""
+        if self.connections or self.db_conn is None:
+            self.table_completer.update_cache([])
+            return
+
         try:
             tables_data = await SchemaManager(self.db_conn).list_tables()
 

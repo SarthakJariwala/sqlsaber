@@ -366,7 +366,7 @@ LIMIT_ALL_UNBOUNDED_DIALECTS: set[str] = {
 }
 
 # Known from-less projection nodes/functions that can yield multiple rows.
-SET_RETURNING_PROJECTION_NODE_TYPES: tuple[type[exp.Expression], ...] = (
+SET_RETURNING_PROJECTION_NODE_TYPES: tuple[type[exp.Expr], ...] = (
     exp.Explode,
     exp.ExplodeOuter,
     exp.Unnest,
@@ -1611,7 +1611,7 @@ def _has_global_aggregate_without_group(select: exp.Select) -> bool:
     if select.args.get("group") is not None:
         return False
 
-    def should_prune(node: exp.Expression) -> bool:
+    def should_prune(node: exp.Expr) -> bool:
         return node is not select and isinstance(
             node,
             (exp.Subquery, exp.Select, exp.Union, exp.Except, exp.Intersect),
@@ -2696,7 +2696,7 @@ def _expression_references_target_symbols(
     if expression is None or not target_symbols:
         return False
 
-    def should_prune(node: exp.Expression) -> bool:
+    def should_prune(node: exp.Expr) -> bool:
         return isinstance(
             node,
             (exp.Subquery, exp.Select, exp.Union, exp.Except, exp.Intersect),
@@ -3449,7 +3449,9 @@ def _unfiltered_mutation_reason(
 
     where_clause = node.args.get("where")
     if not where_clause:
-        return f"{operation} without WHERE clause is not allowed (would affect all rows)"
+        return (
+            f"{operation} without WHERE clause is not allowed (would affect all rows)"
+        )
 
     if not isinstance(where_clause, exp.Where):
         return None
@@ -3665,9 +3667,7 @@ def has_disallowed_dangerous_mode_statement(stmt: exp.Expression) -> str | None:
             if expression is not None and not is_select_like(expression):
                 return "CREATE VIEW must be based on a SELECT-like expression"
         elif (
-            kind == "INDEX"
-            and target is not None
-            and not isinstance(target, exp.Index)
+            kind == "INDEX" and target is not None and not isinstance(target, exp.Index)
         ):
             return "Only CREATE INDEX statements are allowed in dangerous mode"
 
@@ -3727,7 +3727,7 @@ def validate_read_only(sql: str, dialect: str = "ansi") -> GuardResult:
         )
 
     stmt = statements[0]
-    if stmt is None:
+    if stmt is None or not isinstance(stmt, exp.Expression):
         return GuardResult(False, "Unable to parse query - empty statement")
 
     # Must be a SELECT-like statement
@@ -3797,7 +3797,7 @@ def validate_sql(
         )
 
     stmt = statements[0]
-    if stmt is None:
+    if stmt is None or not isinstance(stmt, exp.Expression):
         return GuardResult(False, "Unable to parse query - empty statement")
 
     try:
@@ -3864,7 +3864,7 @@ def add_limit(sql: str, dialect: str = "ansi", limit: int = 100) -> str:
             return sql
 
         stmt = statements[0]
-        if stmt is None:
+        if stmt is None or not isinstance(stmt, exp.Expression):
             return sql
 
         # Check if LIMIT/TOP/FETCH already exists

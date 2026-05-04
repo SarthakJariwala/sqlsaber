@@ -50,6 +50,24 @@ def _parse_schema_list(raw: str | None) -> SchemaList:
     return _normalize_schema_list(raw.split(","))
 
 
+def _normalize_description(description: str | None) -> str | None:
+    """Return a stripped description, or None when empty."""
+    if description is None:
+        return None
+    stripped = description.strip()
+    return stripped or None
+
+
+def _format_description(description: str | None) -> str:
+    """Format a concise description for table display."""
+    normalized = _normalize_description(description)
+    if normalized is None:
+        return ""
+    if len(normalized) <= 60:
+        return normalized
+    return f"{normalized[:57]}..."
+
+
 @db_app.command
 def add(
     name: Annotated[str, cyclopts.Parameter(help="Name for the database connection")],
@@ -102,6 +120,10 @@ def add(
             help="Comma-separated list of schemas to exclude from introspection",
         ),
     ] = None,
+    description: Annotated[
+        str | None,
+        cyclopts.Parameter(["--description"], help="Description of this database"),
+    ] = None,
     interactive: Annotated[
         bool,
         cyclopts.Parameter(
@@ -150,6 +172,7 @@ def add(
         ssl_ca = db_input.ssl_ca
         ssl_cert = db_input.ssl_cert
         ssl_key = db_input.ssl_key
+        description = db_input.description
         exclude_schema_list = _normalize_schema_list(db_input.exclude_schemas)
     else:
         # Non-interactive mode - use provided values or defaults
@@ -194,6 +217,8 @@ def add(
             )
         exclude_schema_list = _parse_schema_list(exclude_schemas)
 
+    normalized_description = _normalize_description(description)
+
     # Create database config
     # At this point, all required values should be set
     assert database is not None, "Database should be set by now"
@@ -213,6 +238,7 @@ def add(
         ssl_ca=ssl_ca,
         ssl_cert=ssl_cert,
         ssl_key=ssl_key,
+        description=normalized_description,
         exclude_schemas=exclude_schema_list,
     )
 
@@ -250,13 +276,16 @@ def list_databases() -> None:
 
     table = Table(title="Database Connections")
     table.add_column("Name", style="info")
+    table.add_column("Description", style="muted", overflow="fold", max_width=24)
     table.add_column("Type", style="accent")
-    table.add_column("Host", style="success")
-    table.add_column("Port", style="warning")
     table.add_column("Database", style="info")
-    table.add_column("Username", style="info")
-    table.add_column("Excluded Schemas", style="muted")
-    table.add_column("SSL", style="success")
+    show_details = console.width >= 120
+    if show_details:
+        table.add_column("Host", style="success")
+        table.add_column("Port", style="warning")
+        table.add_column("Username", style="info")
+        table.add_column("Excluded Schemas", style="muted")
+        table.add_column("SSL", style="success")
     table.add_column("Default", style="error")
 
     for db in databases:
@@ -271,20 +300,92 @@ def list_databases() -> None:
         else:
             ssl_status = "disabled" if db.type not in {"sqlite", "duckdb"} else "N/A"
 
-        table.add_row(
+        row = [
             db.name,
+            _format_description(db.description),
             db.type,
-            db.host,
-            str(db.port) if db.port else "",
             db.database,
-            db.username,
-            ", ".join(db.exclude_schemas) if db.exclude_schemas else "",
-            ssl_status,
-            is_default,
-        )
+        ]
+        if show_details:
+            row.extend(
+                [
+                    db.host or "",
+                    str(db.port) if db.port else "",
+                    db.username or "",
+                    ", ".join(db.exclude_schemas) if db.exclude_schemas else "",
+                    ssl_status,
+                ]
+            )
+        row.append(is_default)
+        table.add_row(*row)
 
     console.print(table)
     logger.info("db.list.complete", count=len(databases))
+
+
+@db_app.command
+def describe(
+    name: Annotated[
+        str,
+        cyclopts.Parameter(help="Name of the database connection to update"),
+    ],
+    set_description: Annotated[
+        str | None,
+        cyclopts.Parameter(["--set"], help="Set the database description"),
+    ] = None,
+    clear: Annotated[
+        bool,
+        cyclopts.Parameter(["--clear"], help="Clear the description"),
+    ] = False,
+) -> None:
+    """Update the description for a database connection."""
+    logger.info(
+        "db.describe.start",
+        name=name,
+        set=bool(set_description),
+        clear=clear,
+    )
+    db_config = config_manager.get_database(name)
+    if db_config is None:
+        console.print(
+            f"[bold error]Error: Database connection '{name}' not found[/bold error]"
+        )
+        logger.error("db.describe.not_found", name=name)
+        raise SystemExit(1)
+
+    if set_description is not None and clear:
+        console.print(
+            "[bold error]Error: Specify only one of --set or --clear[/bold error]"
+        )
+        logger.error("db.describe.multiple_actions", name=name)
+        raise SystemExit(1)
+
+    if clear:
+        updated_description = None
+    elif set_description is not None:
+        updated_description = _normalize_description(set_description)
+    else:
+        response = questionary.text(
+            "Description:", default=db_config.description or ""
+        ).ask()
+        if response is None:
+            console.print("[warning]Operation cancelled[/warning]")
+            logger.info("db.describe.cancelled", name=name)
+            return
+        updated_description = _normalize_description(response)
+
+    db_config.description = updated_description
+    config_manager.update_database(db_config)
+
+    console.print(
+        f"[success]Updated description for '{name}':[/success] "
+        f"{db_config.description or '(none)'}"
+    )
+    logger.info(
+        "db.describe.success",
+        name=name,
+        has_description=db_config.description is not None,
+    )
 
 
 @db_app.command

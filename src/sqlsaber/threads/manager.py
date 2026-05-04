@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING
 
+from pydantic_ai.messages import ModelMessagesTypeAdapter
+
 from sqlsaber.config.logging import get_logger
 from sqlsaber.threads.storage import ThreadStorage
 
@@ -45,6 +47,37 @@ class ThreadManager:
         await self.end_current_thread()
         self.current_thread_id = None
         self.first_message = True
+
+    async def ensure_thread(
+        self,
+        *,
+        database_name: str | None,
+        title: str | None = None,
+        model_name: str | None = None,
+        extra_metadata: str | None = None,
+    ) -> str:
+        """Create the active thread before model execution if it does not exist."""
+        if self.current_thread_id is None:
+            self.current_thread_id = await self.storage.save_snapshot(
+                messages_json=ModelMessagesTypeAdapter.dump_json([]),
+                database_name=database_name,
+                extra_metadata=extra_metadata,
+            )
+        elif extra_metadata is not None:
+            await self.storage.save_metadata(
+                thread_id=self.current_thread_id,
+                extra_metadata=extra_metadata,
+            )
+
+        if title is not None or model_name is not None:
+            await self.storage.save_metadata(
+                thread_id=self.current_thread_id,
+                title=title,
+                model_name=model_name,
+            )
+            self.first_message = False
+
+        return self.current_thread_id
 
     async def save_run(
         self,

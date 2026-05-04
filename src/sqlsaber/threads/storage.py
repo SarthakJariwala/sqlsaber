@@ -53,6 +53,7 @@ class Thread:
         ended_at: float | None,
         last_activity_at: float,
         model_name: str | None,
+        extra_metadata: str | None = None,
     ) -> None:
         self.id = id
         self.database_name = database_name
@@ -61,6 +62,7 @@ class Thread:
         self.ended_at = ended_at
         self.last_activity_at = last_activity_at
         self.model_name = model_name
+        self.extra_metadata = extra_metadata
 
 
 class ThreadStorage:
@@ -78,6 +80,12 @@ class ThreadStorage:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             async with aiosqlite.connect(self.db_path) as db:
                 await db.executescript(SCHEMA_SQL)
+                async with db.execute("PRAGMA table_info(threads)") as cur:
+                    columns = {row[1] async for row in cur}
+                if "extra_metadata" not in columns:
+                    await db.execute(
+                        "ALTER TABLE threads ADD COLUMN extra_metadata TEXT"
+                    )
                 await db.commit()
             self._initialized = True
             logger.info("threads.db.init", path=str(self.db_path))
@@ -155,19 +163,36 @@ class ThreadStorage:
         thread_id: str,
         title: str | None = None,
         model_name: str | None = None,
+        extra_metadata: str | None = None,
     ) -> bool:
         """Update thread metadata (title/model/extra). Only provided fields are updated."""
         await self._init_db()
+
+        update_title = title is not None
+        update_model_name = model_name is not None
+        update_extra_metadata = extra_metadata is not None
+        if not (update_title or update_model_name or update_extra_metadata):
+            return True
 
         try:
             async with self._lock, aiosqlite.connect(self.db_path) as db:
                 await db.execute(
                     """
                     UPDATE threads
-                    SET title = ?, model_name = ?
+                    SET title = CASE WHEN ? THEN ? ELSE title END,
+                        model_name = CASE WHEN ? THEN ? ELSE model_name END,
+                        extra_metadata = CASE WHEN ? THEN ? ELSE extra_metadata END
                     WHERE id = ?
                     """,
-                    (title, model_name, thread_id),
+                    (
+                        update_title,
+                        title,
+                        update_model_name,
+                        model_name,
+                        update_extra_metadata,
+                        extra_metadata,
+                        thread_id,
+                    ),
                 )
                 await db.commit()
             logger.info("threads.update_metadata", thread_id=thread_id)
@@ -200,7 +225,7 @@ class ThreadStorage:
                 async with db.execute(
                     """
                     SELECT id, database_name, title, created_at, ended_at,
-                           last_activity_at, model_name
+                           last_activity_at, model_name, extra_metadata
                     FROM threads WHERE id = ?
                     """,
                     (thread_id,),
@@ -216,6 +241,7 @@ class ThreadStorage:
                         ended_at=row[4],
                         last_activity_at=row[5],
                         model_name=row[6],
+                        extra_metadata=row[7],
                     )
         except Exception as e:  # pragma: no cover
             logger.warning("threads.get_failed", thread_id=thread_id, error=str(e))
@@ -247,7 +273,8 @@ class ThreadStorage:
         await self._init_db()
         try:
             query = (
-                "SELECT id, database_name, title, created_at, ended_at, last_activity_at, model_name"
+                "SELECT id, database_name, title, created_at, ended_at, last_activity_at,"
+                " model_name, extra_metadata"
                 " FROM threads"
             )
             params: list[Any] = []
@@ -270,6 +297,7 @@ class ThreadStorage:
                                 ended_at=row[4],
                                 last_activity_at=row[5],
                                 model_name=row[6],
+                                extra_metadata=row[7],
                             )
                         )
                     return threads

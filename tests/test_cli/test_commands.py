@@ -1,8 +1,20 @@
 """Tests for CLI commands."""
 
+import re
+
 import pytest
 
 from sqlsaber.cli.commands import app
+
+
+def test_query_help_mentions_multiple_databases(capsys):
+    """Test query help mentions repeated database options."""
+    with pytest.raises(SystemExit) as exc_info:
+        app(["--help"])
+
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert re.search(r"multiple\W+databases", captured.out.lower())
 
 
 class TestCLICommands:

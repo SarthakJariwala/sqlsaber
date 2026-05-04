@@ -48,6 +48,7 @@ class SQLSaberAgent:
         allow_dangerous: bool = False,
         system_prompt: str | None = None,
         tool_overides: ToolOveridesInput | None = None,
+        output_type: Any = str,
     ):
         self.db_connection = db_connection
         self.database_name = database_name
@@ -63,6 +64,7 @@ class SQLSaberAgent:
         self.db_type = self.db_connection.display_name
         self.allow_dangerous = allow_dangerous
         self._tool_overides = normalize_tool_overides(tool_overides)
+        self.output_type = output_type
 
         self.schema_manager = SchemaManager(self.db_connection)
 
@@ -126,6 +128,7 @@ class SQLSaberAgent:
             api_key=api_key,
             thinking_enabled=self.thinking_enabled,
             thinking_level=self.thinking_level,
+            output_type=self.output_type,
         )
 
         self._setup_system_prompt(agent)
@@ -188,6 +191,7 @@ class SQLSaberAgent:
             Awaitable[None],
         ]
         | None = None,
+        usage: Any | None = None,
     ) -> Any:
         """Run the agent."""
         run_agent = cast(Agent[ToolRunDeps, Any], self.agent)
@@ -196,6 +200,7 @@ class SQLSaberAgent:
             message_history=message_history,
             event_stream_handler=event_stream_handler,
             deps=build_tool_run_deps(self._tool_overides),
+            usage=usage,
         )
 
     async def close(self) -> None:

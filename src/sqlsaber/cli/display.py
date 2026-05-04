@@ -10,12 +10,13 @@ from typing import TYPE_CHECKING, Type
 
 from pydantic_ai.messages import ModelResponsePart, TextPart, ThinkingPart
 from rich.columns import Columns
-from rich.console import Console, ConsoleOptions, RenderResult
+from rich.console import Console, ConsoleOptions, Group, RenderResult
 from rich.live import Live
 from rich.markdown import CodeBlock, Markdown
 from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.syntax import Syntax
+from rich.table import Table
 from rich.text import Text
 from sqlsaber.theme.manager import get_theme_manager
 from sqlsaber.tools.display import ResultConfig, SpecRenderer, ToolDisplaySpec
@@ -213,14 +214,27 @@ class DisplayManager:
         self.tm = get_theme_manager()
         self._spec_renderer = SpecRenderer(self.tm)
         self._replay_messages: list | None = None
+        self._pending_ask_database_context: dict[str, str] | None = None
+        self._pending_ask_database_contexts: dict[str, dict[str, str]] = {}
 
     def set_replay_messages(self, messages: list) -> None:
         """Set message history for replay scenarios (e.g., threads show)."""
         self._replay_messages = messages
 
-    def show_tool_executing(self, tool_name: str, tool_input: dict):
+    def show_tool_executing(
+        self,
+        tool_name: str,
+        tool_input: dict,
+        *,
+        tool_call_id: str | None = None,
+    ):
         """Display tool execution details."""
         self.show_newline()
+        if self._render_coordinator_tool_executing(
+            tool_name, tool_input, tool_call_id=tool_call_id
+        ):
+            return
+
         tool = self._get_tool(tool_name)
         if tool and tool.render_executing(self.console, tool_input):
             return
@@ -239,8 +253,19 @@ class DisplayManager:
         if text is not None:  # Extra safety check
             self.console.print(text, end="", markup=False)
 
-    def show_tool_result(self, tool_name: str, result: object) -> None:
+    def show_tool_result(
+        self,
+        tool_name: str,
+        result: object,
+        *,
+        tool_call_id: str | None = None,
+    ) -> None:
         """Display tool result using override/spec/fallback resolution."""
+        if self._render_coordinator_tool_result(
+            tool_name, result, tool_call_id=tool_call_id
+        ):
+            return
+
         tool = self._get_tool(tool_name)
         if tool:
             if self._replay_messages is not None and hasattr(
@@ -296,6 +321,185 @@ class DisplayManager:
             return tool_registry.get_tool(tool_name)
         except KeyError:
             return None
+
+    def _render_coordinator_tool_executing(
+        self, tool_name: str, tool_input: dict, *, tool_call_id: str | None
+    ) -> bool:
+        if tool_name == "ask_database":
+            database_id = str(tool_input.get("database_id") or "database")
+            question = str(tool_input.get("question") or "").strip()
+            context = {
+                "database_id": database_id,
+                "question": question,
+            }
+            if tool_call_id:
+                self._pending_ask_database_contexts[tool_call_id] = context
+            else:
+                self._pending_ask_database_context = context
+
+            if self.console.is_terminal:
+                line = Text("Asking database ", style=self.tm.style("muted"))
+                line.append(database_id, style=self.tm.style("info"))
+                self.console.print(line)
+                if question:
+                    question_text = Text("Question: ", style=self.tm.style("muted"))
+                    question_text.append(question)
+                    self.console.print(question_text)
+            else:
+                self.console.print(f"**Asking database {database_id}**")
+                if question:
+                    self.console.print(f"Question: {question}")
+            return True
+
+        if tool_name == "list_connected_databases":
+            if self.console.is_terminal:
+                self.console.print(
+                    "[muted bold]Checking connected databases[/muted bold]"
+                )
+            else:
+                self.console.print("**Checking connected databases**")
+            return True
+
+        return False
+
+    def _render_coordinator_tool_result(
+        self, tool_name: str, result: object, *, tool_call_id: str | None
+    ) -> bool:
+        if tool_name == "ask_database":
+            self._render_ask_database_result(result, tool_call_id=tool_call_id)
+            return True
+
+        if tool_name == "list_connected_databases":
+            self._render_connected_databases(result)
+            return True
+
+        return False
+
+    def _render_ask_database_result(
+        self, result: object, *, tool_call_id: str | None
+    ) -> None:
+        database_name, database_id, thread_id, answer_text = (
+            self._split_child_answer_result(str(result))
+        )
+        context = self._pop_ask_database_context(tool_call_id)
+        if not database_id:
+            database_id = context.get("database_id")
+        question = context.get("question", "").strip()
+
+        title_target = database_name or database_id or "database"
+        panel_title = f"Subagent answer: {title_target}"
+        if database_id and database_id != title_target:
+            panel_title = f"{panel_title} ({database_id})"
+
+        renderables = []
+        if question:
+            question_text = Text()
+            question_text.append("Question: ", style=self.tm.style("muted"))
+            question_text.append(question)
+            renderables.append(question_text)
+        if thread_id:
+            thread_text = Text()
+            thread_text.append("Thread: ", style=self.tm.style("muted"))
+            thread_text.append(thread_id, style=self.tm.style("muted"))
+            renderables.append(thread_text)
+        if renderables:
+            renderables.append(Text(""))
+        renderables.append(
+            Markdown(answer_text, code_theme=self.tm.pygments_style_name)
+        )
+
+        self.console.print(
+            Panel(
+                Group(*renderables),
+                title=panel_title,
+                border_style=self.tm.style("panel.border.assistant"),
+                expand=True,
+            )
+        )
+
+    def _pop_ask_database_context(self, tool_call_id: str | None) -> dict[str, str]:
+        if tool_call_id:
+            context = self._pending_ask_database_contexts.pop(tool_call_id, None)
+            if context is not None:
+                return context
+
+        context = self._pending_ask_database_context or {}
+        self._pending_ask_database_context = None
+        return context
+
+    def _split_child_answer_result(
+        self, result: str
+    ) -> tuple[str | None, str | None, str | None, str]:
+        lines = result.strip().splitlines()
+        if not lines:
+            return None, None, None, ""
+
+        database_name: str | None = None
+        database_id: str | None = None
+        thread_id: str | None = None
+        body_start = 0
+
+        first = lines[0].strip()
+        if first.startswith("Database: "):
+            database_label = first.removeprefix("Database: ").strip()
+            if database_label.endswith(")") and " (id: " in database_label:
+                database_name, raw_id = database_label.rsplit(" (id: ", 1)
+                database_id = raw_id[:-1]
+            else:
+                database_name = database_label
+            body_start = 1
+
+        if len(lines) > body_start:
+            candidate = lines[body_start].strip()
+            if candidate.startswith("Child thread ID: "):
+                thread_id = candidate.removeprefix("Child thread ID: ").strip()
+                body_start += 1
+
+        answer_text = "\n".join(lines[body_start:]).strip()
+        return database_name, database_id, thread_id, answer_text
+
+    def _render_connected_databases(self, result: object) -> None:
+        rows = self._coerce_database_rows(result)
+        if not rows:
+            self.console.print("[muted]No connected databases.[/muted]")
+            return
+
+        table = Table(title="Connected databases")
+        table.add_column("ID", style=self.tm.style("info"))
+        table.add_column("Name")
+        table.add_column("Type", style=self.tm.style("muted"))
+        table.add_column("Description", style=self.tm.style("muted"))
+        for row in rows:
+            table.add_row(
+                str(row.get("id") or ""),
+                str(row.get("name") or ""),
+                str(row.get("type") or ""),
+                str(row.get("description") or row.get("summary") or ""),
+            )
+        self.console.print(table)
+
+    def _coerce_database_rows(self, result: object) -> list[dict[str, object]]:
+        data = result
+        if isinstance(result, str):
+            try:
+                data = json.loads(result)
+            except json.JSONDecodeError:
+                return []
+
+        if not isinstance(data, list):
+            return []
+
+        rows: list[dict[str, object]] = []
+        for item in data:
+            if isinstance(item, dict):
+                rows.append({str(key): value for key, value in item.items()})
+                continue
+            model_dump = getattr(item, "model_dump", None)
+            if callable(model_dump):
+                dumped = model_dump()
+                if isinstance(dumped, dict):
+                    rows.append({str(key): value for key, value in dumped.items()})
+        return rows
 
     def _render_fallback_result(self, result: object) -> None:
         if isinstance(result, str):

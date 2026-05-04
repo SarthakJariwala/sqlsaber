@@ -26,6 +26,14 @@ def _normalize_schemas(schemas: list[str]) -> list[str]:
     return normalized
 
 
+def _normalize_description(description: str | None) -> str | None:
+    """Return a stripped description, or None when empty."""
+    if description is None:
+        return None
+    stripped = description.strip()
+    return stripped or None
+
+
 @dataclass
 class DatabaseInput:
     """Input data for database configuration."""
@@ -41,6 +49,7 @@ class DatabaseInput:
     ssl_ca: str | None = None
     ssl_cert: str | None = None
     ssl_key: str | None = None
+    description: str | None = None
     exclude_schemas: list[str] = field(default_factory=list)
 
 
@@ -187,6 +196,10 @@ async def collect_db_input(
             return None
         exclude_schemas = _normalize_schemas(exclude_prompt.split(","))
 
+    description = await prompter.text("Description (optional):", default="")
+    if description is None:
+        return None
+
     return DatabaseInput(
         name=name,
         type=db_type,
@@ -199,6 +212,7 @@ async def collect_db_input(
         ssl_ca=ssl_ca,
         ssl_cert=ssl_cert,
         ssl_key=ssl_key,
+        description=_normalize_description(description),
         exclude_schemas=exclude_schemas,
     )
 
@@ -216,6 +230,7 @@ def build_config(db_input: DatabaseInput) -> DatabaseConfig:
         ssl_ca=db_input.ssl_ca,
         ssl_cert=db_input.ssl_cert,
         ssl_key=db_input.ssl_key,
+        description=db_input.description,
         exclude_schemas=_normalize_schemas(db_input.exclude_schemas),
     )
 
