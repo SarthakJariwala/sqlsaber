@@ -65,6 +65,14 @@ async def test_process_clear_command(processor, mock_context):
 
 
 @pytest.mark.asyncio
+async def test_process_settings_is_not_a_slash_command(processor, mock_context):
+    """Test /settings is not handled as a text slash command."""
+    result = await processor.process("/settings", mock_context)
+
+    assert result.handled is False
+
+
+@pytest.mark.asyncio
 async def test_process_thinking_on(processor, mock_context):
     """Test processing /thinking on command."""
     result = await processor.process("/thinking on", mock_context)

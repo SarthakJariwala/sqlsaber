@@ -1,5 +1,7 @@
 """Interactive mode handling for the CLI."""
 
+from __future__ import annotations
+
 import asyncio
 from collections.abc import Callable
 from pathlib import Path
@@ -7,21 +9,15 @@ from textwrap import dedent
 from typing import TYPE_CHECKING
 
 import platformdirs
-from prompt_toolkit import PromptSession
-from prompt_toolkit.history import FileHistory
-from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from sqlsaber.cli.completers import (
-    CompositeCompleter,
-    SlashCommandCompleter,
-    TableNameCompleter,
-)
+from sqlsaber.cli.completers import SQLSaberAutocompleteProvider
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.slash_commands import CommandContext, SlashCommandProcessor
-from sqlsaber.cli.streaming import StreamingQueryHandler
+from sqlsaber.cli.tui_chat import ChatApp, ChatConsole, build_chat_app
+from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
 from sqlsaber.cli.usage import SessionUsage
 from sqlsaber.config.logging import get_logger
 from sqlsaber.database import (
@@ -37,6 +33,8 @@ from sqlsaber.theme.manager import get_theme_manager
 
 if TYPE_CHECKING:
     from sqlsaber.session import SQLSaberSession
+
+QUERY_CANCEL_GRACE_SECONDS = 0.1
 
 
 class InteractiveSession:
@@ -55,14 +53,16 @@ class InteractiveSession:
         self.db_conn = session.connection
         self.database_name = session.db_name
         self.display = DisplayManager(console)
-        self.streaming_handler = StreamingQueryHandler(console)
+        self.streaming_handler: TUIStreamingQueryHandler | None = None
         self.current_task: asyncio.Task | None = None
         self.cancellation_token: asyncio.Event | None = None
-        self.table_completer = TableNameCompleter()
+        self._submit_pending = False
+        self.autocomplete_provider = SQLSaberAutocompleteProvider()
         self.message_history: list | None = initial_history or []
         self.tm = get_theme_manager()
+        self._handoff_mode = False
+        self._exit_finalized = False
 
-        # Component Managers
         if session.thread_manager is None:
             raise ValueError(
                 "InteractiveSession requires SQLSaberSession with thread_manager set."
@@ -79,14 +79,25 @@ class InteractiveSession:
         history_dir.mkdir(parents=True, exist_ok=True)
         return history_dir / "history"
 
-    def _bottom_toolbar(self):
-        """Get the bottom toolbar text."""
-        return [
-            (
-                "class:bottom-toolbar",
-                " Use 'Esc-Enter' or 'Meta-Enter' to submit.",
-            )
-        ]
+    def _load_history(self) -> list[str]:
+        path = self._history_path()
+        if not path.exists():
+            return []
+        try:
+            return [
+                line[1:] if line.startswith("+") else line
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ][-100:]
+        except OSError:
+            return []
+
+    def _append_history(self, text: str) -> None:
+        try:
+            with self._history_path().open("a", encoding="utf-8") as history_file:
+                history_file.write(f"+{text.replace('\n', ' ')}\n")
+        except OSError:
+            return
 
     def _banner(self) -> str:
         """Get the ASCII banner."""
@@ -122,36 +133,39 @@ class InteractiveSession:
                 return name
         return "database"
 
-    def show_welcome_message(self):
-        """Display welcome message for interactive mode."""
-        if self.thread_manager.first_message:
-            self.console.print(Panel.fit(self._banner(), border_style="primary"))
-            self.console.print(
-                Markdown(
-                    self._instructions(),
-                    code_theme=self.tm.pygments_style_name,
-                    inline_code_theme=self.tm.pygments_style_name,
-                )
-            )
+    def _model_name(self) -> str:
+        return getattr(self.sqlsaber_agent.agent.model, "model_name", "Unknown")
 
+    def _footer_text(self) -> str:
         db_name = self.database_name or "Unknown"
-        model_name = getattr(self.sqlsaber_agent.agent.model, "model_name", "Unknown")
-        self.console.print(
-            f"[heading]\nConnected to {db_name} ({self._db_type_name()})[/heading]\n"
-            f"[heading]Model: {model_name}[/heading]\n"
-        )
+        return f"DB: {db_name} ({self._db_type_name()}) | Model: {self._model_name()}"
 
-        if self.thread_manager.current_thread_id:
-            self.console.print(
-                f"[muted]Resuming thread:[/muted] {self.thread_manager.current_thread_id}\n"
-            )
+    def show_welcome_message(self, app: ChatApp) -> None:
+        """Display welcome message for interactive mode."""
 
-    async def _update_table_cache(self):
+        def render(console: Console) -> None:
+            if self.thread_manager.first_message:
+                console.print(Panel.fit(self._banner(), border_style="primary"))
+                console.print(
+                    Markdown(
+                        self._instructions(),
+                        code_theme=self.tm.pygments_style_name,
+                        inline_code_theme=self.tm.pygments_style_name,
+                    )
+                )
+
+            if self.thread_manager.current_thread_id:
+                console.print(
+                    f"[muted]Resuming thread:[/muted] {self.thread_manager.current_thread_id}\n"
+                )
+
+        app.append_rich(render)
+
+    async def _update_table_cache(self) -> None:
         """Update the table completer cache with fresh data."""
         try:
             tables_data = await SchemaManager(self.db_conn).list_tables()
 
-            # Parse the table information
             table_list = []
             if isinstance(tables_data, dict) and "tables" in tables_data:
                 for table in tables_data["tables"]:
@@ -160,7 +174,6 @@ class InteractiveSession:
                         schema = table.get("schema", "")
                         full_name = table.get("full_name", "")
 
-                        # Use full_name if available, otherwise construct it
                         if full_name:
                             table_name = full_name
                         elif schema and schema != "main":
@@ -168,97 +181,80 @@ class InteractiveSession:
                         else:
                             table_name = name
 
-                        # No description needed - cleaner completions
                         table_list.append((table_name, ""))
 
-            # Update the completer cache
-            self.table_completer.update_cache(table_list)
+            self.autocomplete_provider.update_table_cache(table_list)
 
         except Exception:
-            # If there's an error, just use empty cache
-            self.table_completer.update_cache([])
+            self.autocomplete_provider.update_table_cache([])
 
-    async def before_prompt_loop(self):
+    async def before_prompt_loop(self) -> None:
         """Hook to refresh context before prompt loop."""
         await self._update_table_cache()
 
-    async def _handle_handoff(
-        self,
-        session: PromptSession,
-        goal: str,
-        clear_history: Callable[[], None],
-    ) -> None:
-        """Handle the handoff flow: generate draft, let user edit, start new thread.
-
-        Args:
-            session: The prompt session for user input.
-            goal: The user's goal for the new thread.
-            clear_history: Callback to clear message history.
-        """
+    async def _start_handoff(self, app: ChatApp, goal: str) -> None:
+        """Generate a handoff draft and put it in the focused editor."""
         from sqlsaber.agents.handoff_agent import HandoffAgent
 
-        self.display.live.start_status("Generating handoff prompt...")
-
+        app.set_loading("Generating handoff prompt...")
         try:
             handoff_agent = HandoffAgent()
-
             draft = await handoff_agent.generate_draft(
                 message_history=self.message_history or [],
                 goal=goal,
             )
-        except Exception as e:
-            self.display.live.end_status()
-            self.console.print(
-                f"[error]Failed to generate handoff prompt:[/error] {e}\n"
+        except Exception as exc:
+            error_message = str(exc)
+            app.append_rich(
+                lambda console: console.print(
+                    f"[error]Failed to generate handoff prompt:[/error] {error_message}\n"
+                )
             )
             return
         finally:
-            self.display.live.end_status()
+            app.clear_status()
 
-        self.console.print(
-            "[success]Draft generated. Edit and submit to start new thread:[/success]\n"
-        )
+        self._handoff_mode = True
+        app.editor.set_text(draft)
+        app.set_status("Edit the handoff draft and press Enter to start a new thread.")
 
-        try:
-            with patch_stdout():
-                edited = await session.prompt_async(
-                    "handoff > ",
-                    multiline=True,
-                    default=draft,
-                    bottom_toolbar=self._bottom_toolbar,
-                    style=self.tm.pt_style(),
-                )
-        except KeyboardInterrupt:
-            self.console.print("\n[muted]Handoff cancelled.[/muted]\n")
-            return
-
+    async def _submit_handoff(
+        self, app: ChatApp, edited: str, clear_history: Callable[[], None]
+    ) -> None:
+        self._handoff_mode = False
+        app.clear_status()
         edited = edited.strip()
         if not edited:
-            self.console.print("[warning]Empty handoff prompt; cancelled.[/warning]\n")
+            app.append_rich(
+                lambda console: console.print(
+                    "[warning]Empty handoff prompt; cancelled.[/warning]\n"
+                )
+            )
             return
 
         old_id = await self.thread_manager.end_current_thread()
         if old_id:
-            self.console.print(f"[muted]Previous thread saved:[/muted] {old_id}")
-            self.console.print(
-                f"[muted]Resume with:[/muted] saber threads resume {old_id}\n"
+            app.append_rich(
+                lambda console: console.print(
+                    f"[muted]Previous thread saved:[/muted] {old_id}\n"
+                    f"[muted]Resume with:[/muted] saber threads resume {old_id}\n"
+                )
             )
 
         clear_history()
         await self.thread_manager.clear_current_thread()
-
-        self.console.print("[heading]Starting new thread...[/heading]\n")
-
+        app.append_rich(
+            lambda console: console.print("[heading]Starting new thread...[/heading]\n")
+        )
         await self._execute_query_with_cancellation(edited)
-        self.display.show_newline()
 
-    async def _execute_query_with_cancellation(self, user_query: str):
+    async def _execute_query_with_cancellation(self, user_query: str) -> None:
         """Execute a query with cancellation support."""
-        self.log.info("interactive.query.start", database=self.database_name)
-        # Create cancellation token
-        self.cancellation_token = asyncio.Event()
+        if self.streaming_handler is None:
+            raise RuntimeError("Streaming handler has not been initialized.")
 
-        # Create the query task
+        self.log.info("interactive.query.start", database=self.database_name)
+        self.cancellation_token = asyncio.Event()
         query_task = asyncio.create_task(
             self.streaming_handler.execute_streaming_query(
                 user_query,
@@ -271,11 +267,8 @@ class InteractiveSession:
 
         try:
             run_result = await query_task
-            # SQLSaberSession persists thread snapshots; we only keep local history.
             if run_result is not None:
                 self.message_history = run_result.all_messages()
-                # Track usage for session summary
-                # Use result.response.usage for the FINAL request's context size
                 final_context = run_result.response.usage.input_tokens
                 self.session_usage.add_run(run_result.usage(), final_context)
         finally:
@@ -283,87 +276,193 @@ class InteractiveSession:
             self.cancellation_token = None
             self.log.info("interactive.query.end")
 
-    async def run(self):
+    async def _cancel_current_task(self, app: ChatApp, chat_console: Console) -> None:
+        if self.current_task and not self.current_task.done():
+            task = self.current_task
+            if self.cancellation_token is not None:
+                self.cancellation_token.set()
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(task), timeout=QUERY_CANCEL_GRACE_SECONDS
+                    )
+                    return
+                except TimeoutError:
+                    task.cancel()
+                except asyncio.CancelledError:
+                    return
+            else:
+                task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            return
+
+        if self._handoff_mode:
+            self._cancel_handoff_editing(app, chat_console)
+            return
+
+        chat_console.print(
+            "[warning]Press Ctrl+D to exit. Or use '/exit' or '/quit'.[/warning]"
+        )
+        app.tui.set_focus(app.editor)
+
+    def _cancel_handoff_editing(self, app: ChatApp, chat_console: Console) -> None:
+        self._handoff_mode = False
+        app.editor.set_text("")
+        app.clear_status()
+        chat_console.print("[warning]Handoff cancelled.[/warning]\n")
+        app.tui.set_focus(app.editor)
+
+    async def _handle_submit(
+        self,
+        app: ChatApp,
+        chat_console: Console,
+        clear_history: Callable[[], None],
+        user_query: str,
+    ) -> None:
+        try:
+            if self.current_task and not self.current_task.done():
+                chat_console.print(
+                    "[warning]A query is already running. Press Ctrl+C to interrupt it.[/warning]"
+                )
+                return
+
+            if self._handoff_mode:
+                if user_query.strip():
+                    self._append_history(user_query)
+                await self._submit_handoff(app, user_query, clear_history)
+                return
+
+            self._append_history(user_query)
+
+            context = CommandContext(
+                console=chat_console,
+                agent=self.sqlsaber_agent,
+                thread_manager=self.thread_manager,
+                on_clear_history=clear_history,
+                session_usage=self.session_usage,
+            )
+
+            cmd_result = await self.command_processor.process(user_query, context)
+            if cmd_result.should_exit:
+                self._exit_finalized = True
+                app.stop()
+                return
+
+            if cmd_result.handoff_goal:
+                await self._start_handoff(app, cmd_result.handoff_goal)
+                return
+
+            if cmd_result.handled:
+                return
+
+            await self._execute_query_with_cancellation(user_query)
+        except Exception as exc:
+            chat_console.print(f"[error]Error:[/error] {exc}")
+            self.log.exception("interactive.error", error=str(exc))
+        finally:
+            app.tui.set_focus(app.editor)
+
+    async def _finalize_exit(self) -> None:
+        if self._exit_finalized:
+            return
+        self.display.show_session_summary(self.session_usage)
+        ended_thread_id = await self.thread_manager.end_current_thread()
+        if ended_thread_id:
+            hint = f"saber threads resume {ended_thread_id}"
+            self.console.print(
+                f"[muted]You can continue this thread using:[/muted] {hint}"
+            )
+        self._exit_finalized = True
+
+    async def run(self) -> None:
         """Run the interactive session loop."""
         self.log.info("interactive.start", database=self.database_name)
-        self.show_welcome_message()
         await self.before_prompt_loop()
 
-        session = PromptSession(history=FileHistory(self._history_path()))
+        exit_event = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        app_ref: dict[str, ChatApp] = {}
+        chat_console_ref: dict[str, ChatConsole] = {}
 
-        def clear_history():
+        def clear_history() -> None:
             self.message_history = []
 
-        while True:
-            try:
-                with patch_stdout():
-                    user_query = await session.prompt_async(
-                        "> ",
-                        multiline=True,
-                        completer=CompositeCompleter(
-                            SlashCommandCompleter(), self.table_completer
-                        ),
-                        bottom_toolbar=self._bottom_toolbar,
-                        style=self.tm.pt_style(),
-                    )
+        def on_submit(user_query: str) -> bool:
+            app = app_ref["app"]
+            chat_console = chat_console_ref["chat_console"]
 
-                user_query = user_query.strip()
-
-                if not user_query:
-                    continue
-
-                # Process slash commands
-                context = CommandContext(
-                    console=self.console,
-                    agent=self.sqlsaber_agent,
-                    thread_manager=self.thread_manager,
-                    on_clear_history=clear_history,
-                    session_usage=self.session_usage,
+            if self._submit_pending or (
+                self.current_task and not self.current_task.done()
+            ):
+                chat_console.print(
+                    "[warning]A query is already running. Press Ctrl+C to interrupt it.[/warning]"
                 )
+                app.tui.set_focus(app.editor)
+                return False
 
-                cmd_result = await self.command_processor.process(user_query, context)
-                if cmd_result.should_exit:
-                    break
+            self._submit_pending = True
 
-                # Handle handoff command
-                if cmd_result.handoff_goal:
-                    await self._handle_handoff(
-                        session, cmd_result.handoff_goal, clear_history
+            async def submit_query() -> None:
+                try:
+                    await self._handle_submit(
+                        app,
+                        chat_console,
+                        clear_history,
+                        user_query,
                     )
-                    continue
+                finally:
+                    self._submit_pending = False
 
-                if cmd_result.handled:
-                    continue
+            loop.call_soon_threadsafe(lambda: asyncio.create_task(submit_query()))
+            return True
 
-                # Execute query with cancellation support
-                await self._execute_query_with_cancellation(user_query)
-                self.display.show_newline()
+        def open_command_palette(app: ChatApp) -> None:
+            app.show_command_palette(
+                thinking_enabled=self.sqlsaber_agent.thinking_enabled,
+                thinking_level=self.sqlsaber_agent.thinking_level,
+                on_thinking_change=self.sqlsaber_agent.set_thinking,
+                model_name=self._model_name(),
+                database_name=self.database_name,
+            )
 
-            except KeyboardInterrupt:
-                # Handle Ctrl+C - cancel current task if running
-                if self.current_task and not self.current_task.done():
-                    if self.cancellation_token is not None:
-                        self.cancellation_token.set()
-                    self.current_task.cancel()
-                    try:
-                        await self.current_task
-                    except asyncio.CancelledError:
-                        pass
-                    self.console.print("\n[warning]Query interrupted[/warning]")
-                else:
-                    self.console.print(
-                        "\n[warning]Press Ctrl+D to exit. Or use '/exit' or '/quit' slash command.[/warning]"
+        def on_cancel() -> None:
+            app = app_ref["app"]
+            chat_console = chat_console_ref["chat_console"]
+            loop.call_soon_threadsafe(
+                lambda: asyncio.create_task(
+                    self._cancel_current_task(
+                        app,
+                        chat_console,
                     )
-            except EOFError:
-                # Exit when Ctrl+D is pressed
-                self.display.show_session_summary(self.session_usage)
-                ended_thread_id = await self.thread_manager.end_current_thread()
-                if ended_thread_id:
-                    hint = f"saber threads resume {ended_thread_id}"
-                    self.console.print(
-                        f"[muted]You can continue this thread using:[/muted] {hint}"
-                    )
-                break
-            except Exception as exc:
-                self.console.print(f"[error]Error:[/error] {exc}")
-                self.log.exception("interactive.error", error=str(exc))
+                )
+            )
+
+        def on_exit() -> None:
+            loop.call_soon_threadsafe(exit_event.set)
+
+        app = build_chat_app(
+            on_submit=on_submit,
+            on_exit=on_exit,
+            on_cancel=on_cancel,
+            should_submit_empty=lambda: self._handoff_mode,
+            autocomplete_provider=self.autocomplete_provider,
+            console=self.console,
+            footer_text=self._footer_text(),
+            on_open_command_palette=open_command_palette,
+        )
+        chat_console = ChatConsole(app)
+        app_ref["app"] = app
+        chat_console_ref["chat_console"] = chat_console
+        app.editor.history = self._load_history()
+        self.streaming_handler = TUIStreamingQueryHandler(app, self.console)
+        self.show_welcome_message(app)
+
+        app.tui.start()
+        try:
+            await exit_event.wait()
+        finally:
+            if not app.tui.stopped:
+                app.stop()
+            await self._finalize_exit()

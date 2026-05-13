@@ -3053,6 +3053,19 @@ wheels = [
 ]
 
 [[package]]
+name = "saber-tui"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "regex" },
+    { name = "wcwidth" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/29/db/090e097b893b60e7ffbbc67a317bbbfac6673013ae6c1d97fa890f6d5e55/saber_tui-0.4.0.tar.gz", hash = "sha256:eeb75ea3625ff886d2fa286ba2226d06db749069321980c667aea1fb987c7482", size = 142844, upload-time = "2026-05-15T16:33:52.967Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7f/d3/06a1c659906f39eaf972c1b9259cfcd6e5ed2c81a2eb4061e08674c5cdf8/saber_tui-0.4.0-py3-none-any.whl", hash = "sha256:fc4e3d1bfd611e095a9781b477c1e673b2dc8dc6e31493b8b2c37a25de00691e", size = 56585, upload-time = "2026-05-15T16:33:52.04Z" },
+]
+
+[[package]]
 name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3150,10 +3163,10 @@ dependencies = [
     { name = "keyring" },
     { name = "keyrings-cryptfile", marker = "sys_platform == 'linux'" },
     { name = "platformdirs" },
-    { name = "prompt-toolkit" },
     { name = "pydantic-ai" },
     { name = "questionary" },
     { name = "rich" },
+    { name = "saber-tui" },
     { name = "sqlglot", extra = ["rs"] },
     { name = "structlog" },
     { name = "tabulate" },
@@ -3179,10 +3192,10 @@ requires-dist = [
     { name = "keyring", specifier = ">=25.6.0" },
     { name = "keyrings-cryptfile", marker = "sys_platform == 'linux'" },
     { name = "platformdirs", specifier = ">=4.0.0" },
-    { name = "prompt-toolkit", specifier = ">3.0.51" },
     { name = "pydantic-ai" },
     { name = "questionary", specifier = ">=2.1.0" },
     { name = "rich", specifier = ">=13.7.0" },
+    { name = "saber-tui", specifier = ">=0.4.0" },
     { name = "sqlglot", extras = ["rs"], specifier = ">=27.20.0" },
     { name = "structlog", specifier = ">=25.4.0" },
     { name = "tabulate", specifier = ">=0.9.0" },

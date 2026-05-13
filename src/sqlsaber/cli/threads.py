@@ -14,7 +14,6 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from sqlsaber.cli.html_export import render_thread_html
 from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console, get_theme_manager
 
@@ -339,6 +338,7 @@ def export(
     ] = None,
 ):
     """Export a thread transcript as a standalone HTML file."""
+    from sqlsaber.cli.html_export import render_thread_html
     from sqlsaber.threads import ThreadStorage
 
     logger.info(
