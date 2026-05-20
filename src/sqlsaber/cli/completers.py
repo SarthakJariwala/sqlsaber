@@ -1,123 +1,124 @@
-"""Command line completers for the CLI interface."""
+"""Autocomplete providers for the interactive CLI."""
 
-from prompt_toolkit.completion import Completer, Completion
-
-
-class SlashCommandCompleter(Completer):
-    """Custom completer for slash commands."""
-
-    def get_completions(self, document, complete_event):
-        """Get completions for slash commands."""
-        # Only provide completions if the line starts with "/"
-        text = document.text
-        if text.startswith("/"):
-            # Get the partial command after the slash
-            partial_cmd = text[1:]
-
-            # Define available commands with descriptions
-            commands = [
-                ("clear", "Clear conversation history"),
-                ("exit", "Exit the interactive session"),
-                ("handoff", "Start new thread with context from current"),
-                ("quit", "Exit the interactive session"),
-                ("thinking", "Get current thinking config status"),
-                ("thinking on", "Enable default thinking"),
-                ("thinking off", "Disable default thinking"),
-                ("thinking low", "Set thinking mode to low"),
-                ("thinking medium", "Set thinking mode to medium"),
-                ("thinking high", "Set thinking mode to high"),
-                ("thinking maximum", "Set thinking mode to maximum"),
-                ("thinking minimal", "Set thinking mode to minimal"),
-            ]
-
-            # Yield completions that match the partial command
-            for cmd, description in commands:
-                if cmd.startswith(partial_cmd):
-                    yield Completion(
-                        cmd,
-                        start_position=-len(partial_cmd),
-                        display_meta=description,
-                    )
+from saber_tui import AutocompleteItem, AutocompleteSuggestions, CompletionResult
 
 
-class TableNameCompleter(Completer):
-    """Custom completer for table names."""
+class SQLSaberAutocompleteProvider:
+    """saber-tui autocomplete provider for table names."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._table_cache: list[tuple[str, str]] = []
 
-    def update_cache(self, tables_data: list[tuple[str, str]]):
-        """Update the cache with fresh table data."""
+    def update_table_cache(self, tables_data: list[tuple[str, str]]) -> None:
+        """Update the table completion cache with fresh schema data."""
         self._table_cache = tables_data
 
-    def _get_table_names(self) -> list[tuple[str, str]]:
-        """Get table names from cache."""
-        return self._table_cache
+    def get_suggestions(
+        self,
+        lines: list[str],
+        cursor_line: int,
+        cursor_col: int,
+        *,
+        force: bool = False,
+        signal: object | None = None,
+    ) -> AutocompleteSuggestions | None:
+        """Return completion suggestions for the current editor state."""
+        if bool(getattr(signal, "aborted", False)):
+            return None
 
-    def get_completions(self, document, complete_event):
-        """Get completions for table names with fuzzy matching."""
-        text = document.text
-        cursor_position = document.cursor_position
+        current_line = lines[cursor_line] if 0 <= cursor_line < len(lines) else ""
+        text_before_cursor = current_line[:cursor_col]
 
-        # Find the last "@" before the cursor position
-        at_pos = text.rfind("@", 0, cursor_position)
+        table_suggestions = self._table_suggestions(
+            current_line, cursor_col, text_before_cursor
+        )
+        if table_suggestions is not None:
+            return table_suggestions
 
-        if at_pos >= 0:
-            # Extract text after the "@" up to the cursor
-            partial_table = text[at_pos + 1 : cursor_position].lower()
+        return None
 
-            # Check if this looks like a valid table reference context
-            # (not inside quotes, and followed by word characters or end of input)
-            if self._is_valid_table_context(text, at_pos, cursor_position):
-                # Get table names
-                tables = self._get_table_names()
+    def apply_completion(
+        self,
+        lines: list[str],
+        cursor_line: int,
+        cursor_col: int,
+        item: AutocompleteItem,
+        prefix: str,
+    ) -> CompletionResult:
+        """Apply a selected completion to the editor buffer."""
+        new_lines = list(lines) or [""]
+        cursor_line = max(0, min(cursor_line, len(new_lines) - 1))
+        current_line = new_lines[cursor_line]
+        before_prefix = current_line[: max(0, cursor_col - len(prefix))]
+        after_cursor = current_line[cursor_col:]
 
-                # Collect matches with scores for ranking
-                matches = []
+        replacement = item.value
 
-                for table_name, description in tables:
-                    table_lower = table_name.lower()
-                    score = self._calculate_match_score(
-                        partial_table, table_name, table_lower
-                    )
+        new_line = f"{before_prefix}{replacement}{after_cursor}"
+        new_lines[cursor_line] = new_line
+        return CompletionResult(
+            new_lines,
+            cursor_line,
+            len(before_prefix) + len(replacement),
+        )
 
-                    if score > 0:
-                        matches.append((score, table_name, description))
+    def should_trigger_file_completion(
+        self, lines: list[str], cursor_line: int, cursor_col: int
+    ) -> bool:
+        """Return whether Tab should force path-style completion.
 
-                # Sort by score (higher is better) and yield completions
-                matches.sort(key=lambda x: x[0], reverse=True)
+        SQLsaber owns bare slash commands. Other contexts can use Tab without
+        reopening slash-command suggestions.
+        """
+        current_line = lines[cursor_line] if 0 <= cursor_line < len(lines) else ""
+        text_before_cursor = current_line[:cursor_col]
+        stripped = text_before_cursor.strip()
+        return not (stripped.startswith("/") and " " not in stripped)
 
-                for score, table_name, description in matches:
-                    yield Completion(
-                        table_name,
-                        start_position=at_pos
-                        + 1
-                        - cursor_position,  # Start from after the @
-                        display_meta=description if description else None,
-                    )
+    def _table_suggestions(
+        self,
+        current_line: str,
+        cursor_col: int,
+        text_before_cursor: str,
+    ) -> AutocompleteSuggestions | None:
+        at_pos = text_before_cursor.rfind("@")
+        if at_pos < 0:
+            return None
+        if not self._is_valid_table_context(current_line, at_pos, cursor_col):
+            return None
+
+        partial_table = text_before_cursor[at_pos + 1 :].lower()
+        matches: list[tuple[int, str, str]] = []
+        for table_name, description in self._table_cache:
+            table_lower = table_name.lower()
+            score = self._calculate_match_score(partial_table, table_name, table_lower)
+            if score > 0:
+                matches.append((score, table_name, description))
+
+        matches.sort(key=lambda item: item[0], reverse=True)
+        if not matches:
+            return None
+
+        items = [
+            AutocompleteItem(f"@{table_name}", table_name, description or None)
+            for _, table_name, description in matches
+        ]
+        return AutocompleteSuggestions(items, text_before_cursor[at_pos:])
 
     def _is_valid_table_context(self, text: str, at_pos: int, cursor_pos: int) -> bool:
         """Check if the @ is in a valid context for table completion."""
-        # Simple heuristic: avoid completion inside quoted strings
-
-        # Count quotes before the @ position
         single_quotes = text[:at_pos].count("'") - text[:at_pos].count("\\'")
         double_quotes = text[:at_pos].count('"') - text[:at_pos].count('\\"')
-
-        # If we're inside quotes, don't complete
         if single_quotes % 2 == 1 or double_quotes % 2 == 1:
             return False
 
-        # Check if the character after the cursor (if any) is part of a word
-        # This helps avoid breaking existing words
         if cursor_pos < len(text):
             next_char = text[cursor_pos]
             if next_char.isalnum() or next_char == "_":
-                # We're in the middle of a word, check if it looks like a table name
                 partial = (
                     text[at_pos + 1 :].split()[0] if text[at_pos + 1 :].split() else ""
                 )
-                if not any(c in partial for c in [".", "_"]):
+                if not any(char in partial for char in [".", "_"]):
                     return False
 
         return True
@@ -125,55 +126,27 @@ class TableNameCompleter(Completer):
     def _calculate_match_score(
         self, partial: str, table_name: str, table_lower: str
     ) -> int:
-        """Calculate match score for fuzzy matching (higher is better)."""
+        """Calculate fuzzy table match score. Higher is better."""
         if not partial:
-            return 1  # Empty search matches everything with low score
+            return 1
 
-        # Score 100: Exact full name prefix match
         if table_lower.startswith(partial):
             return 100
 
-        # Score 90: Table name (after schema) prefix match
         if "." in table_name:
             table_part = table_name.split(".")[-1].lower()
             if table_part.startswith(partial):
                 return 90
-
-        # Score 80: Exact table name match (for short names)
-        if "." in table_name:
-            table_part = table_name.split(".")[-1].lower()
             if table_part == partial:
                 return 80
-
-        # Score 70: Word boundary matches (e.g., "user" matches "user_accounts")
-        if "." in table_name:
-            table_part = table_name.split(".")[-1].lower()
             if table_part.startswith(partial + "_") or table_part.startswith(
                 partial + "-"
             ):
                 return 70
-
-        # Score 50: Substring match in table name part
-        if "." in table_name:
-            table_part = table_name.split(".")[-1].lower()
             if partial in table_part:
                 return 50
 
-        # Score 30: Substring match in full name
         if partial in table_lower:
             return 30
 
-        # Score 0: No match
         return 0
-
-
-class CompositeCompleter(Completer):
-    """Combines multiple completers."""
-
-    def __init__(self, *completers: Completer):
-        self.completers = completers
-
-    def get_completions(self, document, complete_event):
-        """Get completions from all registered completers."""
-        for completer in self.completers:
-            yield from completer.get_completions(document, complete_event)

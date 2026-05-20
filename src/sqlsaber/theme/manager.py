@@ -1,4 +1,4 @@
-"""Theme management for unified theming across Rich and prompt_toolkit."""
+"""Theme management for SQLsaber Rich output."""
 
 import json
 import os
@@ -7,8 +7,6 @@ from functools import lru_cache
 from typing import Dict
 
 from platformdirs import user_config_dir
-from prompt_toolkit.styles import Style as PTStyle
-from prompt_toolkit.styles.pygments import style_from_pygments_cls
 from pygments.styles import get_all_styles, get_style_by_name
 from pygments.token import Token
 from pygments.util import ClassNotFound
@@ -165,7 +163,6 @@ class ThemeManager:
         self._cfg = cfg
         self._roles = _resolve_refs({**DEFAULT_ROLE_PALETTE, **cfg.roles})
         self._rich_theme = Theme(self._roles)
-        self._pt_style = None
 
     @property
     def rich_theme(self) -> Theme:
@@ -177,18 +174,6 @@ class ThemeManager:
         """Get pygments style name for syntax highlighting."""
         return self._cfg.pygments_style
 
-    def pt_style(self) -> PTStyle:
-        """Get prompt_toolkit style derived from Pygments theme."""
-        if self._pt_style is None:
-            try:
-                # Try to use Pygments style directly
-                pygments_style = get_style_by_name(self._cfg.pygments_style)
-                self._pt_style = style_from_pygments_cls(pygments_style)
-            except Exception:
-                # Fallback to basic style if Pygments theme not found
-                self._pt_style = PTStyle.from_dict({})
-        return self._pt_style
-
     def style(self, role: str) -> str:
         """Get style string for a semantic role."""
         return self._roles.get(role, "")
@@ -199,14 +184,20 @@ def get_theme_manager() -> ThemeManager:
     """Get the global theme manager instance."""
     user_cfg = _load_user_theme_config()
     env_name = os.getenv("SQLSABER_THEME")
+    env_theme_requested = env_name is not None
 
     if env_name and env_name.lower() not in get_all_styles():
         env_name = None
 
-    name = (
-        env_name or user_cfg.get("theme", {}).get("name") or DEFAULT_THEME_NAME
-    ).lower()
-    pygments_style = user_cfg.get("theme", {}).get("pygments_style") or name
+    if env_name:
+        name = env_name.lower()
+        pygments_style = name
+    elif env_theme_requested:
+        name = DEFAULT_THEME_NAME
+        pygments_style = DEFAULT_THEME_NAME
+    else:
+        name = (user_cfg.get("theme", {}).get("name") or DEFAULT_THEME_NAME).lower()
+        pygments_style = user_cfg.get("theme", {}).get("pygments_style") or name
 
     roles = dict(DEFAULT_ROLE_PALETTE)
     roles.update(_build_role_palette_from_style(pygments_style))

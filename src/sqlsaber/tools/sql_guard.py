@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, InvalidOperation
+from typing import cast
 
 import sqlglot
 from sqlglot import exp
@@ -366,11 +367,14 @@ LIMIT_ALL_UNBOUNDED_DIALECTS: set[str] = {
 }
 
 # Known from-less projection nodes/functions that can yield multiple rows.
-SET_RETURNING_PROJECTION_NODE_TYPES: tuple[type[exp.Expression], ...] = (
-    exp.Explode,
-    exp.ExplodeOuter,
-    exp.Unnest,
-    exp.ExplodingGenerateSeries,
+SET_RETURNING_PROJECTION_NODE_TYPES = cast(
+    tuple[type[exp.Expression], ...],
+    (
+        exp.Explode,
+        exp.ExplodeOuter,
+        exp.Unnest,
+        exp.ExplodingGenerateSeries,
+    ),
 )
 POSTGRES_SET_RETURNING_ANONYMOUS_FUNCTIONS: set[str] = {
     "generate_series",
@@ -1611,7 +1615,7 @@ def _has_global_aggregate_without_group(select: exp.Select) -> bool:
     if select.args.get("group") is not None:
         return False
 
-    def should_prune(node: exp.Expression) -> bool:
+    def should_prune(node: object) -> bool:
         return node is not select and isinstance(
             node,
             (exp.Subquery, exp.Select, exp.Union, exp.Except, exp.Intersect),
@@ -2696,7 +2700,7 @@ def _expression_references_target_symbols(
     if expression is None or not target_symbols:
         return False
 
-    def should_prune(node: exp.Expression) -> bool:
+    def should_prune(node: object) -> bool:
         return isinstance(
             node,
             (exp.Subquery, exp.Select, exp.Union, exp.Except, exp.Intersect),
@@ -3449,7 +3453,9 @@ def _unfiltered_mutation_reason(
 
     where_clause = node.args.get("where")
     if not where_clause:
-        return f"{operation} without WHERE clause is not allowed (would affect all rows)"
+        return (
+            f"{operation} without WHERE clause is not allowed (would affect all rows)"
+        )
 
     if not isinstance(where_clause, exp.Where):
         return None
@@ -3665,9 +3671,7 @@ def has_disallowed_dangerous_mode_statement(stmt: exp.Expression) -> str | None:
             if expression is not None and not is_select_like(expression):
                 return "CREATE VIEW must be based on a SELECT-like expression"
         elif (
-            kind == "INDEX"
-            and target is not None
-            and not isinstance(target, exp.Index)
+            kind == "INDEX" and target is not None and not isinstance(target, exp.Index)
         ):
             return "Only CREATE INDEX statements are allowed in dangerous mode"
 
@@ -3726,9 +3730,10 @@ def validate_read_only(sql: str, dialect: str = "ansi") -> GuardResult:
             f"Only single SELECT statements are allowed (got {len(statements)} statements)",
         )
 
-    stmt = statements[0]
-    if stmt is None:
+    raw_stmt = statements[0]
+    if raw_stmt is None:
         return GuardResult(False, "Unable to parse query - empty statement")
+    stmt = cast(exp.Expression, raw_stmt)
 
     # Must be a SELECT-like statement
     if not is_select_like(stmt):
@@ -3796,9 +3801,10 @@ def validate_sql(
             f"Only single statements are allowed (got {len(statements)} statements)",
         )
 
-    stmt = statements[0]
-    if stmt is None:
+    raw_stmt = statements[0]
+    if raw_stmt is None:
         return GuardResult(False, "Unable to parse query - empty statement")
+    stmt = cast(exp.Expression, raw_stmt)
 
     try:
         with _analysis_session():
@@ -3863,9 +3869,10 @@ def add_limit(sql: str, dialect: str = "ansi", limit: int = 100) -> str:
         if len(statements) != 1:
             return sql
 
-        stmt = statements[0]
-        if stmt is None:
+        raw_stmt = statements[0]
+        if raw_stmt is None:
             return sql
+        stmt = cast(exp.Expression, raw_stmt)
 
         # Check if LIMIT/TOP/FETCH already exists
         if has_limit_clause(stmt):

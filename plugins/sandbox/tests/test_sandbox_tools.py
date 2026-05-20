@@ -3,7 +3,9 @@
 import json
 import sys
 from types import SimpleNamespace
+from typing import cast
 
+from pydantic_ai import RunContext
 import pytest
 
 pytest.importorskip("sqlsaber_sandbox")
@@ -16,6 +18,18 @@ from sqlsaber_sandbox.tools import (
 )
 
 from sqlsaber.tools.registry import ToolRegistry
+
+PROVIDER_ENV_VARS = (
+    "E2B_API_KEY",
+    "DAYTONA_API_KEY",
+    "SPRITES_TOKEN",
+    "HOPX_API_KEY",
+    "MODAL_TOKEN_ID",
+    "MODAL_TOKEN_SECRET",
+    "MODAL_CONFIG_PATH",
+    "CLOUDFLARE_SANDBOX_BASE_URL",
+    "CLOUDFLARE_API_TOKEN",
+)
 
 
 def _build_result(
@@ -76,27 +90,28 @@ def _parse_result(payload: str) -> dict:
     return json.loads(payload)
 
 
-def _make_ctx() -> SimpleNamespace:
-    return SimpleNamespace(messages=[])
+def _make_ctx() -> RunContext[None]:
+    return cast(RunContext[None], SimpleNamespace(messages=[]))
+
+
+def _clear_provider_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for env_var in PROVIDER_ENV_VARS:
+        monkeypatch.delenv(env_var, raising=False)
+
+
+def _isolate_modal_home(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.delenv("HOMEDRIVE", raising=False)
+    monkeypatch.delenv("HOMEPATH", raising=False)
 
 
 def test_register_sandbox_tools_disabled(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    for env_vars in [
-        "E2B_API_KEY",
-        "DAYTONA_API_KEY",
-        "SPRITES_TOKEN",
-        "HOPX_API_KEY",
-        "MODAL_TOKEN_ID",
-        "MODAL_TOKEN_SECRET",
-        "MODAL_CONFIG_PATH",
-        "CLOUDFLARE_SANDBOX_BASE_URL",
-        "CLOUDFLARE_API_TOKEN",
-    ]:
-        monkeypatch.delenv(env_vars, raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path))
+    _clear_provider_env(monkeypatch)
+    _isolate_modal_home(monkeypatch, tmp_path)
     registry = ToolRegistry()
 
     registered = register_tools(registry)
@@ -106,9 +121,8 @@ def test_register_sandbox_tools_disabled(
 
 
 def test_register_sandbox_tools_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_provider_env(monkeypatch)
     monkeypatch.setenv("E2B_API_KEY", "test-key")
-    monkeypatch.delenv("MODAL_TOKEN_ID", raising=False)
-    monkeypatch.delenv("MODAL_CONFIG_PATH", raising=False)
     registry = ToolRegistry()
 
     registered = register_tools(registry)
@@ -121,19 +135,9 @@ def test_register_sandbox_tools_disabled_with_modal_id_only(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    for env_vars in [
-        "E2B_API_KEY",
-        "DAYTONA_API_KEY",
-        "SPRITES_TOKEN",
-        "HOPX_API_KEY",
-        "MODAL_TOKEN_SECRET",
-        "MODAL_CONFIG_PATH",
-        "CLOUDFLARE_SANDBOX_BASE_URL",
-        "CLOUDFLARE_API_TOKEN",
-    ]:
-        monkeypatch.delenv(env_vars, raising=False)
+    _clear_provider_env(monkeypatch)
     monkeypatch.setenv("MODAL_TOKEN_ID", "modal-id-only")
-    monkeypatch.setenv("HOME", str(tmp_path))
+    _isolate_modal_home(monkeypatch, tmp_path)
     registry = ToolRegistry()
 
     registered = register_tools(registry)
@@ -146,19 +150,8 @@ def test_register_sandbox_tools_enabled_with_modal_config(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    for env_vars in [
-        "E2B_API_KEY",
-        "DAYTONA_API_KEY",
-        "SPRITES_TOKEN",
-        "HOPX_API_KEY",
-        "MODAL_TOKEN_ID",
-        "MODAL_TOKEN_SECRET",
-        "MODAL_CONFIG_PATH",
-        "CLOUDFLARE_SANDBOX_BASE_URL",
-        "CLOUDFLARE_API_TOKEN",
-    ]:
-        monkeypatch.delenv(env_vars, raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path))
+    _clear_provider_env(monkeypatch)
+    _isolate_modal_home(monkeypatch, tmp_path)
     modal_config = tmp_path / ".modal.toml"
     modal_config.write_text('token_id = "test"\n', encoding="utf-8")
     registry = ToolRegistry()
@@ -173,17 +166,7 @@ def test_register_sandbox_tools_enabled_with_modal_config_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    for env_vars in [
-        "E2B_API_KEY",
-        "DAYTONA_API_KEY",
-        "SPRITES_TOKEN",
-        "HOPX_API_KEY",
-        "MODAL_TOKEN_ID",
-        "MODAL_TOKEN_SECRET",
-        "CLOUDFLARE_SANDBOX_BASE_URL",
-        "CLOUDFLARE_API_TOKEN",
-    ]:
-        monkeypatch.delenv(env_vars, raising=False)
+    _clear_provider_env(monkeypatch)
     config_path = tmp_path / "custom-modal.toml"
     config_path.write_text('token_id = "test"\n', encoding="utf-8")
     monkeypatch.setenv("MODAL_CONFIG_PATH", str(config_path))
@@ -200,19 +183,8 @@ async def test_run_python_requires_provider(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    for env_var in [
-        "E2B_API_KEY",
-        "DAYTONA_API_KEY",
-        "SPRITES_TOKEN",
-        "HOPX_API_KEY",
-        "MODAL_TOKEN_ID",
-        "MODAL_TOKEN_SECRET",
-        "MODAL_CONFIG_PATH",
-        "CLOUDFLARE_SANDBOX_BASE_URL",
-        "CLOUDFLARE_API_TOKEN",
-    ]:
-        monkeypatch.delenv(env_var, raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path))
+    _clear_provider_env(monkeypatch)
+    _isolate_modal_home(monkeypatch, tmp_path)
     tool = RunPythonTool()
 
     result = _parse_result(await tool.execute(_make_ctx(), code="print('hi')"))
