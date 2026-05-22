@@ -1,5 +1,6 @@
 import pytest
 from pydantic_ai import Agent
+from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.models.openai import OpenAIResponsesModel
@@ -171,6 +172,24 @@ class TestAnthropicThinkingLevels:
             settings.get("anthropic_thinking", {}).get("budget_tokens")
             == expected_budget
         )
+
+    def test_anthropic_opus_4_7_uses_adaptive_thinking(self, monkeypatch):
+        """Test Opus 4.7 uses adaptive thinking instead of budget tokens."""
+        strategy = AnthropicProviderStrategy()
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+
+        agent = strategy.create_agent(
+            model_name="claude-opus-4-7",
+            thinking_enabled=True,
+            thinking_level=ThinkingLevel.HIGH,
+        )
+
+        settings = agent.model_settings
+        assert settings
+        assert settings.get("anthropic_thinking") == {"type": "adaptive"}
+        assert settings.get("anthropic_effort") == "high"
+        assert "max_tokens" not in settings
+        agent.model.prepare_request(settings, ModelRequestParameters())
 
     def test_anthropic_thinking_disabled(self, monkeypatch):
         """Test that disabling thinking still keeps prompt caching enabled."""
