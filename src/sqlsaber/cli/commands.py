@@ -163,7 +163,7 @@ def query(
         from sqlsaber.cli.display import DisplayManager
         from sqlsaber.cli.interactive import InteractiveSession
         from sqlsaber.cli.streaming import StreamingQueryHandler
-        from sqlsaber.cli.usage import SessionUsage
+        from sqlsaber.cli.usage import SessionUsage, request_usages_from_run_result
         from sqlsaber.database.resolver import DatabaseResolutionError
         from sqlsaber.options import SQLSaberOptions
         from sqlsaber.session import SQLSaberSession
@@ -238,7 +238,13 @@ def query(
                 if run is not None:
                     session_usage = SessionUsage()
                     final_context = run.response.usage.input_tokens
-                    session_usage.add_run(run.usage(), final_context)
+                    model_id = getattr(session.agent.agent.model, "model_id", None)
+                    session_usage.add_run(
+                        run.usage(),
+                        final_context,
+                        model_name=str(model_id) if model_id else model_name,
+                        request_usages=request_usages_from_run_result(run),
+                    )
                     display = DisplayManager(console)
                     display.show_session_summary(session_usage)
 

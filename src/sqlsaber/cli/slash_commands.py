@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING, Callable
 
 from rich.console import Console
 
-from sqlsaber.cli.display import DisplayManager
 from sqlsaber.config.settings import ThinkingLevel
 
 if TYPE_CHECKING:
@@ -68,9 +67,6 @@ class SlashCommandProcessor:
 
     async def _handle_exit(self, context: CommandContext) -> CommandResult:
         """Handle exit commands."""
-        if context.session_usage is not None:
-            display = DisplayManager(context.console)
-            display.show_session_summary(context.session_usage)
         ended_thread_id = await context.thread_manager.end_current_thread()
         if ended_thread_id:
             hint = f"saber threads resume {ended_thread_id}"
