@@ -5,30 +5,33 @@ description: "Install SQLsaber with uv or pipx. Set up the AI-powered SQL assist
 
 import { Aside } from "@astrojs/starlight/components";
 
-## Install with uv (recommended)
+## Install
 
 ```bash
 uv tool install sqlsaber
 ```
 
 <Aside type="note">
-**Don't have uv?** Install it first:
+**Don't have uv?** Use the standalone installer:
+
+macOS and Linux:
 
 ```bash
-# macOS/Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Windows
-winget install --id=astral-sh.uv -e
+curl -LsSf uvx.sh/sqlsaber/install.sh | sh
 ```
 
-</Aside>
+Windows:
 
-## Alternative: pipx
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://uvx.sh/sqlsaber/install.ps1 | iex"
+```
+
+You can also use `pipx` if you have it and prefer to use it.
 
 ```bash
 pipx install sqlsaber
 ```
+</Aside>
 
 ## Verify installation
 
