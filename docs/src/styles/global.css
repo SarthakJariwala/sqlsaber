@@ -1,125 +1,233 @@
-/* Fonts (must be first to satisfy PostCSS import order) */
-@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
+/* ------------------------------------------------------------------ */
+/* Nothing-inspired design system for SQLsaber docs                    */
+/* Fonts: Doto (display), Space Grotesk (body/UI), Space Mono (data)   */
+/* ------------------------------------------------------------------ */
+
+/* Self-hosted fonts via Fontsource — bundled, no external requests */
+@import "@fontsource-variable/space-grotesk/wght.css";
+@import "@fontsource-variable/doto/wght.css";
+@import "@fontsource/space-mono/400.css";
+@import "@fontsource/space-mono/700.css";
 
 @layer base, starlight, theme, components, utilities;
 @import "@astrojs/starlight-tailwind";
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 
-/* Theme tokens (light) */
+/* ------------------------------------------------------------------ */
+/* 1. NOTHING TOKENS — semantic, mode-aware                            */
+/* ------------------------------------------------------------------ */
+
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.1448 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.1448 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.1448 0 0);
-    --primary: oklch(0.5555 0 0);
-    --primary-foreground: oklch(0.9851 0 0);
-    --secondary: oklch(0.9702 0 0);
-    --secondary-foreground: oklch(0.2046 0 0);
-    --muted: oklch(0.9702 0 0);
-    --muted-foreground: oklch(0.5486 0 0);
-    --accent: oklch(0.9702 0 0);
-    --accent-foreground: oklch(0.2046 0 0);
-    --destructive: oklch(0.583 0.2387 28.4765);
-    --destructive-foreground: oklch(0.9702 0 0);
-    --border: oklch(0.9219 0 0);
-    --input: oklch(0.9219 0 0);
-    --ring: oklch(0.709 0 0);
-    --chart-1: oklch(0.5555 0 0);
-    --chart-2: oklch(0.5555 0 0);
-    --chart-3: oklch(0.5555 0 0);
-    --chart-4: oklch(0.5555 0 0);
-    --chart-5: oklch(0.5555 0 0);
-    --sidebar: oklch(0.9851 0 0);
-    --sidebar-foreground: oklch(0.1448 0 0);
-    --sidebar-primary: oklch(0.2046 0 0);
-    --sidebar-primary-foreground: oklch(0.9851 0 0);
-    --sidebar-accent: oklch(0.9702 0 0);
-    --sidebar-accent-foreground: oklch(0.2046 0 0);
-    --sidebar-border: oklch(0.9219 0 0);
-    --sidebar-ring: oklch(0.709 0 0);
-    --font-sans: Geist Mono, monospace;
-    --font-serif: Geist Mono, monospace;
-    --font-mono: Geist Mono, monospace;
+    /* Light mode — printed technical manual */
+    --nd-black: #f5f5f5; /* page (off-white) */
+    --nd-surface: #ffffff; /* cards on page */
+    --nd-surface-raised: #f0f0f0; /* secondary elevation */
+    --nd-border: #e8e8e8; /* subtle dividers */
+    --nd-border-visible: #cccccc; /* intentional wireframe */
+    --nd-text-disabled: #999999;
+    --nd-text-secondary: #666666;
+    --nd-text-primary: #1a1a1a;
+    --nd-text-display: #000000;
+    /* Accent = foreground (theme-aware). No chromatic accent. */
+    --nd-accent: #000000;
+    --nd-accent-subtle: rgba(0, 0, 0, 0.06);
+    --nd-success: #4a9e5c;
+    --nd-warning: #d4a843;
+    --nd-interactive: #007aff;
+
+    /* Spacing */
+    --nd-space-xs: 4px;
+    --nd-space-sm: 8px;
+    --nd-space-md: 16px;
+    --nd-space-lg: 24px;
+    --nd-space-xl: 32px;
+    --nd-space-2xl: 48px;
+    --nd-space-3xl: 64px;
+    --nd-space-4xl: 96px;
+
+    /* Font stacks */
+    --nd-font-display: "Doto", "Space Mono", monospace;
+    --nd-font-body: "Space Grotesk", "DM Sans", system-ui, sans-serif;
+    --nd-font-mono: "Space Mono", "JetBrains Mono", "SF Mono", monospace;
+
+    /* shadcn-style tokens kept for the splash page utilities */
+    --background: var(--nd-black);
+    --foreground: var(--nd-text-primary);
+    --card: var(--nd-surface);
+    --card-foreground: var(--nd-text-primary);
+    --popover: var(--nd-surface);
+    --popover-foreground: var(--nd-text-primary);
+    --primary: var(--nd-text-display);
+    --primary-foreground: var(--nd-black);
+    --secondary: var(--nd-surface-raised);
+    --secondary-foreground: var(--nd-text-primary);
+    --muted: var(--nd-surface-raised);
+    --muted-foreground: var(--nd-text-secondary);
+    --accent: var(--nd-accent);
+    --accent-foreground: var(--nd-text-display);
+    --destructive: var(--nd-accent);
+    --destructive-foreground: var(--nd-surface);
+    --border: var(--nd-border);
+    --input: var(--nd-border-visible);
+    --ring: var(--nd-text-secondary);
+    --sidebar: var(--nd-black);
+    --sidebar-foreground: var(--nd-text-primary);
+    --sidebar-primary: var(--nd-text-display);
+    --sidebar-primary-foreground: var(--nd-black);
+    --sidebar-accent: var(--nd-surface-raised);
+    --sidebar-accent-foreground: var(--nd-text-primary);
+    --sidebar-border: var(--nd-border);
+    --sidebar-ring: var(--nd-text-secondary);
+
+    --font-sans: var(--nd-font-body);
+    --font-serif: var(--nd-font-body);
+    --font-mono: var(--nd-font-mono);
     --radius: 0rem;
-    --shadow-2xs: 0px 1px 0px 0px hsl(0 0% 0% / 0);
-    --shadow-xs: 0px 1px 0px 0px hsl(0 0% 0% / 0);
-    --shadow-sm:
-        0px 1px 0px 0px hsl(0 0% 0% / 0), 0px 1px 2px -1px hsl(0 0% 0% / 0);
-    --shadow:
-        0px 1px 0px 0px hsl(0 0% 0% / 0), 0px 1px 2px -1px hsl(0 0% 0% / 0);
-    --shadow-md:
-        0px 1px 0px 0px hsl(0 0% 0% / 0), 0px 2px 4px -1px hsl(0 0% 0% / 0);
-    --shadow-lg:
-        0px 1px 0px 0px hsl(0 0% 0% / 0), 0px 4px 6px -1px hsl(0 0% 0% / 0);
-    --shadow-xl:
-        0px 1px 0px 0px hsl(0 0% 0% / 0), 0px 8px 10px -1px hsl(0 0% 0% / 0);
-    --shadow-2xl: 0px 1px 0px 0px hsl(0 0% 0% / 0);
+
+    /* No shadows in Nothing world */
+    --shadow-2xs: 0 0 #0000;
+    --shadow-xs: 0 0 #0000;
+    --shadow-sm: 0 0 #0000;
+    --shadow: 0 0 #0000;
+    --shadow-md: 0 0 #0000;
+    --shadow-lg: 0 0 #0000;
+    --shadow-xl: 0 0 #0000;
+    --shadow-2xl: 0 0 #0000;
+
     --tracking-normal: 0em;
     --spacing: 0.25rem;
 }
 
-/* Dark mode tokens — support common selectors used by Starlight and Tailwind */
+/* Dark mode — instrument panel in a dark room */
 :root.dark,
 html.dark,
 :root[data-theme="dark"],
 html[data-theme="dark"],
 body.dark,
 body[data-theme="dark"] {
-    --background: oklch(0.1448 0 0);
-    --foreground: oklch(0.9851 0 0);
-    --card: oklch(0.2134 0 0);
-    --card-foreground: oklch(0.9851 0 0);
-    --popover: oklch(0.2686 0 0);
-    --popover-foreground: oklch(0.9851 0 0);
-    --primary: oklch(0.5555 0 0);
-    --primary-foreground: oklch(0.9851 0 0);
-    --secondary: oklch(0.2686 0 0);
-    --secondary-foreground: oklch(0.9851 0 0);
-    --muted: oklch(0.2686 0 0);
-    --muted-foreground: oklch(0.709 0 0);
-    --accent: oklch(0.3715 0 0);
-    --accent-foreground: oklch(0.9851 0 0);
-    --destructive: oklch(0.7022 0.1892 22.2279);
-    --destructive-foreground: oklch(0.2686 0 0);
-    --border: oklch(0.3407 0 0);
-    --input: oklch(0.4386 0 0);
-    --ring: oklch(0.5555 0 0);
-    --chart-1: oklch(0.5555 0 0);
-    --chart-2: oklch(0.5555 0 0);
-    --chart-3: oklch(0.5555 0 0);
-    --chart-4: oklch(0.5555 0 0);
-    --chart-5: oklch(0.5555 0 0);
-    --sidebar: oklch(0.2046 0 0);
-    --sidebar-foreground: oklch(0.9851 0 0);
-    --sidebar-primary: oklch(0.9851 0 0);
-    --sidebar-primary-foreground: oklch(0.2046 0 0);
-    --sidebar-accent: oklch(0.2686 0 0);
-    --sidebar-accent-foreground: oklch(0.9851 0 0);
-    --sidebar-border: oklch(1 0 0);
-    --sidebar-ring: oklch(0.4386 0 0);
-    --font-sans: Geist Mono, monospace;
-    --font-serif: Geist Mono, monospace;
-    --font-mono: Geist Mono, monospace;
-    --radius: 0rem;
-    --shadow-2xs: 0px 1px 0px 0px hsl(0 0% 0% / 0);
-    --shadow-xs: 0px 1px 0px 0px hsl(0 0% 0% / 0);
-    --shadow-sm:
-        0px 1px 0px 0px hsl(0 0% 0% / 0), 0px 1px 2px -1px hsl(0 0% 0% / 0);
-    --shadow:
-        0px 1px 0px 0px hsl(0 0% 0% / 0), 0px 1px 2px -1px hsl(0 0% 0% / 0);
-    --shadow-md:
-        0px 1px 0px 0px hsl(0 0% 0% / 0), 0px 2px 4px -1px hsl(0 0% 0% / 0);
-    --shadow-lg:
-        0px 1px 0px 0px hsl(0 0% 0% / 0), 0px 4px 6px -1px hsl(0 0% 0% / 0);
-    --shadow-xl:
-        0px 1px 0px 0px hsl(0 0% 0% / 0), 0px 8px 10px -1px hsl(0 0% 0% / 0);
-    --shadow-2xl: 0px 1px 0px 0px hsl(0 0% 0% / 0);
+    --nd-black: #000000;
+    --nd-surface: #111111;
+    --nd-surface-raised: #1a1a1a;
+    --nd-border: #222222;
+    --nd-border-visible: #333333;
+    --nd-text-disabled: #666666;
+    --nd-text-secondary: #999999;
+    --nd-text-primary: #e8e8e8;
+    --nd-text-display: #ffffff;
+    --nd-accent: #ffffff;
+    --nd-accent-subtle: rgba(255, 255, 255, 0.08);
+    --nd-interactive: #5b9bf6;
+
+    --background: var(--nd-black);
+    --foreground: var(--nd-text-primary);
+    --card: var(--nd-surface);
+    --card-foreground: var(--nd-text-primary);
+    --popover: var(--nd-surface);
+    --popover-foreground: var(--nd-text-primary);
+    --primary: var(--nd-text-display);
+    --primary-foreground: var(--nd-black);
+    --secondary: var(--nd-surface-raised);
+    --secondary-foreground: var(--nd-text-primary);
+    --muted: var(--nd-surface-raised);
+    --muted-foreground: var(--nd-text-secondary);
+    --accent: var(--nd-accent);
+    --accent-foreground: var(--nd-text-display);
+    --border: var(--nd-border);
+    --input: var(--nd-border-visible);
+    --ring: var(--nd-text-secondary);
+    --sidebar: var(--nd-black);
+    --sidebar-foreground: var(--nd-text-primary);
+    --sidebar-primary: var(--nd-text-display);
+    --sidebar-primary-foreground: var(--nd-black);
+    --sidebar-accent: var(--nd-surface-raised);
+    --sidebar-accent-foreground: var(--nd-text-primary);
+    --sidebar-border: var(--nd-border);
+    --sidebar-ring: var(--nd-text-secondary);
 }
 
-/* Map tokens into Tailwind theme so utilities like bg-background work */
+/* ------------------------------------------------------------------ */
+/* 2. STARLIGHT TOKEN OVERRIDES — apply Nothing palette to chrome      */
+/* ------------------------------------------------------------------ */
+
+@layer starlight.base {
+    /* Default = dark mode (matches Starlight's convention) */
+    :root,
+    ::backdrop {
+        --sl-color-white: #ffffff;
+        --sl-color-gray-1: #e8e8e8;
+        --sl-color-gray-2: #cccccc;
+        --sl-color-gray-3: #999999;
+        --sl-color-gray-4: #666666;
+        --sl-color-gray-5: #333333;
+        --sl-color-gray-6: #1a1a1a;
+        --sl-color-black: #000000;
+
+        /* Accent = foreground (monochrome, no chromatic accent) */
+        --sl-color-accent-low: rgba(255, 255, 255, 0.12);
+        --sl-color-accent: #ffffff;
+        --sl-color-accent-high: #ffffff;
+
+        --sl-color-text: #e8e8e8;
+        --sl-color-text-accent: #ffffff;
+        --sl-color-text-invert: #000000;
+        --sl-color-bg: #000000;
+        --sl-color-bg-nav: #000000;
+        --sl-color-bg-sidebar: #000000;
+        --sl-color-bg-inline-code: #1a1a1a;
+        --sl-color-bg-accent: #d71921;
+        --sl-color-hairline-light: #222222;
+        --sl-color-hairline: #1a1a1a;
+        --sl-color-hairline-shade: #000000;
+
+        --sl-color-backdrop-overlay: rgba(0, 0, 0, 0.7);
+
+        /* No glow, no haze */
+        --sl-shadow-sm: 0 0 #0000;
+        --sl-shadow-md: 0 0 #0000;
+        --sl-shadow-lg: 0 0 #0000;
+
+        --sl-font: var(--nd-font-body);
+        --sl-font-mono: var(--nd-font-mono);
+
+        --sl-line-height: 1.6;
+        --sl-line-height-headings: 1.1;
+    }
+
+    :root[data-theme="light"],
+    [data-theme="light"] ::backdrop {
+        --sl-color-white: #000000;
+        --sl-color-gray-1: #1a1a1a;
+        --sl-color-gray-2: #333333;
+        --sl-color-gray-3: #666666;
+        --sl-color-gray-4: #999999;
+        --sl-color-gray-5: #cccccc;
+        --sl-color-gray-6: #e8e8e8;
+        --sl-color-gray-7: #f0f0f0;
+        --sl-color-black: #ffffff;
+
+        --sl-color-accent-low: rgba(0, 0, 0, 0.08);
+        --sl-color-accent: #000000;
+        --sl-color-accent-high: #000000;
+
+        --sl-color-text: #1a1a1a;
+        --sl-color-text-accent: #000000;
+        --sl-color-text-invert: #ffffff;
+        --sl-color-bg: #f5f5f5;
+        --sl-color-bg-nav: #f5f5f5;
+        --sl-color-bg-sidebar: #f5f5f5;
+        --sl-color-bg-inline-code: #e8e8e8;
+        --sl-color-bg-accent: #000000;
+        --sl-color-hairline-light: #e8e8e8;
+        --sl-color-hairline: #e8e8e8;
+        --sl-color-hairline-shade: #cccccc;
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* 3. TAILWIND THEME WIRING                                            */
+/* ------------------------------------------------------------------ */
+
 @theme inline {
     --color-background: var(--background);
     --color-foreground: var(--foreground);
@@ -140,11 +248,6 @@ body[data-theme="dark"] {
     --color-border: var(--border);
     --color-input: var(--input);
     --color-ring: var(--ring);
-    --color-chart-1: var(--chart-1);
-    --color-chart-2: var(--chart-2);
-    --color-chart-3: var(--chart-3);
-    --color-chart-4: var(--chart-4);
-    --color-chart-5: var(--chart-5);
     --color-sidebar: var(--sidebar);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar-primary: var(--sidebar-primary);
@@ -154,27 +257,27 @@ body[data-theme="dark"] {
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-ring: var(--sidebar-ring);
 
-    /* Accent scale for Starlight (use your accent tone across the scale) */
-    --color-accent-50: var(--accent);
-    --color-accent-100: var(--accent);
-    --color-accent-200: var(--accent);
-    --color-accent-300: var(--accent);
-    --color-accent-400: var(--accent);
-    --color-accent-500: var(--accent);
-    --color-accent-600: var(--accent);
-    --color-accent-700: var(--accent);
-    --color-accent-800: var(--accent);
-    --color-accent-900: var(--accent);
-    --color-accent-950: var(--accent);
+    /* Single-tone accent scale */
+    --color-accent-50: var(--nd-accent);
+    --color-accent-100: var(--nd-accent);
+    --color-accent-200: var(--nd-accent);
+    --color-accent-300: var(--nd-accent);
+    --color-accent-400: var(--nd-accent);
+    --color-accent-500: var(--nd-accent);
+    --color-accent-600: var(--nd-accent);
+    --color-accent-700: var(--nd-accent);
+    --color-accent-800: var(--nd-accent);
+    --color-accent-900: var(--nd-accent);
+    --color-accent-950: var(--nd-accent);
 
     --font-sans: var(--font-sans);
     --font-mono: var(--font-mono);
     --font-serif: var(--font-serif);
 
-    --radius-sm: calc(var(--radius) - 4px);
-    --radius-md: calc(var(--radius) - 2px);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) + 4px);
+    --radius-sm: 0;
+    --radius-md: 0;
+    --radius-lg: 0;
+    --radius-xl: 0;
 
     --shadow-2xs: var(--shadow-2xs);
     --shadow-xs: var(--shadow-xs);
@@ -186,15 +289,61 @@ body[data-theme="dark"] {
     --shadow-2xl: var(--shadow-2xl);
 }
 
-/* Base rules */
+/* ------------------------------------------------------------------ */
+/* 4. BASE TYPOGRAPHY — three-layer hierarchy                          */
+/* ------------------------------------------------------------------ */
+
 @layer base {
     * {
         @apply border-border outline-ring/50;
     }
+
+    html {
+        font-family: var(--nd-font-body);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
     body {
         @apply bg-background text-foreground;
+        font-family: var(--nd-font-body);
+        font-weight: 400;
+        letter-spacing: 0;
     }
-    /* Square buttons & form controls to match theme radius */
+
+    /* Headings: Space Grotesk Light, tight tracking, big sizes */
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        font-family: var(--nd-font-body);
+        font-weight: 300;
+        letter-spacing: -0.02em;
+        color: var(--sl-color-white);
+    }
+
+    h1 {
+        letter-spacing: -0.03em;
+        font-weight: 300;
+    }
+    h4,
+    h5,
+    h6 {
+        font-weight: 400;
+        letter-spacing: -0.01em;
+    }
+
+    /* Code / data / inline code: Space Mono */
+    code,
+    pre,
+    kbd,
+    samp {
+        font-family: var(--nd-font-mono);
+    }
+
+    /* Square everything — flat, mechanical */
     button,
     [role="button"],
     a[role="button"],
@@ -205,25 +354,481 @@ body[data-theme="dark"] {
     input,
     select,
     textarea {
-        border-radius: var(--radius);
+        border-radius: 0 !important;
     }
 }
 
-/* Link contrast: use accent-foreground (dark in light mode, light in dark mode) */
-@layer theme {
-    a:not([role="button"]):not(.sl-button):not(.link-button) {
-        color: var(--accent-foreground);
+/* ------------------------------------------------------------------ */
+/* 5. STARLIGHT CHROME TWEAKS                                          */
+/* ------------------------------------------------------------------ */
+
+@layer starlight.components {
+    /* Site title — Space Grotesk Medium, tight */
+    .site-title,
+    a.site-title {
+        font-family: var(--nd-font-body);
+        font-weight: 500;
+        letter-spacing: -0.02em;
+        text-transform: lowercase;
     }
-    a:not([role="button"]):not(.sl-button):not(.link-button):visited {
-        color: var(--accent-foreground);
+
+    /* Sidebar group labels = instrument-panel labels */
+    starlight-toc nav summary span.toc-title,
+    .sidebar-content summary span,
+    .sidebar ul li > details > summary,
+    .sidebar ul li > div > span,
+    .sidebar-content > ul > li > details > summary,
+    .sidebar-content > ul > li > span {
+        font-family: var(--nd-font-mono);
+        font-size: 11px !important;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 400;
     }
-    a:not([role="button"]):not(.sl-button):not(.link-button):hover {
-        color: var(--primary);
+
+    /* Sidebar links — Space Grotesk, no decoration */
+    .sidebar a {
+        font-family: var(--nd-font-body);
+        letter-spacing: 0;
+    }
+
+    .sidebar a[aria-current="page"] {
+        color: var(--sl-color-white) !important;
+        background: transparent !important;
+        font-weight: 500;
+        position: relative;
+    }
+
+    .sidebar a[aria-current="page"]::before {
+        content: "";
+        position: absolute;
+        left: -0.5rem;
+        top: 50%;
+        width: 6px;
+        height: 6px;
+        background: var(--nd-accent);
+        transform: translateY(-50%);
+    }
+
+    /* TOC and right-nav labels */
+    starlight-toc nav h2,
+    .right-sidebar h2 {
+        font-family: var(--nd-font-mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 400;
+        color: var(--sl-color-gray-3);
+    }
+
+    /* Nav bar separator: thin line, not shadow */
+    header.header {
+        box-shadow: none;
+        border-bottom: 1px solid var(--sl-color-hairline);
+        background: var(--sl-color-bg-nav);
+    }
+
+    /* Pagination cards: flat, bordered */
+    .pagination-links a {
+        border-radius: 0;
+        border: 1px solid var(--sl-color-hairline);
+        box-shadow: none;
+    }
+
+    .pagination-links a:hover {
+        border-color: var(--sl-color-white);
+    }
+
+    /* Hero — centered single column (no image) */
+    .hero {
+        padding-block: var(--nd-space-4xl, 96px) var(--nd-space-3xl, 64px);
+        gap: var(--nd-space-2xl, 48px);
+        grid-template-columns: 1fr !important;
+        text-align: center;
+        justify-items: center;
+    }
+
+    .hero .stack {
+        align-items: center;
+        max-width: 52rem;
+        margin-inline: auto;
+    }
+
+    .hero .copy {
+        text-align: center !important;
+        align-items: center !important;
+        width: 100%;
+    }
+
+    /* Override Starlight's .copy > * { max-width: 50ch } */
+    .hero .copy > * {
+        max-width: 100%;
+    }
+
+    .hero h1 {
+        font-family: var(--nd-font-body);
+        font-weight: 300;
+        letter-spacing: -0.03em;
+        line-height: 1;
+        font-size: clamp(2.5rem, 6vw, 5rem);
+        text-align: center !important;
+        width: 100%;
+    }
+
+    .hero .tagline {
+        font-family: var(--nd-font-body);
+        font-weight: 400;
+        letter-spacing: -0.005em;
+        color: var(--sl-color-gray-2);
+        font-size: clamp(1.125rem, 1.6vw, 1.375rem);
+        line-height: 1.4;
+        max-width: 56ch !important;
+        width: 100%;
+        text-align: center !important;
+        margin-inline: auto !important;
+    }
+
+    .hero .actions {
+        justify-content: center;
+    }
+
+    /* Hero action buttons */
+    .hero .actions a,
+    a.sl-link-button {
+        border-radius: 0 !important;
+        font-family: var(--nd-font-mono) !important;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 12px !important;
+        padding: 14px 24px !important;
+        font-weight: 400 !important;
+        box-shadow: none !important;
+        border: 1px solid currentColor !important;
+        transition:
+            background-color 200ms cubic-bezier(0.25, 0.1, 0.25, 1),
+            color 200ms cubic-bezier(0.25, 0.1, 0.25, 1),
+            border-color 200ms cubic-bezier(0.25, 0.1, 0.25, 1) !important;
+    }
+
+    a.sl-link-button.primary {
+        background: var(--sl-color-white) !important;
+        color: var(--sl-color-black) !important;
+        border-color: var(--sl-color-white) !important;
+    }
+
+    /* Hover = monochrome inversion (no chromatic accent) */
+    a.sl-link-button.primary:hover {
+        background: transparent !important;
+        color: var(--sl-color-white) !important;
+        border-color: var(--sl-color-white) !important;
+    }
+
+    a.sl-link-button.secondary {
+        background: transparent !important;
+        color: var(--sl-color-text) !important;
+        border-color: var(--sl-color-hairline-light) !important;
+    }
+
+    a.sl-link-button.secondary:hover {
+        color: var(--sl-color-white) !important;
+        border-color: var(--sl-color-white) !important;
+    }
+
+    a.sl-link-button.minimal {
+        background: transparent !important;
+        color: var(--sl-color-text) !important;
+        border-color: var(--sl-color-hairline-light) !important;
+    }
+
+    a.sl-link-button.minimal:hover {
+        color: var(--sl-color-white) !important;
+        border-color: var(--sl-color-white) !important;
+    }
+
+    /* Cards: flat, square, hairline border, no shadow */
+    .card {
+        border-radius: 0 !important;
+        border: 1px solid var(--sl-color-hairline) !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: var(--nd-space-lg);
+        transition: border-color 200ms cubic-bezier(0.25, 0.1, 0.25, 1);
+    }
+
+    .card:hover {
+        border-color: var(--sl-color-white) !important;
+    }
+
+    .card .title {
+        font-family: var(--nd-font-body);
+        font-weight: 400;
+        letter-spacing: -0.01em;
+        gap: var(--nd-space-sm);
+    }
+
+    /* Kill Starlight's nth-child colored chips — monochrome icons only */
+    .card,
+    .card:nth-child(4n + 1),
+    .card:nth-child(4n + 3),
+    .card:nth-child(4n + 4),
+    .card:nth-child(4n + 5) {
+        --sl-card-border: transparent;
+        --sl-card-bg: transparent;
+    }
+
+    .card .icon {
+        color: var(--sl-color-white) !important;
+        background-color: transparent !important;
+        border: none !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* LinkCard / LinkButton */
+    a.sl-link-card,
+    .sl-link-card {
+        border-radius: 0 !important;
+        border: 1px solid var(--sl-color-hairline) !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }
+
+    a.sl-link-card:hover {
+        border-color: var(--sl-color-white) !important;
+    }
+
+    /* Inline code: square, bordered tag look */
+    :not(pre) > code {
+        font-family: var(--nd-font-mono);
+        font-size: 0.875em;
+        background: var(--sl-color-bg-inline-code);
+        border: 1px solid var(--sl-color-hairline);
+        padding: 1px 6px;
+        border-radius: 0;
+    }
+
+    /* Code blocks: flat, square, hairline border */
+    .expressive-code,
+    .expressive-code .frame,
+    .expressive-code pre {
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+
+    .expressive-code .frame {
+        border: 1px solid var(--sl-color-hairline) !important;
+    }
+
+    /* Asides — monochrome instrument-panel callouts. No color washes. */
+    .starlight-aside,
+    .starlight-aside--note,
+    .starlight-aside--tip,
+    .starlight-aside--caution,
+    .starlight-aside--danger {
+        border-radius: 0;
+        background: transparent !important;
+        border-inline-start: 2px solid var(--sl-color-white) !important;
+        padding: var(--nd-space-md) var(--nd-space-lg);
+        color: var(--sl-color-text);
+        --sl-color-asides-text-accent: var(--sl-color-white);
+        --sl-color-asides-border: var(--sl-color-white);
+    }
+
+    /* Danger gets a subtle differentiation via dashed border, still monochrome */
+    .starlight-aside--danger {
+        border-inline-start-style: dashed !important;
+    }
+
+    .starlight-aside__title {
+        font-family: var(--nd-font-mono) !important;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 11px !important;
+        font-weight: 400 !important;
+        color: var(--sl-color-white) !important;
+    }
+
+    .starlight-aside__icon {
+        color: var(--sl-color-white);
+    }
+
+    .starlight-aside__content a {
+        color: var(--sl-color-white) !important;
+    }
+
+    /* Tables — instrument-panel grid */
+    .sl-markdown-content table {
+        border-collapse: collapse;
+        border: 1px solid var(--sl-color-hairline);
+    }
+
+    .sl-markdown-content th {
+        font-family: var(--nd-font-mono);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--sl-color-gray-3);
+        border-bottom: 1px solid var(--sl-color-hairline);
+        text-align: left;
+    }
+
+    .sl-markdown-content td {
+        border-bottom: 1px solid var(--sl-color-hairline);
+    }
+
+    /* Markdown headings: oversized & restrained */
+    .sl-markdown-content h1 {
+        font-weight: 300;
+        letter-spacing: -0.03em;
+        line-height: 1.05;
+    }
+
+    .sl-markdown-content h2 {
+        font-weight: 300;
+        letter-spacing: -0.025em;
+        margin-top: var(--nd-space-2xl);
+        padding-top: var(--nd-space-md);
+        border-top: 1px solid var(--sl-color-hairline);
+    }
+
+    .sl-markdown-content h3 {
+        font-weight: 400;
+        letter-spacing: -0.015em;
+        margin-top: var(--nd-space-xl);
+    }
+
+    /* Tabs — flat */
+    starlight-tabs ul[role="tablist"] {
+        border-bottom: 1px solid var(--sl-color-hairline);
+    }
+
+    starlight-tabs a[role="tab"][aria-selected="true"] {
+        border-color: var(--nd-accent);
+        color: var(--sl-color-white);
+    }
+
+    /* Search box */
+    site-search button[data-open-modal],
+    [data-open-modal] {
+        border-radius: 0;
+        border: 1px solid var(--sl-color-hairline);
+        font-family: var(--nd-font-mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+
+    /* Theme select */
+    starlight-theme-select select {
+        border-radius: 0;
+        font-family: var(--nd-font-mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
     }
 }
+
+/* ------------------------------------------------------------------ */
+/* 6. LINKS — restrained, underline on hover                            */
+/* ------------------------------------------------------------------ */
+
+@layer theme {
+    .sl-markdown-content
+        a:not([role="button"]):not(.sl-button):not(.link-button):not(
+            .sl-link-card
+        ) {
+        color: var(--sl-color-white);
+        text-decoration: underline;
+        text-decoration-color: var(--sl-color-hairline-light);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.2em;
+        transition:
+            text-decoration-color 200ms cubic-bezier(0.25, 0.1, 0.25, 1),
+            color 200ms cubic-bezier(0.25, 0.1, 0.25, 1);
+    }
+
+    .sl-markdown-content
+        a:not([role="button"]):not(.sl-button):not(.link-button):not(
+            .sl-link-card
+        ):hover {
+        text-decoration-color: var(--nd-accent);
+        color: var(--nd-accent);
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* 7. UTILITIES — Nothing-specific helpers                              */
+/* ------------------------------------------------------------------ */
+
+@layer utilities {
+    /* ALL CAPS Space Mono label — "instrument panel" */
+    .nd-label {
+        font-family: var(--nd-font-mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 400;
+        color: var(--sl-color-gray-3);
+    }
+
+    /* Hero-size display number */
+    .nd-display {
+        font-family: var(--nd-font-display);
+        font-weight: 400;
+        letter-spacing: -0.02em;
+        line-height: 1;
+        color: var(--sl-color-white);
+    }
+
+    /* Mono data value */
+    .nd-mono {
+        font-family: var(--nd-font-mono);
+        letter-spacing: 0;
+    }
+
+    /* Dot-matrix background */
+    .nd-dot-grid {
+        background-image: radial-gradient(
+            circle,
+            var(--sl-color-hairline-light) 1px,
+            transparent 1px
+        );
+        background-size: 16px 16px;
+    }
+
+    .nd-dot-grid-subtle {
+        background-image: radial-gradient(
+            circle,
+            var(--sl-color-hairline) 0.5px,
+            transparent 0.5px
+        );
+        background-size: 12px 12px;
+    }
+
+    /* Signal dot — single red moment */
+    .nd-signal::before {
+        content: "";
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: var(--nd-accent);
+        margin-right: 8px;
+        vertical-align: middle;
+    }
+
+    /* Hairline divider */
+    .nd-hairline {
+        border-top: 1px solid var(--sl-color-hairline);
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* 8. SPLASH PAGE OVERRIDES (index.mdx)                                 */
+/* ------------------------------------------------------------------ */
 
 @layer components {
-    /* Expand hero "image" area so embeds like Asciinema have more room */
+    /* Hero image area — restrained width, no rounding */
     .hero > .hero-html {
         width: min(100%, 40rem);
         margin-inline: auto;
@@ -233,11 +838,22 @@ body[data-theme="dark"] {
     .hero > img {
         width: min(100%, 40rem);
         margin-inline: auto;
+        border-radius: 0;
     }
 
     .hero > picture img,
     .hero > img {
         width: 100%;
         height: auto;
+        border-radius: 0;
+        border: 1px solid var(--sl-color-hairline);
+    }
+
+    /* Splash section headings: Space Grotesk Light, big */
+    [data-has-hero] h2,
+    main h2.font-sans {
+        font-family: var(--nd-font-body) !important;
+        font-weight: 300 !important;
+        letter-spacing: -0.025em !important;
     }
 }
