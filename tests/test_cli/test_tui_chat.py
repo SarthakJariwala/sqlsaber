@@ -2,10 +2,12 @@ import asyncio
 import time
 from collections.abc import Callable
 from io import StringIO
+from types import SimpleNamespace
 
 import pytest
 import saber_tui.utils as tui_utils
-from pydantic_ai.messages import PartEndEvent, PartStartEvent, TextPart
+from pydantic_ai.messages import ModelResponse, PartEndEvent, PartStartEvent, TextPart
+from pydantic_ai.usage import RequestUsage, RunUsage
 from rich.table import Table
 from saber_tui import PosixProcessTerminal, WindowsProcessTerminal
 from saber_tui.stdin_buffer import StdinBuffer
@@ -17,8 +19,7 @@ from sqlsaber.cli.interactive import InteractiveSession
 from sqlsaber.cli.tui_chat import ChatApp, build_chat_app
 from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
 from sqlsaber.config.settings import ThinkingLevel
-from sqlsaber.theme.manager import get_theme_manager
-from sqlsaber.theme.manager import create_console
+from sqlsaber.theme.manager import create_console, get_theme_manager
 
 
 class FakeTerminal:
@@ -443,6 +444,96 @@ def test_chat_app_renders_footer_text() -> None:
     viewport = "\n".join(app.render_plain_viewport())
     assert "DB: analytics (DuckDB)" in viewport
     assert "Model: gpt-test" in viewport
+
+
+def test_interactive_footer_includes_usage_cost_and_context() -> None:
+    session = InteractiveSession.__new__(InteractiveSession)
+    session.database_name = "analytics"
+    session._db_type_name = lambda: "DuckDB"
+    session.sqlsaber_agent = SimpleNamespace(
+        agent=SimpleNamespace(model=SimpleNamespace(model_name="gpt-test")),
+    )
+    session.session_usage = interactive.SessionUsage(
+        total_input_tokens=4200,
+        total_output_tokens=820,
+        current_context_tokens=999,
+        total_cost_usd=0.0123,
+    )
+
+    footer = session._footer_text()
+
+    assert "DB: analytics (DuckDB)" in footer
+    assert "Model: gpt-test" in footer
+    assert "Usage: ↑4.2k ↓820" in footer
+    assert "Ctx: 999" in footer
+    assert "Cost: $0.0123" in footer
+
+
+@pytest.mark.asyncio
+async def test_execute_query_refreshes_footer_usage_cost_and_context() -> None:
+    terminal = FakeTerminal(columns=160, rows=12)
+    app = build_chat_app(
+        terminal=terminal,
+        on_submit=lambda text: None,
+        footer_text="DB: analytics (DuckDB) | Model: claude-sonnet-4-5 | Usage: ↑0 ↓0 | Ctx: 0 | Cost: $0.0000",
+    )
+    app.tui.start()
+
+    session = InteractiveSession.__new__(InteractiveSession)
+    session.log = SimpleNamespace(info=lambda *args, **kwargs: None)
+    session.database_name = "analytics"
+    session._db_type_name = lambda: "DuckDB"
+    session.session_usage = interactive.SessionUsage()
+    session.message_history = []
+    session.current_task = None
+    session.cancellation_token = None
+    session.sqlsaber_agent = SimpleNamespace(
+        agent=SimpleNamespace(
+            model=SimpleNamespace(
+                model_name="claude-sonnet-4-5",
+                model_id="anthropic:claude-sonnet-4-5",
+            )
+        ),
+    )
+    session.session = SimpleNamespace(query=lambda *args, **kwargs: None)
+
+    class FakeRunResult:
+        response = SimpleNamespace(usage=SimpleNamespace(input_tokens=150_000))
+
+        def usage(self) -> RunUsage:
+            return RunUsage(input_tokens=300_000, output_tokens=0, requests=2)
+
+        def all_messages(self) -> list[str]:
+            return ["message"]
+
+        def new_messages(self) -> list[ModelResponse]:
+            return [
+                ModelResponse(
+                    parts=[TextPart(content="first")],
+                    usage=RequestUsage(input_tokens=150_000, output_tokens=0),
+                ),
+                ModelResponse(
+                    parts=[TextPart(content="second")],
+                    usage=RequestUsage(input_tokens=150_000, output_tokens=0),
+                ),
+            ]
+
+    class FakeStreamingHandler:
+        def __init__(self, target_app: ChatApp) -> None:
+            self.app = target_app
+
+        async def execute_streaming_query(self, *args, **kwargs) -> FakeRunResult:
+            _ = args, kwargs
+            return FakeRunResult()
+
+    session.streaming_handler = FakeStreamingHandler(app)
+
+    await session._execute_query_with_cancellation("show revenue")
+
+    viewport = "\n".join(app.render_plain_viewport())
+    assert "Usage: ↑300.0k ↓0" in viewport
+    assert "Ctx: 150.0k" in viewport
+    assert "Cost: $0.9000" in viewport
 
 
 def test_chat_app_renders_rich_output_as_ansi_inside_tui() -> None:

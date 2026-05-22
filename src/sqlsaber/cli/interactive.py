@@ -14,11 +14,15 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from sqlsaber.cli.completers import SQLSaberAutocompleteProvider
-from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.slash_commands import CommandContext, SlashCommandProcessor
 from sqlsaber.cli.tui_chat import ChatApp, ChatConsole, build_chat_app
 from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
-from sqlsaber.cli.usage import SessionUsage
+from sqlsaber.cli.usage import (
+    SessionUsage,
+    format_cost_usd,
+    format_tokens,
+    request_usages_from_run_result,
+)
 from sqlsaber.config.logging import get_logger
 from sqlsaber.database import (
     CSVConnection,
@@ -52,7 +56,6 @@ class InteractiveSession:
         self.sqlsaber_agent = session.agent
         self.db_conn = session.connection
         self.database_name = session.db_name
-        self.display = DisplayManager(console)
         self.streaming_handler: TUIStreamingQueryHandler | None = None
         self.current_task: asyncio.Task | None = None
         self.cancellation_token: asyncio.Event | None = None
@@ -136,9 +139,39 @@ class InteractiveSession:
     def _model_name(self) -> str:
         return getattr(self.sqlsaber_agent.agent.model, "model_name", "Unknown")
 
+    def _model_id(self) -> str | None:
+        model = self.sqlsaber_agent.agent.model
+        model_id = getattr(model, "model_id", None)
+        if model_id:
+            return str(model_id)
+        configured_model = getattr(
+            getattr(self.sqlsaber_agent, "config", None), "model", None
+        )
+        configured_name = getattr(configured_model, "name", None)
+        if configured_name:
+            return str(configured_name)
+        model_name = self._model_name()
+        return None if model_name == "Unknown" else model_name
+
     def _footer_text(self) -> str:
         db_name = self.database_name or "Unknown"
-        return f"DB: {db_name} ({self._db_type_name()}) | Model: {self._model_name()}"
+        return (
+            f"DB: {db_name} ({self._db_type_name()}) | "
+            f"Model: {self._model_name()} | {self._usage_footer_text()}"
+        )
+
+    def _usage_footer_text(self) -> str:
+        session_usage = getattr(self, "session_usage", SessionUsage())
+        return (
+            f"Usage: ↑{format_tokens(session_usage.total_input_tokens)} "
+            f"↓{format_tokens(session_usage.total_output_tokens)} | "
+            f"Ctx: {format_tokens(session_usage.current_context_tokens)} | "
+            f"Cost: {format_cost_usd(session_usage.total_cost_usd)}"
+        )
+
+    def _refresh_footer(self) -> None:
+        if self.streaming_handler is not None:
+            self.streaming_handler.app.set_footer(self._footer_text())
 
     def show_welcome_message(self, app: ChatApp) -> None:
         """Display welcome message for interactive mode."""
@@ -270,7 +303,13 @@ class InteractiveSession:
             if run_result is not None:
                 self.message_history = run_result.all_messages()
                 final_context = run_result.response.usage.input_tokens
-                self.session_usage.add_run(run_result.usage(), final_context)
+                self.session_usage.add_run(
+                    run_result.usage(),
+                    final_context,
+                    model_name=self._model_id(),
+                    request_usages=request_usages_from_run_result(run_result),
+                )
+                self._refresh_footer()
         finally:
             self.current_task = None
             self.cancellation_token = None
@@ -367,7 +406,6 @@ class InteractiveSession:
     async def _finalize_exit(self) -> None:
         if self._exit_finalized:
             return
-        self.display.show_session_summary(self.session_usage)
         ended_thread_id = await self.thread_manager.end_current_thread()
         if ended_thread_id:
             hint = f"saber threads resume {ended_thread_id}"

@@ -17,6 +17,8 @@ from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.syntax import Syntax
 from rich.text import Text
+
+from sqlsaber.cli.usage import format_cost_usd, format_tokens
 from sqlsaber.theme.manager import get_theme_manager
 from sqlsaber.tools.display import ResultConfig, SpecRenderer, ToolDisplaySpec
 from sqlsaber.tools.registry import tool_registry
@@ -355,7 +357,7 @@ class DisplayManager:
     def show_session_summary(self, session_usage: "SessionUsage") -> None:
         """Display session summary on exit.
 
-        Shows final context size, total output tokens generated, and request/tool counts.
+        Shows cumulative usage, cost, current context size, and request/tool counts.
         """
         if not self.console.is_terminal:
             return
@@ -367,21 +369,27 @@ class DisplayManager:
         self.console.print("[muted]Session Summary[/muted]")
         self.console.print("[muted]" + "─" * 40 + "[/muted]")
 
-        tokens_line = Text()
-        tokens_line.append("Input: ", style="muted")
-        tokens_line.append(
+        usage_line = Text()
+        usage_line.append("Usage: ", style="muted")
+        usage_line.append(
+            f"{format_tokens(session_usage.total_input_tokens)} in / "
+            f"{format_tokens(session_usage.total_output_tokens)} out",
+            style="muted bold",
+        )
+        usage_line.append(" │ Cost: ", style="muted")
+        usage_line.append(
+            format_cost_usd(session_usage.total_cost_usd),
+            style="muted bold",
+        )
+        self.console.print(usage_line)
+
+        context_line = Text()
+        context_line.append("Current context: ", style="muted")
+        context_line.append(
             f"{session_usage.current_context_tokens:,} tokens",
             style="muted bold",
         )
-        self.console.print(tokens_line)
-
-        output_line = Text()
-        output_line.append("Output (total): ", style="muted")
-        output_line.append(
-            f"{session_usage.total_output_tokens:,} tokens",
-            style="muted bold",
-        )
-        self.console.print(output_line)
+        self.console.print(context_line)
 
         stats_line = Text()
         stats_line.append("Requests: ", style="muted")
