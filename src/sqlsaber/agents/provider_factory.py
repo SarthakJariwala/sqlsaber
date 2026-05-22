@@ -17,6 +17,7 @@ from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 
+from sqlsaber.config import providers
 from sqlsaber.config.settings import ThinkingLevel
 
 ProviderName = Literal["google", "anthropic", "openai", "groq"]
@@ -28,6 +29,15 @@ ANTHROPIC_BUDGET_MAP: dict[ThinkingLevel, int] = {
     ThinkingLevel.MEDIUM: 8192,
     ThinkingLevel.HIGH: 32768,
     ThinkingLevel.MAXIMUM: 100000,
+}
+
+# Mapping from ThinkingLevel to Anthropic adaptive effort
+ANTHROPIC_ADAPTIVE_EFFORT_MAP: dict[ThinkingLevel, str] = {
+    ThinkingLevel.MINIMAL: "low",
+    ThinkingLevel.LOW: "low",
+    ThinkingLevel.MEDIUM: "medium",
+    ThinkingLevel.HIGH: "high",
+    ThinkingLevel.MAXIMUM: "xhigh",
 }
 
 # Mapping from ThinkingLevel to OpenAI reasoning_effort
@@ -122,15 +132,22 @@ class AnthropicProviderStrategy(AgentProviderStrategy):
         settings_kwargs: dict[str, Any] = {"anthropic_cache": True}
 
         if thinking_enabled:
-            budget_tokens = ANTHROPIC_BUDGET_MAP.get(thinking_level, 8192)
-            # max_tokens must be >= budget_tokens
-            max_tokens = max(budget_tokens + 4096, 8192)
-            settings_kwargs.update(
-                anthropic_thinking=cast(
-                    Any, {"type": "enabled", "budget_tokens": budget_tokens}
-                ),
-                max_tokens=max_tokens,
-            )
+            if providers.requires_anthropic_adaptive_thinking(model_name):
+                effort = ANTHROPIC_ADAPTIVE_EFFORT_MAP.get(thinking_level, "medium")
+                settings_kwargs.update(
+                    anthropic_thinking=cast(Any, {"type": "adaptive"}),
+                    anthropic_effort=effort,
+                )
+            else:
+                budget_tokens = ANTHROPIC_BUDGET_MAP.get(thinking_level, 8192)
+                # max_tokens must be >= budget_tokens
+                max_tokens = max(budget_tokens + 4096, 8192)
+                settings_kwargs.update(
+                    anthropic_thinking=cast(
+                        Any, {"type": "enabled", "budget_tokens": budget_tokens}
+                    ),
+                    max_tokens=max_tokens,
+                )
 
         settings = AnthropicModelSettings(**settings_kwargs)
         return Agent(model_obj, name="sqlsaber", model_settings=settings)
