@@ -15,6 +15,7 @@ All notable changes to SQLsaber will be documented here.
 ### Features
 
 * Use adaptive thinking for opus 4.7 ([#173](https://github.com/SarthakJariwala/sqlsaber/issues/173)) ([fcad0dc](https://github.com/SarthakJariwala/sqlsaber/commit/fcad0dc6cf0a98055cc48ae7d029e2139533221d))
+* Show token usage and context in footer in interactive mode ([#170](https://github.com/SarthakJariwala/sqlsaber/pull/170))
 
 ## [0.64.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.63.0...sqlsaber-v0.64.0) (2026-05-20)
 
