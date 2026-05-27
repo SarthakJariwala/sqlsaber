@@ -1,0 +1,87 @@
+---
+title: Overview
+description: "Use SQLsaber from Python. Run natural-language to SQL queries programmatically with the async SQLSaber SDK instead of the CLI."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+SQLsaber ships a small public Python API (the SDK) so you can run natural-language
+queries against your databases directly from Python code, instead of through the
+`saber` CLI. It is the same agent that powers the CLI, exposed as an `async`
+interface you can embed in scripts, notebooks, web backends, or data pipelines.
+
+The SDK exposes three names from the top-level `sqlsaber` package:
+
+| Export            | Purpose                                                       |
+| ----------------- | ------------------------------------------------------------- |
+| `SQLSaber`        | Main entry point — runs queries and owns the DB connection.   |
+| `SQLSaberOptions` | Typed options bag used to configure a `SQLSaber` session.     |
+| `ModelOverides`   | Per-tool model/API-key overrides (see [Advanced](/sdk/advanced)). |
+
+## Installation
+
+The SDK is included with the main package — no extra install required.
+
+```bash
+uv add sqlsaber
+# or
+pip install sqlsaber
+```
+
+## Quickstart
+
+Create a `SQLSaberOptions`, open a `SQLSaber` session, and `await` a query. The
+result behaves like a string containing the agent's answer.
+
+```python
+import asyncio
+
+from sqlsaber import SQLSaber, SQLSaberOptions
+
+
+async def main() -> None:
+    options = SQLSaberOptions(database="sqlite:///my.db")
+
+    async with SQLSaber(options=options) as saber:
+        result = await saber.query("Show me the top 5 users by order count")
+        print(result)        # the agent's text answer
+        print(result.usage)  # token usage for the run
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+<Aside type="note">
+  `query()` is asynchronous, so call it inside an `async` function (e.g. via
+  `asyncio.run`). The `SQLSaber` constructor is keyword-only — always pass
+  `options=...`.
+</Aside>
+
+## Managing the connection
+
+`SQLSaber` owns a live database connection. Use it as an async context manager
+(`async with`) so the connection is closed automatically, or call `await
+saber.close()` yourself:
+
+```python
+saber = SQLSaber(options=SQLSaberOptions(database="sqlite:///my.db"))
+try:
+    result = await saber.query("How many orders shipped last week?")
+finally:
+    await saber.close()
+```
+
+## Credentials
+
+By default the SDK reuses the credentials you configured for the CLI (via
+`saber auth`) and any provider environment variables such as
+`ANTHROPIC_API_KEY`. You can also pass keys explicitly in code — see
+[Credentials & Models](/sdk/credentials-and-models).
+
+## Where to next?
+
+1. [Configuration](/sdk/configuration) — every `SQLSaberOptions` field.
+2. [Credentials & Models](/sdk/credentials-and-models) — auth and model selection.
+3. [Results & Streaming](/sdk/results-and-streaming) — read SQL, usage, and stream events.
+4. [Advanced](/sdk/advanced) — tool overrides, custom prompts, write access, and more.

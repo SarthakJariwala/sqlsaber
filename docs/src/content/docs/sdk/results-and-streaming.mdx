@@ -1,0 +1,97 @@
+---
+title: Results & Streaming
+description: "Read SQLsaber SDK query results: the text answer, generated SQL, token usage, streaming events, and multi-turn conversations with message history."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+`saber.query()` returns a `SQLSaberResult`. It subclasses `str`, so it *is* the
+agent's text answer, while also exposing the full execution details.
+
+```python
+result = await saber.query("How many orders shipped last week?")
+
+print(result)            # the answer, as a string
+print(result.usage)      # token usage for this run
+print(result.messages)   # messages from this run (incl. tool calls / SQL)
+```
+
+## Result properties
+
+| Property        | Description                                                              |
+| --------------- | ------------------------------------------------------------------------ |
+| _(the value)_   | The result *is* a `str` containing the agent's final text answer.        |
+| `.usage`        | Token usage statistics for the run.                                      |
+| `.messages`     | New messages produced by this run, including tool calls and SQL.         |
+| `.all_messages` | The full message history, including any prior turns you passed in.       |
+
+## Inspecting the generated SQL
+
+The SQL the agent ran lives in the run's messages as tool calls. The message
+objects are `pydantic_ai` message types; iterate over their parts to find tool
+calls:
+
+```python
+from pydantic_ai.messages import ModelResponse, ToolCallPart
+
+result = await saber.query("Top 5 customers by revenue")
+
+for message in result.messages:
+    if isinstance(message, ModelResponse):
+        for part in message.parts:
+            if isinstance(part, ToolCallPart):
+                print(part.tool_name, part.args)
+```
+
+## Streaming events
+
+Pass an `event_stream_handler` to react to events (text chunks, tool calls,
+etc.) as they arrive, rather than waiting for the final answer. The handler is an
+async function that receives the run context and an async iterable of events:
+
+```python
+from collections.abc import AsyncIterable
+from typing import Any
+
+from pydantic_ai import RunContext
+from pydantic_ai.messages import AgentStreamEvent
+
+
+async def on_event(
+    ctx: RunContext[Any],
+    events: AsyncIterable[AgentStreamEvent],
+) -> None:
+    async for event in events:
+        print(event)
+
+
+result = await saber.query(
+    "Show me revenue by month",
+    event_stream_handler=on_event,
+)
+```
+
+<Aside type="note">
+  The event and context types come from
+  <a href="https://ai.pydantic.dev/">pydantic-ai</a>, which powers SQLsaber's
+  agent. Refer to its docs for the full event taxonomy.
+</Aside>
+
+## Multi-turn conversations
+
+To continue a conversation, feed the previous result's messages back into the
+next call via `message_history`:
+
+```python
+async with SQLSaber(options=options) as saber:
+    first = await saber.query("How many active customers do we have?")
+
+    follow_up = await saber.query(
+        "Now break that down by country",
+        message_history=first.all_messages,
+    )
+    print(follow_up)
+```
+
+Use `result.all_messages` to carry the whole history forward, or
+`result.messages` to pass only the latest turn.

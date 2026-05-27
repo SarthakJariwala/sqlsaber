@@ -1,0 +1,83 @@
+---
+title: Configuration
+description: "Configure the SQLsaber Python SDK with SQLSaberOptions: database connections, model selection, thinking, system prompts, and injectable components."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Every `SQLSaber` session is configured through a single `SQLSaberOptions`
+dataclass. Construct it with keyword arguments and pass it to `SQLSaber(options=...)`.
+
+```python
+from sqlsaber import SQLSaberOptions
+
+options = SQLSaberOptions(
+    database="postgresql://user:pass@localhost:5432/analytics",
+    model_name="anthropic:claude-sonnet-4-5-20250929",
+    thinking_level="medium",
+)
+```
+
+## Options reference
+
+| Field               | Type                                          | Default | Description                                                                                  |
+| ------------------- | --------------------------------------------- | ------- | -------------------------------------------------------------------------------------------- |
+| `database`          | `str \| list[str] \| tuple[str, ...] \| None` | `None`  | Connection string, file path, configured DB name, or a list of CSV paths.                    |
+| `model_name`        | `str \| None`                                 | `None`  | Model in `"provider:model"` form. Falls back to your configured/default model.               |
+| `api_key`           | `str \| None`                                 | `None`  | API key for the model's provider. Usually unnecessary — see [Credentials](/sdk/credentials-and-models). |
+| `thinking_enabled`  | `bool \| None`                                | `None`  | Toggle extended thinking on supported reasoning models.                                      |
+| `thinking_level`    | `ThinkingLevel \| str \| None`                | `None`  | `"minimal" \| "low" \| "medium" \| "high" \| "maximum"`. Setting a level enables thinking.   |
+| `system_prompt`     | `str \| Path \| None`                         | `None`  | Custom system prompt text, or a path to a file containing it.                                |
+| `settings`          | `Config \| None`                              | `None`  | Inject a `Config` (e.g. `Config.in_memory(...)`). Defaults to file-backed `Config.default()`. |
+| `knowledge_manager` | `KnowledgeManager \| None`                    | `None`  | Inject your own knowledge base (see [Advanced](/sdk/advanced)).                              |
+| `thread_manager`    | `ThreadManager \| None`                       | `None`  | Persist conversation history across runs (see [Advanced](/sdk/advanced)).                    |
+| `tool_overrides`    | `Mapping[str, ModelOverides] \| None`         | `None`  | Per-tool model/API-key overrides (see [Advanced](/sdk/advanced)).                            |
+| `allow_dangerous`   | `bool`                                        | `False` | Allow write operations and a restricted subset of DDL (see [Advanced](/sdk/advanced)).       |
+
+<Aside type="note">
+  `model_name`, `thinking_*`, `system_prompt`, and the injectable components all
+  have sensible defaults. For many use cases just `database` (plus credentials in
+  your environment) is enough.
+</Aside>
+
+## Choosing a database
+
+The `database` option accepts the same targets as the CLI's `-d` flag.
+
+### Connection strings
+
+```python
+SQLSaberOptions(database="postgresql://user:pass@host:5432/db")
+SQLSaberOptions(database="mysql://user:pass@host:3306/db")
+SQLSaberOptions(database="sqlite:///path/to/local.db")
+SQLSaberOptions(database="duckdb:///path/to/warehouse.duckdb")
+```
+
+### File paths
+
+Point directly at a SQLite, DuckDB, or CSV file:
+
+```python
+SQLSaberOptions(database="./data/sales.db")
+SQLSaberOptions(database="./customers.csv")
+```
+
+### Multiple CSV files
+
+Pass a list (or tuple) of CSV paths to query across them together:
+
+```python
+SQLSaberOptions(database=["users.csv", "orders.csv"])
+```
+
+### A configured database
+
+If you've already registered a connection with the CLI (`saber db add`), refer
+to it by name:
+
+```python
+SQLSaberOptions(database="prod-db")
+```
+
+See the [Database Setup guide](/guides/database-setup) for details on connection
+strings and registering databases.
