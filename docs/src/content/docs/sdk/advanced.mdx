@@ -1,0 +1,135 @@
+---
+title: Advanced
+description: "Advanced SQLsaber SDK usage: per-tool model overrides, custom system prompts, write access, and injecting knowledge base and conversation thread managers."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+## Per-tool model overrides
+
+You can run specific internal tools (for example a visualization or summarization
+tool) on a different model than the main agent. Use `tool_overrides`, mapping a
+tool name to a `ModelOverides`:
+
+```python
+from sqlsaber import SQLSaber, SQLSaberOptions, ModelOverides
+
+options = SQLSaberOptions(
+    database="sqlite:///my.db",
+    model_name="anthropic:claude-sonnet-4-5-20250929",
+    tool_overrides={
+        "viz": ModelOverides(
+            model_name="openai:gpt-5-mini",
+            api_key="sk-...",
+        ),
+    },
+)
+```
+
+You may also pass a plain dict instead of `ModelOverides`:
+
+```python
+tool_overrides={"viz": {"model_name": "openai:gpt-5-mini"}}
+```
+
+<Aside type="note">
+  An `api_key` override requires a `model_name`, since the provider is derived
+  from the model. Setting `api_key` without `model_name` raises an error.
+</Aside>
+
+## Custom system prompt
+
+Override the agent's system prompt with inline text or a path to a file:
+
+```python
+from pathlib import Path
+
+# Inline
+SQLSaberOptions(
+    database="sqlite:///my.db",
+    system_prompt="You are a senior data analyst. Prefer concise answers.",
+)
+
+# From a file
+SQLSaberOptions(
+    database="sqlite:///my.db",
+    system_prompt=Path("prompts/analyst.txt"),
+)
+```
+
+## Allowing write operations
+
+By default the SDK only permits read-only `SELECT` queries. Set
+`allow_dangerous=True` to permit DML and a restricted subset of DDL:
+
+```python
+SQLSaberOptions(database="sqlite:///my.db", allow_dangerous=True)
+```
+
+<Aside type="caution">
+  This allows data modifications (INSERT/UPDATE/DELETE, with UPDATE/DELETE
+  requiring a `WHERE`) and limited DDL. Destructive operations such as DROP and
+  TRUNCATE remain blocked. See [Running Queries](/guides/queries#dangerous-mode)
+  for the full policy.
+</Aside>
+
+## Injecting a knowledge base
+
+Provide domain context by injecting your own `KnowledgeManager`. The agent can
+search it while answering:
+
+```python
+import asyncio
+
+from sqlsaber import SQLSaber, SQLSaberOptions
+from sqlsaber.knowledge import KnowledgeManager, SQLiteKnowledgeStore
+
+
+async def main() -> None:
+    manager = KnowledgeManager(store=SQLiteKnowledgeStore(db_path="knowledge.db"))
+
+    await manager.add_knowledge(
+        database_name="analytics",
+        name="Gross margin",
+        description="(Revenue - COGS) / Revenue",
+        source="finance-handbook",
+    )
+
+    async with SQLSaber(
+        options=SQLSaberOptions(
+            database="analytics",
+            knowledge_manager=manager,
+        )
+    ) as saber:
+        print(await saber.query("How do we define gross margin?"))
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+<Aside type="note">
+  When you inject your own `knowledge_manager`, the session does **not** close it
+  for you — you own its lifecycle. If you omit it, the session creates and closes
+  one automatically.
+</Aside>
+
+See the [Knowledge Base guide](/guides/knowledge) for managing entries.
+
+## Persisting conversation threads
+
+Inject a `ThreadManager` to persist each run's history, just like the CLI does
+between sessions:
+
+```python
+from sqlsaber import SQLSaber, SQLSaberOptions
+from sqlsaber.threads.manager import ThreadManager
+
+options = SQLSaberOptions(
+    database="analytics",
+    thread_manager=ThreadManager(),
+)
+```
+
+The session saves each run and ends the current thread when it closes. See the
+[Conversation Threads guide](/guides/threads) for how threads work.

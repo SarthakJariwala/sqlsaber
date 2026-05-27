@@ -95,6 +95,22 @@ export default defineConfig({
 					],
 				},
 				{
+					label: "Python SDK",
+					items: [
+						{ label: "Overview", slug: "sdk/overview" },
+						{ label: "Configuration", slug: "sdk/configuration" },
+						{
+							label: "Credentials & Models",
+							slug: "sdk/credentials-and-models",
+						},
+						{
+							label: "Results & Streaming",
+							slug: "sdk/results-and-streaming",
+						},
+						{ label: "Advanced", slug: "sdk/advanced" },
+					],
+				},
+				{
 					label: "Reference",
 					items: [
 						{ label: "Commands", slug: "reference/commands" },
