@@ -1,5 +1,6 @@
 """Tests for the multi-database registry that backs a SQLSaber session."""
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -21,6 +22,12 @@ def _entry(name: str, *, description: str | None = None) -> DatabaseEntry:
         description=description,
         excluded_schemas=[],
     )
+
+
+def _mock_close(entry: DatabaseEntry, side_effect: object = None) -> AsyncMock:
+    close_mock = AsyncMock(side_effect=side_effect)
+    setattr(entry.connection, "close", close_mock)
+    return close_mock
 
 
 class TestDatabaseRegistry:
@@ -76,31 +83,48 @@ class TestDatabaseRegistry:
     async def test_close_closes_every_connection(self):
         entry_a = _entry("a")
         entry_b = _entry("b")
-        entry_a.connection.close = AsyncMock()
-        entry_b.connection.close = AsyncMock()
+        close_a = _mock_close(entry_a)
+        close_b = _mock_close(entry_b)
 
         registry = DatabaseRegistry([entry_a, entry_b])
         await registry.close()
 
-        entry_a.connection.close.assert_awaited_once()
-        entry_b.connection.close.assert_awaited_once()
+        close_a.assert_awaited_once()
+        close_b.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_close_aggregates_errors_but_still_closes_all(self):
         entry_a = _entry("a")
         entry_b = _entry("b")
         entry_c = _entry("c")
-        entry_a.connection.close = AsyncMock(side_effect=RuntimeError("boom"))
-        entry_b.connection.close = AsyncMock()
-        entry_c.connection.close = AsyncMock()
+        close_a = _mock_close(entry_a, RuntimeError("boom"))
+        close_b = _mock_close(entry_b)
+        close_c = _mock_close(entry_c)
 
         registry = DatabaseRegistry([entry_a, entry_b, entry_c])
         with pytest.raises(RuntimeError, match="boom"):
             await registry.close()
 
-        entry_a.connection.close.assert_awaited_once()
-        entry_b.connection.close.assert_awaited_once()
-        entry_c.connection.close.assert_awaited_once()
+        close_a.assert_awaited_once()
+        close_b.assert_awaited_once()
+        close_c.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_close_propagates_cancellation_without_swallowing_it(self):
+        entry_a = _entry("a")
+        entry_b = _entry("b")
+        entry_c = _entry("c")
+        close_a = _mock_close(entry_a, RuntimeError("boom"))
+        close_b = _mock_close(entry_b, asyncio.CancelledError())
+        close_c = _mock_close(entry_c)
+
+        registry = DatabaseRegistry([entry_a, entry_b, entry_c])
+        with pytest.raises(asyncio.CancelledError):
+            await registry.close()
+
+        close_a.assert_awaited_once()
+        close_b.assert_awaited_once()
+        close_c.assert_not_awaited()
 
 
 class TestDatabaseRegistryFromResolved:

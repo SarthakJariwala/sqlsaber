@@ -9,6 +9,7 @@ from pydantic_ai import RunContext
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
+from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import Config, ThinkingLevel
 from sqlsaber.database.base import BaseDatabaseConnection
@@ -16,6 +17,10 @@ from sqlsaber.database.registry import DatabaseRegistry
 from sqlsaber.database.resolver import resolve_databases
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.options import SQLSaberOptions
+from sqlsaber.threads.metadata import (
+    encode_thread_extra_metadata,
+    encode_thread_resume_disabled_metadata,
+)
 from sqlsaber.utils.text_input import resolve_text_input
 
 logger = get_logger(__name__)
@@ -34,6 +39,9 @@ class SQLSaberSession:
         else:
             database_spec = options.database
 
+        self._database_spec = (
+            list(database_spec) if isinstance(database_spec, list) else database_spec
+        )
         self._resolved = resolve_databases(database_spec)
         self.registry: DatabaseRegistry = DatabaseRegistry.from_resolved(self._resolved)
         self.db_names: list[str] = self.registry.names()
@@ -98,23 +106,61 @@ class SQLSaberSession:
                 if not isinstance(resolved_model_name, str) or not resolved_model_name:
                     resolved_model_name = self.agent.config.model.name
 
-                # Multi-DB sessions persist comma-joined names for now; thread
-                # resume does not auto-reconnect, so the column is informational.
+                # Keep database_name display-oriented while storing the original
+                # selector separately so multi-DB resumes never treat
+                # comma-joined names as one database spec.
                 if len(self.registry) > 1:
                     database_name = ",".join(self.db_names)
                 else:
                     database_name = self.db_name
+
+                database_selector = self._configured_database_selector()
+                if database_selector is None:
+                    extra_metadata = encode_thread_resume_disabled_metadata(
+                        reason=(
+                            "Only configured database names are saved for automatic "
+                            "resume."
+                        )
+                    )
+                else:
+                    extra_metadata = encode_thread_extra_metadata(
+                        database_selector=database_selector
+                    )
 
                 await self.thread_manager.save_run(
                     run_result=run_result,
                     database_name=database_name,
                     user_query=prompt,
                     model_name=resolved_model_name,
+                    extra_metadata=extra_metadata,
                 )
             except Exception as exc:
                 logger.warning("sdk.thread.save_failed", error=str(exc))
 
         return run_result
+
+    def _configured_database_selector(self) -> str | list[str] | None:
+        """Return a safe, configured selector for resume metadata, if available.
+
+        Raw DSNs and paths are intentionally not persisted so credentials never
+        land in thread metadata. Those sessions require an explicit database
+        override when resuming.
+        """
+        if self._database_spec is None:
+            return self.db_name
+
+        config_mgr = DatabaseConfigManager()
+        if isinstance(self._database_spec, str):
+            if config_mgr.get_database(self._database_spec) is None:
+                return None
+            return self._database_spec
+
+        configured_names: list[str] = []
+        for selector in self._database_spec:
+            if config_mgr.get_database(selector) is None:
+                return None
+            configured_names.append(selector)
+        return configured_names
 
     async def close(self) -> None:
         """Close resources owned by this session."""

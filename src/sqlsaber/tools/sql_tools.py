@@ -704,7 +704,7 @@ class ExecuteSQLTool(SQLTool):
             tool_call_id = ctx.tool_call_id
             if query_type == "select":
                 row_count = len(results)
-                payload = {
+                payload: dict[str, Any] = {
                     "success": True,
                     "row_count": row_count,
                     "results": results,
@@ -717,7 +717,7 @@ class ExecuteSQLTool(SQLTool):
                 if tool_call_id:
                     payload["file"] = f"result_{tool_call_id}.json"
                 return json_dumps(payload)
-            payload = {
+            payload: dict[str, Any] = {
                 "success": True,
                 "row_count": len(results),
                 "results": results,

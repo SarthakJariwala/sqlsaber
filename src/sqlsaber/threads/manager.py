@@ -52,6 +52,7 @@ class ThreadManager:
         database_name: str,
         user_query: str,
         model_name: str,
+        extra_metadata: str | None = None,
     ) -> list:
         """
         Persist message history from a run result.
@@ -69,6 +70,7 @@ class ThreadManager:
                 messages_json=run_result.all_messages_json(),
                 database_name=database_name,
                 thread_id=self.current_thread_id,
+                extra_metadata=extra_metadata,
             )
 
             # Save metadata separately (only if it's the first message of a new thread)

@@ -136,12 +136,12 @@ class DatabaseRegistry:
         ]
 
     async def close(self) -> None:
-        """Close every connection. Aggregates errors and re-raises the first."""
-        errors: list[BaseException] = []
+        """Close every connection. Aggregates regular errors and re-raises the first."""
+        errors: list[Exception] = []
         for entry in self._entries.values():
             try:
                 await entry.connection.close()
-            except BaseException as exc:
+            except Exception as exc:
                 errors.append(exc)
         if errors:
             raise errors[0]

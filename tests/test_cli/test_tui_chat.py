@@ -469,6 +469,23 @@ def test_interactive_footer_includes_usage_cost_and_context() -> None:
     assert "Cost: $0.0123" in footer
 
 
+def test_interactive_footer_shows_all_database_names() -> None:
+    session = InteractiveSession.__new__(InteractiveSession)
+    session.database_name = "prod"
+    session.database_names = ["prod", "staging", "warehouse"]
+    session._db_type_name = lambda: "PostgreSQL"
+    session.sqlsaber_agent = SimpleNamespace(
+        agent=SimpleNamespace(model=SimpleNamespace(model_name="gpt-test")),
+    )
+    session.session_usage = interactive.SessionUsage()
+
+    footer = session._footer_text()
+
+    assert "DBs: prod, staging, warehouse" in footer
+    assert "DB: prod (PostgreSQL)" not in footer
+    assert "Model: gpt-test" in footer
+
+
 @pytest.mark.asyncio
 async def test_execute_query_refreshes_footer_usage_cost_and_context() -> None:
     terminal = FakeTerminal(columns=160, rows=12)

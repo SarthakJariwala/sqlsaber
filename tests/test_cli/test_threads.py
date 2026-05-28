@@ -24,6 +24,7 @@ from sqlsaber.cli.threads import (
     create_threads_app,
 )
 from sqlsaber.config.database import DatabaseConfigManager
+from sqlsaber.threads.metadata import encode_thread_extra_metadata
 from sqlsaber.threads.storage import Thread, ThreadStorage
 
 
@@ -88,7 +89,7 @@ class TestThreadsCLI:
                     ),
                 ]
             ),
-            ModelResponse(
+            ModelRequest(
                 parts=[
                     ToolReturnPart(
                         tool_name="list_tables",
@@ -208,7 +209,7 @@ class TestThreadsCLI:
                     ),
                 ]
             ),
-            ModelResponse(
+            ModelRequest(
                 parts=[
                     ToolReturnPart(
                         tool_name="list_tables",
@@ -246,7 +247,7 @@ class TestThreadsCLI:
                     ),
                 ]
             ),
-            ModelResponse(
+            ModelRequest(
                 parts=[
                     ToolReturnPart(
                         tool_name="execute_sql",
@@ -349,6 +350,109 @@ class TestThreadsCLI:
                 assert resolved.name == "prod_db"
 
         await mock_resume_run()
+
+    def test_resume_uses_structured_multi_database_metadata(self, sample_messages):
+        """Resume passes saved repeated database selectors, not a comma string."""
+        from sqlsaber.cli.threads import resume
+
+        thread = Thread(
+            id="thread-multi",
+            database_name="prod,staging",
+            title="Multi DB",
+            created_at=1672531200.0,
+            ended_at=None,
+            last_activity_at=1672531200.0,
+            model_name="gpt-4",
+            extra_metadata=encode_thread_extra_metadata(
+                database_selector=["prod", "staging"]
+            ),
+        )
+        store = MagicMock()
+        store.get_thread = AsyncMock(return_value=thread)
+        store.get_thread_messages = AsyncMock(return_value=sample_messages)
+        captured: dict[str, object] = {}
+
+        class FakeSQLSaberSession:
+            def __init__(self, options):
+                captured["database"] = options.database
+
+            async def close(self) -> None:
+                captured["closed"] = True
+
+        class FakeInteractiveSession:
+            def __init__(self, **kwargs):
+                captured["history"] = kwargs["initial_history"]
+
+            async def run(self) -> None:
+                captured["ran"] = True
+
+        class FakeDatabaseConfigManager:
+            def get_database(self, name: str):
+                if name in {"prod", "staging"}:
+                    return object()
+                return None
+
+        with (
+            patch("sqlsaber.threads.ThreadStorage", return_value=store),
+            patch(
+                "sqlsaber.config.database.DatabaseConfigManager",
+                FakeDatabaseConfigManager,
+            ),
+            patch("sqlsaber.session.SQLSaberSession", FakeSQLSaberSession),
+            patch(
+                "sqlsaber.cli.interactive.InteractiveSession", FakeInteractiveSession
+            ),
+            patch("sqlsaber.cli.threads._render_transcript"),
+            patch("sqlsaber.cli.threads.console") as mock_console,
+        ):
+            mock_console.is_terminal = False
+            resume("thread-multi")
+
+        assert captured["database"] == ["prod", "staging"]
+        assert captured["history"] == sample_messages
+        assert captured["ran"] is True
+        assert captured["closed"] is True
+
+    def test_resume_requires_configured_database_for_automatic_resume(self):
+        """Automatic resume stops before constructing a session for unknown DBs."""
+        from sqlsaber.cli.threads import resume
+
+        thread = Thread(
+            id="thread-missing-db",
+            database_name="external",
+            title="External DB",
+            created_at=1672531200.0,
+            ended_at=None,
+            last_activity_at=1672531200.0,
+            model_name="gpt-4",
+            extra_metadata=encode_thread_extra_metadata(database_selector="external"),
+        )
+        store = MagicMock()
+        store.get_thread = AsyncMock(return_value=thread)
+        store.get_thread_messages = AsyncMock(return_value=[])
+
+        class FakeDatabaseConfigManager:
+            def get_database(self, name: str):
+                _ = name
+                return None
+
+        with (
+            patch("sqlsaber.threads.ThreadStorage", return_value=store),
+            patch(
+                "sqlsaber.config.database.DatabaseConfigManager",
+                FakeDatabaseConfigManager,
+            ),
+            patch("sqlsaber.session.SQLSaberSession") as mock_session,
+            patch("sqlsaber.cli.threads.console") as mock_console,
+        ):
+            resume("thread-missing-db")
+
+        mock_session.assert_not_called()
+        store.get_thread_messages.assert_not_awaited()
+        mock_console.print.assert_called_with(
+            "[error]Thread database is not configured for automatic "
+            "resume.[/error] Resume it with explicit --database/-d options."
+        )
 
     def test_build_turn_slices_basic(self, sample_messages):
         """Test build_turn_slices groups messages correctly by user prompts."""

@@ -56,6 +56,7 @@ class InteractiveSession:
         self.sqlsaber_agent = session.agent
         self.db_conn = session.connection
         self.database_name = session.db_name
+        self.database_names = list(getattr(session, "db_names", [session.db_name]))
         self.streaming_handler: TUIStreamingQueryHandler | None = None
         self.current_task: asyncio.Task | None = None
         self.cancellation_token: asyncio.Event | None = None
@@ -153,10 +154,20 @@ class InteractiveSession:
         model_name = self._model_name()
         return None if model_name == "Unknown" else model_name
 
+    def _database_footer_text(self) -> str:
+        database_names = getattr(self, "database_names", None)
+        if not database_names:
+            database_names = [self.database_name or "Unknown"]
+
+        if len(database_names) > 1:
+            return f"DBs: {', '.join(database_names)}"
+
+        db_name = database_names[0] or "Unknown"
+        return f"DB: {db_name} ({self._db_type_name()})"
+
     def _footer_text(self) -> str:
-        db_name = self.database_name or "Unknown"
         return (
-            f"DB: {db_name} ({self._db_type_name()}) | "
+            f"{self._database_footer_text()} | "
             f"Model: {self._model_name()} | {self._usage_footer_text()}"
         )
 
