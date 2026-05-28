@@ -86,7 +86,7 @@ class MySQLConnection(BaseDatabaseConnection):
     async def get_pool(self) -> aiomysql.Pool:
         """Get or create connection pool."""
         if self._pool is None:
-            pool_kwargs = {
+            pool_kwargs: dict[str, Any] = {
                 "host": self.host,
                 "port": self.port,
                 "user": self.user,

@@ -30,6 +30,7 @@ class DatabaseConfig:
     ssl_key: str | None = None
     schema: str | None = None
     exclude_schemas: list[str] = field(default_factory=list)
+    description: str | None = None
 
     def to_connection_string(self) -> str:
         """Convert config to database connection string."""
@@ -151,6 +152,7 @@ class DatabaseConfig:
             "ssl_key": self.ssl_key,
             "schema": self.schema,
             "exclude_schemas": self.exclude_schemas,
+            "description": self.description,
         }
 
     @classmethod
@@ -169,6 +171,7 @@ class DatabaseConfig:
             ssl_key=data.get("ssl_key"),
             schema=data.get("schema"),
             exclude_schemas=list(data.get("exclude_schemas", [])),
+            description=data.get("description"),
         )
 
 

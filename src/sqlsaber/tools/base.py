@@ -12,6 +12,7 @@ class Tool(ABC):
     """Abstract base class for all tools."""
 
     requires_ctx: ClassVar[bool] = False
+    multi_db_only: ClassVar[bool] = False
     display_spec: ClassVar[ToolDisplaySpec | None] = None
 
     def __init__(self):

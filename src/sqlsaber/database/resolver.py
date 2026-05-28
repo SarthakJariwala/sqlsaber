@@ -18,6 +18,7 @@ class ResolvedDatabase:
     name: str  # Human-readable name for display/logging
     connection_string: str  # Canonical connection string for DatabaseConnection factory
     excluded_schemas: list[str]
+    description: str | None = None
 
 
 SUPPORTED_SCHEMES = {"postgresql", "mysql", "sqlite", "duckdb", "csv", "csvs"}
@@ -82,6 +83,59 @@ def _resolve_multiple_csvs(specs: list[str]) -> ResolvedDatabase:
     )
 
 
+def _all_csv_specs(specs: list[str]) -> bool:
+    """Return True iff every spec resolves to a CSV file (path or csv:// URL)."""
+    for spec in specs:
+        if _is_connection_string(spec):
+            if urlparse(spec).scheme != "csv":
+                return False
+        else:
+            if Path(spec).suffix.lower() != ".csv":
+                return False
+    return True
+
+
+def resolve_databases(
+    spec: str | list[str] | None,
+    config_mgr: DatabaseConfigManager | None = None,
+) -> list[ResolvedDatabase]:
+    """Resolve a CLI spec into one or more `ResolvedDatabase` entries.
+
+    - `None`, single string, or single-element list → returns 1 entry (matches
+      `resolve_database` semantics).
+    - All-CSV list → returns 1 entry (CSVs merger, today's behavior).
+    - Mixed/non-CSV list with N > 1 → returns N entries, each resolved
+      independently. Duplicate names raise `DatabaseResolutionError`.
+    """
+    if spec is None or isinstance(spec, str):
+        return [resolve_database(spec, config_mgr)]
+
+    if not isinstance(spec, list):
+        raise DatabaseResolutionError(f"Unsupported database spec: {spec!r}")
+
+    if len(spec) == 0:
+        raise DatabaseResolutionError("Empty database argument list.")
+
+    if len(spec) == 1:
+        return [resolve_database(spec[0], config_mgr)]
+
+    if _all_csv_specs(spec):
+        return [_resolve_multiple_csvs(spec)]
+
+    resolved = [resolve_database(item, config_mgr) for item in spec]
+
+    seen: set[str] = set()
+    for entry in resolved:
+        if entry.name in seen:
+            raise DatabaseResolutionError(
+                f"Cannot use duplicate database name '{entry.name}' in a "
+                "multi-database session."
+            )
+        seen.add(entry.name)
+
+    return resolved
+
+
 def resolve_database(
     spec: str | list[str] | None, config_mgr: DatabaseConfigManager | None = None
 ) -> ResolvedDatabase:
@@ -112,6 +166,7 @@ def resolve_database(
             name=db_cfg.name,
             connection_string=db_cfg.to_connection_string(),
             excluded_schemas=list(db_cfg.exclude_schemas),
+            description=db_cfg.description,
         )
 
     if isinstance(spec, list):
@@ -167,4 +222,5 @@ def resolve_database(
         name=db_cfg.name,
         connection_string=db_cfg.to_connection_string(),
         excluded_schemas=list(db_cfg.exclude_schemas),
+        description=db_cfg.description,
     )

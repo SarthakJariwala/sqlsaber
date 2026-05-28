@@ -13,7 +13,13 @@ from pygments.styles import get_style_by_name
 from pygments.util import ClassNotFound
 from rich.console import Console
 from rich.markdown import Markdown
-from saber_tui import PosixProcessTerminal, TUI, Terminal, WindowsProcessTerminal, matches_key
+from saber_tui import (
+    PosixProcessTerminal,
+    TUI,
+    Terminal,
+    WindowsProcessTerminal,
+    matches_key,
+)
 from saber_tui.components import (
     CancellableLoader,
     Editor,
@@ -102,8 +108,10 @@ def _hex_to_rgb(color: str | None) -> tuple[int, int, int] | None:
 def _blend(
     base: tuple[int, int, int], accent: tuple[int, int, int], ratio: float
 ) -> tuple[int, int, int]:
-    return tuple(
-        round(base[index] * (1 - ratio) + accent[index] * ratio) for index in range(3)
+    return (
+        round(base[0] * (1 - ratio) + accent[0] * ratio),
+        round(base[1] * (1 - ratio) + accent[1] * ratio),
+        round(base[2] * (1 - ratio) + accent[2] * ratio),
     )
 
 

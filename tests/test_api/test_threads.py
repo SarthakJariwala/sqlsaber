@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import pytest
 from pydantic_ai.messages import (
@@ -13,13 +14,15 @@ from pydantic_ai.messages import (
 )
 
 from sqlsaber import SQLSaber, SQLSaberOptions
+from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
 from sqlsaber.config.settings import Config
 from sqlsaber.threads.manager import ThreadManager
+from sqlsaber.threads.metadata import resolve_thread_database_selector
 from sqlsaber.threads.storage import ThreadStorage
 
 
 def _messages_bytes(user_text: str, *assistant_texts: str) -> bytes:
-    messages = [ModelRequest(parts=[UserPromptPart(user_text)])]
+    messages: list[ModelMessage] = [ModelRequest(parts=[UserPromptPart(user_text)])]
     for text in assistant_texts:
         messages.append(ModelResponse(parts=[TextPart(text)]))
     return ModelMessagesTypeAdapter.dump_json(messages)
@@ -114,6 +117,112 @@ async def test_api_thread_manager_persists_queries_and_ends_on_close(
 
 
 @pytest.mark.asyncio
+async def test_api_thread_manager_persists_configured_multi_database_resume_selector(
+    temp_dir, monkeypatch
+):
+    monkeypatch.setattr(
+        "platformdirs.user_config_dir", lambda *args, **kwargs: str(temp_dir / "config")
+    )
+    config_mgr = DatabaseConfigManager()
+    config_mgr.add_database(
+        DatabaseConfig(
+            name="prod",
+            type="sqlite",
+            host=None,
+            port=None,
+            database=str(temp_dir / "prod.sqlite"),
+            username=None,
+        )
+    )
+    config_mgr.add_database(
+        DatabaseConfig(
+            name="staging",
+            type="sqlite",
+            host=None,
+            port=None,
+            database=str(temp_dir / "staging.sqlite"),
+            username=None,
+        )
+    )
+
+    storage = ThreadStorage()
+    storage.db_path = temp_dir / "threads.db"
+    thread_manager = ThreadManager(storage=storage)
+    options = SQLSaberOptions(
+        database=["prod", "staging"],
+        settings=Config.in_memory(
+            model_name="anthropic:claude-3-5-sonnet",
+            api_keys={"anthropic": "test-key"},
+        ),
+        thread_manager=thread_manager,
+    )
+    saber = SQLSaber(options=options)
+
+    async def fake_run(prompt: str, **kwargs):
+        _ = prompt, kwargs
+        return FakeRunResult(output="ok", _messages_json=_messages_bytes("compare"))
+
+    monkeypatch.setattr(saber.agent, "run", fake_run)
+
+    try:
+        await saber.query("compare")
+        thread_id = thread_manager.current_thread_id
+        assert thread_id is not None
+
+        metadata = await storage.get_thread(thread_id)
+        assert metadata is not None
+        assert metadata.database_name == "prod,staging"
+        assert resolve_thread_database_selector(
+            database_name=metadata.database_name,
+            extra_metadata=metadata.extra_metadata,
+        ) == ["prod", "staging"]
+    finally:
+        await saber.close()
+
+
+@pytest.mark.asyncio
+async def test_api_thread_manager_does_not_persist_raw_dsn_resume_selector(
+    temp_dir, monkeypatch
+):
+    storage = ThreadStorage()
+    storage.db_path = temp_dir / "threads.db"
+    thread_manager = ThreadManager(storage=storage)
+    raw_dsn = "postgresql://user:secret-password@localhost/app"
+    options = SQLSaberOptions(
+        database=raw_dsn,
+        settings=Config.in_memory(
+            model_name="anthropic:claude-3-5-sonnet",
+            api_keys={"anthropic": "test-key"},
+        ),
+        thread_manager=thread_manager,
+    )
+    saber = SQLSaber(options=options)
+
+    async def fake_run(prompt: str, **kwargs):
+        _ = prompt, kwargs
+        return FakeRunResult(output="ok", _messages_json=_messages_bytes("compare"))
+
+    monkeypatch.setattr(saber.agent, "run", fake_run)
+
+    try:
+        await saber.query("compare")
+        thread_id = thread_manager.current_thread_id
+        assert thread_id is not None
+
+        metadata = await storage.get_thread(thread_id)
+        assert metadata is not None
+        assert metadata.extra_metadata is not None
+        assert "secret-password" not in metadata.extra_metadata
+        with pytest.raises(ValueError, match="explicit --database"):
+            resolve_thread_database_selector(
+                database_name=metadata.database_name,
+                extra_metadata=metadata.extra_metadata,
+            )
+    finally:
+        await saber.close()
+
+
+@pytest.mark.asyncio
 async def test_api_without_thread_manager_does_not_require_run_snapshot_methods(
     monkeypatch,
 ):
@@ -162,7 +271,7 @@ async def test_api_thread_persistence_failures_do_not_fail_query(monkeypatch):
             model_name="anthropic:claude-3-5-sonnet",
             api_keys={"anthropic": "test-key"},
         ),
-        thread_manager=failing_manager,
+        thread_manager=cast(ThreadManager, failing_manager),
     )
     saber = SQLSaber(options=options)
 

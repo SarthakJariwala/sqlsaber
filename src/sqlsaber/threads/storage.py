@@ -53,6 +53,7 @@ class Thread:
         ended_at: float | None,
         last_activity_at: float,
         model_name: str | None,
+        extra_metadata: str | None = None,
     ) -> None:
         self.id = id
         self.database_name = database_name
@@ -61,6 +62,7 @@ class Thread:
         self.ended_at = ended_at
         self.last_activity_at = last_activity_at
         self.model_name = model_name
+        self.extra_metadata = extra_metadata
 
 
 class ThreadStorage:
@@ -200,7 +202,7 @@ class ThreadStorage:
                 async with db.execute(
                     """
                     SELECT id, database_name, title, created_at, ended_at,
-                           last_activity_at, model_name
+                           last_activity_at, model_name, extra_metadata
                     FROM threads WHERE id = ?
                     """,
                     (thread_id,),
@@ -216,6 +218,7 @@ class ThreadStorage:
                         ended_at=row[4],
                         last_activity_at=row[5],
                         model_name=row[6],
+                        extra_metadata=row[7],
                     )
         except Exception as e:  # pragma: no cover
             logger.warning("threads.get_failed", thread_id=thread_id, error=str(e))
@@ -247,7 +250,7 @@ class ThreadStorage:
         await self._init_db()
         try:
             query = (
-                "SELECT id, database_name, title, created_at, ended_at, last_activity_at, model_name"
+                "SELECT id, database_name, title, created_at, ended_at, last_activity_at, model_name, extra_metadata"
                 " FROM threads"
             )
             params: list[Any] = []
@@ -270,6 +273,7 @@ class ThreadStorage:
                                 ended_at=row[4],
                                 last_activity_at=row[5],
                                 model_name=row[6],
+                                extra_metadata=row[7],
                             )
                         )
                     return threads

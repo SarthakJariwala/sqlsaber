@@ -85,6 +85,9 @@ class SQLSaber:
             options: Session options bag used to build the SQLSaber session.
         """
         self._session = SQLSaberSession(options)
+        self.registry = self._session.registry
+        self.db_names = self._session.db_names
+        self.connections = self._session.connections
         self.db_name = self._session.db_name
         self.connection = self._session.connection
         self.agent = self._session.agent

@@ -241,23 +241,59 @@ def resume(
     async def _run() -> None:
         # Lazy imports to avoid heavy modules at CLI startup
         from sqlsaber.cli.interactive import InteractiveSession
+        from sqlsaber.config.database import DatabaseConfigManager
         from sqlsaber.database.resolver import DatabaseResolutionError
         from sqlsaber.options import SQLSaberOptions
         from sqlsaber.session import SQLSaberSession
         from sqlsaber.threads.manager import ThreadManager
+        from sqlsaber.threads.metadata import resolve_thread_database_selector
 
         thread = await store.get_thread(thread_id)
         if not thread:
             console.print(f"[error]Thread not found:[/error] {thread_id}")
             logger.error("threads.cli.resume.not_found", thread_id=thread_id)
             return
-        db_selector = database if database is not None else thread.database_name
+        if database is not None:
+            db_selector = database
+        else:
+            try:
+                db_selector = resolve_thread_database_selector(
+                    database_name=thread.database_name,
+                    extra_metadata=thread.extra_metadata,
+                )
+            except ValueError as e:
+                console.print(f"[error]Thread metadata error:[/error] {e}")
+                logger.error(
+                    "threads.cli.resume.metadata_invalid",
+                    thread_id=thread_id,
+                    error=str(e),
+                )
+                return
         if not db_selector:
             console.print(
                 "[error]No database specified or stored with this thread.[/error]"
             )
             logger.error("threads.cli.resume.no_database", thread_id=thread_id)
             return
+        if database is None:
+            config_mgr = DatabaseConfigManager()
+            selectors = [db_selector] if isinstance(db_selector, str) else db_selector
+            missing = [
+                selector
+                for selector in selectors
+                if config_mgr.get_database(selector) is None
+            ]
+            if missing:
+                console.print(
+                    "[error]Thread database is not configured for automatic "
+                    "resume.[/error] Resume it with explicit --database/-d options."
+                )
+                logger.error(
+                    "threads.cli.resume.database_not_configured",
+                    thread_id=thread_id,
+                    missing=missing,
+                )
+                return
         history = await store.get_thread_messages(thread_id)
         session_thread_manager = ThreadManager(
             initial_thread_id=thread_id, storage=store

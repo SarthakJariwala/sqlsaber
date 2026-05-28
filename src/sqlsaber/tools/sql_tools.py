@@ -1,6 +1,7 @@
 """SQL-related tools for database operations."""
 
 import json
+from dataclasses import dataclass
 from html import escape
 from typing import Any, cast
 
@@ -13,6 +14,7 @@ from tabulate import tabulate
 from sqlsaber.theme.manager import get_theme_manager
 
 from sqlsaber.database import BaseDatabaseConnection
+from sqlsaber.database.registry import DatabaseRegistry, UnknownDatabaseError
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.utils.json_utils import json_dumps
 
@@ -30,6 +32,19 @@ from .registry import register_tool
 from .sql_guard import add_limit, validate_sql
 
 
+@dataclass
+class _ResolvedTarget:
+    """Connection + schema manager + dialect resolved for a single tool call."""
+
+    connection: BaseDatabaseConnection
+    schema_manager: SchemaManager
+    dialect: str
+
+
+class ToolDatabaseError(Exception):
+    """Raised when a tool cannot resolve which database to operate against."""
+
+
 class SQLTool(Tool):
     """Base class for SQL tools that need database access."""
 
@@ -44,6 +59,7 @@ class SQLTool(Tool):
         # allow_dangerous is set by SQLSaberAgent at session level
         # Do NOT expose this as a tool parameter to prevent LLM from escalating
         self.allow_dangerous: bool = False
+        self.registry: DatabaseRegistry | None = None
         if schema_manager:
             self.schema_manager = schema_manager
         elif db_connection:
@@ -62,6 +78,44 @@ class SQLTool(Tool):
             self.schema_manager = schema_manager
         else:
             self.schema_manager = SchemaManager(db_connection)
+
+    def set_registry(self, registry: DatabaseRegistry) -> None:
+        """Attach a multi-database registry. Replaces any single-DB binding."""
+        self.registry = registry
+
+    def _resolve(self, db_name: str | None) -> _ResolvedTarget:
+        """Resolve which DB to act on for this tool call.
+
+        - Registry attached: `db_name` must be a registered name.
+        - No registry: fall back to the single-DB connection set via
+          `set_connection`. `db_name` is ignored.
+        Raises `ToolDatabaseError` with a user-facing message on failure.
+        """
+        if self.registry is not None:
+            if not db_name:
+                raise ToolDatabaseError(
+                    "Multiple databases are connected; you must pass `db_name`. "
+                    f"Valid names: {', '.join(self.registry.names())}."
+                )
+            try:
+                entry = self.registry.get(db_name)
+            except UnknownDatabaseError as exc:
+                raise ToolDatabaseError(str(exc)) from exc
+            return _ResolvedTarget(
+                connection=entry.connection,
+                schema_manager=entry.schema_manager,
+                dialect=entry.dialect,
+            )
+
+        if not self.db:
+            raise ToolDatabaseError("No database connection available")
+
+        schema_manager = self.schema_manager or SchemaManager(self.db)
+        return _ResolvedTarget(
+            connection=self.db,
+            schema_manager=schema_manager,
+            dialect=self.db.sqlglot_dialect,
+        )
 
 
 @register_tool
@@ -90,13 +144,15 @@ class ListTablesTool(SQLTool):
     def name(self) -> str:
         return "list_tables"
 
-    async def execute(self) -> str:
+    async def execute(self, db_name: str | None = None) -> str:
         """List all tables in the database."""
-        if not self.db or not self.schema_manager:
-            return json_dumps({"error": "No database connection available"})
+        try:
+            target = self._resolve(db_name)
+        except ToolDatabaseError as exc:
+            return json_dumps({"error": str(exc)})
 
         try:
-            tables_info = await self.schema_manager.list_tables()
+            tables_info = await target.schema_manager.list_tables()
             return json_dumps(tables_info)
         except Exception as e:
             return json_dumps({"error": f"Error listing tables: {str(e)}"})
@@ -367,18 +423,22 @@ class IntrospectSchemaTool(SQLTool):
     def name(self) -> str:
         return "introspect_schema"
 
-    async def execute(self, table_pattern: str | None = None) -> str:
+    async def execute(
+        self, table_pattern: str | None = None, db_name: str | None = None
+    ) -> str:
         """
         Introspect database schema.
 
         Args:
             table_pattern: Optional pattern to filter tables (e.g., 'public.users', 'user%', '%order%')
         """
-        if not self.db or not self.schema_manager:
-            return json_dumps({"error": "No database connection available"})
+        try:
+            target = self._resolve(db_name)
+        except ToolDatabaseError as exc:
+            return json_dumps({"error": str(exc)})
 
         try:
-            schema_info = await self.schema_manager.get_schema_info(table_pattern)
+            schema_info = await target.schema_manager.get_schema_info(table_pattern)
 
             # Format the schema information
             formatted_info = {}
@@ -593,15 +653,19 @@ class ExecuteSQLTool(SQLTool):
     def name(self) -> str:
         return "execute_sql"
 
-    async def execute(self, ctx: RunContext, query: str) -> str:
+    async def execute(
+        self, ctx: RunContext, query: str, db_name: str | None = None
+    ) -> str:
         """
         Execute a SQL query against the database.
 
         Args:
             query: SQL query to execute
         """
-        if not self.db:
-            return json_dumps({"error": "No database connection available"})
+        try:
+            target = self._resolve(db_name)
+        except ToolDatabaseError as exc:
+            return json_dumps({"error": str(exc)})
 
         if not query:
             return json_dumps({"error": "No query provided"})
@@ -610,7 +674,7 @@ class ExecuteSQLTool(SQLTool):
 
         try:
             # Get the dialect for this database
-            dialect = self.db.sqlglot_dialect
+            dialect = target.dialect
 
             # Security check using sqlglot AST analysis
             validation_result = validate_sql(
@@ -630,7 +694,7 @@ class ExecuteSQLTool(SQLTool):
             commit = bool(self.allow_dangerous and query_type in {"dml", "ddl"})
 
             # Execute the query
-            results = await self.db.execute_query(
+            results = await target.connection.execute_query(
                 query,
                 commit=commit,
                 read_only=not self.allow_dangerous,
@@ -640,7 +704,7 @@ class ExecuteSQLTool(SQLTool):
             tool_call_id = ctx.tool_call_id
             if query_type == "select":
                 row_count = len(results)
-                payload = {
+                payload: dict[str, Any] = {
                     "success": True,
                     "row_count": row_count,
                     "results": results,
@@ -653,7 +717,7 @@ class ExecuteSQLTool(SQLTool):
                 if tool_call_id:
                     payload["file"] = f"result_{tool_call_id}.json"
                 return json_dumps(payload)
-            payload = {
+            payload: dict[str, Any] = {
                 "success": True,
                 "row_count": len(results),
                 "results": results,
@@ -681,3 +745,47 @@ class ExecuteSQLTool(SQLTool):
                 )
 
             return json_dumps({"error": error_msg})
+
+
+@register_tool
+class ListDatabasesTool(SQLTool):
+    """List databases connected to the current SQLSaber session.
+
+    Registered only when more than one database is connected. The tool
+    exposes the name, dialect, and optional description of each, so the
+    agent can choose which database to target with subsequent tool calls.
+    """
+
+    multi_db_only = True
+
+    display_spec = ToolDisplaySpec(
+        executing=ExecutingConfig(message="Listing connected databases", icon="📚"),
+        result=ResultConfig(
+            format="table",
+            title="Connected Databases ({total_databases} total)",
+            fields=FieldMappings(items="databases", error="error"),
+            table=TableConfig(
+                columns=[
+                    ColumnDef(field="name", header="Name", style="column.name"),
+                    ColumnDef(field="dialect", header="Dialect", style="column.type"),
+                    ColumnDef(field="description", header="Description", style="muted"),
+                ],
+                max_rows=20,
+            ),
+        ),
+        metadata=DisplayMetadata(display_name="List Databases"),
+    )
+
+    @property
+    def name(self) -> str:
+        return "list_dbs"
+
+    async def execute(self) -> str:
+        """List all databases connected to this session."""
+        if self.registry is None:
+            return json_dumps(
+                {"error": "Multi-database registry is not configured for this session."}
+            )
+
+        entries = self.registry.catalog()
+        return json_dumps({"total_databases": len(entries), "databases": entries})

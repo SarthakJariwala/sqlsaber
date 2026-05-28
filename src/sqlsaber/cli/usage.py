@@ -125,7 +125,9 @@ def calculate_run_cost_usd(
         return None
 
 
-def request_usages_from_messages(messages: Sequence[ModelMessage]) -> list[RequestUsage]:
+def request_usages_from_messages(
+    messages: Sequence[ModelMessage],
+) -> list[RequestUsage]:
     """Extract per-request usage entries from model response messages."""
     return [message.usage for message in messages if isinstance(message, ModelResponse)]
 

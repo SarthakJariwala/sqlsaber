@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from pydantic_ai.messages import (
+    ModelMessage,
     ModelMessagesTypeAdapter,
     ModelRequest,
     ModelResponse,
@@ -12,12 +13,13 @@ from pydantic_ai.messages import (
 )
 
 from sqlsaber.threads.manager import ThreadManager
+from sqlsaber.threads.metadata import encode_thread_extra_metadata
 from sqlsaber.threads.storage import ThreadStorage
 
 
 def _messages_bytes(user_text: str, assistant_text: str | None = None) -> bytes:
     parts = [UserPromptPart(user_text)]
-    msgs = [ModelRequest(parts=parts)]
+    msgs: list[ModelMessage] = [ModelRequest(parts=parts)]
     if assistant_text:
         msgs.append(ModelResponse(parts=[TextPart(assistant_text)]))
     return ModelMessagesTypeAdapter.dump_json(msgs)
@@ -138,6 +140,32 @@ async def test_save_run_new_thread(thread_manager, temp_storage):
     # Verify messages can be read back
     msgs = await temp_storage.get_thread_messages(thread_id)
     assert len(msgs) == 1
+
+
+@pytest.mark.asyncio
+async def test_save_run_persists_resume_metadata(thread_manager, temp_storage):
+    """Test saving structured resume metadata for multi-database sessions."""
+    json_bytes = _messages_bytes("hello")
+    extra_metadata = encode_thread_extra_metadata(database_selector=["prod", "staging"])
+
+    run_result = MagicMock()
+    run_result.all_messages_json.return_value = json_bytes
+    run_result.all_messages.return_value = ["msg1"]
+
+    await thread_manager.save_run(
+        run_result=run_result,
+        database_name="prod,staging",
+        user_query="hello",
+        model_name="gpt-4",
+        extra_metadata=extra_metadata,
+    )
+
+    thread_id = thread_manager.current_thread_id
+    assert thread_id is not None
+    thread = await temp_storage.get_thread(thread_id)
+    assert thread is not None
+    assert thread.database_name == "prod,staging"
+    assert thread.extra_metadata == extra_metadata
 
 
 @pytest.mark.asyncio

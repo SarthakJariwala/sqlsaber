@@ -103,7 +103,7 @@ class GoogleProviderStrategy(AgentProviderStrategy):
             settings = GoogleModelSettings(
                 google_thinking_config={
                     "include_thoughts": True,
-                    "thinking_level": google_level,
+                    "thinking_level": cast(Any, google_level),
                 }
             )
             return Agent(model_obj, name="sqlsaber", model_settings=settings)
