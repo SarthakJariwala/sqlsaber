@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlsaber.database.registry import DatabaseRegistry, UnknownDatabaseError
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.utils.json_utils import json_dumps
 
@@ -29,6 +30,7 @@ class KnowledgeTool(Tool):
         super().__init__()
         self.database_name = database_name
         self.knowledge_manager = knowledge_manager
+        self.registry: DatabaseRegistry | None = None
 
     def set_context(
         self, database_name: str | None, knowledge_manager: KnowledgeManager
@@ -36,6 +38,29 @@ class KnowledgeTool(Tool):
         """Set contextual dependencies after tool construction."""
         self.database_name = database_name
         self.knowledge_manager = knowledge_manager
+
+    def set_registry(self, registry: DatabaseRegistry) -> None:
+        """Attach a multi-database registry for runtime routing by `db_name`."""
+        self.registry = registry
+
+    def _resolve_database_name(self, db_name: str | None) -> str | None:
+        """Resolve which DB partition to search.
+
+        Returns the registered name when a registry is attached, the
+        session-bound `self.database_name` otherwise. Raises ValueError with a
+        user-facing message if `db_name` is missing or invalid in multi-DB mode.
+        """
+        if self.registry is not None:
+            if not db_name:
+                raise ValueError(
+                    "Multiple databases are connected; you must pass `db_name`. "
+                    f"Valid names: {', '.join(self.registry.names())}."
+                )
+            try:
+                return self.registry.get(db_name).name
+            except UnknownDatabaseError as exc:
+                raise ValueError(str(exc)) from exc
+        return self.database_name
 
 
 @register_tool
@@ -71,7 +96,7 @@ class SearchKnowledgeTool(KnowledgeTool):
     def name(self) -> str:
         return "search_knowledge"
 
-    async def execute(self, query: str) -> str:
+    async def execute(self, query: str, db_name: str | None = None) -> str:
         """Search existing sql and knowledge about active database.
 
         When to use this tool:
@@ -86,7 +111,12 @@ class SearchKnowledgeTool(KnowledgeTool):
         if not query.strip():
             return json_dumps({"error": "No query provided."})
 
-        if self.knowledge_manager is None or not self.database_name:
+        try:
+            target_name = self._resolve_database_name(db_name)
+        except ValueError as exc:
+            return json_dumps({"error": str(exc)})
+
+        if self.knowledge_manager is None or not target_name:
             return json_dumps(
                 {
                     "error": (
@@ -98,7 +128,7 @@ class SearchKnowledgeTool(KnowledgeTool):
 
         try:
             entries = await self.knowledge_manager.search_knowledge(
-                self.database_name, query, limit=10
+                target_name, query, limit=10
             )
         except Exception as exc:
             return json_dumps({"error": f"Error searching knowledge: {str(exc)}"})

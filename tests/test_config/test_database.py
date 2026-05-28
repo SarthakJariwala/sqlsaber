@@ -109,6 +109,7 @@ class TestDatabaseConfig:
             "ssl_cert": None,
             "ssl_key": None,
             "exclude_schemas": [],
+            "description": None,
         }
 
     def test_config_from_dict(self):
@@ -130,6 +131,39 @@ class TestDatabaseConfig:
         assert config.username == "admin"
         assert config.database == "production"
         assert config.exclude_schemas == []
+        assert config.description is None
+
+    def test_config_description_roundtrip(self):
+        """Description field survives to_dict/from_dict, defaults to None."""
+        config = DatabaseConfig(
+            name="warehouse",
+            type="postgresql",
+            host="localhost",
+            port=5432,
+            username="user",
+            database="db",
+            description="analytics warehouse, read-only replica",
+        )
+
+        as_dict = config.to_dict()
+        assert as_dict["description"] == "analytics warehouse, read-only replica"
+
+        rebuilt = DatabaseConfig.from_dict(as_dict)
+        assert rebuilt.description == "analytics warehouse, read-only replica"
+
+    def test_config_from_dict_missing_description(self):
+        """Loading legacy configs (no `description` key) defaults to None."""
+        data = {
+            "name": "legacy",
+            "type": "sqlite",
+            "host": None,
+            "port": None,
+            "username": None,
+            "database": "/tmp/legacy.db",
+        }
+
+        config = DatabaseConfig.from_dict(data)
+        assert config.description is None
 
 
 class TestDatabaseConfigManager:

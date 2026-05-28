@@ -54,7 +54,9 @@ def test_session_usage_marks_cost_unknown_when_model_name_is_missing() -> None:
     assert format_cost_usd(usage.total_cost_usd) == "n/a"
 
 
-def test_session_usage_marks_multi_request_aggregate_cost_unknown_without_request_usages() -> None:
+def test_session_usage_marks_multi_request_aggregate_cost_unknown_without_request_usages() -> (
+    None
+):
     usage = SessionUsage()
 
     usage.add_run(

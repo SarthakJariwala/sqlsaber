@@ -11,8 +11,9 @@ from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import Config, ThinkingLevel
-from sqlsaber.database import DatabaseConnection
-from sqlsaber.database.resolver import resolve_database
+from sqlsaber.database.base import BaseDatabaseConnection
+from sqlsaber.database.registry import DatabaseRegistry
+from sqlsaber.database.resolver import resolve_databases
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.options import SQLSaberOptions
 from sqlsaber.utils.text_input import resolve_text_input
@@ -33,12 +34,15 @@ class SQLSaberSession:
         else:
             database_spec = options.database
 
-        self._resolved = resolve_database(database_spec)
-        self.db_name = self._resolved.name
-        self.connection = DatabaseConnection(
-            self._resolved.connection_string,
-            excluded_schemas=self._resolved.excluded_schemas,
-        )
+        self._resolved = resolve_databases(database_spec)
+        self.registry: DatabaseRegistry = DatabaseRegistry.from_resolved(self._resolved)
+        self.db_names: list[str] = self.registry.names()
+        self.connections: dict[str, BaseDatabaseConnection] = {
+            entry.name: entry.connection for entry in self.registry
+        }
+        # Primary attrs preserved for back-compat with single-DB callers/tests.
+        self.db_name = self.registry.primary()
+        self.connection = self.connections[self.db_name]
 
         self.settings = options.settings or Config.default()
         self.knowledge_manager = options.knowledge_manager or KnowledgeManager()
@@ -59,8 +63,7 @@ class SQLSaberSession:
         system_prompt_text = resolve_text_input(options.system_prompt)
 
         self.agent = SQLSaberAgent(
-            self.connection,
-            self.db_name,
+            registry=self.registry,
             settings=self.settings,
             knowledge_manager=self.knowledge_manager,
             thinking_enabled=thinking_enabled,
@@ -95,9 +98,16 @@ class SQLSaberSession:
                 if not isinstance(resolved_model_name, str) or not resolved_model_name:
                     resolved_model_name = self.agent.config.model.name
 
+                # Multi-DB sessions persist comma-joined names for now; thread
+                # resume does not auto-reconnect, so the column is informational.
+                if len(self.registry) > 1:
+                    database_name = ",".join(self.db_names)
+                else:
+                    database_name = self.db_name
+
                 await self.thread_manager.save_run(
                     run_result=run_result,
-                    database_name=self.db_name,
+                    database_name=database_name,
                     user_query=prompt,
                     model_name=resolved_model_name,
                 )
@@ -132,7 +142,7 @@ class SQLSaberSession:
                 errors.append(exc)
 
         try:
-            await self.connection.close()
+            await self.registry.close()
         except Exception as exc:  # pragma: no cover - best effort cleanup
             errors.append(exc)
 

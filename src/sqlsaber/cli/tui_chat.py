@@ -13,7 +13,13 @@ from pygments.styles import get_style_by_name
 from pygments.util import ClassNotFound
 from rich.console import Console
 from rich.markdown import Markdown
-from saber_tui import PosixProcessTerminal, TUI, Terminal, WindowsProcessTerminal, matches_key
+from saber_tui import (
+    PosixProcessTerminal,
+    TUI,
+    Terminal,
+    WindowsProcessTerminal,
+    matches_key,
+)
 from saber_tui.components import (
     CancellableLoader,
     Editor,

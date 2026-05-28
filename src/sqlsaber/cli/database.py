@@ -102,6 +102,16 @@ def add(
             help="Comma-separated list of schemas to exclude from introspection",
         ),
     ] = None,
+    description: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--description"],
+            help=(
+                "Short human-readable description of this connection. Shown to "
+                "the agent in multi-database sessions to help it pick the right DB."
+            ),
+        ),
+    ] = None,
     interactive: Annotated[
         bool,
         cyclopts.Parameter(
@@ -214,6 +224,7 @@ def add(
         ssl_cert=ssl_cert,
         ssl_key=ssl_key,
         exclude_schemas=exclude_schema_list,
+        description=description,
     )
 
     try:

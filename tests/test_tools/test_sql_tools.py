@@ -6,9 +6,11 @@ from types import SimpleNamespace
 import pytest
 
 from sqlsaber.database import SQLiteConnection
+from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
 from sqlsaber.tools.sql_tools import (
     ExecuteSQLTool,
     IntrospectSchemaTool,
+    ListDatabasesTool,
     ListTablesTool,
 )
 
@@ -307,3 +309,124 @@ class TestExecuteSQLTool:
 
         assert "error" in data
         assert "unknown_table" in data["error"]
+
+
+def _entry(name: str, mock_db: MockDatabaseConnection) -> DatabaseEntry:
+    """Build a registry entry from a mock connection + matching mock schema manager."""
+    return DatabaseEntry(
+        name=name,
+        connection=mock_db,
+        schema_manager=MockSchemaManager(mock_db),
+        description=None,
+        excluded_schemas=[],
+    )
+
+
+class TestMultiDatabaseRouting:
+    """Tools routed by `db_name` against a `DatabaseRegistry`."""
+
+    @pytest.mark.asyncio
+    async def test_list_tables_uses_resolved_schema_manager(self):
+        db_a = MockDatabaseConnection()
+        db_b = MockDatabaseConnection()
+        registry = DatabaseRegistry([_entry("a", db_a), _entry("b", db_b)])
+
+        tool = ListTablesTool()
+        tool.set_registry(registry)
+
+        result = await tool.execute(db_name="b")
+        data = json.loads(result)
+        assert "tables" in data
+        # Confirm we routed to db_b's schema manager (each MockSchemaManager wraps
+        # its db; the result is the same shape but came from the right one).
+        assert tool._resolve("b").connection is db_b
+
+    @pytest.mark.asyncio
+    async def test_execute_sql_routes_to_named_db(self):
+        db_a = MockDatabaseConnection()
+        db_b = MockDatabaseConnection()
+        registry = DatabaseRegistry([_entry("a", db_a), _entry("b", db_b)])
+
+        tool = ExecuteSQLTool()
+        tool.set_registry(registry)
+
+        await tool.execute(
+            SimpleNamespace(tool_call_id=None),
+            "SELECT * FROM users",
+            db_name="b",
+        )
+        assert db_b.queries  # query went to b
+        assert not db_a.queries
+
+    @pytest.mark.asyncio
+    async def test_missing_db_name_in_multi_returns_tool_error(self):
+        db_a = MockDatabaseConnection()
+        db_b = MockDatabaseConnection()
+        registry = DatabaseRegistry([_entry("a", db_a), _entry("b", db_b)])
+
+        tool = ListTablesTool()
+        tool.set_registry(registry)
+
+        result = await tool.execute(db_name=None)
+        data = json.loads(result)
+        assert "error" in data
+        assert "db_name" in data["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_unknown_db_name_returns_tool_error_listing_valid(self):
+        db_a = MockDatabaseConnection()
+        db_b = MockDatabaseConnection()
+        registry = DatabaseRegistry([_entry("a", db_a), _entry("b", db_b)])
+
+        tool = ListTablesTool()
+        tool.set_registry(registry)
+
+        result = await tool.execute(db_name="nope")
+        data = json.loads(result)
+        assert "error" in data
+        assert "a" in data["error"]
+        assert "b" in data["error"]
+
+    @pytest.mark.asyncio
+    async def test_introspect_schema_routes_to_named_db(self):
+        db_a = MockDatabaseConnection()
+        db_b = MockDatabaseConnection()
+        registry = DatabaseRegistry([_entry("a", db_a), _entry("b", db_b)])
+
+        tool = IntrospectSchemaTool()
+        tool.set_registry(registry)
+
+        result = await tool.execute(db_name="b", table_pattern="users")
+        data = json.loads(result)
+        assert "users" in data
+
+
+class TestListDatabasesTool:
+    def test_tool_properties(self):
+        tool = ListDatabasesTool()
+        assert tool.name == "list_dbs"
+        assert tool.multi_db_only is True
+
+    @pytest.mark.asyncio
+    async def test_execute_returns_catalog(self):
+        registry = DatabaseRegistry(
+            [
+                _entry("prod", MockDatabaseConnection()),
+                _entry("staging", MockDatabaseConnection()),
+            ]
+        )
+        tool = ListDatabasesTool()
+        tool.set_registry(registry)
+
+        result = await tool.execute()
+        data = json.loads(result)
+        assert "databases" in data
+        names = [item["name"] for item in data["databases"]]
+        assert names == ["prod", "staging"]
+
+    @pytest.mark.asyncio
+    async def test_execute_without_registry_returns_error(self):
+        tool = ListDatabasesTool()
+        result = await tool.execute()
+        data = json.loads(result)
+        assert "error" in data
