@@ -9,6 +9,19 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.66.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.65.0...sqlsaber-v0.66.0) (2026-05-28)
+
+
+### Features
+
+* Add multi-database support with registry-based routing ([66fca89](https://github.com/SarthakJariwala/sqlsaber/commit/66fca89ef4aa05af6f93ef4b74a9721b7686acb7))
+
+
+### Documentation
+
+* add ACM CAIS '26 paper section to home page ([#175](https://github.com/SarthakJariwala/sqlsaber/issues/175)) ([be3f76b](https://github.com/SarthakJariwala/sqlsaber/commit/be3f76b4ace90c87a6f3db564d95a8d9d981e8e2))
+* add Python SDK documentation section ([#176](https://github.com/SarthakJariwala/sqlsaber/issues/176)) ([768e21d](https://github.com/SarthakJariwala/sqlsaber/commit/768e21d83bba391c579bb6ac3ad719210d2e7e6c))
+
 ## [0.65.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.64.0...sqlsaber-v0.65.0) (2026-05-22)
 
 
