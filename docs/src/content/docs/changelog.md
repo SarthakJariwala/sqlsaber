@@ -9,6 +9,18 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.67.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.66.0...sqlsaber-v0.67.0) (2026-05-29)
+
+
+### Features
+
+* Update footer indicating dangerous mode when operating in that mode ([#181](https://github.com/SarthakJariwala/sqlsaber/issues/181)) ([1f9b936](https://github.com/SarthakJariwala/sqlsaber/commit/1f9b936fc533f969de2224add630a898f74385e5))
+
+
+### Documentation
+
+* add multi-database usage documentation ([dca8891](https://github.com/SarthakJariwala/sqlsaber/commit/dca8891cc9710001c72c91ecf8fa57f478bbeb50))
+
 ## [0.66.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.65.0...sqlsaber-v0.66.0) (2026-05-28)
 
 
