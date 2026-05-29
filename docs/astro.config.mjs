@@ -87,6 +87,7 @@ export default defineConfig({
 					label: "Guides",
 					items: [
 						{ label: "Database Setup", slug: "guides/database-setup" },
+						{ label: "Multiple Databases", slug: "guides/multi-database" },
 						{ label: "Authentication", slug: "guides/authentication" },
 						{ label: "Models", slug: "guides/models" },
 						{ label: "Running Queries", slug: "guides/queries" },

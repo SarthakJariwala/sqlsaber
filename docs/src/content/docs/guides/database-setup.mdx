@@ -23,6 +23,14 @@ saber db add my-database
 
 This will prompt you for all necessary connection details.
 
+You can also attach an optional description to a connection. Descriptions are
+shown to the agent when [several databases are connected at once](/guides/multi-database)
+to help it pick the right one:
+
+```bash
+saber db add my-database --description "Production Postgres: orders and revenue"
+```
+
 ### Connection Strings
 
 SQLsaber supports direct connection strings for PostgreSQL and MySQL, plus file URIs for SQLite and DuckDB.
@@ -103,6 +111,18 @@ saber db test my-database
 ```bash
 saber db remove my-database
 ```
+
+### Connecting to Multiple Databases
+
+A single session can be connected to several databases at once by repeating the
+`-d` flag. The agent then queries each database separately and combines the
+results in its answer:
+
+```bash
+saber -d sales -d analytics "Compare revenue to web sessions"
+```
+
+See the [Multiple Databases guide](/guides/multi-database) for details.
 
 ### Security
 
@@ -195,4 +215,5 @@ After setting up your database connections:
 
 1. [Configure authentication](/guides/authentication) for AI providers
 2. [Start querying your data](/guides/getting-started)
-3. [Manage conversation threads](/guides/threads)
+3. [Connect to multiple databases at once](/guides/multi-database)
+4. [Manage conversation threads](/guides/threads)
