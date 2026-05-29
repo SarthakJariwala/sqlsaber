@@ -15,7 +15,12 @@ from rich.panel import Panel
 
 from sqlsaber.cli.completers import SQLSaberAutocompleteProvider
 from sqlsaber.cli.slash_commands import CommandContext, SlashCommandProcessor
-from sqlsaber.cli.tui_chat import ChatApp, ChatConsole, build_chat_app
+from sqlsaber.cli.tui_chat import (
+    DANGEROUS_MODE_FOOTER_LABEL,
+    ChatApp,
+    ChatConsole,
+    build_chat_app,
+)
 from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
 from sqlsaber.cli.usage import (
     SessionUsage,
@@ -54,6 +59,13 @@ class InteractiveSession:
         self.console = console
         self.session = session
         self.sqlsaber_agent = session.agent
+        self.allow_dangerous = bool(
+            getattr(
+                session.options,
+                "allow_dangerous",
+                getattr(self.sqlsaber_agent, "allow_dangerous", False),
+            )
+        )
         self.db_conn = session.connection
         self.database_name = session.db_name
         self.database_names = list(getattr(session, "db_names", [session.db_name]))
@@ -166,10 +178,19 @@ class InteractiveSession:
         return f"DB: {db_name} ({self._db_type_name()})"
 
     def _footer_text(self) -> str:
-        return (
-            f"{self._database_footer_text()} | "
-            f"Model: {self._model_name()} | {self._usage_footer_text()}"
+        parts = [self._database_footer_text(), f"Model: {self._model_name()}"]
+        if dangerous_mode := self._dangerous_mode_footer_text():
+            parts.append(dangerous_mode)
+        parts.append(self._usage_footer_text())
+        return " | ".join(parts)
+
+    def _dangerous_mode_footer_text(self) -> str | None:
+        agent = getattr(self, "sqlsaber_agent", None)
+        allow_dangerous = bool(
+            getattr(self, "allow_dangerous", False)
+            or getattr(agent, "allow_dangerous", False)
         )
+        return DANGEROUS_MODE_FOOTER_LABEL if allow_dangerous else None
 
     def _usage_footer_text(self) -> str:
         session_usage = getattr(self, "session_usage", SessionUsage())
