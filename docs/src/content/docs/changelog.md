@@ -9,6 +9,13 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.68.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.67.0...sqlsaber-v0.68.0) (2026-05-29)
+
+
+### Features
+
+* support for Claude Opus 4.8 ([#182](https://github.com/SarthakJariwala/sqlsaber/issues/182)) ([755cd98](https://github.com/SarthakJariwala/sqlsaber/commit/755cd980638309218caedd25f7ebb262b32e95e7))
+
 ## [0.67.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.66.0...sqlsaber-v0.67.0) (2026-05-29)
 
 
