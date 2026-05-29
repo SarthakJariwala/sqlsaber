@@ -62,7 +62,7 @@ _BY_KEY: Dict[str, ProviderSpec] = {p.key: p for p in _PROVIDERS}
 _ALIAS_TO_KEY: Dict[str, str] = {
     alias: p.key for p in _PROVIDERS for alias in p.aliases
 }
-_ANTHROPIC_ADAPTIVE_THINKING_MODEL_PREFIXES = ("claude-opus-4-7",)
+_ANTHROPIC_ADAPTIVE_THINKING_MODEL_PREFIXES = ("claude-opus-4-7", "claude-opus-4-8")
 
 
 def all_keys() -> List[str]:
