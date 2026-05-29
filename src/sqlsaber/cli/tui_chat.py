@@ -71,6 +71,7 @@ THINKING_MODE_SETTING_ID = "thinking_mode"
 THINKING_MODE_VALUES = ["off", *(level.value for level in ThinkingLevel)]
 ACTION_VALUE = ""
 COMMAND_PALETTE_MAX_WIDTH = 60
+DANGEROUS_MODE_FOOTER_LABEL = "Dangerous mode"
 
 
 def _default_process_terminal() -> Terminal:
@@ -432,7 +433,19 @@ class _FooterComponent:
     def render(self, width: int) -> list[str]:
         if not self.text:
             return []
-        return [self.theme.muted_fg(_pad_to_width(f" {self.text}", width))]
+        line = _pad_to_width(f" {self.text}", width)
+        return [self._style_line(line)]
+
+    def _style_line(self, line: str) -> str:
+        if DANGEROUS_MODE_FOOTER_LABEL not in line:
+            return self.theme.muted_fg(line)
+
+        before, _, after = line.partition(DANGEROUS_MODE_FOOTER_LABEL)
+        return (
+            self.theme.muted_fg(before)
+            + _bold(self.theme.system_fg(DANGEROUS_MODE_FOOTER_LABEL))
+            + self.theme.muted_fg(after)
+        )
 
     def invalidate(self) -> None:
         return None

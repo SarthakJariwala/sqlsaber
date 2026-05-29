@@ -469,6 +469,21 @@ def test_interactive_footer_includes_usage_cost_and_context() -> None:
     assert "Cost: $0.0123" in footer
 
 
+def test_interactive_footer_includes_dangerous_mode_when_enabled() -> None:
+    session = InteractiveSession.__new__(InteractiveSession)
+    session.database_name = "analytics"
+    session._db_type_name = lambda: "DuckDB"
+    session.allow_dangerous = True
+    session.sqlsaber_agent = SimpleNamespace(
+        agent=SimpleNamespace(model=SimpleNamespace(model_name="gpt-test")),
+    )
+    session.session_usage = interactive.SessionUsage()
+
+    footer = session._footer_text()
+
+    assert tui_chat.DANGEROUS_MODE_FOOTER_LABEL in footer
+
+
 def test_interactive_footer_shows_all_database_names() -> None:
     session = InteractiveSession.__new__(InteractiveSession)
     session.database_name = "prod"
