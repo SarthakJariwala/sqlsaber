@@ -23,12 +23,15 @@ saber -d my-database "Show me recent orders"
 
 # With connection string
 saber -d "postgresql://user:pass@host:5432/db" "User statistics for 2024"
+
+# With multiple databases (repeat -d)
+saber -d sales -d analytics "Compare revenue to web sessions"
 ```
 
 **Parameters:**
 
 - `QUERY-TEXT` - SQL query in natural language (optional, starts interactive mode if not provided)
-- `-d, --database` - Database connection name, file path (CSV/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://)
+- `-d, --database` - Database connection name, file path (CSV/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://). Repeat the flag to connect to [multiple databases](/guides/multi-database) at once (or to merge multiple CSV files into one session).
 - `--thinking` / `--no-thinking` - Enable/disable extended thinking/reasoning mode
 - `--allow-dangerous` - Allow INSERT/UPDATE/DELETE and restricted DDL (CREATE TABLE/VIEW/INDEX, ALTER TABLE). DROP/TRUNCATE and admin/security operations remain blocked; UPDATE/DELETE require WHERE.
 - `--system-prompt` - Custom system prompt text or path to a file (overrides built-in prompt)
@@ -106,6 +109,7 @@ saber db add my-database [OPTIONS]
 - `--database, --db` - Database name
 - `-u, --username` - Username
 - `--exclude-schemas` - Comma-separated list of schemas to skip during introspection
+- `--description` - Short human-readable description of the connection. Shown to the agent in [multi-database sessions](/guides/multi-database) to help it pick the right database.
 - `--ssl-mode` - SSL mode (see SSL options below)
 - `--ssl-ca` - SSL CA certificate file path
 - `--ssl-cert` - SSL client certificate file path
@@ -493,14 +497,18 @@ saber threads resume a1b2c3d4 [OPTIONS]
 
 **Options:**
 
-- `-d, --database` - Use different database than original thread
+- `-d, --database` - Use a different database than the original thread. Repeat the flag to resume against multiple databases.
 
 **Features:**
 
 - Loads full conversation context
 - Uses same model as original thread
-- Connects to original database
+- Reconnects to the original database(s), including [multi-database](/guides/multi-database) threads
 - Continues where conversation left off in interactive mode
+
+:::note
+Automatic resume requires every database in the thread to be a saved connection. If a thread used an ad-hoc connection string or file path, resume it with explicit `-d` flags.
+:::
 
 #### `saber threads prune`
 

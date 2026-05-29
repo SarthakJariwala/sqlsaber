@@ -1,0 +1,152 @@
+---
+title: Multiple Databases
+description: "Connect a single SQLsaber session to several databases at once. Query each database separately and let the agent combine the results."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+A single SQLsaber session can be connected to more than one database at the same
+time. The agent picks which database to query for each step, runs the queries
+separately, and combines the results in its answer — so you can ask a question
+that spans several databases without switching sessions.
+
+<Aside type="note">
+  SQLsaber does **not** attempt cross-database JOINs. When multiple databases
+  are connected, the agent queries each one independently and stitches the
+  results together in plain language in its reply.
+</Aside>
+
+### Starting a Multi-Database Session
+
+Connect to multiple databases by repeating the `-d` / `--database` flag. Each
+value can be a configured connection name, a connection string, or a file path —
+and you can mix them freely.
+
+```bash
+# Two configured connections
+saber -d sales -d analytics "Compare last month's revenue to web sessions"
+
+# Mix a configured name with a connection string
+saber -d sales -d "postgresql://user:pass@host:5432/events" "..."
+
+# Start interactive mode across several databases
+saber -d sales -d analytics -d inventory
+```
+
+Everything works the same in single-query mode and interactive mode. In
+interactive mode the footer shows all connected databases:
+
+```
+DBs: sales, analytics, inventory | Model: ... | ...
+```
+
+<Aside type="caution">
+  Each connected database must resolve to a **unique name**. Connecting two
+  databases that resolve to the same name (for example the same connection used
+  twice) raises an error. Names come from the configured connection name, or are
+  derived from the database/file name for ad-hoc connection strings and paths.
+</Aside>
+
+#### CSV files are different
+
+Passing **multiple CSV files** does not create a multi-database session. Instead,
+all CSVs are merged into a single in-memory database with one table (view) per
+file, so you can join across them:
+
+```bash
+saber -d users.csv -d orders.csv "Join users and orders"
+```
+
+Multi-database mode kicks in only when more than one **non-CSV** target is
+provided (or a CSV combined with another database type).
+
+### Describing Connections
+
+When several databases are connected, the agent needs to decide which one holds
+the data for a given question. You can help it by attaching a short description
+to each connection. Descriptions are shown to the agent (and surfaced by the
+`list_dbs` tool) but are otherwise optional.
+
+```bash
+saber db add sales \
+  --description "Production Postgres: orders, customers, revenue"
+
+saber db add analytics \
+  --description "ClickHouse warehouse: web sessions, events, funnels"
+```
+
+You can add a description to any connection — see
+[Database Setup](/guides/database-setup) for the full `saber db add` flow.
+
+<Aside type="tip">
+  Clear, distinct descriptions noticeably improve how reliably the agent routes
+  a question to the right database. Mention the kind of data each connection
+  holds (tables, domains, environments).
+</Aside>
+
+### How the Agent Routes Queries
+
+When more than one database is connected, the agent's behavior changes in a few
+ways:
+
+- **`db_name` on every tool call.** The SQL and knowledge tools require a
+  `db_name` argument that names the target database. The agent must choose a
+  connected database for each `list_tables`, `introspect_schema`,
+  `execute_sql`, and knowledge-base call.
+- **A `list_dbs` tool.** A dedicated tool lists every connected database with
+  its name, dialect, and description, so the agent can see its options before
+  exploring schemas.
+- **Per-database knowledge.** [Knowledge entries](/guides/knowledge) remain
+  scoped per database, so each connection contributes its own context.
+
+In single-database sessions none of this is visible — the tool schemas and
+system prompt are identical to before, and there is no `db_name` argument or
+`list_dbs` tool.
+
+### Resuming Multi-Database Threads
+
+[Conversation threads](/guides/threads) created in a multi-database session
+record all of the connected databases. When you resume such a thread, SQLsaber
+reconnects to the same set automatically:
+
+```bash
+saber threads resume a1b2c3d4
+```
+
+<Aside type="note">
+  Automatic resume only works when **every** database in the thread is a saved
+  connection (added with `saber db add`). If a thread used an ad-hoc connection
+  string or file path, resume it with explicit `-d` flags:
+
+```bash
+saber threads resume a1b2c3d4 -d sales -d "postgresql://user:pass@host:5432/events"
+```
+
+</Aside>
+
+### Using the Python SDK
+
+The SDK exposes the same capability through `SQLSaberOptions`. Pass a list of
+targets to connect to multiple databases at once:
+
+```python
+from sqlsaber import SQLSaber
+from sqlsaber.options import SQLSaberOptions
+
+options = SQLSaberOptions(
+    database=["sales", "postgresql://user:pass@host:5432/events"],
+)
+
+saber = SQLSaber(options)
+print(saber.db_names)     # ["sales", "events"]
+print(saber.connections)  # {name: connection, ...}
+```
+
+See the [SDK Configuration guide](/sdk/configuration) for the full set of
+options.
+
+### What's Next?
+
+- [Database Setup](/guides/database-setup) — register and describe connections
+- [Knowledge Base](/guides/knowledge) — give each database extra context
+- [Conversation Threads](/guides/threads) — resume multi-database sessions

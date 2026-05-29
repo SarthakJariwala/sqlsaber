@@ -22,7 +22,7 @@ options = SQLSaberOptions(
 
 | Field               | Type                                          | Default | Description                                                                                  |
 | ------------------- | --------------------------------------------- | ------- | -------------------------------------------------------------------------------------------- |
-| `database`          | `str \| list[str] \| tuple[str, ...] \| None` | `None`  | Connection string, file path, configured DB name, or a list of CSV paths.                    |
+| `database`          | `str \| list[str] \| tuple[str, ...] \| None` | `None`  | Connection string, file path, configured DB name, a list of CSV paths, or a list of targets for a [multi-database](/guides/multi-database) session. |
 | `model_name`        | `str \| None`                                 | `None`  | Model in `"provider:model"` form. Falls back to your configured/default model.               |
 | `api_key`           | `str \| None`                                 | `None`  | API key for the model's provider. Usually unnecessary — see [Credentials](/sdk/credentials-and-models). |
 | `thinking_enabled`  | `bool \| None`                                | `None`  | Toggle extended thinking on supported reasoning models.                                      |
@@ -64,10 +64,30 @@ SQLSaberOptions(database="./customers.csv")
 
 ### Multiple CSV files
 
-Pass a list (or tuple) of CSV paths to query across them together:
+Pass a list (or tuple) of CSV paths to query across them together. All CSVs are
+merged into a single in-memory database with one table per file:
 
 ```python
 SQLSaberOptions(database=["users.csv", "orders.csv"])
+```
+
+### Multiple databases
+
+Pass a list of non-CSV targets (configured names, connection strings, or file
+paths) to connect to [several databases](/guides/multi-database) in one session.
+The agent queries each one separately and combines the results:
+
+```python
+SQLSaberOptions(database=["sales", "postgresql://user:pass@host:5432/events"])
+```
+
+The resulting session exposes `db_names` and `connections` for the connected
+databases:
+
+```python
+saber = SQLSaber(options)
+saber.db_names     # ["sales", "events"]
+saber.connections  # {name: connection, ...}
 ```
 
 ### A configured database
