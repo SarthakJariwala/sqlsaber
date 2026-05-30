@@ -87,6 +87,27 @@ DANGEROUS_FUNCTIONS_BY_DIALECT: dict[str, set[str]] = {
         "pg_current_logfile",
         "lo_import",
         "lo_export",
+        "lo_get",
+        "lo_put",
+        "loread",
+        "lowrite",
+        # Arbitrary SQL execution via XML mapping functions (the query string is
+        # opaque to AST analysis, so these must be blocked outright)
+        "query_to_xml",
+        "query_to_xmlschema",
+        "query_to_xml_and_xmlschema",
+        "table_to_xml",
+        "table_to_xmlschema",
+        "table_to_xml_and_xmlschema",
+        "cursor_to_xml",
+        "cursor_to_xmlschema",
+        # Sequence side effects (exempt from SET TRANSACTION READ ONLY)
+        "nextval",
+        "setval",
+        "currval",
+        "lastval",
+        # Logical replication message emission (side effect)
+        "pg_logical_emit_message",
         # External execution / remote calls
         "dblink",
         "dblink_exec",
@@ -161,6 +182,8 @@ DANGEROUS_FUNCTIONS_BY_DIALECT: dict[str, set[str]] = {
         "writefile",
         # Extension loading
         "load_extension",
+        # FTS3 tokenizer pointer primitive (memory corruption / code execution)
+        "fts3_tokenizer",
     },
     "duckdb": {
         # File-reading table functions
@@ -188,12 +211,21 @@ DANGEROUS_FUNCTIONS_BY_DIALECT: dict[str, set[str]] = {
         "read_ndjson_objects",
         # Filesystem enumeration
         "glob",
+        # CSV sniffing (reads files)
+        "sniff_csv",
         # External database access
         "sqlite_scan",
         "postgres_scan",
         "mysql_scan",
         "postgres_query",
         "mysql_query",
+        # Secret / session-variable disclosure
+        "duckdb_secrets",
+        "which_secret",
+        "getvariable",
+        # Sequence side effects
+        "nextval",
+        "currval",
         # Extension management
         "load_extension",
         "install_extension",
@@ -3603,8 +3635,19 @@ def _display_function_name(fn: exp.Func) -> str:
 
 def has_dangerous_functions(stmt: exp.Expression, dialect: str) -> str | None:
     """Check for dangerous functions that can read files or execute commands."""
-    deny_set = DANGEROUS_FUNCTIONS_BY_DIALECT.get(dialect, set())
-    deny_prefix_set = DANGEROUS_FUNCTION_PREFIXES_BY_DIALECT.get(dialect, set())
+    known_dialect = (
+        dialect in DANGEROUS_FUNCTIONS_BY_DIALECT
+        or dialect in DANGEROUS_FUNCTION_PREFIXES_BY_DIALECT
+    )
+    if known_dialect:
+        deny_set = DANGEROUS_FUNCTIONS_BY_DIALECT.get(dialect, set())
+        deny_prefix_set = DANGEROUS_FUNCTION_PREFIXES_BY_DIALECT.get(dialect, set())
+    else:
+        # Unknown dialect: fail closed against the union of every known denylist
+        # rather than allowing all functions through.
+        deny_set = set().union(*DANGEROUS_FUNCTIONS_BY_DIALECT.values())
+        deny_prefix_set = set().union(*DANGEROUS_FUNCTION_PREFIXES_BY_DIALECT.values())
+
     if not deny_set and not deny_prefix_set:
         return None
 
@@ -3640,6 +3683,67 @@ def has_dangerous_functions(stmt: exp.Expression, dialect: str) -> str | None:
                 "is not allowed"
             )
 
+    return None
+
+
+# Dialects whose engines treat a bare quoted string in FROM as a file path
+# (DuckDB "replacement scans"). For these, a path/URL/glob table reference reads
+# arbitrary files with no function call and must be rejected.
+FILE_PATH_TARGET_DIALECTS: set[str] = {"duckdb"}
+
+# Data-file extensions that, as a table reference suffix, indicate a file read.
+FILE_PATH_DATA_EXTENSIONS: tuple[str, ...] = (
+    ".csv",
+    ".tsv",
+    ".txt",
+    ".parquet",
+    ".json",
+    ".jsonl",
+    ".ndjson",
+    ".arrow",
+    ".feather",
+    ".ipc",
+    ".avro",
+    ".xml",
+    ".xlsx",
+    ".xls",
+    ".gz",
+    ".zst",
+    ".db",
+    ".sqlite",
+    ".duckdb",
+)
+
+
+def _looks_like_file_path(name: str) -> bool:
+    """Heuristically detect a file path, URL, or glob used as a table reference."""
+    lowered = name.strip().lower()
+    if not lowered:
+        return False
+    if "://" in lowered:  # URLs: http(s), s3, gcs, azure, etc.
+        return True
+    if "/" in lowered or "\\" in lowered:  # path separators
+        return True
+    if "*" in lowered or "?" in lowered:  # globs
+        return True
+    return lowered.endswith(FILE_PATH_DATA_EXTENSIONS)
+
+
+def has_file_path_target(stmt: exp.Expression, dialect: str) -> str | None:
+    """Reject file-path/URL/glob table references for replacement-scan dialects."""
+    if dialect not in FILE_PATH_TARGET_DIALECTS:
+        return None
+
+    for table in stmt.find_all(exp.Table):
+        ident = table.this
+        if not isinstance(ident, exp.Identifier):
+            continue
+        name = ident.name or ""
+        if _looks_like_file_path(name):
+            return (
+                "Reading from a file path or URL is not allowed "
+                f"(table reference: {name!r})"
+            )
     return None
 
 
@@ -3749,6 +3853,11 @@ def validate_read_only(sql: str, dialect: str = "ansi") -> GuardResult:
     if reason:
         return GuardResult(False, reason)
 
+    # Block file-path/URL/glob table references (DuckDB replacement scans)
+    reason = has_file_path_target(stmt, dialect)
+    if reason:
+        return GuardResult(False, reason)
+
     return GuardResult(
         True,
         None,
@@ -3810,6 +3919,11 @@ def validate_sql(
         with _analysis_session():
             # Enforce function-level sandbox in dangerous mode too
             reason = has_dangerous_functions(stmt, dialect)
+            if reason:
+                return GuardResult(False, reason)
+
+            # Block file-path/URL/glob table references (DuckDB replacement scans)
+            reason = has_file_path_target(stmt, dialect)
             if reason:
                 return GuardResult(False, reason)
 

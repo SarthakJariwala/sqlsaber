@@ -11,7 +11,11 @@ from urllib.parse import parse_qs, urlparse
 import duckdb
 
 from .base import DEFAULT_QUERY_TIMEOUT, BaseDatabaseConnection, QueryTimeoutError
-from .csv import CSVConnection, _execute_duckdb_transaction
+from .csv import (
+    CSVConnection,
+    _execute_duckdb_transaction,
+    apply_read_only_lockdown,
+)
 
 
 class CSVsConnection(BaseDatabaseConnection):
@@ -83,14 +87,21 @@ class CSVsConnection(BaseDatabaseConnection):
             conn = duckdb.connect(":memory:")
             try:
                 for src in self.csv_sources:
-                    src._create_view(conn)
-                return _execute_duckdb_transaction(conn, query, args_tuple, commit)
+                    src._create_table(conn)
+                if read_only:
+                    apply_read_only_lockdown(conn)
+                return _execute_duckdb_transaction(
+                    conn, query, args_tuple, commit, timeout=effective_timeout
+                )
             finally:
                 conn.close()
 
         try:
+            wait_timeout = (
+                effective_timeout + 5 if effective_timeout else effective_timeout
+            )
             return await asyncio.wait_for(
-                asyncio.to_thread(_run_query), timeout=effective_timeout
+                asyncio.to_thread(_run_query), timeout=wait_timeout
             )
         except asyncio.TimeoutError as exc:
             raise QueryTimeoutError(effective_timeout or 0) from exc
