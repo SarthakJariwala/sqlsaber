@@ -11,8 +11,9 @@ from urllib.parse import parse_qs, urlparse
 import duckdb
 
 from .base import DEFAULT_QUERY_TIMEOUT, BaseDatabaseConnection, QueryTimeoutError
-from .csv import (
-    CSVConnection,
+from .csv import CSVConnection
+from .duckdb import (
+    _duckdb_interrupt_timer,
     _execute_duckdb_transaction,
     apply_read_only_lockdown,
 )
@@ -86,13 +87,16 @@ class CSVsConnection(BaseDatabaseConnection):
         def _run_query() -> list[dict[str, Any]]:
             conn = duckdb.connect(":memory:")
             try:
-                for src in self.csv_sources:
-                    src._create_table(conn)
-                if read_only:
-                    apply_read_only_lockdown(conn)
-                return _execute_duckdb_transaction(
-                    conn, query, args_tuple, commit, timeout=effective_timeout
-                )
+                with _duckdb_interrupt_timer(conn, effective_timeout):
+                    for src in self.csv_sources:
+                        src._create_table(conn)
+                    if read_only:
+                        apply_read_only_lockdown(conn)
+                    return _execute_duckdb_transaction(
+                        conn, query, args_tuple, commit, timeout=effective_timeout
+                    )
+            except duckdb.InterruptException as exc:
+                raise QueryTimeoutError(effective_timeout or 0) from exc
             finally:
                 conn.close()
 

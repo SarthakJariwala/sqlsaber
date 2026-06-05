@@ -10,6 +10,7 @@ import duckdb
 from .base import DEFAULT_QUERY_TIMEOUT, BaseDatabaseConnection, QueryTimeoutError
 from .duckdb import (
     DuckDBSchemaIntrospector,
+    _duckdb_interrupt_timer,
     _execute_duckdb_transaction,
     apply_read_only_lockdown,
 )
@@ -17,8 +18,6 @@ from .duckdb import (
 __all__ = [
     "CSVConnection",
     "CSVSchemaIntrospector",
-    "_execute_duckdb_transaction",
-    "apply_read_only_lockdown",
 ]
 
 
@@ -122,12 +121,15 @@ class CSVConnection(BaseDatabaseConnection):
         def _run_query() -> list[dict[str, Any]]:
             conn = duckdb.connect(":memory:")
             try:
-                self._create_table(conn)
-                if read_only:
-                    apply_read_only_lockdown(conn)
-                return _execute_duckdb_transaction(
-                    conn, query, args_tuple, commit, timeout=effective_timeout
-                )
+                with _duckdb_interrupt_timer(conn, effective_timeout):
+                    self._create_table(conn)
+                    if read_only:
+                        apply_read_only_lockdown(conn)
+                    return _execute_duckdb_transaction(
+                        conn, query, args_tuple, commit, timeout=effective_timeout
+                    )
+            except duckdb.InterruptException as exc:
+                raise QueryTimeoutError(effective_timeout or 0) from exc
             finally:
                 conn.close()
 

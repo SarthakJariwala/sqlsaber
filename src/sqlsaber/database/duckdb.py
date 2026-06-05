@@ -2,6 +2,8 @@
 
 import asyncio
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import duckdb
@@ -24,6 +26,24 @@ READ_ONLY_DUCKDB_CONFIG: dict[str, Any] = {
 }
 
 
+@contextmanager
+def _duckdb_interrupt_timer(
+    conn: duckdb.DuckDBPyConnection, timeout: float | None
+) -> Iterator[None]:
+    """Interrupt the DuckDB connection if the timeout elapses."""
+    timer: threading.Timer | None = None
+    if timeout:
+        timer = threading.Timer(timeout, conn.interrupt)
+        timer.daemon = True
+        timer.start()
+
+    try:
+        yield
+    finally:
+        if timer is not None:
+            timer.cancel()
+
+
 def _execute_duckdb_transaction(
     conn: duckdb.DuckDBPyConnection,
     query: str,
@@ -38,29 +58,24 @@ def _execute_duckdb_transaction(
     actually cancelled (not merely abandoned); the interrupt is surfaced as
     QueryTimeoutError.
     """
-    timer: threading.Timer | None = None
-    if timeout:
-        timer = threading.Timer(timeout, conn.interrupt)
-        timer.daemon = True
-        timer.start()
-
-    conn.execute("BEGIN TRANSACTION")
     success = False
     try:
-        if args:
-            conn.execute(query, args)
-        else:
-            conn.execute(query)
+        with _duckdb_interrupt_timer(conn, timeout):
+            conn.execute("BEGIN TRANSACTION")
+            if args:
+                conn.execute(query, args)
+            else:
+                conn.execute(query)
 
-        if conn.description is None:
-            rows: list[dict[str, Any]] = []
-        else:
-            columns = [col[0] for col in conn.description]
-            data = conn.fetchall()
-            rows = [dict(zip(columns, row)) for row in data]
+            if conn.description is None:
+                rows: list[dict[str, Any]] = []
+            else:
+                columns = [col[0] for col in conn.description]
+                data = conn.fetchall()
+                rows = [dict(zip(columns, row)) for row in data]
 
-        success = True
-        return rows
+            success = True
+            return rows
     except duckdb.InterruptException as exc:
         _safe_rollback(conn)
         raise QueryTimeoutError(timeout or 0) from exc
@@ -68,8 +83,6 @@ def _execute_duckdb_transaction(
         _safe_rollback(conn)
         raise
     finally:
-        if timer is not None:
-            timer.cancel()
         if success:
             if commit:
                 conn.execute("COMMIT")

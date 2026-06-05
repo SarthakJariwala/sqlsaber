@@ -6,6 +6,8 @@ read-only mode, and runaway queries must be cancelled at the engine when the
 timeout elapses.
 """
 
+import time
+
 import pytest
 
 from sqlsaber.database.base import QueryTimeoutError
@@ -130,6 +132,47 @@ class TestCSVFileReadLockdown:
 
 
 class TestQueryCancellation:
+    @pytest.mark.asyncio
+    async def test_csv_materialization_times_out_promptly(self, tmp_path, monkeypatch):
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("a\n1\n", encoding="utf-8")
+        conn = CSVConnection(f"csv:///{csv_path}")
+
+        def slow_materialization(duck_conn) -> None:
+            duck_conn.execute(RECURSIVE_BOMB)
+
+        monkeypatch.setattr(conn, "_create_table", slow_materialization)
+        started = time.monotonic()
+        try:
+            with pytest.raises(QueryTimeoutError):
+                await conn.execute_query("SELECT 1", timeout=0.2)
+        finally:
+            await conn.close()
+
+        assert time.monotonic() - started < 2
+
+    @pytest.mark.asyncio
+    async def test_csvs_materialization_times_out_promptly(self, tmp_path, monkeypatch):
+        from urllib.parse import urlencode
+
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text("a\n1\n", encoding="utf-8")
+        specs = [f"csv:///{csv_path}"]
+        conn = CSVsConnection(f"csvs:///?{urlencode({'spec': specs}, doseq=True)}")
+
+        def slow_materialization(duck_conn) -> None:
+            duck_conn.execute(RECURSIVE_BOMB)
+
+        monkeypatch.setattr(conn.csv_sources[0], "_create_table", slow_materialization)
+        started = time.monotonic()
+        try:
+            with pytest.raises(QueryTimeoutError):
+                await conn.execute_query("SELECT 1", timeout=0.2)
+        finally:
+            await conn.close()
+
+        assert time.monotonic() - started < 2
+
     @pytest.mark.asyncio
     async def test_duckdb_recursive_bomb_times_out(self):
         conn = DuckDBConnection(":memory:")

@@ -25,6 +25,11 @@ def _never_abort() -> int:
     return 0
 
 
+def _is_sqlite_interrupt(exc: sqlite3.OperationalError) -> bool:
+    """Return True when SQLite reports an engine interrupt."""
+    return getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_INTERRUPT
+
+
 class SQLiteConnection(BaseDatabaseConnection):
     """SQLite database connection using aiosqlite."""
 
@@ -114,7 +119,7 @@ class SQLiteConnection(BaseDatabaseConnection):
             except asyncio.TimeoutError as exc:
                 raise QueryTimeoutError(effective_timeout or 0) from exc
             except sqlite3.OperationalError as exc:
-                if "interrupted" in str(exc).lower():
+                if _is_sqlite_interrupt(exc):
                     raise QueryTimeoutError(effective_timeout or 0) from exc
                 raise
             finally:

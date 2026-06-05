@@ -4,11 +4,25 @@ import sqlite3
 
 import pytest
 
-from sqlsaber.database.sqlite import SQLiteConnection, SQLiteSchemaIntrospector
+from sqlsaber.database.sqlite import (
+    SQLiteConnection,
+    SQLiteSchemaIntrospector,
+    _is_sqlite_interrupt,
+)
 
 
 class TestSQLiteConnection:
     """Test SQLite connection functionality."""
+
+    def test_interrupt_detection_uses_sqlite_error_code(self):
+        """Interrupt classification should not depend on exception text."""
+        interrupt = sqlite3.OperationalError("localized engine stop")
+        interrupt.sqlite_errorcode = sqlite3.SQLITE_INTERRUPT
+        assert _is_sqlite_interrupt(interrupt)
+
+        not_interrupt = sqlite3.OperationalError("interrupted")
+        not_interrupt.sqlite_errorcode = sqlite3.SQLITE_ERROR
+        assert not _is_sqlite_interrupt(not_interrupt)
 
     def test_connection_string_parsing(self):
         """Test SQLite connection string parsing."""
