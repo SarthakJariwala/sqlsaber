@@ -1,12 +1,15 @@
 """Comprehensive tests for SQLite database module."""
 
 import sqlite3
+import time
 
 import pytest
 
+from sqlsaber.database.base import QueryTimeoutError
 from sqlsaber.database.sqlite import (
     SQLiteConnection,
     SQLiteSchemaIntrospector,
+    _is_sqlite_busy_timeout,
     _is_sqlite_interrupt,
 )
 
@@ -23,6 +26,16 @@ class TestSQLiteConnection:
         not_interrupt = sqlite3.OperationalError("interrupted")
         not_interrupt.sqlite_errorcode = sqlite3.SQLITE_ERROR
         assert not _is_sqlite_interrupt(not_interrupt)
+
+    def test_busy_timeout_detection_uses_sqlite_error_code(self):
+        """Lock timeout classification should use SQLite result codes."""
+        busy = sqlite3.OperationalError("localized lock timeout")
+        busy.sqlite_errorcode = sqlite3.SQLITE_BUSY
+        assert _is_sqlite_busy_timeout(busy)
+
+        not_busy = sqlite3.OperationalError("database is locked")
+        not_busy.sqlite_errorcode = sqlite3.SQLITE_ERROR
+        assert not _is_sqlite_busy_timeout(not_busy)
 
     def test_connection_string_parsing(self):
         """Test SQLite connection string parsing."""
@@ -56,6 +69,34 @@ class TestSQLiteConnection:
             await conn.execute_query("SELECT * FROM non_existent_table")
 
         await conn.close()
+
+    @pytest.mark.asyncio
+    async def test_locked_database_respects_query_timeout(self, tmp_path):
+        """SQLite lock waits should respect the requested query timeout."""
+        db_path = tmp_path / "locked.db"
+        with sqlite3.connect(db_path) as db_conn:
+            db_conn.execute(
+                "CREATE TABLE items (id INTEGER PRIMARY KEY, value INTEGER)"
+            )
+            db_conn.execute("INSERT INTO items (id, value) VALUES (1, 10)")
+            db_conn.commit()
+
+        locker = sqlite3.connect(db_path, timeout=0)
+        conn = SQLiteConnection(f"sqlite:///{db_path}")
+        try:
+            locker.execute("BEGIN IMMEDIATE")
+            started = time.monotonic()
+            with pytest.raises(QueryTimeoutError):
+                await conn.execute_query(
+                    "UPDATE items SET value = value + 1 WHERE id = 1",
+                    timeout=0.2,
+                    commit=True,
+                )
+            assert time.monotonic() - started < 1.5
+        finally:
+            locker.rollback()
+            locker.close()
+            await conn.close()
 
 
 class TestSQLiteSchemaIntrospector:
