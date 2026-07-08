@@ -1,6 +1,8 @@
 """SQLite database connection and schema introspection."""
 
 import asyncio
+import sqlite3
+import time
 from typing import Any
 
 import aiosqlite
@@ -11,6 +13,42 @@ from .base import (
     BaseSchemaIntrospector,
     QueryTimeoutError,
 )
+
+# Number of SQLite VM instructions between progress-handler callbacks. Small
+# enough to abort a runaway query promptly, large enough to add negligible
+# overhead to normal queries.
+_PROGRESS_HANDLER_INSTRUCTIONS = 10_000
+_SQLITE_BUSY_TIMEOUT_ERROR_CODES: set[int] = {sqlite3.SQLITE_BUSY}
+for _busy_code_name in (
+    "SQLITE_BUSY_RECOVERY",
+    "SQLITE_BUSY_SNAPSHOT",
+    "SQLITE_BUSY_TIMEOUT",
+):
+    _busy_code = getattr(sqlite3, _busy_code_name, None)
+    if isinstance(_busy_code, int):
+        _SQLITE_BUSY_TIMEOUT_ERROR_CODES.add(_busy_code)
+
+
+def _never_abort() -> int:
+    """Progress handler that never aborts (used to clear the deadline handler)."""
+    return 0
+
+
+def _is_sqlite_interrupt(exc: sqlite3.OperationalError) -> bool:
+    """Return True when SQLite reports an engine interrupt."""
+    return getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_INTERRUPT
+
+
+def _is_sqlite_busy_timeout(exc: sqlite3.OperationalError) -> bool:
+    """Return True when SQLite reports that its busy timeout elapsed."""
+    return getattr(exc, "sqlite_errorcode", None) in _SQLITE_BUSY_TIMEOUT_ERROR_CODES
+
+
+def _busy_timeout_ms(timeout: float | None) -> int:
+    """Convert a query timeout in seconds to SQLite busy_timeout milliseconds."""
+    if timeout is None or timeout <= 0:
+        return 0
+    return max(1, int(timeout * 1000))
 
 
 class SQLiteConnection(BaseDatabaseConnection):
@@ -55,40 +93,70 @@ class SQLiteConnection(BaseDatabaseConnection):
         If commit=True, the transaction will be committed on success.
         """
         effective_timeout = timeout or DEFAULT_QUERY_TIMEOUT
+        busy_timeout_ms = _busy_timeout_ms(effective_timeout)
 
-        async with aiosqlite.connect(self.database_path) as conn:
+        async with aiosqlite.connect(
+            self.database_path, timeout=busy_timeout_ms / 1000
+        ) as conn:
             conn.row_factory = aiosqlite.Row
-
-            if read_only:
-                await conn.execute("PRAGMA query_only = ON")
-            else:
-                await conn.execute("PRAGMA query_only = OFF")
-
-            await conn.execute("BEGIN")
+            transaction_started = False
             success = False
+
             try:
-                # Execute query with client-side timeout (SQLite has no server-side timeout)
+                await conn.execute(f"PRAGMA busy_timeout = {busy_timeout_ms}")
+
+                if read_only:
+                    await conn.execute("PRAGMA query_only = ON")
+                else:
+                    await conn.execute("PRAGMA query_only = OFF")
+
+                # SQLite has no server-side timeout, and asyncio.wait_for cannot
+                # cancel the C-level execute running on the aiosqlite worker thread.
+                # A progress handler lets the engine itself abort once the deadline
+                # passes, so a runaway query is actually stopped rather than leaked.
                 if effective_timeout:
-                    cursor = await asyncio.wait_for(
-                        conn.execute(query, args if args else ()),
-                        timeout=effective_timeout,
+                    deadline = time.monotonic() + effective_timeout
+
+                    def _abort_when_expired() -> int:
+                        return 1 if time.monotonic() > deadline else 0
+
+                    await conn.set_progress_handler(
+                        _abort_when_expired, _PROGRESS_HANDLER_INSTRUCTIONS
                     )
+
+                await conn.execute("BEGIN")
+                transaction_started = True
+
+                async def _execute_and_fetch() -> list[Any]:
+                    cursor = await conn.execute(query, args if args else ())
+                    return list(await cursor.fetchall())
+
+                if effective_timeout:
                     rows = await asyncio.wait_for(
-                        cursor.fetchall(), timeout=effective_timeout
+                        _execute_and_fetch(), timeout=effective_timeout
                     )
                 else:
-                    cursor = await conn.execute(query, args if args else ())
-                    rows = await cursor.fetchall()
+                    rows = await _execute_and_fetch()
 
                 success = True
                 return [dict(row) for row in rows]
             except asyncio.TimeoutError as exc:
                 raise QueryTimeoutError(effective_timeout or 0) from exc
+            except sqlite3.OperationalError as exc:
+                if _is_sqlite_interrupt(exc) or _is_sqlite_busy_timeout(exc):
+                    raise QueryTimeoutError(effective_timeout or 0) from exc
+                raise
             finally:
-                if success and commit:
-                    await conn.commit()
-                else:
-                    await conn.rollback()
+                if effective_timeout:
+                    # Clear the deadline handler so it cannot abort commit/rollback.
+                    await conn.set_progress_handler(
+                        _never_abort, _PROGRESS_HANDLER_INSTRUCTIONS
+                    )
+                if transaction_started:
+                    if success and commit:
+                        await conn.commit()
+                    else:
+                        await conn.rollback()
 
 
 class SQLiteSchemaIntrospector(BaseSchemaIntrospector):

@@ -1,5 +1,7 @@
 """Tests for database connection module."""
 
+from urllib.parse import urlencode
+
 import pytest
 
 from sqlsaber.database import (
@@ -9,10 +11,22 @@ from sqlsaber.database import (
     PostgreSQLConnection,
     SQLiteConnection,
 )
+from sqlsaber.database.csv import CSVConnection
+from sqlsaber.database.csvs import CSVsConnection
 
 
 class TestDatabaseConnectionFactory:
     """Test the DatabaseConnection factory function."""
+
+    def test_csv_compatibility_exports_are_removed(self):
+        """CSV implementation classes should be imported from their modules."""
+        import sqlsaber.database as database
+        import sqlsaber.database.csv as csv_module
+
+        assert not hasattr(database, "CSVConnection")
+        assert not hasattr(database, "CSVsConnection")
+        assert not hasattr(database, "CSVSchemaIntrospector")
+        assert not hasattr(csv_module, "CSVSchemaIntrospector")
 
     def test_postgresql_connection(self):
         """Test creating a PostgreSQL connection."""
@@ -43,6 +57,26 @@ class TestDatabaseConnectionFactory:
         assert isinstance(conn, DuckDBConnection)
         assert conn.connection_string == conn_string
         assert conn.database_path == "path/to/data.duckdb"
+
+    def test_csv_connection(self):
+        """Test creating a CSV connection."""
+        conn_string = "csv:///path/to/data.csv"
+        conn = DatabaseConnection(conn_string)
+        assert isinstance(conn, CSVConnection)
+        assert conn.connection_string == conn_string
+        assert conn.csv_path == "path/to/data.csv"
+
+    def test_csvs_connection(self):
+        """Test creating a multi-CSV connection."""
+        specs = ["csv:///path/to/users.csv", "csv:///path/to/orders.csv"]
+        conn_string = f"csvs:///?{urlencode({'spec': specs}, doseq=True)}"
+        conn = DatabaseConnection(conn_string)
+        assert isinstance(conn, CSVsConnection)
+        assert conn.connection_string == conn_string
+        assert [source.csv_path for source in conn.csv_sources] == [
+            "path/to/users.csv",
+            "path/to/orders.csv",
+        ]
 
     def test_unsupported_database(self):
         """Test error for unsupported database type."""

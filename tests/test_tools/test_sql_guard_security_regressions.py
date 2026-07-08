@@ -7,7 +7,7 @@ These tests intentionally codify stricter security expectations:
 
 import pytest
 
-from sqlsaber.tools.sql_guard import validate_sql
+from sqlsaber.tools.sql_guard import validate_read_only, validate_sql
 
 SAFE_MODE_SIDE_EFFECT_CASES = [
     # PostgreSQL side-effectful/admin/file/process functions
@@ -101,6 +101,41 @@ SAFE_MODE_SIDE_EFFECT_CASES = [
     ("duckdb", "SELECT * FROM excel_scan('file.xlsx')"),
     ("duckdb", "SELECT * FROM read_xlsx('file.xlsx')"),
     ("duckdb", "SELECT * FROM st_read('file.geojson')"),
+    # DuckDB replacement scans: a bare quoted path/URL/glob in FROM reads files
+    # with no function call (parses as Table -> Identifier).
+    ("duckdb", "SELECT * FROM '/etc/passwd'"),
+    ("duckdb", "SELECT * FROM 'secrets.parquet'"),
+    ("duckdb", "SELECT * FROM '/data/*.csv'"),
+    ("duckdb", "SELECT * FROM 'https://evil.example.com/x.csv'"),
+    ("duckdb", "SELECT a.x FROM '/etc/passwd' AS a"),
+    (
+        "duckdb",
+        "SELECT * FROM read_csv_auto('/etc/passwd') UNION SELECT * FROM '/etc/passwd'",
+    ),
+    # DuckDB readers/secrets/session functions missing from the denylist.
+    ("duckdb", "SELECT * FROM sniff_csv('/etc/passwd')"),
+    ("duckdb", "SELECT * FROM duckdb_secrets()"),
+    ("duckdb", "SELECT which_secret('s3://bucket/key', 's3')"),
+    ("duckdb", "SELECT getvariable('my_secret')"),
+    # PostgreSQL: functions that execute arbitrary SQL strings or read large objects.
+    ("postgres", "SELECT query_to_xml('DELETE FROM users', true, true, '')"),
+    ("postgres", "SELECT query_to_xmlschema('SELECT 1', true, true, '')"),
+    ("postgres", "SELECT query_to_xml_and_xmlschema('SELECT 1', true, true, '')"),
+    ("postgres", "SELECT table_to_xml('users', true, true, '')"),
+    ("postgres", "SELECT cursor_to_xml('mycursor', 0, true, true, '')"),
+    ("postgres", "SELECT lo_get(1234)"),
+    ("postgres", "SELECT loread(0, 100)"),
+    ("postgres", "SELECT lo_put(1234, 0, 'abc')"),
+    ("postgres", "SELECT pg_logical_emit_message(true, 'p', 'msg')"),
+    # SQLite FTS3 tokenizer pointer primitive.
+    ("sqlite", "SELECT fts3_tokenizer('x', x'0000000000000000')"),
+    # Sequence side effects bypass SET TRANSACTION READ ONLY in Postgres.
+    ("postgres", "SELECT nextval('my_seq')"),
+    ("postgres", "SELECT setval('my_seq', 1)"),
+    ("postgres", "SELECT currval('my_seq')"),
+    ("postgres", "SELECT lastval()"),
+    ("duckdb", "SELECT nextval('my_seq')"),
+    ("duckdb", "SELECT currval('my_seq')"),
 ]
 
 
@@ -157,6 +192,28 @@ STRICT_DANGEROUS_MODE_BLOCK_CASES = [
     # SQLite statements that should not be in dangerous allowlist
     ("sqlite", "REINDEX"),
 ]
+
+
+UNKNOWN_DIALECT_FAIL_CLOSED_CASES = [
+    # Dangerous functions from any known dialect must be blocked even when the
+    # dialect is unrecognized (denylist must fail closed, not fail open).
+    ("ansi", "SELECT pg_sleep(30)"),
+    ("ansi", "SELECT load_file('/etc/passwd')"),
+    ("totally-made-up", "SELECT pg_read_file('/etc/passwd')"),
+    ("totally-made-up", "SELECT sys_eval('id')"),
+]
+
+
+@pytest.mark.parametrize(("dialect", "query"), UNKNOWN_DIALECT_FAIL_CLOSED_CASES)
+def test_unknown_dialect_fails_closed_on_dangerous_functions(
+    dialect: str,
+    query: str,
+):
+    """Unrecognized dialects must still block known dangerous functions."""
+    result = validate_read_only(query, dialect)
+
+    assert not result.allowed
+    assert result.reason
 
 
 @pytest.mark.parametrize(("dialect", "query"), STRICT_DANGEROUS_MODE_BLOCK_CASES)

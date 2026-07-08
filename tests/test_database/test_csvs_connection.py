@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 
 import pytest
 
-from sqlsaber.database import CSVsConnection
+from sqlsaber.database.csvs import CSVsConnection
 from sqlsaber.database.schema import SchemaManager
 
 

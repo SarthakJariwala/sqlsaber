@@ -8,45 +8,13 @@ from urllib.parse import parse_qs, urlparse
 import duckdb
 
 from .base import DEFAULT_QUERY_TIMEOUT, BaseDatabaseConnection, QueryTimeoutError
-from .duckdb import DuckDBSchemaIntrospector
+from .duckdb import (
+    _duckdb_interrupt_timer,
+    _execute_duckdb_transaction,
+    apply_read_only_lockdown,
+)
 
-
-def _execute_duckdb_transaction(
-    conn: duckdb.DuckDBPyConnection,
-    query: str,
-    args: tuple[Any, ...],
-    commit: bool = False,
-) -> list[dict[str, Any]]:
-    """Run a DuckDB query inside a transaction and return list of dicts.
-
-    If commit=True, commits on success instead of rolling back.
-    """
-    conn.execute("BEGIN TRANSACTION")
-    success = False
-    try:
-        if args:
-            conn.execute(query, args)
-        else:
-            conn.execute(query)
-
-        if conn.description is None:
-            rows: list[dict[str, Any]] = []
-        else:
-            columns = [col[0] for col in conn.description]
-            data = conn.fetchall()
-            rows = [dict(zip(columns, row)) for row in data]
-
-        success = True
-        return rows
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
-    finally:
-        if success:
-            if commit:
-                conn.execute("COMMIT")
-            else:
-                conn.execute("ROLLBACK")
+__all__ = ["CSVConnection"]
 
 
 class CSVConnection(BaseDatabaseConnection):
@@ -103,7 +71,14 @@ class CSVConnection(BaseDatabaseConnection):
             return None
         return encoding.replace("-", "").replace("_", "").upper()
 
-    def _create_view(self, conn: duckdb.DuckDBPyConnection) -> None:
+    def _create_table(self, conn: duckdb.DuckDBPyConnection) -> None:
+        """Materialize the CSV into a real table.
+
+        A materialized table (rather than a view over read_csv_auto) lets the
+        session lock down external file access afterwards while still serving the
+        intended data — a view would re-read the file on every query and break
+        under the lockdown.
+        """
         header_literal = "TRUE" if self.has_header else "FALSE"
         option_parts: list[str] = [f"HEADER={header_literal}"]
 
@@ -122,11 +97,11 @@ class CSVConnection(BaseDatabaseConnection):
             f"read_csv_auto({self._quote_literal(self.csv_path)}{options_sql})"
         )
 
-        create_view_sql = (
-            f"CREATE VIEW {self._quote_identifier(self.table_name)} AS "
+        create_table_sql = (
+            f"CREATE TABLE {self._quote_identifier(self.table_name)} AS "
             f"SELECT * FROM {base_relation_sql}"
         )
-        conn.execute(create_view_sql)
+        conn.execute(create_table_sql)
 
     async def execute_query(
         self,
@@ -142,20 +117,24 @@ class CSVConnection(BaseDatabaseConnection):
         def _run_query() -> list[dict[str, Any]]:
             conn = duckdb.connect(":memory:")
             try:
-                self._create_view(conn)
-                return _execute_duckdb_transaction(conn, query, args_tuple, commit)
+                with _duckdb_interrupt_timer(conn, effective_timeout):
+                    self._create_table(conn)
+                    if read_only:
+                        apply_read_only_lockdown(conn)
+                    return _execute_duckdb_transaction(
+                        conn, query, args_tuple, commit, timeout=effective_timeout
+                    )
+            except duckdb.InterruptException as exc:
+                raise QueryTimeoutError(effective_timeout or 0) from exc
             finally:
                 conn.close()
 
         try:
+            wait_timeout = (
+                effective_timeout + 5 if effective_timeout else effective_timeout
+            )
             return await asyncio.wait_for(
-                asyncio.to_thread(_run_query), timeout=effective_timeout
+                asyncio.to_thread(_run_query), timeout=wait_timeout
             )
         except asyncio.TimeoutError as exc:
             raise QueryTimeoutError(effective_timeout or 0) from exc
-
-
-class CSVSchemaIntrospector(DuckDBSchemaIntrospector):
-    """CSV-specific schema introspection using DuckDB backend."""
-
-    pass

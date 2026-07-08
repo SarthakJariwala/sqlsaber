@@ -2,7 +2,8 @@
 
 import pytest
 
-from sqlsaber.database.csv import CSVConnection, CSVSchemaIntrospector
+from sqlsaber.database.csv import CSVConnection
+from sqlsaber.database.duckdb import DuckDBSchemaIntrospector
 
 
 class TestCSVConnection:
@@ -190,8 +191,8 @@ class TestCSVConnection:
         await conn.close()
 
 
-class TestCSVSchemaIntrospector:
-    """Test CSV schema introspection (uses DuckDB backend)."""
+class TestCSVDuckDBSchemaIntrospection:
+    """Test CSV schema introspection using the DuckDB introspector."""
 
     @pytest.mark.asyncio
     async def test_csv_table_listing(self, tmp_path):
@@ -200,7 +201,7 @@ class TestCSVSchemaIntrospector:
         csv_path.write_text("id,name,price\n1,Laptop,999.99\n2,Mouse,29.99\n")
 
         conn = CSVConnection(f"csv:///{csv_path}")
-        introspector = CSVSchemaIntrospector()
+        introspector = DuckDBSchemaIntrospector()
 
         tables = await introspector.list_tables_info(conn)
 
@@ -219,7 +220,7 @@ class TestCSVSchemaIntrospector:
         )
 
         conn = CSVConnection(f"csv:///{csv_path}")
-        introspector = CSVSchemaIntrospector()
+        introspector = DuckDBSchemaIntrospector()
 
         tables = await introspector.get_tables_info(conn)
         columns = await introspector.get_columns_info(conn, tables)
@@ -250,7 +251,7 @@ class TestCSVSchemaIntrospector:
         )
 
         conn = CSVConnection(f"csv:///{csv_path}")
-        introspector = CSVSchemaIntrospector()
+        introspector = DuckDBSchemaIntrospector()
 
         # Test that we can introspect tables with null values
         tables = await introspector.get_tables_info(conn)
@@ -274,7 +275,7 @@ class TestCSVSchemaIntrospector:
         )
 
         conn = CSVConnection(f"csv:///{csv_path}")
-        introspector = CSVSchemaIntrospector()
+        introspector = DuckDBSchemaIntrospector()
 
         tables = await introspector.get_tables_info(conn)
         columns = await introspector.get_columns_info(conn, tables)
@@ -327,7 +328,7 @@ class TestCSVSchemaIntrospector:
         single_col_path.write_text("value\n1\n2\n3\n")
 
         conn = CSVConnection(f"csv:///{single_col_path}")
-        introspector = CSVSchemaIntrospector()
+        introspector = DuckDBSchemaIntrospector()
 
         tables = await introspector.get_tables_info(conn)
         columns = await introspector.get_columns_info(conn, tables)

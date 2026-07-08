@@ -1,6 +1,9 @@
 """DuckDB database connection and schema introspection."""
 
 import asyncio
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import duckdb
@@ -12,36 +15,72 @@ from .base import (
     QueryTimeoutError,
 )
 
+# Engine-level lockdown applied to read-only DuckDB sessions. Disabling external
+# access blocks replacement scans (e.g. SELECT * FROM '/etc/passwd'), file-reading
+# table functions, httpfs/SSRF, and ATTACH; the extension flags prevent loading
+# code at runtime. This is defense-in-depth behind the AST guard.
+READ_ONLY_DUCKDB_CONFIG: dict[str, Any] = {
+    "enable_external_access": False,
+    "autoinstall_known_extensions": False,
+    "autoload_known_extensions": False,
+}
+
+
+@contextmanager
+def _duckdb_interrupt_timer(
+    conn: duckdb.DuckDBPyConnection, timeout: float | None
+) -> Iterator[None]:
+    """Interrupt the DuckDB connection if the timeout elapses."""
+    timer: threading.Timer | None = None
+    if timeout:
+        timer = threading.Timer(timeout, conn.interrupt)
+        timer.daemon = True
+        timer.start()
+
+    try:
+        yield
+    finally:
+        if timer is not None:
+            timer.cancel()
+
 
 def _execute_duckdb_transaction(
     conn: duckdb.DuckDBPyConnection,
     query: str,
     args: tuple[Any, ...],
     commit: bool = False,
+    timeout: float | None = None,
 ) -> list[dict[str, Any]]:
     """Run a DuckDB query inside a transaction and return list of dicts.
 
-    If commit=True, commits on success instead of rolling back.
+    If commit=True, commits on success instead of rolling back. If timeout is set,
+    a watchdog thread interrupts the engine when it elapses so a runaway query is
+    actually cancelled (not merely abandoned); the interrupt is surfaced as
+    QueryTimeoutError.
     """
-    conn.execute("BEGIN TRANSACTION")
     success = False
     try:
-        if args:
-            conn.execute(query, args)
-        else:
-            conn.execute(query)
+        with _duckdb_interrupt_timer(conn, timeout):
+            conn.execute("BEGIN TRANSACTION")
+            if args:
+                conn.execute(query, args)
+            else:
+                conn.execute(query)
 
-        if conn.description is None:
-            rows: list[dict[str, Any]] = []
-        else:
-            columns = [col[0] for col in conn.description]
-            data = conn.fetchall()
-            rows = [dict(zip(columns, row)) for row in data]
+            if conn.description is None:
+                rows: list[dict[str, Any]] = []
+            else:
+                columns = [col[0] for col in conn.description]
+                data = conn.fetchall()
+                rows = [dict(zip(columns, row)) for row in data]
 
-        success = True
-        return rows
+            success = True
+            return rows
+    except duckdb.InterruptException as exc:
+        _safe_rollback(conn)
+        raise QueryTimeoutError(timeout or 0) from exc
     except Exception:
-        conn.execute("ROLLBACK")
+        _safe_rollback(conn)
         raise
     finally:
         if success:
@@ -49,6 +88,25 @@ def _execute_duckdb_transaction(
                 conn.execute("COMMIT")
             else:
                 conn.execute("ROLLBACK")
+
+
+def _safe_rollback(conn: duckdb.DuckDBPyConnection) -> None:
+    """Best-effort ROLLBACK that never masks the original error."""
+    try:
+        conn.execute("ROLLBACK")
+    except Exception:
+        pass
+
+
+def apply_read_only_lockdown(conn: duckdb.DuckDBPyConnection) -> None:
+    """Disable external access/extension loading on an already-open connection.
+
+    Used by the CSV connections, which must read their source file(s) with
+    external access enabled before locking the session down for the user query.
+    """
+    conn.execute("SET autoinstall_known_extensions=false")
+    conn.execute("SET autoload_known_extensions=false")
+    conn.execute("SET enable_external_access=false")
 
 
 class DuckDBConnection(BaseDatabaseConnection):
@@ -104,18 +162,28 @@ class DuckDBConnection(BaseDatabaseConnection):
 
         def _run_query() -> list[dict[str, Any]]:
             connect_kwargs: dict[str, Any] = {}
-            if read_only and self.database_path != ":memory:":
-                connect_kwargs["read_only"] = True
+            if read_only:
+                # In-memory databases cannot be opened read_only, but the config
+                # lockdown still applies and the transaction is rolled back.
+                connect_kwargs["config"] = dict(READ_ONLY_DUCKDB_CONFIG)
+                if self.database_path != ":memory:":
+                    connect_kwargs["read_only"] = True
 
             conn = duckdb.connect(self.database_path, **connect_kwargs)
             try:
-                return _execute_duckdb_transaction(conn, query, args_tuple, commit)
+                return _execute_duckdb_transaction(
+                    conn, query, args_tuple, commit, timeout=effective_timeout
+                )
             finally:
                 conn.close()
 
         try:
+            # Backstop the engine-side interrupt with a slightly longer wall clock.
+            wait_timeout = (
+                effective_timeout + 5 if effective_timeout else effective_timeout
+            )
             return await asyncio.wait_for(
-                asyncio.to_thread(_run_query), timeout=effective_timeout
+                asyncio.to_thread(_run_query), timeout=wait_timeout
             )
         except asyncio.TimeoutError as exc:
             raise QueryTimeoutError(effective_timeout or 0) from exc
