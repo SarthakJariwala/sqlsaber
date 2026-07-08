@@ -12,8 +12,6 @@ from .base import (
     QueryTimeoutError,
     SchemaInfo,
 )
-from .csv import CSVConnection, CSVSchemaIntrospector
-from .csvs import CSVsConnection
 from .duckdb import DuckDBConnection, DuckDBSchemaIntrospector
 from .mysql import MySQLConnection, MySQLSchemaIntrospector
 from .postgresql import PostgreSQLConnection, PostgreSQLSchemaIntrospector
@@ -34,8 +32,12 @@ def DatabaseConnection(
     elif connection_string.startswith("duckdb://"):
         conn = DuckDBConnection(connection_string)
     elif connection_string.startswith("csv:///"):
+        from .csv import CSVConnection
+
         conn = CSVConnection(connection_string)
     elif connection_string.startswith("csvs://"):
+        from .csvs import CSVsConnection
+
         conn = CSVsConnection(connection_string)
     else:
         raise ValueError(
@@ -61,13 +63,10 @@ __all__ = [
     "MySQLConnection",
     "SQLiteConnection",
     "DuckDBConnection",
-    "CSVConnection",
-    "CSVsConnection",
     "PostgreSQLSchemaIntrospector",
     "MySQLSchemaIntrospector",
     "SQLiteSchemaIntrospector",
     "DuckDBSchemaIntrospector",
-    "CSVSchemaIntrospector",
     # Factory function and manager
     "DatabaseConnection",
     "SchemaManager",

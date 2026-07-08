@@ -9,16 +9,12 @@ import duckdb
 
 from .base import DEFAULT_QUERY_TIMEOUT, BaseDatabaseConnection, QueryTimeoutError
 from .duckdb import (
-    DuckDBSchemaIntrospector,
     _duckdb_interrupt_timer,
     _execute_duckdb_transaction,
     apply_read_only_lockdown,
 )
 
-__all__ = [
-    "CSVConnection",
-    "CSVSchemaIntrospector",
-]
+__all__ = ["CSVConnection"]
 
 
 class CSVConnection(BaseDatabaseConnection):
@@ -142,9 +138,3 @@ class CSVConnection(BaseDatabaseConnection):
             )
         except asyncio.TimeoutError as exc:
             raise QueryTimeoutError(effective_timeout or 0) from exc
-
-
-class CSVSchemaIntrospector(DuckDBSchemaIntrospector):
-    """CSV-specific schema introspection using DuckDB backend."""
-
-    pass

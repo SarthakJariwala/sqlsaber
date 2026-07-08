@@ -30,13 +30,13 @@ from sqlsaber.cli.usage import (
 )
 from sqlsaber.config.logging import get_logger
 from sqlsaber.database import (
-    CSVConnection,
-    CSVsConnection,
     DuckDBConnection,
     MySQLConnection,
     PostgreSQLConnection,
     SQLiteConnection,
 )
+from sqlsaber.database.csv import CSVConnection
+from sqlsaber.database.csvs import CSVsConnection
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.theme.manager import get_theme_manager
 

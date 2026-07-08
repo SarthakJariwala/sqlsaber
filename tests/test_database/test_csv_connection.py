@@ -2,7 +2,7 @@
 
 import pytest
 
-from sqlsaber.database import CSVConnection
+from sqlsaber.database.csv import CSVConnection
 from sqlsaber.database.schema import SchemaManager
 
 

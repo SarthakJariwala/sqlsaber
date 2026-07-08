@@ -6,13 +6,13 @@ import pytest
 
 from sqlsaber.database import (
     BaseDatabaseConnection,
-    CSVConnection,
-    CSVsConnection,
     DuckDBConnection,
     MySQLConnection,
     PostgreSQLConnection,
     SQLiteConnection,
 )
+from sqlsaber.database.csv import CSVConnection
+from sqlsaber.database.csvs import CSVsConnection
 
 
 def test_base_connection_contract_exposes_read_only_flag():

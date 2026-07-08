@@ -7,7 +7,8 @@ import duckdb
 import pytest
 
 from sqlsaber.cli.display import DisplayManager
-from sqlsaber.database import CSVConnection, DuckDBConnection, SQLiteConnection
+from sqlsaber.database import DuckDBConnection, SQLiteConnection
+from sqlsaber.database.csv import CSVConnection
 from sqlsaber.database.duckdb import DuckDBSchemaIntrospector
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.database.sqlite import SQLiteSchemaIntrospector
