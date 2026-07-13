@@ -7,11 +7,11 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import AbstractCapability, Thinking
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 from pydantic_ai.models.anthropic import AnthropicModelSettings
-from pydantic_ai.toolsets import FunctionToolset
 
 from sqlsaber.agents.model_factory import UNIFIED_EFFORT_MAP, build_model
 from sqlsaber.capabilities import Knowledge, SqlTools
 from sqlsaber.capabilities.base import SqlSaberCapability
+from sqlsaber.capabilities.plugins import PluginContext, discover_capabilities
 from sqlsaber.config import providers
 from sqlsaber.config.settings import Config, ThinkingLevel
 from sqlsaber.database import BaseDatabaseConnection
@@ -21,40 +21,6 @@ from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.overrides import ToolOveridesInput, normalize_tool_overides
 from sqlsaber.prompts.persona import PERSONA
 from sqlsaber.tools.base import Tool
-from sqlsaber.tools.knowledge_tool import KnowledgeTool
-from sqlsaber.tools.registry import tool_registry
-from sqlsaber.tools.sql_tools import SQLTool
-
-
-class _LegacyPluginTools(SqlSaberCapability):
-    """Temporary adapter for v1 tool plugins until the capability contract lands."""
-
-    def __init__(
-        self,
-        tool_overides: Mapping[str, object],
-    ) -> None:
-        self._toolset = FunctionToolset[Any](id="sqlsaber-legacy-plugins")
-        self._tools: dict[str, Tool] = {}
-        for name in tool_registry.list_tools():
-            tool = tool_registry.create_tool(name)
-            if isinstance(tool, (SQLTool, KnowledgeTool)):
-                continue
-            # Plugin tools read this constructor-equivalent state directly instead
-            # of claiming the embedding agent's deps slot.
-            setattr(tool, "model_overide", tool_overides.get(name))
-            self._tools[name] = tool
-            self._toolset.add_function(
-                tool.execute,
-                name=tool.name,
-                takes_ctx=tool.requires_ctx,
-            )
-
-    @property
-    def display_specs(self) -> Mapping[str, Tool]:
-        return self._tools
-
-    def get_toolset(self) -> FunctionToolset[Any]:
-        return self._toolset
 
 
 def _make_single_db_registry(
@@ -164,8 +130,17 @@ class SQLSaberAgent:
                 allow_dangerous=self.allow_dangerous,
                 include_catalog_instructions=include_guidance,
             ),
-            _LegacyPluginTools(self._tool_overides),
         ]
+        capabilities.extend(
+            discover_capabilities(
+                PluginContext(
+                    registry=self.registry,
+                    knowledge_manager=self.knowledge_manager,
+                    allow_dangerous=self.allow_dangerous,
+                    tool_overrides=self._tool_overides,
+                )
+            )
+        )
         if self.thinking_enabled:
             capabilities.append(
                 Thinking(effort=UNIFIED_EFFORT_MAP[self.thinking_level])

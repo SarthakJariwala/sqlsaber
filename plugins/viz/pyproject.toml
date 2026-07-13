@@ -6,8 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = ["sqlsaber>=0.55.1", "plotext>=5.3.0"]
 
-[project.entry-points."sqlsaber.tools"]
-viz = "sqlsaber_viz:register_tools"
+[project.entry-points."sqlsaber.capabilities"]
+viz = "sqlsaber_viz:capability"
 
 [build-system]
 requires = ["hatchling"]

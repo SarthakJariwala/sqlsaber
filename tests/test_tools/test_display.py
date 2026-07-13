@@ -15,7 +15,6 @@ from sqlsaber.tools.display import (
     TableConfig,
     ToolDisplaySpec,
 )
-from sqlsaber.tools.registry import tool_registry
 
 
 class TestSpecRenderer:
@@ -129,14 +128,11 @@ class TestDisplayManagerResolution:
                 console.print("override handled")
                 return True
 
-        tool_registry.register(OverrideTool)
-        try:
-            console, buffer = self._make_console()
-            display = DisplayManager(console)
-            display.show_tool_result("override_tool", {"result": 1})
-            assert "override handled" in buffer.getvalue()
-        finally:
-            tool_registry.unregister("override_tool")
+        tool = OverrideTool()
+        console, buffer = self._make_console()
+        display = DisplayManager(console, {tool.name: tool})
+        display.show_tool_result("override_tool", {"result": 1})
+        assert "override handled" in buffer.getvalue()
 
     def test_render_result_spec_used_when_no_override(self):
         class SpecTool(Tool):
@@ -151,16 +147,13 @@ class TestDisplayManagerResolution:
             async def execute(self, **kwargs) -> str:
                 return "{}"
 
-        tool_registry.register(SpecTool)
-        try:
-            console, buffer = self._make_console()
-            display = DisplayManager(console)
-            display.show_tool_result("spec_tool", {"output": "hello"})
-            output = buffer.getvalue()
-            assert "Spec Output" in output
-            assert "hello" in output
-        finally:
-            tool_registry.unregister("spec_tool")
+        tool = SpecTool()
+        console, buffer = self._make_console()
+        display = DisplayManager(console, {tool.name: tool})
+        display.show_tool_result("spec_tool", {"output": "hello"})
+        output = buffer.getvalue()
+        assert "Spec Output" in output
+        assert "hello" in output
 
     def test_render_result_fallback_for_unknown_tool(self):
         console, buffer = self._make_console()
@@ -187,14 +180,11 @@ class TestDisplayManagerResolution:
             async def execute(self, **kwargs) -> str:
                 return "{}"
 
-        tool_registry.register(HtmlTool)
-        try:
-            console, _ = self._make_console()
-            display = DisplayManager(console)
-            html = display.render_tool_result_html(
-                "html_tool", {"rows": [{"name": "alpha"}]}
-            )
-            assert "<table" in html
-            assert "alpha" in html
-        finally:
-            tool_registry.unregister("html_tool")
+        tool = HtmlTool()
+        console, _ = self._make_console()
+        display = DisplayManager(console, {tool.name: tool})
+        html = display.render_tool_result_html(
+            "html_tool", {"rows": [{"name": "alpha"}]}
+        )
+        assert "<table" in html
+        assert "alpha" in html

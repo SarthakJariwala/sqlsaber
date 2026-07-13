@@ -213,7 +213,9 @@ def query(
         try:
             if actual_query:
                 # Single query mode with streaming
-                streaming_handler = StreamingQueryHandler(console)
+                streaming_handler = StreamingQueryHandler(
+                    console, session.agent.display_registry
+                )
                 db_type = session.agent.db_type
                 model_name = session.agent.config.model.name
                 console.print(

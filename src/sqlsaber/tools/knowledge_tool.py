@@ -16,7 +16,6 @@ from .display import (
     TableConfig,
     ToolDisplaySpec,
 )
-from .registry import register_tool
 
 
 class KnowledgeTool(Tool):
@@ -63,7 +62,6 @@ class KnowledgeTool(Tool):
         return self.database_name
 
 
-@register_tool
 class SearchKnowledgeTool(KnowledgeTool):
     """Search saved database knowledge by keyword."""
 

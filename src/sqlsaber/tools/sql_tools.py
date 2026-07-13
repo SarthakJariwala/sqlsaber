@@ -28,7 +28,6 @@ from .display import (
     TableConfig,
     ToolDisplaySpec,
 )
-from .registry import register_tool
 from .sql_guard import add_limit, validate_sql
 
 
@@ -118,7 +117,6 @@ class SQLTool(Tool):
         )
 
 
-@register_tool
 class ListTablesTool(SQLTool):
     """Tool for listing database tables."""
 
@@ -158,7 +156,6 @@ class ListTablesTool(SQLTool):
             return json_dumps({"error": f"Error listing tables: {str(e)}"})
 
 
-@register_tool
 class IntrospectSchemaTool(SQLTool):
     """Tool for introspecting database schema."""
 
@@ -481,7 +478,6 @@ class IntrospectSchemaTool(SQLTool):
             return json_dumps({"error": f"Error introspecting schema: {str(e)}"})
 
 
-@register_tool
 class ExecuteSQLTool(SQLTool):
     """Tool for executing SQL queries."""
 
@@ -747,7 +743,6 @@ class ExecuteSQLTool(SQLTool):
             return json_dumps({"error": error_msg})
 
 
-@register_tool
 class ListDatabasesTool(SQLTool):
     """List databases connected to the current SQLSaber session.
 

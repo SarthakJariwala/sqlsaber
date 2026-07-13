@@ -3,21 +3,15 @@
 import json
 import sys
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 from pydantic_ai import RunContext
 import pytest
 
 pytest.importorskip("sqlsaber_sandbox")
 
-from sqlsaber_sandbox.tools import (
-    MAX_CODE_CHARS,
-    MAX_REQUIREMENTS,
-    RunPythonTool,
-    register_tools,
-)
-
-from sqlsaber.tools.registry import ToolRegistry
+from sqlsaber_sandbox.capability import Sandbox, capability
+from sqlsaber_sandbox.tools import MAX_CODE_CHARS, MAX_REQUIREMENTS, RunPythonTool
 
 PROVIDER_ENV_VARS = (
     "E2B_API_KEY",
@@ -106,47 +100,35 @@ def _isolate_modal_home(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.delenv("HOMEPATH", raising=False)
 
 
-def test_register_sandbox_tools_disabled(
+def test_sandbox_capability_disabled(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
     _clear_provider_env(monkeypatch)
     _isolate_modal_home(monkeypatch, tmp_path)
-    registry = ToolRegistry()
 
-    registered = register_tools(registry)
-
-    assert registered is None
-    assert registry.list_tools() == []
+    assert capability(cast(Any, None)) == ()
 
 
-def test_register_sandbox_tools_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_sandbox_capability_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_provider_env(monkeypatch)
     monkeypatch.setenv("E2B_API_KEY", "test-key")
-    registry = ToolRegistry()
 
-    registered = register_tools(registry)
-
-    assert registered == [RunPythonTool]
-    assert "run_python" in registry.list_tools()
+    assert isinstance(capability(cast(Any, None)), Sandbox)
 
 
-def test_register_sandbox_tools_disabled_with_modal_id_only(
+def test_sandbox_capability_disabled_with_modal_id_only(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
     _clear_provider_env(monkeypatch)
     monkeypatch.setenv("MODAL_TOKEN_ID", "modal-id-only")
     _isolate_modal_home(monkeypatch, tmp_path)
-    registry = ToolRegistry()
 
-    registered = register_tools(registry)
-
-    assert registered is None
-    assert registry.list_tools() == []
+    assert capability(cast(Any, None)) == ()
 
 
-def test_register_sandbox_tools_enabled_with_modal_config(
+def test_sandbox_capability_enabled_with_modal_config(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
@@ -154,15 +136,11 @@ def test_register_sandbox_tools_enabled_with_modal_config(
     _isolate_modal_home(monkeypatch, tmp_path)
     modal_config = tmp_path / ".modal.toml"
     modal_config.write_text('token_id = "test"\n', encoding="utf-8")
-    registry = ToolRegistry()
 
-    registered = register_tools(registry)
-
-    assert registered == [RunPythonTool]
-    assert "run_python" in registry.list_tools()
+    assert isinstance(capability(cast(Any, None)), Sandbox)
 
 
-def test_register_sandbox_tools_enabled_with_modal_config_path(
+def test_sandbox_capability_enabled_with_modal_config_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
@@ -170,12 +148,8 @@ def test_register_sandbox_tools_enabled_with_modal_config_path(
     config_path = tmp_path / "custom-modal.toml"
     config_path.write_text('token_id = "test"\n', encoding="utf-8")
     monkeypatch.setenv("MODAL_CONFIG_PATH", str(config_path))
-    registry = ToolRegistry()
 
-    registered = register_tools(registry)
-
-    assert registered == [RunPythonTool]
-    assert "run_python" in registry.list_tools()
+    assert isinstance(capability(cast(Any, None)), Sandbox)
 
 
 @pytest.mark.asyncio

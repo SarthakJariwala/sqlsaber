@@ -6,7 +6,7 @@ rendered via DisplayManager helpers.
 """
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from functools import singledispatchmethod
 from typing import Any, AsyncIterable
 
@@ -29,6 +29,7 @@ from rich.console import Console
 
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.config.logging import get_logger
+from sqlsaber.tools.base import Tool
 
 
 class StreamingQueryHandler:
@@ -38,9 +39,13 @@ class StreamingQueryHandler:
     Uses DisplayManager.live to render Markdown incrementally as text streams in.
     """
 
-    def __init__(self, console: Console):
+    def __init__(
+        self,
+        console: Console,
+        display_registry: Mapping[str, Tool] | None = None,
+    ):
         self.console = console
-        self.display = DisplayManager(console)
+        self.display = DisplayManager(console, display_registry)
         self.log = get_logger(__name__)
         self._tool_call_names: dict[int, str] = {}
 
