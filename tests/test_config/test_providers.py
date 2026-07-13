@@ -1,3 +1,5 @@
+import importlib
+
 import pytest
 
 from sqlsaber.config import providers
@@ -22,6 +24,22 @@ def test_env_var_name_mapping():
     assert providers.env_var_name("openai") == "OPENAI_API_KEY"
     assert providers.env_var_name("anthropic") == "ANTHROPIC_API_KEY"
     assert providers.env_var_name("unknown") == "AI_API_KEY"
+
+
+@pytest.mark.parametrize(
+    ("module_name", "model_class"),
+    [
+        ("pydantic_ai.models.groq", "GroqModel"),
+        ("pydantic_ai.models.mistral", "MistralModel"),
+        ("pydantic_ai.models.cohere", "CohereModel"),
+        ("pydantic_ai.models.huggingface", "HuggingFaceModel"),
+    ],
+)
+def test_supported_provider_dependencies_are_installed(
+    module_name: str, model_class: str
+) -> None:
+    module = importlib.import_module(module_name)
+    assert getattr(module, model_class) is not None
 
 
 @pytest.mark.parametrize(
