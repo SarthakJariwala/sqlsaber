@@ -40,9 +40,26 @@ class _SqlToolset(FunctionToolset[Any]):
 
     async def __aenter__(self) -> Self:
         await super().__aenter__()
-        if self._owned and self._entry_count == 0:
-            for entry in self._registry:
-                await entry.connection.get_pool()
+        try:
+            if self._owned and self._entry_count == 0:
+                for entry in self._registry:
+                    await entry.connection.get_pool()
+        except BaseException as init_error:
+            try:
+                await self._registry.close()
+            except BaseException as cleanup_error:
+                init_error.add_note(
+                    f"Database cleanup also failed: {cleanup_error!r}"
+                )
+            try:
+                await super().__aexit__(
+                    type(init_error), init_error, init_error.__traceback__
+                )
+            except BaseException as cleanup_error:
+                init_error.add_note(
+                    f"Toolset cleanup also failed: {cleanup_error!r}"
+                )
+            raise
         self._entry_count += 1
         return self
 
