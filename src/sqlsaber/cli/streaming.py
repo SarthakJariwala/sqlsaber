@@ -125,8 +125,8 @@ class StreamingQueryHandler:
     async def _(self, event: FunctionToolResultEvent, ctx: RunContext) -> None:
         self.display.live.end_status()
         # Route tool result to appropriate display
-        tool_name = event.result.tool_name
-        content = event.result.content
+        tool_name = event.part.tool_name
+        content = event.part.content
         if tool_name is None:
             return
         self.display.show_tool_result(tool_name, content)
