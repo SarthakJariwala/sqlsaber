@@ -62,7 +62,6 @@ _BY_KEY: Dict[str, ProviderSpec] = {p.key: p for p in _PROVIDERS}
 _ALIAS_TO_KEY: Dict[str, str] = {
     alias: p.key for p in _PROVIDERS for alias in p.aliases
 }
-_ANTHROPIC_ADAPTIVE_THINKING_MODEL_PREFIXES = ("claude-opus-4-7", "claude-opus-4-8")
 
 
 def all_keys() -> List[str]:
@@ -99,25 +98,6 @@ def provider_from_model(model_name: str) -> Optional[str]:
         return None
     provider_raw = model_name.split(":", 1)[0]
     return canonical(provider_raw)
-
-
-def requires_anthropic_adaptive_thinking(model_name: str) -> bool:
-    """Return whether an Anthropic model requires adaptive thinking settings.
-
-    Claude Opus 4.7 rejects budget-based thinking configs such as
-    ``{"type": "enabled", "budget_tokens": ...}``; it requires
-    ``{"type": "adaptive"}`` plus ``anthropic_effort``.
-    """
-    if not model_name:
-        return False
-
-    provider_raw, separator, model_id = model_name.partition(":")
-    if separator:
-        if canonical(provider_raw) != "anthropic":
-            return False
-        model_name = model_id
-
-    return model_name.startswith(_ANTHROPIC_ADAPTIVE_THINKING_MODEL_PREFIXES)
 
 
 def specs() -> Iterable[ProviderSpec]:

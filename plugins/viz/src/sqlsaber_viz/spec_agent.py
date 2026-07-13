@@ -6,8 +6,8 @@ import json
 from typing import Any
 
 from pydantic import ValidationError
-from sqlsaber.agents.provider_factory import ProviderFactory
-from sqlsaber.config import providers
+from pydantic_ai import Agent
+from sqlsaber.agents.model_factory import build_model
 from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import Config
 
@@ -35,29 +35,14 @@ class SpecAgent:
             or self.config.model.get_subagent_model("viz")
             or self.config.model.name
         )
-        model_name_only = (
-            model_name.split(":", 1)[1] if ":" in model_name else model_name
-        )
-
         if not (self._model_name_override and self._api_key_override):
             self.config.auth.validate(model_name)
 
-        provider = providers.provider_from_model(model_name) or ""
         api_key = self._api_key_override or self.config.auth.get_api_key(model_name)
-
-        factory = ProviderFactory()
-        agent = factory.create_agent(
-            provider=provider,
-            model_name=model_name_only,
-            full_model_str=model_name,
-            api_key=api_key,
-            thinking_enabled=False,
+        agent = Agent(
+            build_model(model_name, api_key),
+            instructions=VIZ_SYSTEM_PROMPT,
         )
-
-        @agent.system_prompt
-        def viz_system_prompt() -> str:
-            return VIZ_SYSTEM_PROMPT
-
         self._register_tools(agent)
 
         return agent

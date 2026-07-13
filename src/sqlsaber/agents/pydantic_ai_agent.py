@@ -4,10 +4,12 @@ from collections.abc import AsyncIterable, Awaitable, Mapping, Sequence
 from typing import Any, Callable
 
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import AbstractCapability, Thinking
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
+from pydantic_ai.models.anthropic import AnthropicModelSettings
 from pydantic_ai.toolsets import FunctionToolset
 
-from sqlsaber.agents.provider_factory import ProviderFactory
+from sqlsaber.agents.model_factory import UNIFIED_EFFORT_MAP, build_model
 from sqlsaber.capabilities import Knowledge, SqlTools
 from sqlsaber.capabilities.base import SqlSaberCapability
 from sqlsaber.config import providers
@@ -123,7 +125,7 @@ class SQLSaberAgent:
             else self.config.model.thinking_level
         )
 
-        self.capabilities: list[SqlSaberCapability] = []
+        self.capabilities: list[AbstractCapability[Any]] = []
         self._tools: dict[str, Tool] = {}
         self.agent = self._build_agent()
 
@@ -143,25 +145,15 @@ class SQLSaberAgent:
             )
 
         model_name = self._model_name_override or self.config.model.name
-        model_name_only = (
-            model_name.split(":", 1)[1] if ":" in model_name else model_name
-        )
         if not (self._model_name_override and self._api_key_override):
             self.config.auth.validate(model_name)
 
         provider = providers.provider_from_model(model_name) or ""
         api_key = self._api_key_override or self.config.auth.get_api_key(model_name)
-        configured = ProviderFactory().create_agent(
-            provider=provider,
-            model_name=model_name_only,
-            full_model_str=model_name,
-            api_key=api_key,
-            thinking_enabled=self.thinking_enabled,
-            thinking_level=self.thinking_level,
-        )
+        model = build_model(model_name, api_key)
 
         include_guidance = self.system_prompt_override is None
-        capabilities: list[SqlSaberCapability] = [
+        capabilities: list[AbstractCapability[Any]] = [
             Knowledge(
                 knowledge_manager=self.knowledge_manager,
                 registry=self.registry,
@@ -174,18 +166,28 @@ class SQLSaberAgent:
             ),
             _LegacyPluginTools(self._tool_overides),
         ]
+        if self.thinking_enabled:
+            capabilities.append(
+                Thinking(effort=UNIFIED_EFFORT_MAP[self.thinking_level])
+            )
         self.capabilities = capabilities
         self._tools = {
             name: tool
             for capability in capabilities
+            if isinstance(capability, SqlSaberCapability)
             for name, tool in capability.display_specs.items()
         }
 
+        model_settings = (
+            AnthropicModelSettings(anthropic_cache=True)
+            if provider == "anthropic"
+            else None
+        )
         return Agent(
-            configured.model,
+            model,
             name="sqlsaber",
             instructions=self.system_prompt_override or PERSONA,
-            model_settings=configured.model_settings,
+            model_settings=model_settings,
             capabilities=capabilities,
         )
 
