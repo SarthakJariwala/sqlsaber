@@ -1,23 +1,53 @@
 # SQLsaber Plugins
 
-SQLsaber supports optional tools distributed as plugins via entry points.
+SQLsaber plugins are pydantic-ai capabilities distributed through entry points.
 
 ## Create a plugin
 
 1. Create a package under `plugins/<name>/` with its own `pyproject.toml`.
-2. Expose tools via entry points under `sqlsaber.tools`:
+2. Expose a capability factory:
 
 ```toml
-[project.entry-points."sqlsaber.tools"]
-my_tool = "my_plugin.module:MyToolClass"
+[project.entry-points."sqlsaber.capabilities"]
+my_plugin = "my_plugin:capability"
 ```
 
-You can also expose a factory if tool registration is conditional:
+```python
+from collections.abc import Mapping
+from typing import Any
 
-```toml
-[project.entry-points."sqlsaber.tools"]
-my_plugin = "my_plugin:register_tools"
+from pydantic_ai.toolsets import FunctionToolset
+from sqlsaber.capabilities.base import SqlSaberCapability
+from sqlsaber.capabilities.plugins import PluginContext
+from sqlsaber.tools.base import Tool
+
+
+class MyCapability(SqlSaberCapability):
+    id = "my-plugin"
+    description = "Use my specialist tool."
+
+    def __init__(self, context: PluginContext):
+        self.tool = MyTool(context.registry)
+        self.toolset = FunctionToolset[Any](id=self.id)
+        self.toolset.add_function(self.tool.execute, name=self.tool.name)
+
+    def get_toolset(self):
+        return self.toolset
+
+    @property
+    def display_specs(self) -> Mapping[str, Tool]:
+        return {self.tool.name: self.tool}
+
+
+def capability(context: PluginContext):
+    return MyCapability(context)
 ```
+
+Factories receive the active database registry, knowledge manager, dangerous-mode flag, and normalized tool overrides. They may return one capability, a sequence, or an empty sequence when conditionally disabled.
+
+## Porting a legacy tool plugin
+
+The old `sqlsaber.tools` group and global `ToolRegistry` are removed. Keep your existing `Tool.execute` and rendering methods, put the instance in a `FunctionToolset`, expose it through `display_specs`, and change the entry point to `sqlsaber.capabilities`. Model overrides should be read from `context.tool_overrides` during construction rather than `ctx.deps`.
 
 ## Install a plugin locally
 

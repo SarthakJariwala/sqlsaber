@@ -10,13 +10,17 @@ queries against your databases directly from Python code, instead of through the
 `saber` CLI. It is the same agent that powers the CLI, exposed as an `async`
 interface you can embed in scripts, notebooks, web backends, or data pipelines.
 
-The SDK exposes three names from the top-level `sqlsaber` package:
+The SDK exposes five names from the top-level `sqlsaber` package:
 
 | Export            | Purpose                                                       |
 | ----------------- | ------------------------------------------------------------- |
 | `SQLSaber`        | Main entry point — runs queries and owns the DB connection.   |
 | `SQLSaberOptions` | Typed options bag used to configure a `SQLSaber` session.     |
 | `ModelOverides`   | Per-tool model/API-key overrides (see [Advanced](/sdk/advanced)). |
+| `SqlTools`        | SQL capability for composing with your own pydantic-ai agent. |
+| `Knowledge`       | Database-scoped knowledge search capability.                  |
+
+See [Capabilities](/sdk/capabilities) to use SQLsaber inside your own agent or add your capabilities to its managed agent.
 
 ## Installation
 

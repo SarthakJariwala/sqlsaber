@@ -96,21 +96,39 @@ You can install multiple plugins at once:
 uv tool install --with sqlsaber-viz,sqlsaber-sandbox sqlsaber
 ```
 
-## Registering Custom Tools in a Django App
+## Building a plugin
 
-You can register custom tools directly in a Django app using `AppConfig.ready`:
+Plugins ship pydantic-ai capabilities through an entry point:
+
+```toml
+[project.entry-points."sqlsaber.capabilities"]
+my_plugin = "my_plugin:capability"
+```
+
+A typical one-tool plugin is small:
 
 ```python
-# myapp/apps.py
-from django.apps import AppConfig
-
-from sqlsaber.tools.registry import tool_registry
-from myapp.tools import MyCustomTool
+from pydantic_ai.capabilities import Capability
+from sqlsaber.capabilities.plugins import PluginContext
 
 
-class MyAppConfig(AppConfig):
-    name = "myapp"
+def my_tool(value: str) -> str:
+    """Process a value using my application."""
+    return value
 
-    def ready(self):
-        tool_registry.register(MyCustomTool)
+
+def capability(context: PluginContext):
+    return Capability(
+        id="my-plugin",
+        description="Process values with my application.",
+        tools=[my_tool],
+    )
 ```
+
+The factory receives a `PluginContext` containing SQLsaber's database registry,
+knowledge manager, dangerous-mode setting, and normalized tool model overrides.
+It can return one capability or a sequence. See the [Capabilities SDK guide](/sdk/capabilities) for standalone composition and lifecycle details.
+
+:::caution[Plugin API change]
+The former `sqlsaber.tools` entry-point group and global `ToolRegistry` no longer load. Existing plugins should keep their execution function or `Tool` class, wrap it in a capability, and export a `capability(context)` factory through `sqlsaber.capabilities`.
+:::

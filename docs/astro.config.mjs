@@ -100,6 +100,7 @@ export default defineConfig({
 					items: [
 						{ label: "Overview", slug: "sdk/overview" },
 						{ label: "Configuration", slug: "sdk/configuration" },
+						{ label: "Capabilities", slug: "sdk/capabilities" },
 						{
 							label: "Credentials & Models",
 							slug: "sdk/credentials-and-models",

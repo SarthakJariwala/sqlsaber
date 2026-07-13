@@ -7,6 +7,16 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+#### Pydantic AI capabilities migration
+
+- Requires `pydantic-ai>=2.9,<3`. Model names must include a provider prefix and pydantic-ai's graceful end strategy is now the default.
+- Adds public `SqlTools` and `Knowledge` capabilities, plus `SQLSaberOptions.extra_capabilities`, for composing SQLsaber with other pydantic-ai agents.
+- Replaces the `sqlsaber.tools` plugin entry-point group with `sqlsaber.capabilities`. Plugin authors must export a `capability(context)` factory; see the [plugin porting guide](/guides/plugins#building-a-plugin).
+- Removes `ToolRegistry`, `ToolRunDeps`, and the unused `SQLSaberOptions.tools`, `providers`, and `hooks` placeholders. Tool overrides remain available through `SQLSaberOptions.tool_overrides` and are delivered when plugin capabilities are constructed.
+- Delivers the system prompt as non-persisted pydantic-ai instructions and uses one provider-neutral persona. Existing custom system prompts still replace SQLsaber's built-in persona and SQL guidance.
+- Maps thinking levels through pydantic-ai's unified `Thinking` capability. Anthropic thinking budgets may differ from earlier SQLsaber versions because provider-specific token budgets are no longer set by SQLsaber.
+- Inherits pydantic-ai v2's graceful end strategy: function calls emitted beside a final text response execute instead of being skipped.
+
 ---
 
 ## [0.68.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.67.0...sqlsaber-v0.68.0) (2026-05-29)

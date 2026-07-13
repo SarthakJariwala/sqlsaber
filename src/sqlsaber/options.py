@@ -5,12 +5,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlsaber.config.settings import ThinkingLevel
 from sqlsaber.overrides import ToolOveridesInput
 
 if TYPE_CHECKING:
+    from pydantic_ai.capabilities import AbstractCapability
+
     from sqlsaber.config.settings import Config
     from sqlsaber.knowledge.manager import KnowledgeManager
     from sqlsaber.threads.manager import ThreadManager
@@ -34,11 +36,9 @@ class SQLSaberOptions:
 
     # Injectable components
     settings: Config | None = None
-    tools: object | None = None
-    providers: object | None = None
     knowledge_manager: KnowledgeManager | None = None
     thread_manager: ThreadManager | None = None
-    hooks: Sequence[object] = ()
+    extra_capabilities: Sequence[AbstractCapability[Any]] = ()
 
     # Tool overrides
     tool_overrides: ToolOveridesInput | None = None

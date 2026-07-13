@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import pytest
+from pydantic_ai.capabilities import Capability
 
-from sqlsaber import SQLSaber, SQLSaberOptions
+from sqlsaber import Knowledge, SQLSaber, SQLSaberOptions, SqlTools
 from sqlsaber.config.settings import Config
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
@@ -12,6 +13,11 @@ def test_api_options_are_required() -> None:
     kwargs: dict[str, object] = {}
     with pytest.raises(TypeError, match="options"):
         SQLSaber(**kwargs)
+
+
+def test_capabilities_are_exported_from_top_level() -> None:
+    assert SqlTools.__name__ == "SqlTools"
+    assert Knowledge.__name__ == "Knowledge"
 
 
 @pytest.mark.parametrize(
@@ -33,6 +39,24 @@ def test_api_legacy_constructor_kwargs_are_rejected(
     kwargs: dict[str, object] = {legacy_kw: value}
     with pytest.raises(TypeError, match=legacy_kw):
         SQLSaber(**kwargs)
+
+
+@pytest.mark.asyncio
+async def test_extra_capabilities_are_appended_to_managed_agent() -> None:
+    extra = Capability(id="custom", instructions="Custom capability")
+    saber = SQLSaber(
+        options=SQLSaberOptions(
+            database="sqlite:///:memory:",
+            settings=Config.in_memory(
+                model_name="anthropic:claude-3-5-sonnet",
+                api_keys={"anthropic": "test-key"},
+            ),
+            extra_capabilities=[extra],
+        )
+    )
+
+    assert extra in saber.agent.capabilities
+    await saber.close()
 
 
 @pytest.mark.asyncio
