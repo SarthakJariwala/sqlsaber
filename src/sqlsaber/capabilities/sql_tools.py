@@ -36,27 +36,31 @@ class _SqlToolset(FunctionToolset[Any]):
         super().__init__(id="sqlsaber-sql")
         self._registry = registry
         self._owned = owned
-        self._closed = False
+        self._entry_count = 0
 
     async def __aenter__(self) -> Self:
         await super().__aenter__()
-        if self._owned:
+        if self._owned and self._entry_count == 0:
             for entry in self._registry:
                 await entry.connection.get_pool()
+        self._entry_count += 1
         return self
 
     async def __aexit__(self, *args: Any) -> bool | None:
+        if self._entry_count <= 0:
+            raise RuntimeError("SQL toolset context exited without a matching entry.")
+
+        self._entry_count -= 1
         try:
-            if self._owned and not self._closed:
+            if self._owned and self._entry_count == 0:
                 await self._registry.close()
-                self._closed = True
         finally:
-            return await super().__aexit__(*args)
+            super_result = await super().__aexit__(*args)
+        return super_result
 
     async def close(self) -> None:
-        if self._owned and not self._closed:
+        if self._owned:
             await self._registry.close()
-            self._closed = True
 
 
 class SqlTools(SqlSaberCapability):
