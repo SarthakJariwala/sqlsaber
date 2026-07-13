@@ -649,6 +649,23 @@ def test_user_message_render_reuses_cached_theme_styles(monkeypatch) -> None:
     assert component.render(80) == first
 
 
+def test_streaming_handler_resolves_current_display_registry() -> None:
+    terminal = FakeTerminal(columns=80, rows=12)
+    app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
+    first_registry = {}
+    second_registry = {}
+    current = {"registry": first_registry}
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=80, legacy_windows=False),
+        display_registry_provider=lambda: current["registry"],
+    )
+
+    assert handler._resolve_display_registry() is first_registry
+    current["registry"] = second_registry
+    assert handler._resolve_display_registry() is second_registry
+
+
 @pytest.mark.asyncio
 async def test_streaming_handler_freezes_markdown_on_part_end(monkeypatch) -> None:
     terminal = FakeTerminal(columns=80, rows=12)

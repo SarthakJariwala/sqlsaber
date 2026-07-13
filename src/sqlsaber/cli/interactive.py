@@ -529,9 +529,9 @@ class InteractiveSession:
         self.streaming_handler = TUIStreamingQueryHandler(
             app,
             self.console,
-            getattr(self.sqlsaber_agent, "display_registry", None)
-            if hasattr(self, "sqlsaber_agent")
-            else None,
+            display_registry_provider=lambda: getattr(
+                getattr(self, "sqlsaber_agent", None), "display_registry", None
+            ),
         )
         self.show_welcome_message(app)
 
