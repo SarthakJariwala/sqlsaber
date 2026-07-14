@@ -110,6 +110,56 @@ async def test_owned_registry_stays_open_across_nested_agent_runs(
 
 
 @pytest.mark.asyncio
+async def test_partial_owned_registry_initialization_is_cleaned_up(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first_path = tmp_path / "first.sqlite"
+    second_path = tmp_path / "second.sqlite"
+    first_path.touch()
+    second_path.touch()
+    capability = SqlTools(database=[str(first_path), str(second_path)])
+    first, second = list(capability.registry)
+    lifecycle_events: list[str] = []
+
+    class PoolInitializationError(RuntimeError):
+        pass
+
+    init_error = PoolInitializationError()
+
+    async def open_first() -> str:
+        lifecycle_events.append("open:first")
+        return str(first_path)
+
+    async def fail_second() -> str:
+        lifecycle_events.append("open:second")
+        raise init_error
+
+    async def close_first() -> None:
+        lifecycle_events.append("close:first")
+
+    async def close_second() -> None:
+        lifecycle_events.append("close:second")
+
+    monkeypatch.setattr(first.connection, "get_pool", open_first)
+    monkeypatch.setattr(first.connection, "close", close_first)
+    monkeypatch.setattr(second.connection, "get_pool", fail_second)
+    monkeypatch.setattr(second.connection, "close", close_second)
+    agent = Agent(TestModel(call_tools=[]), capabilities=[capability])
+
+    with pytest.raises(PoolInitializationError) as caught:
+        async with agent:
+            pass
+
+    assert caught.value is init_error
+    assert lifecycle_events == [
+        "open:first",
+        "open:second",
+        "close:first",
+        "close:second",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_owned_registry_cleanup_errors_propagate(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
