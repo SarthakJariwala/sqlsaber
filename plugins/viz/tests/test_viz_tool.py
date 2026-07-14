@@ -8,7 +8,7 @@ import pytest
 from rich.console import Console
 
 import sqlsaber_viz.tools as tools
-from sqlsaber.overrides import ModelOverides, build_tool_run_deps
+from sqlsaber.overrides import ModelOverides
 from sqlsaber_viz.spec import VizSpec
 from sqlsaber_viz.tools import VizTool
 
@@ -116,7 +116,7 @@ def test_viz_tool_render_result(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_viz_tool_uses_deps_model_overide(
+async def test_viz_tool_uses_capability_model_overide(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(tools, "_get_spec_agent_cls", lambda: DummyAgent)
@@ -128,18 +128,11 @@ async def test_viz_tool_uses_deps_model_overide(
             {"name": "B", "value": 2},
         ],
     }
-    ctx = _make_ctx(
-        payload,
-        "call-2",
-        deps=build_tool_run_deps(
-            {
-                "viz": ModelOverides(
-                    model_name="openai:gpt-5-mini", api_key="override-api-key"
-                )
-            }
-        ),
-    )
+    ctx = _make_ctx(payload, "call-2")
     tool = VizTool()
+    tool.model_overide = ModelOverides(
+        model_name="openai:gpt-5-mini", api_key="override-api-key"
+    )
 
     result = await tool.execute(ctx, request="show values", file="result_call-2.json")
 

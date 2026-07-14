@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from types import MappingProxyType
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,13 +16,6 @@ class ModelOverides:
 
 type ModelOverideInput = ModelOverides | Mapping[str, str | None]
 type ToolOveridesInput = Mapping[str, ModelOverideInput | None]
-
-
-@dataclass(frozen=True, slots=True)
-class ToolRunDeps:
-    """Run-scoped dependency payload passed to pydantic-ai tools."""
-
-    tool_overides: Mapping[str, ModelOverides]
 
 
 def normalize_tool_overides(
@@ -41,22 +33,6 @@ def normalize_tool_overides(
             normalized[tool_name] = override
 
     return normalized
-
-
-def build_tool_run_deps(tool_overides: Mapping[str, ModelOverides]) -> ToolRunDeps:
-    """Build immutable run-scoped deps for pydantic-ai tool contexts."""
-    return ToolRunDeps(tool_overides=MappingProxyType(dict(tool_overides)))
-
-
-def get_tool_model_overide_from_ctx(
-    ctx: object,
-    tool_name: str,
-) -> ModelOverides | None:
-    """Resolve a tool model override from pydantic-ai run context deps."""
-    deps = getattr(ctx, "deps", None)
-    if not isinstance(deps, ToolRunDeps):
-        return None
-    return deps.tool_overides.get(tool_name)
 
 
 def normalize_model_overide(

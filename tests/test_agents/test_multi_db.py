@@ -6,10 +6,10 @@ import inspect
 
 import pytest
 
-from sqlsaber.agents.pydantic_ai_agent import (
-    SQLSaberAgent,
-    _wrap_add_db_name,
-    _wrap_strip_db_name,
+from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
+from sqlsaber.capabilities._wrapping import (
+    wrap_add_db_name,
+    wrap_strip_db_name,
 )
 from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
 from sqlsaber.database.sqlite import SQLiteConnection
@@ -30,20 +30,30 @@ def _registry(*names: str) -> DatabaseRegistry:
     )
 
 
+def _function_tools(agent: SQLSaberAgent):
+    return {
+        name: function
+        for capability in agent.capabilities
+        for toolset in [capability.get_toolset()]
+        if toolset is not None and hasattr(toolset, "tools")
+        for name, function in toolset.tools.items()
+    }
+
+
 def _tool_def(agent: SQLSaberAgent, tool_name: str):
-    return agent.agent._function_toolset.tools[tool_name].tool_def
+    return _function_tools(agent)[tool_name].tool_def
 
 
 class TestWrappers:
     def test_strip_removes_db_name_from_signature(self):
         tool = ListTablesTool()
-        wrapper = _wrap_strip_db_name(tool)
+        wrapper = wrap_strip_db_name(tool)
         sig = inspect.signature(wrapper)
         assert "db_name" not in sig.parameters
 
     def test_strip_calls_raw_execute_without_db_name(self):
         tool = ListTablesTool()
-        wrapper = _wrap_strip_db_name(tool)
+        wrapper = wrap_strip_db_name(tool)
 
         captured: dict[str, object] = {}
 
@@ -54,7 +64,7 @@ class TestWrappers:
 
         tool.execute = fake_execute  # type: ignore[method-assign]
         # Re-wrap after monkey-patch
-        wrapper = _wrap_strip_db_name(tool)
+        wrapper = wrap_strip_db_name(tool)
 
         import asyncio
 
@@ -63,7 +73,7 @@ class TestWrappers:
 
     def test_add_makes_db_name_required_literal(self):
         tool = ExecuteSQLTool()
-        wrapper = _wrap_add_db_name(tool, ("prod", "staging"))
+        wrapper = wrap_add_db_name(tool, ("prod", "staging"))
         sig = inspect.signature(wrapper)
         assert "db_name" in sig.parameters
         param = sig.parameters["db_name"]
@@ -118,14 +128,14 @@ class TestAgentSchema:
             model_name="anthropic:claude-3-5-sonnet",
             api_key="x",
         )
-        assert "list_dbs" not in single.agent._function_toolset.tools
+        assert "list_dbs" not in _function_tools(single)
 
         multi = SQLSaberAgent(
             registry=_registry("a", "b"),
             model_name="anthropic:claude-3-5-sonnet",
             api_key="x",
         )
-        assert "list_dbs" in multi.agent._function_toolset.tools
+        assert "list_dbs" in _function_tools(multi)
 
 
 class TestAgentPrompt:

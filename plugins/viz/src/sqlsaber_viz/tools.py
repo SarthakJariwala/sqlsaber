@@ -13,7 +13,7 @@ from pydantic_ai import RunContext
 from rich.console import Console
 from rich.text import Text
 
-from sqlsaber.overrides import get_tool_model_overide_from_ctx
+from sqlsaber.overrides import ModelOverides
 from sqlsaber.tools.base import Tool
 from sqlsaber.utils.json_utils import json_dumps
 
@@ -41,6 +41,7 @@ class VizTool(Tool):
         self._last_rows: list[dict] | None = None
         self._last_file: str | None = None
         self._replay_messages: list | None = None
+        self.model_overide: ModelOverides | None = None
 
     def set_replay_messages(self, messages: list) -> None:
         """Set message history for replay scenarios (e.g., threads show)."""
@@ -89,10 +90,9 @@ class VizTool(Tool):
         self._last_rows = rows
         self._last_file = file
 
-        overide = get_tool_model_overide_from_ctx(ctx, self.name)
         agent = _get_spec_agent_cls()(
-            model_name=overide.model_name if overide else None,
-            api_key=overide.api_key if overide else None,
+            model_name=self.model_overide.model_name if self.model_overide else None,
+            api_key=self.model_overide.api_key if self.model_overide else None,
         )
 
         try:

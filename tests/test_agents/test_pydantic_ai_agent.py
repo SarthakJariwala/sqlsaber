@@ -8,7 +8,6 @@ from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.database.sqlite import SQLiteConnection
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
-from sqlsaber.overrides import ToolRunDeps
 from sqlsaber.tools.knowledge_tool import SearchKnowledgeTool
 
 
@@ -55,7 +54,7 @@ class TestSQLSaberAgentKnowledge:
 
 class TestSQLSaberAgentDeps:
     @pytest.mark.asyncio
-    async def test_run_passes_tool_overides_via_deps(self, in_memory_db, monkeypatch):
+    async def test_run_does_not_claim_deps(self, in_memory_db, monkeypatch):
         agent = SQLSaberAgent(
             db_connection=in_memory_db,
             model_name="anthropic:claude-3-5-sonnet",
@@ -78,34 +77,10 @@ class TestSQLSaberAgentDeps:
         monkeypatch.setattr(agent.agent, "run", fake_run)
 
         await agent.run("hello")
-        deps = captured.get("deps")
-        assert isinstance(deps, ToolRunDeps)
-        assert deps.tool_overides["viz"].model_name == "openai:gpt-5-mini"
-        assert deps.tool_overides["viz"].api_key == "override-api-key"
-
-    @pytest.mark.asyncio
-    async def test_run_passes_empty_tool_overides_when_unset(
-        self, in_memory_db, monkeypatch
-    ):
-        agent = SQLSaberAgent(
-            db_connection=in_memory_db,
-            model_name="anthropic:claude-3-5-sonnet",
-            api_key="test-key",
-        )
-
-        captured: dict[str, object] = {}
-
-        async def fake_run(prompt: str, **kwargs):
-            _ = prompt
-            captured.update(kwargs)
-            return SimpleNamespace(output="ok")
-
-        monkeypatch.setattr(agent.agent, "run", fake_run)
-
-        await agent.run("hello")
-        deps = captured.get("deps")
-        assert isinstance(deps, ToolRunDeps)
-        assert deps.tool_overides == {}
+        assert "deps" not in captured
+        viz = agent._tools["viz"]
+        assert viz.model_overide.model_name == "openai:gpt-5-mini"
+        assert viz.model_overide.api_key == "override-api-key"
 
 
 class TestSQLSaberAgentLifecycle:
