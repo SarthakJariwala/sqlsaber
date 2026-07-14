@@ -1,0 +1,101 @@
+[
+  {
+    "description": "Search existing sql and knowledge about active database.",
+    "name": "search_knowledge",
+    "parameters_json_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "description": "The keyword search query to execute.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "List all tables in the database.",
+    "name": "list_tables",
+    "parameters_json_schema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "description": "Introspect database schema.",
+    "name": "introspect_schema",
+    "parameters_json_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "table_pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional pattern to filter tables (e.g., 'public.users', 'user%', '%order%')"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "description": "Execute a SQL query against the database.",
+    "name": "execute_sql",
+    "parameters_json_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "description": "SQL query to execute",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "<summary>Generate a visualization spec for SQL results.</summary>\n<returns>\n<description>JSON string containing the visualization spec.</description>\n</returns>",
+    "name": "viz",
+    "parameters_json_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "chart_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional hint for chart type (bar, line, scatter, boxplot, histogram)."
+        },
+        "file": {
+          "description": "Result file key from execute_sql (e.g., \"result_abc123.json\").",
+          "type": "string"
+        },
+        "request": {
+          "description": "Natural language description of the desired visualization.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request",
+        "file"
+      ],
+      "type": "object"
+    }
+  }
+]

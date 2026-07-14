@@ -117,7 +117,7 @@ class BufferedStreamingHandler:
     @on_event.register
     async def _(self, event: FunctionToolResultEvent, ctx: RunContext) -> None:
         """Handle tool result - print as pretty JSON."""
-        content = event.result.content
+        content = event.part.content
         self.console.print()
 
         # Parse content if it's a JSON string

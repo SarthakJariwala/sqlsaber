@@ -117,11 +117,11 @@ class TUIStreamingQueryHandler:
 
     def _on_tool_result(self, event: FunctionToolResultEvent) -> None:
         self.app.clear_status()
-        tool_name = event.result.tool_name
+        tool_name = event.part.tool_name
         if tool_name is None:
             return
         self._append_display(
-            lambda display: display.show_tool_result(tool_name, event.result.content)
+            lambda display: display.show_tool_result(tool_name, event.part.content)
         )
         self.app.set_loading("Crunching data...")
 
