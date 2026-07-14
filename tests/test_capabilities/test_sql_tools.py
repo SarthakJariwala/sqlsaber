@@ -80,6 +80,56 @@ async def test_owned_registry_closes_with_agent_context(
 
 
 @pytest.mark.asyncio
+async def test_owned_registry_stays_open_across_nested_agent_runs(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_path = tmp_path / "nested.sqlite"
+    database_path.touch()
+    capability = SqlTools(database=str(database_path))
+    connection = capability.registry.get(capability.registry.primary()).connection
+    lifecycle_events: list[str] = []
+
+    async def tracked_get_pool() -> str:
+        lifecycle_events.append("open")
+        return str(database_path)
+
+    async def tracked_close() -> None:
+        lifecycle_events.append("close")
+
+    monkeypatch.setattr(connection, "get_pool", tracked_get_pool)
+    monkeypatch.setattr(connection, "close", tracked_close)
+    agent = Agent(TestModel(call_tools=[]), capabilities=[capability])
+
+    async with agent:
+        assert lifecycle_events == ["open"]
+        await agent.run("First query")
+        await agent.run("Second query")
+        assert lifecycle_events == ["open"]
+
+    assert lifecycle_events == ["open", "close"]
+
+
+@pytest.mark.asyncio
+async def test_owned_registry_cleanup_errors_propagate(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_path = tmp_path / "cleanup-error.sqlite"
+    database_path.touch()
+    capability = SqlTools(database=str(database_path))
+    connection = capability.registry.get(capability.registry.primary()).connection
+
+    async def failing_close() -> None:
+        raise RuntimeError("database cleanup failed")
+
+    monkeypatch.setattr(connection, "close", failing_close)
+    agent = Agent(TestModel(call_tools=[]), capabilities=[capability])
+
+    with pytest.raises(RuntimeError, match="database cleanup failed"):
+        async with agent:
+            await agent.run("Hello")
+
+
+@pytest.mark.asyncio
 async def test_borrowed_registry_is_not_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
