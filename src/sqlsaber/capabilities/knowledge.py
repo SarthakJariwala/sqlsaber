@@ -63,6 +63,7 @@ class Knowledge(SqlSaberCapability):
         tool = SearchKnowledgeTool()
         if registry is not None and len(registry) > 1:
             tool.set_registry(registry)
+            tool.knowledge_manager = manager
         else:
             resolved_name = database_name
             if resolved_name is None and registry is not None:
