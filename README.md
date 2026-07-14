@@ -134,6 +134,25 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+Or compose SQLsaber's tools into an agent you own:
+
+```python
+from pydantic_ai import Agent
+from sqlsaber import SqlTools
+
+sql = SqlTools(database="sqlite:///my.db")
+agent = Agent(
+    "anthropic:claude-sonnet-4-6",
+    instructions="You are my analytics copilot.",
+    capabilities=[sql],
+)
+
+async with agent:  # opens and closes connections owned by SqlTools
+    result = await agent.run("Top 5 customers by revenue")
+```
+
+See the [Capabilities guide](https://sqlsaber.com/sdk/capabilities/) for multi-database use, knowledge search, custom capabilities, and lifecycle details.
+
 ## How it works
 
 1. **Discovery** — Lists tables and identifies relevant ones based on your question.

@@ -54,6 +54,7 @@ class SQLSaberAgent:
         allow_dangerous: bool = False,
         system_prompt: str | None = None,
         tool_overides: ToolOveridesInput | None = None,
+        extra_capabilities: Sequence[AbstractCapability[Any]] = (),
     ) -> None:
         if registry is None:
             if db_connection is None:
@@ -79,6 +80,7 @@ class SQLSaberAgent:
         self.db_type = self.db_connection.display_name
         self.allow_dangerous = allow_dangerous
         self._tool_overides = normalize_tool_overides(tool_overides)
+        self._extra_capabilities = tuple(extra_capabilities)
         self.schema_manager: SchemaManager = primary.schema_manager
         self.thinking_enabled = (
             thinking_enabled
@@ -141,6 +143,7 @@ class SQLSaberAgent:
                 )
             )
         )
+        capabilities.extend(self._extra_capabilities)
         if self.thinking_enabled:
             capabilities.append(
                 Thinking(effort=UNIFIED_EFFORT_MAP[self.thinking_level])

@@ -81,6 +81,7 @@ class SQLSaberSession:
             allow_dangerous=options.allow_dangerous,
             system_prompt=system_prompt_text,
             tool_overides=options.tool_overrides,
+            extra_capabilities=options.extra_capabilities,
         )
 
     async def query(

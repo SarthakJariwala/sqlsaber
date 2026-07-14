@@ -1,0 +1,131 @@
+---
+title: Capabilities
+description: "Compose SQLsaber SQL and knowledge tools into your own pydantic-ai agents, or extend SQLsaber with custom capabilities."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+SQLsaber exposes its database behavior as [pydantic-ai capabilities](https://ai.pydantic.dev/capabilities/). You can attach SQLsaber to an agent you own, or add your capabilities to SQLsaber's managed agent.
+
+## Add SQL tools to your agent
+
+```python
+import asyncio
+
+from pydantic_ai import Agent
+from sqlsaber import SqlTools
+
+
+async def main() -> None:
+    sql = SqlTools(database="postgresql://user:password@localhost/analytics")
+    agent = Agent(
+        "anthropic:claude-sonnet-4-6",
+        instructions="You are our analytics copilot.",
+        capabilities=[sql],
+    )
+
+    async with agent:
+        result = await agent.run("Top 5 customers by revenue")
+        print(result.output)
+
+
+asyncio.run(main())
+```
+
+`SqlTools` provides `list_tables`, `introspect_schema`, and `execute_sql`. Multi-database agents also receive `list_dbs`, and SQL tool schemas require a valid `db_name`.
+
+<Aside type="caution" title="Close owned connections">
+When `SqlTools` receives `database=`, it owns the resulting connections. Enter the agent with `async with agent:` as shown above, or call `await sql.close()` explicitly. A registry passed with `registry=` is borrowed and is never closed by the capability.
+</Aside>
+
+### Multiple databases
+
+Pass configured database names or DSNs as a sequence:
+
+```python
+sql = SqlTools(database=["production", "warehouse"])
+agent = Agent("openai:gpt-5.2", capabilities=[sql])
+```
+
+SQLsaber includes a database catalog in the capability instructions. Cross-database joins are not attempted; the model queries each database separately.
+
+### Allow writes
+
+SQL execution is read-only by default. Enable guarded write operations explicitly:
+
+```python
+sql = SqlTools(database="production", allow_dangerous=True)
+```
+
+Dangerous mode still blocks destructive and administrative operations such as `DROP`, `TRUNCATE`, and role management. Only enable it for agents and users you trust.
+
+## Add knowledge search
+
+`Knowledge` exposes saved SQL patterns and domain definitions. Share a manager when your application already owns one:
+
+```python
+from pydantic_ai import Agent
+from sqlsaber import Knowledge, SqlTools
+from sqlsaber.knowledge.manager import KnowledgeManager
+
+manager = KnowledgeManager()
+sql = SqlTools(database="postgresql://localhost/analytics")
+knowledge = Knowledge(
+    knowledge_manager=manager,
+    registry=sql.registry,
+)
+agent = Agent(
+    "anthropic:claude-sonnet-4-6",
+    capabilities=[sql, knowledge],
+)
+
+async with agent:
+    result = await agent.run("How do we define active customers?")
+
+await manager.close()
+```
+
+A supplied `KnowledgeManager` is borrowed. If omitted, `Knowledge` creates and closes its own manager when the agent context exits (or when `await knowledge.close()` is called).
+
+## Use your capabilities inside SQLsaber
+
+Pass pydantic-ai capabilities through `SQLSaberOptions.extra_capabilities`:
+
+```python
+from pydantic_ai.capabilities import WebSearch
+from sqlsaber import SQLSaber, SQLSaberOptions
+
+options = SQLSaberOptions(
+    database="analytics",
+    extra_capabilities=[WebSearch()],
+)
+
+async with SQLSaber(options=options) as saber:
+    result = await saber.query("Compare our latest revenue with public guidance")
+```
+
+Extra capabilities are appended to SQLsaber's SQL, knowledge, and installed plugin capabilities. They remain free to use their own dependency type when attached directly to your agent; SQLsaber's built-in capabilities do not claim `ctx.deps`.
+
+## Build a plugin capability
+
+Third-party plugins expose a factory through the `sqlsaber.capabilities` entry-point group:
+
+```toml
+[project.entry-points."sqlsaber.capabilities"]
+my_plugin = "my_plugin:capability"
+```
+
+```python
+from pydantic_ai.capabilities import Capability
+from sqlsaber.capabilities.plugins import PluginContext
+
+
+def capability(context: PluginContext):
+    return Capability(
+        id="my-plugin",
+        description="Use my application's specialist tool.",
+        tools=[my_tool],
+    )
+```
+
+`PluginContext` supplies the database registry, knowledge manager, dangerous-mode flag, and normalized tool model overrides. A factory may return one capability or a sequence of capabilities.

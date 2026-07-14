@@ -4,10 +4,11 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .api import SQLSaber
+    from .capabilities import Knowledge, SqlTools
     from .options import SQLSaberOptions
     from .overrides import ModelOverides
 
-__all__ = ["SQLSaber", "SQLSaberOptions", "ModelOverides"]
+__all__ = ["SQLSaber", "SQLSaberOptions", "ModelOverides", "SqlTools", "Knowledge"]
 
 
 def __getattr__(name: str):
@@ -24,4 +25,12 @@ def __getattr__(name: str):
         from .overrides import ModelOverides
 
         return ModelOverides
+    if name == "SqlTools":
+        from .capabilities import SqlTools
+
+        return SqlTools
+    if name == "Knowledge":
+        from .capabilities import Knowledge
+
+        return Knowledge
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
