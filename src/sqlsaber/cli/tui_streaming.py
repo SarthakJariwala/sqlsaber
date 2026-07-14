@@ -41,6 +41,9 @@ class TUIStreamingQueryHandler:
         app: ChatApp,
         console: Console,
         display_registry: Mapping[str, Tool] | None = None,
+        *,
+        display_registry_provider: Callable[[], Mapping[str, Tool] | None]
+        | None = None,
     ):
         self.app = app
         self.console = console
@@ -52,6 +55,7 @@ class TUIStreamingQueryHandler:
         self._replay_messages: list | None = None
         self._cancellation_token: asyncio.Event | None = None
         self._display_registry = display_registry
+        self._display_registry_provider = display_registry_provider
 
     async def _event_stream_handler(
         self, ctx: RunContext, event_stream: AsyncIterable[AgentStreamEvent]
@@ -157,9 +161,14 @@ class TUIStreamingQueryHandler:
         if tool_name == "execute_sql":
             self.app.set_loading("Generating SQL...")
 
+    def _resolve_display_registry(self) -> Mapping[str, Tool] | None:
+        if self._display_registry_provider is not None:
+            return self._display_registry_provider()
+        return self._display_registry
+
     def _append_display(self, render: Callable[[DisplayManager], None]) -> None:
         def capture(console: Console) -> None:
-            display = DisplayManager(console, self._display_registry)
+            display = DisplayManager(console, self._resolve_display_registry())
             if self._replay_messages is not None:
                 display.set_replay_messages(self._replay_messages)
             render(display)
