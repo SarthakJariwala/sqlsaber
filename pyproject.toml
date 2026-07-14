@@ -30,11 +30,13 @@ dev = [
     "ruff>=0.12.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=1.0.0",
+    "sqlsaber-notebook[modal]",
     "sqlsaber-sandbox",
     "sqlsaber-viz",
 ]
 
 [tool.uv.sources]
+sqlsaber-notebook = { path = "plugins/notebook", editable = true }
 sqlsaber-sandbox = { path = "plugins/sandbox", editable = true }
 sqlsaber-viz = { path = "plugins/viz", editable = true }
 
