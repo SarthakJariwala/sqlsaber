@@ -1,5 +1,5 @@
-"""SQLSaber sandbox plugin."""
+"""SQLSaber sandbox capability plugin."""
 
-from .tools import register_tools
+from .capability import Sandbox, capability
 
-__all__ = ["register_tools"]
+__all__ = ["Sandbox", "capability"]

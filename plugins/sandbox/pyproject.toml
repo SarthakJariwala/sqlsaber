@@ -6,8 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = ["sqlsaber>=0.54.0", "cased-sandboxes>=0.5.0"]
 
-[project.entry-points."sqlsaber.tools"]
-sandbox = "sqlsaber_sandbox:register_tools"
+[project.entry-points."sqlsaber.capabilities"]
+sandbox = "sqlsaber_sandbox:capability"
 
 [build-system]
 requires = ["hatchling"]

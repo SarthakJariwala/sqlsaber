@@ -40,7 +40,9 @@ async def test_sql_tools_compose_with_custom_agent_deps() -> None:
 
     result = await agent.run("List tables", deps=CustomDeps(tenant="acme"))
 
-    assert {tool.name for tool in model.last_model_request_parameters.function_tools} == {
+    assert {
+        tool.name for tool in model.last_model_request_parameters.function_tools
+    } == {
         "list_tables",
         "introspect_schema",
         "execute_sql",

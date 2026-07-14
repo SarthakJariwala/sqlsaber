@@ -1,4 +1,4 @@
-"""SQLSaber tools module."""
+"""SQLSaber tool execution and display primitives."""
 
 from .base import Tool
 from .display import (
@@ -12,20 +12,16 @@ from .display import (
     ToolDisplaySpec,
 )
 from .knowledge_tool import KnowledgeTool, SearchKnowledgeTool
-from .registry import ToolRegistry, discover_plugins, register_tool, tool_registry
-
-# Import concrete tools to register them
-from .sql_tools import ExecuteSQLTool, IntrospectSchemaTool, ListTablesTool, SQLTool
-
-# Discover and load any installed plugins
-discover_plugins()
+from .sql_tools import (
+    ExecuteSQLTool,
+    IntrospectSchemaTool,
+    ListDatabasesTool,
+    ListTablesTool,
+    SQLTool,
+)
 
 __all__ = [
     "Tool",
-    "ToolRegistry",
-    "tool_registry",
-    "register_tool",
-    "discover_plugins",
     "ToolDisplaySpec",
     "ExecutingConfig",
     "ResultConfig",
@@ -38,6 +34,7 @@ __all__ = [
     "ListTablesTool",
     "IntrospectSchemaTool",
     "ExecuteSQLTool",
+    "ListDatabasesTool",
     "KnowledgeTool",
     "SearchKnowledgeTool",
 ]

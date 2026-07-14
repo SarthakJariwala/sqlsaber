@@ -18,7 +18,6 @@ from sqlsaber.tools.display import (
     ResultConfig,
     ToolDisplaySpec,
 )
-from sqlsaber.tools.registry import ToolRegistry
 from sqlsaber.utils.json_utils import json_dumps
 
 PROVIDER_ENV_REQUIREMENTS: dict[str, tuple[str, ...]] = {
@@ -63,26 +62,6 @@ def sandbox_providers_available() -> bool:
         return True
 
     return False
-
-
-def register_tools(registry: ToolRegistry | None = None):
-    """Register sandbox tools when providers are available.
-
-    Returns list of tool classes when registration should occur.
-    """
-
-    if not sandbox_providers_available():
-        return None
-
-    tool_classes = [RunPythonTool]
-    if registry is not None:
-        for tool_class in tool_classes:
-            if tool_class().name in registry.list_tools():
-                return None
-            registry.register(tool_class)
-        return tool_classes
-
-    return tool_classes
 
 
 def _build_python_command(code: str) -> str:

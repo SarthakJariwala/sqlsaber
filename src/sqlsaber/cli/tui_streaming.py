@@ -1,7 +1,7 @@
 """pydantic-ai streaming adapter for the persistent saber-tui chat UI."""
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, AsyncIterable
 
 from pydantic_ai import RunContext
@@ -26,6 +26,7 @@ from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.tui_chat import ChatApp
 from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import get_theme_manager
+from sqlsaber.tools.base import Tool
 
 
 class _QueryInterrupted(Exception):
@@ -35,7 +36,12 @@ class _QueryInterrupted(Exception):
 class TUIStreamingQueryHandler:
     """Stream agent output into the persistent chat app."""
 
-    def __init__(self, app: ChatApp, console: Console):
+    def __init__(
+        self,
+        app: ChatApp,
+        console: Console,
+        display_registry: Mapping[str, Tool] | None = None,
+    ):
         self.app = app
         self.console = console
         self.log = get_logger(__name__)
@@ -45,6 +51,7 @@ class TUIStreamingQueryHandler:
         self._stream_buffer = ""
         self._replay_messages: list | None = None
         self._cancellation_token: asyncio.Event | None = None
+        self._display_registry = display_registry
 
     async def _event_stream_handler(
         self, ctx: RunContext, event_stream: AsyncIterable[AgentStreamEvent]
@@ -152,7 +159,7 @@ class TUIStreamingQueryHandler:
 
     def _append_display(self, render: Callable[[DisplayManager], None]) -> None:
         def capture(console: Console) -> None:
-            display = DisplayManager(console)
+            display = DisplayManager(console, self._display_registry)
             if self._replay_messages is not None:
                 display.set_replay_messages(self._replay_messages)
             render(display)

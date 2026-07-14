@@ -6,6 +6,7 @@ rendered with Live.
 """
 
 import json
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Type
 
 from pydantic_ai.messages import ModelResponsePart, TextPart, ThinkingPart
@@ -21,10 +22,30 @@ from rich.text import Text
 from sqlsaber.cli.usage import format_cost_usd, format_tokens
 from sqlsaber.theme.manager import get_theme_manager
 from sqlsaber.tools.display import ResultConfig, SpecRenderer, ToolDisplaySpec
-from sqlsaber.tools.registry import tool_registry
 
 if TYPE_CHECKING:
     from sqlsaber.cli.usage import SessionUsage
+    from sqlsaber.tools.base import Tool
+
+
+def _core_display_registry() -> dict[str, "Tool"]:
+    """Build stateless core renderers for transcript and fallback contexts."""
+    from sqlsaber.tools.knowledge_tool import SearchKnowledgeTool
+    from sqlsaber.tools.sql_tools import (
+        ExecuteSQLTool,
+        IntrospectSchemaTool,
+        ListDatabasesTool,
+        ListTablesTool,
+    )
+
+    tools = [
+        SearchKnowledgeTool(),
+        ListTablesTool(),
+        IntrospectSchemaTool(),
+        ExecuteSQLTool(),
+        ListDatabasesTool(),
+    ]
+    return {tool.name: tool for tool in tools}
 
 
 class _SimpleCodeBlock(CodeBlock):
@@ -209,12 +230,17 @@ class LiveMarkdownRenderer:
 class DisplayManager:
     """Manages display formatting and output for the CLI."""
 
-    def __init__(self, console: Console):
+    def __init__(
+        self,
+        console: Console,
+        display_registry: Mapping[str, "Tool"] | None = None,
+    ):
         self.console = console
         self.live = LiveMarkdownRenderer(console)
         self.tm = get_theme_manager()
         self._spec_renderer = SpecRenderer(self.tm)
         self._replay_messages: list | None = None
+        self._display_registry = dict(display_registry or _core_display_registry())
 
     def set_replay_messages(self, messages: list) -> None:
         """Set message history for replay scenarios (e.g., threads show)."""
@@ -294,10 +320,7 @@ class DisplayManager:
         self.console.print()
 
     def _get_tool(self, tool_name: str):
-        try:
-            return tool_registry.get_tool(tool_name)
-        except KeyError:
-            return None
+        return self._display_registry.get(tool_name)
 
     def _render_fallback_result(self, result: object) -> None:
         if isinstance(result, str):

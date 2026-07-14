@@ -526,7 +526,13 @@ class InteractiveSession:
         app_ref["app"] = app
         chat_console_ref["chat_console"] = chat_console
         app.editor.history = self._load_history()
-        self.streaming_handler = TUIStreamingQueryHandler(app, self.console)
+        self.streaming_handler = TUIStreamingQueryHandler(
+            app,
+            self.console,
+            getattr(self.sqlsaber_agent, "display_registry", None)
+            if hasattr(self, "sqlsaber_agent")
+            else None,
+        )
         self.show_welcome_message(app)
 
         app.tui.start()
