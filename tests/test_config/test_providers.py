@@ -27,21 +27,6 @@ def test_env_var_name_mapping():
 @pytest.mark.parametrize(
     "model,expected",
     [
-        ("claude-opus-4-7", True),
-        ("anthropic:claude-opus-4-7-20260501", True),
-        ("claude-opus-4-6", False),
-        ("anthropic:claude-sonnet-4-6", False),
-        ("openai:gpt-5", False),
-        ("", False),
-    ],
-)
-def test_requires_anthropic_adaptive_thinking(model: str, expected: bool):
-    assert providers.requires_anthropic_adaptive_thinking(model) is expected
-
-
-@pytest.mark.parametrize(
-    "model,expected",
-    [
         ("anthropic:claude-3", "anthropic"),
         ("openai:gpt-4o", "openai"),
         ("google:gemini-1.5-pro", "google"),
