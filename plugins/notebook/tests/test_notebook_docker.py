@@ -11,9 +11,16 @@ from sqlsaber_notebook.execution.base import NotebookExecutionTimeout
 from sqlsaber_notebook.execution.docker import (
     DockerNotebookBackend,
     DockerNotebookEnvironment,
+    _bounded_timeout,
     _run_process,
     _scan_artifact_sizes,
 )
+
+
+def test_notebook_command_has_no_default_timeout() -> None:
+    assert _bounded_timeout(None, None) is None
+    assert _bounded_timeout(30, None) == 30
+    assert _bounded_timeout(30, 60) == 30
 
 
 def test_docker_availability_does_not_fall_back() -> None:
@@ -44,8 +51,8 @@ def test_docker_argv_is_hardened_and_uses_direct_arguments(tmp_path: Path) -> No
         argv.index("--cap-drop") : argv.index("--cap-drop") + 2
     ]
     assert "no-new-privileges" in argv
-    assert "--memory" in argv and "4096m" in argv
-    assert "--cpus" in argv and "2.0" in argv
+    assert "--memory" in argv and "8192m" in argv
+    assert "--cpus" in argv and "4.0" in argv
     assert "--workdir" in argv and "/work/run" in argv
     assert "--allow-errors" in argv
     assert "--ExecutePreprocessor.timeout=99" in argv

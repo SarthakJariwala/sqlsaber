@@ -35,6 +35,9 @@ _RUN_USER = "jovyan"
 _RUN_GROUP = "users"
 _RUNUSER = "/usr/sbin/runuser"
 _PYTHON = "/opt/conda/bin/python"
+# Modal requires a finite Sandbox lifetime; use its 24-hour platform ceiling
+# rather than imposing a SQLsaber analysis timeout.
+_MODAL_PLATFORM_TIMEOUT_SECONDS = 24 * 60 * 60
 
 _INVENTORY_SCRIPT = r"""
 import json
@@ -46,6 +49,7 @@ root = sys.argv[1]
 max_entries = int(sys.argv[2]) + 1  # include notebook.ipynb
 max_file = int(sys.argv[3])
 max_total = int(sys.argv[4])
+max_notebook = int(sys.argv[5])
 entries = {}
 total = 0
 try:
@@ -64,9 +68,9 @@ try:
             total += info.st_size
             if len(entries) > max_entries:
                 raise ValueError("too many generated files")
-            if info.st_size > max(max_file, 20 * 1024 * 1024):
+            if info.st_size > max(max_file, max_notebook):
                 raise ValueError(f"generated file too large: {relative}")
-            if total > max_total + 20 * 1024 * 1024:
+            if total > max_total + max_notebook:
                 raise ValueError("generated files too large")
 except Exception as exc:
     print(json.dumps({"error": str(exc)}))
@@ -107,8 +111,7 @@ class ModalNotebookBackend(NotebookBackend):
                     block_network=True,
                     cpu=limits.cpu_cores,
                     memory=limits.memory_mb,
-                    timeout=limits.operation_seconds,
-                    idle_timeout=limits.idle_seconds,
+                    timeout=_MODAL_PLATFORM_TIMEOUT_SECONDS,
                 )
         except TimeoutError as exc:
             raise NotebookExecutionTimeout(
@@ -215,8 +218,8 @@ class ModalNotebookEnvironment(NotebookEnvironment):
         self,
         notebook: bytes,
         *,
-        cell_timeout: int,
-        command_timeout: int,
+        cell_timeout: int | None,
+        command_timeout: int | None,
     ) -> NotebookExecutionResult:
         async with self._lock:
             self._ensure_open()
@@ -276,9 +279,12 @@ class ModalNotebookEnvironment(NotebookEnvironment):
                     "--execute",
                     "--inplace",
                     "--allow-errors",
-                    f"--ExecutePreprocessor.timeout={min(cell_timeout, self.limits.cell_seconds)}",
+                    "--ExecutePreprocessor.timeout="
+                    f"{_bounded_timeout(cell_timeout, self.limits.cell_seconds) or -1}",
                     "notebook.ipynb",
-                    timeout=min(command_timeout, self.limits.command_seconds),
+                    timeout=_bounded_timeout(
+                        command_timeout, self.limits.command_seconds
+                    ),
                     workdir=self.run_path,
                 )
                 if returncode != 0:
@@ -429,6 +435,7 @@ class ModalNotebookEnvironment(NotebookEnvironment):
             str(self.limits.max_artifacts),
             str(self.limits.max_artifact_bytes),
             str(self.limits.max_total_artifact_bytes),
+            str(self.limits.max_notebook_bytes),
             timeout=self.limits.open_seconds,
         )
         if returncode != 0:
@@ -456,7 +463,7 @@ class ModalNotebookEnvironment(NotebookEnvironment):
         self,
         phase: str,
         *argv: str,
-        timeout: int,
+        timeout: int | None,
         workdir: str | None = None,
     ) -> tuple[int, str, str]:
         try:
@@ -501,6 +508,17 @@ class ModalNotebookEnvironment(NotebookEnvironment):
                 backend="modal",
                 phase="lifecycle",
             )
+
+
+def _bounded_timeout(
+    requested: int | None,
+    configured: int | None,
+) -> int | None:
+    if requested is None:
+        return configured
+    if configured is None:
+        return requested
+    return min(requested, configured)
 
 
 async def _modal_operation(

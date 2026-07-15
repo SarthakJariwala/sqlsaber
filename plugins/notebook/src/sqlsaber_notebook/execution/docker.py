@@ -168,8 +168,8 @@ class DockerNotebookEnvironment(NotebookEnvironment):
         self,
         notebook: bytes,
         *,
-        cell_timeout: int,
-        command_timeout: int,
+        cell_timeout: int | None,
+        command_timeout: int | None,
     ) -> NotebookExecutionResult:
         async with self._lock:
             self._ensure_open()
@@ -186,7 +186,9 @@ class DockerNotebookEnvironment(NotebookEnvironment):
                 argv = self._docker_argv(container_name, cell_timeout)
                 result = await _run_process(
                     argv,
-                    timeout=min(command_timeout, self.limits.command_seconds),
+                    timeout=_bounded_timeout(
+                        command_timeout, self.limits.command_seconds
+                    ),
                     backend="docker",
                     phase="notebook-execution",
                     log_limit=self.limits.max_log_chars,
@@ -297,7 +299,9 @@ class DockerNotebookEnvironment(NotebookEnvironment):
             await asyncio.to_thread(shutil.rmtree, self.root, True)
             self._inventory = ()
 
-    def _docker_argv(self, container_name: str, cell_timeout: int) -> tuple[str, ...]:
+    def _docker_argv(
+        self, container_name: str, cell_timeout: int | None
+    ) -> tuple[str, ...]:
         argv = [
             self.executable,
             "run",
@@ -337,7 +341,8 @@ class DockerNotebookEnvironment(NotebookEnvironment):
                 "--execute",
                 "--inplace",
                 "--allow-errors",
-                f"--ExecutePreprocessor.timeout={min(cell_timeout, self.limits.cell_seconds)}",
+                "--ExecutePreprocessor.timeout="
+                f"{_bounded_timeout(cell_timeout, self.limits.cell_seconds) or -1}",
                 "notebook.ipynb",
             )
         )
@@ -362,10 +367,21 @@ class DockerNotebookEnvironment(NotebookEnvironment):
             )
 
 
+def _bounded_timeout(
+    requested: int | None,
+    configured: int | None,
+) -> int | None:
+    if requested is None:
+        return configured
+    if configured is None:
+        return requested
+    return min(requested, configured)
+
+
 async def _run_process(
     argv: Sequence[str],
     *,
-    timeout: int | float,
+    timeout: int | float | None,
     backend: str,
     phase: str,
     log_limit: int,

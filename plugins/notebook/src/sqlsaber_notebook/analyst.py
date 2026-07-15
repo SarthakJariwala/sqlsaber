@@ -15,11 +15,8 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from ._shared import (
-    DEFAULT_ANALYSIS_TIMEOUT_SECONDS,
     DEFAULT_EXECUTION_LIMITS,
-    DEFAULT_OPERATION_TIMEOUT_SECONDS,
     MAX_GOAL_CHARS,
-    MAX_MODEL_REQUESTS,
     MAX_SNAPSHOT_IMAGE_BYTES,
     MAX_SNAPSHOT_IMAGES,
 )
@@ -96,27 +93,24 @@ async def analyze(
     agent = build_analyst_agent(model, model_provider=model_provider)
     child_usage = RunUsage()
     try:
-        async with asyncio.timeout(DEFAULT_OPERATION_TIMEOUT_SECONDS):
-            await session.ensure_environment()
-            async with asyncio.timeout(DEFAULT_ANALYSIS_TIMEOUT_SECONDS):
-                result = await agent.run(
-                    goal_prompt(goal),
-                    deps=session,
-                    usage=child_usage,
-                    usage_limits=usage_limits
-                    or UsageLimits(request_limit=MAX_MODEL_REQUESTS),
-                )
-            images, files = await _harvest_artifacts(
-                session,
-                collect_files=collect_files,
-            )
-            return AnalysisResult(
-                answer=result.output,
-                notebook=session.notebook_bytes(),
-                images=images,
-                files=files,
-                provenance=_infer_provenance(session),
-            )
+        await session.ensure_environment()
+        result = await agent.run(
+            goal_prompt(goal),
+            deps=session,
+            usage=child_usage,
+            usage_limits=usage_limits,
+        )
+        images, files = await _harvest_artifacts(
+            session,
+            collect_files=collect_files,
+        )
+        return AnalysisResult(
+            answer=result.output,
+            notebook=session.notebook_bytes(),
+            images=images,
+            files=files,
+            provenance=_infer_provenance(session),
+        )
     finally:
         if parent_usage is not None:
             parent_usage.incr(child_usage)

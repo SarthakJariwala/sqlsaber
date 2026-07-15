@@ -16,23 +16,23 @@ class ExecutionLimits:
 
     image_prepare_seconds: int = 600
     open_seconds: int = 180
-    cell_seconds: int = 120
-    command_seconds: int = 600
-    operation_seconds: int = 1500
-    idle_seconds: int = 300
-    memory_mb: int = 4096
-    cpu_cores: float = 2.0
+    cell_seconds: int | None = 600
+    # No whole-notebook timeout by default. A deployment may still provide one
+    # through the SDK without making it a product-level analysis cap.
+    command_seconds: int | None = None
+    memory_mb: int = 8192
+    cpu_cores: float = 4.0
     pids: int = 256
-    # Twenty user-visible files plus the adapter-neutral manifest.json.
-    max_input_files: int = 21
-    max_input_file_bytes: int = 10 * MIB
-    # User-visible quota is 50 MiB; reserve 1 MiB for manifest metadata.
-    max_total_input_bytes: int = 51 * MIB
-    max_notebook_bytes: int = 20 * MIB
-    max_artifacts: int = 20
-    max_artifact_bytes: int = 20 * MIB
-    max_total_artifact_bytes: int = 50 * MIB
-    max_log_chars: int = 8_000
+    # Fifty user-visible files plus the adapter-neutral manifest.json.
+    max_input_files: int = 51
+    max_input_file_bytes: int = 100 * MIB
+    # User-visible quota is 250 MiB; reserve 1 MiB for manifest metadata.
+    max_total_input_bytes: int = 251 * MIB
+    max_notebook_bytes: int = 50 * MIB
+    max_artifacts: int = 50
+    max_artifact_bytes: int = 50 * MIB
+    max_total_artifact_bytes: int = 200 * MIB
+    max_log_chars: int = 16_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,8 +107,8 @@ class NotebookEnvironment(Protocol):
         self,
         notebook: bytes,
         *,
-        cell_timeout: int,
-        command_timeout: int,
+        cell_timeout: int | None,
+        command_timeout: int | None,
     ) -> NotebookExecutionResult: ...
 
     async def read_artifact(self, artifact: ArtifactInfo) -> bytes: ...

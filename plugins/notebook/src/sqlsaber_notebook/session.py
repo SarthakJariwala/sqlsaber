@@ -12,7 +12,6 @@ import nbformat
 from ._shared import (
     DEFAULT_EXECUTION_LIMITS,
     MAX_CELL_SOURCE_CHARS,
-    MAX_CELLS,
     MAX_TOTAL_SOURCE_CHARS,
 )
 from .execution import (
@@ -84,8 +83,16 @@ class NotebookSession:
         source_notebook = self.serialize_notebook()
         result = await environment.execute(
             source_notebook,
-            cell_timeout=cell_timeout or self.execution_limits.cell_seconds,
-            command_timeout=command_timeout or self.execution_limits.command_seconds,
+            cell_timeout=(
+                self.execution_limits.cell_seconds
+                if cell_timeout is None
+                else cell_timeout
+            ),
+            command_timeout=(
+                self.execution_limits.command_seconds
+                if command_timeout is None
+                else command_timeout
+            ),
         )
         parsed = _parse_executed_notebook(
             result.notebook,
@@ -182,12 +189,6 @@ class NotebookSession:
         )
 
     def _validate_sources(self, cells: list[str]) -> None:
-        if len(cells) > MAX_CELLS:
-            raise NotebookLimitExceeded(
-                f"Notebook has more than {MAX_CELLS} cells",
-                backend=self.backend.name,
-                phase="notebook-validation",
-            )
         total = 0
         for index, source in enumerate(cells):
             if not isinstance(source, str):

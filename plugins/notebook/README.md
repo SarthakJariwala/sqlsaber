@@ -15,6 +15,14 @@ Implemented components:
 
 The managed SQLsaber `analyze_data` capability is added in the next integration phase.
 
+The default balanced runtime targets larger EDA and classical ML: 4 CPUs, 8 GiB
+memory, and up to 100 MiB per input/250 MiB total. SQLsaber does not cap model
+requests, notebook cell count, the analyst loop, or the whole operation. Individual
+cells retain a 10-minute timeout so a stuck computation can be diagnosed without
+ending the overall analysis. These are fixed product defaults rather than CLI tuning
+flags. Use an immutable custom image through `SQLSABER_NOTEBOOK_IMAGE` when
+additional ML libraries are required.
+
 ## Standalone usage
 
 ```bash

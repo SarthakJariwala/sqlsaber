@@ -77,8 +77,8 @@ class FakeNotebookEnvironment(NotebookEnvironment):
         self,
         notebook: bytes,
         *,
-        cell_timeout: int,
-        command_timeout: int,
+        cell_timeout: int | None,
+        command_timeout: int | None,
     ) -> NotebookExecutionResult:
         del cell_timeout, command_timeout
         self._ensure_open()

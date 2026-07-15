@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import base64
 import io
+from typing import Any
 
 from PIL import Image
 
+from sqlsaber_notebook._shared import MAX_SNAPSHOT_CHARS
 from sqlsaber_notebook.execution.fake import FakeNotebookBackend
 from sqlsaber_notebook.rendering import (
     limit_output,
@@ -82,6 +84,31 @@ def test_unsupported_and_duplicate_images_have_visible_omissions() -> None:
     assert second_images == []
     assert "[image omitted: already shown]" in second_markdown
     assert "<1>" not in second_markdown
+
+
+def test_balanced_snapshot_keeps_middle_cells_and_prioritizes_errors() -> None:
+    cells = [f"start_{index}\n" + "s" * 5_000 + f"\nend_{index}" for index in range(50)]
+    outputs: list[list[dict[str, Any]]] = [
+        [{"output_type": "stream", "text": "o" * 10_000}] for _ in cells
+    ]
+    outputs[25] = [
+        {
+            "output_type": "error",
+            "ename": "RuntimeError",
+            "evalue": "critical",
+            "traceback": ["CRITICAL_MIDDLE_ERROR", "traceback tail"],
+        }
+    ]
+
+    markdown, _ = view_notebook(cells, outputs)
+
+    assert len(markdown) <= MAX_SNAPSHOT_CHARS
+    assert "### Cell 0:" in markdown
+    assert "### Cell 25:" in markdown
+    assert "### Cell 49:" in markdown
+    assert "CRITICAL_MIDDLE_ERROR" in markdown
+    assert "cell source limited" in markdown
+    assert "cell outputs limited" in markdown
 
 
 def test_invalid_png_is_omitted_without_dangling_placeholder() -> None:

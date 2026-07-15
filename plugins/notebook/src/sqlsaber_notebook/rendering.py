@@ -117,8 +117,16 @@ def view_notebook(
         selector = image_selector
     markdown: list[str] = []
     images: list[bytes] = []
+    source_budget, output_budgets = _snapshot_cell_budgets(cells, outputs)
     for index, source in enumerate(cells):
-        markdown.extend((f"### Cell {index}:", f"```{language}", source, "```"))
+        rendered_source = _limit_text(
+            source,
+            source_budget,
+            marker="\n<...cell source limited...>\n",
+        )
+        markdown.extend(
+            (f"### Cell {index}:", f"```{language}", rendered_source, "```")
+        )
         cell_outputs = outputs[index] if index < len(outputs) else []
         rendered = [
             text
@@ -130,7 +138,15 @@ def view_notebook(
             )
         ]
         if rendered:
-            markdown.extend((f"### Output {index}:", "```", "\n".join(rendered), "```"))
+            output_budget = output_budgets.get(index, MAX_OUTPUT_CHARS)
+            rendered_output = _limit_text(
+                "\n".join(rendered),
+                output_budget,
+                marker="\n<...cell outputs limited...>\n",
+            )
+            markdown.extend((f"### Output {index}:", "```", rendered_output, "```"))
+    # Budget allocation retains every cell header. This final bound is defensive
+    # against Markdown overhead estimation rather than the primary truncation path.
     return limit_output("\n".join(markdown), MAX_SNAPSHOT_CHARS), images
 
 
@@ -187,6 +203,54 @@ def extract_notebook_images(
             total += len(image)
             images.append(image)
     return images
+
+
+def _snapshot_cell_budgets(
+    cells: list[str],
+    outputs: list[list[dict[str, Any]]],
+) -> tuple[int, dict[int, int]]:
+    if not cells:
+        return MAX_SNAPSHOT_CHARS, {}
+
+    # Reserve enough Markdown structure to keep every cell visible, then divide
+    # text between source (needed for editing) and output (needed for evidence).
+    structural_chars = min(MAX_SNAPSHOT_CHARS // 4, len(cells) * 128)
+    available = max(1, MAX_SNAPSHOT_CHARS - structural_chars)
+    output_cells = [
+        index for index in range(len(cells)) if index < len(outputs) and outputs[index]
+    ]
+    source_pool = available if not output_cells else int(available * 0.65)
+    output_pool = available - source_pool
+    source_budget = max(256, source_pool // len(cells))
+
+    weights: dict[int, int] = {}
+    newest_threshold = max(0, len(cells) - 5)
+    for index in output_cells:
+        weight = 1
+        if index >= newest_threshold:
+            weight += 2
+        if any(output.get("output_type") == "error" for output in outputs[index]):
+            weight += 3
+        weights[index] = weight
+    total_weight = sum(weights.values()) or 1
+    output_budgets = {
+        index: max(256, output_pool * weight // total_weight)
+        for index, weight in weights.items()
+    }
+    return source_budget, output_budgets
+
+
+def _limit_text(text: str, limit: int, *, marker: str) -> str:
+    if limit <= 0:
+        return ""
+    clean = _strip_controls(text)
+    if len(clean) <= limit:
+        return clean
+    if limit <= len(marker):
+        return marker[:limit]
+    remaining = limit - len(marker)
+    head = remaining // 2
+    return f"{clean[:head]}{marker}{clean[-(remaining - head) :]}"
 
 
 def normalize_png_bytes(raw: bytes) -> bytes | None:

@@ -92,6 +92,16 @@ async def test_session_rejects_backend_source_changes_without_installing_state()
     await session.close()
 
 
+def test_session_does_not_impose_a_cell_count_policy() -> None:
+    session = NotebookSession(
+        workspace=Workspace(()),
+        backend=FakeNotebookBackend(),
+        image="unused",
+        cells=[f"value_{index} = {index}" for index in range(75)],
+    )
+    assert len(session.cells) == 75
+
+
 async def test_blank_session_returns_valid_notebook_without_execution() -> None:
     session = NotebookSession(
         workspace=Workspace(()),

@@ -37,6 +37,18 @@ def notebook_bytes(label: str = "initial") -> bytes:
     ).encode()
 
 
+def test_balanced_execution_defaults_support_classical_ml() -> None:
+    limits = ExecutionLimits()
+    assert limits.cpu_cores == 4.0
+    assert limits.memory_mb == 8192
+    assert limits.cell_seconds == 600
+    assert limits.command_seconds is None
+    assert limits.max_input_file_bytes == 100 * 1024 * 1024
+    assert limits.max_total_input_bytes == 251 * 1024 * 1024
+    assert limits.max_notebook_bytes == 50 * 1024 * 1024
+    assert limits.max_total_artifact_bytes == 200 * 1024 * 1024
+
+
 def test_backend_selection_is_explicit_without_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -115,8 +115,10 @@ async def test_modal_open_uses_direct_image_blocked_network_and_non_root_preflig
     argv, kwargs = captured["create"]
     assert argv == ("sleep", "infinity")
     assert kwargs["block_network"] is True
-    assert kwargs["cpu"] == 2.0
-    assert kwargs["memory"] == 4096
+    assert kwargs["cpu"] == 4.0
+    assert kwargs["memory"] == 8192
+    assert kwargs["timeout"] == 86_400
+    assert "idle_timeout" not in kwargs
     assert "experimental_options" not in kwargs
     assert any(command[0] == "chmod" for command in sandbox.commands)
     assert any(
