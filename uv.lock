@@ -1677,6 +1677,15 @@ wheels = [
 ]
 
 [[package]]
+name = "mistune"
+version = "3.3.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/a5/2dab368d6950e6808904dec98f54c7e726ee7be4a0c6afe00e6e011bd52d/mistune-3.3.3.tar.gz", hash = "sha256:c4c6c0c840b8637a2e9b8b6d607eb7c8f00888bf14c754409bcd339e848c2477", size = 115363, upload-time = "2026-07-09T06:18:05.268Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/89/70/b1e4737b84163db5bb1dfde6f216dbfbf32783330a9989c965e121172830/mistune-3.3.3-py3-none-any.whl", hash = "sha256:99de1585e42dcbd826faa9e11a202727a5e202e4e4722a4c69ac1ff615793dd7", size = 63569, upload-time = "2026-07-09T06:18:03.839Z" },
+]
+
+[[package]]
 name = "modal"
 version = "1.4.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2905,15 +2914,16 @@ wheels = [
 
 [[package]]
 name = "saber-tui"
-version = "0.4.0"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "mistune" },
     { name = "regex" },
     { name = "wcwidth" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/29/db/090e097b893b60e7ffbbc67a317bbbfac6673013ae6c1d97fa890f6d5e55/saber_tui-0.4.0.tar.gz", hash = "sha256:eeb75ea3625ff886d2fa286ba2226d06db749069321980c667aea1fb987c7482", size = 142844, upload-time = "2026-05-15T16:33:52.967Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/f3/62a88e1815cd9a917c689160b6e12596bb76cc173bf68785d0f0a74ceb06/saber_tui-0.5.0.tar.gz", hash = "sha256:721fc6fde7067b32affaa019ecf5be9a4f28f5a2289837b2c767dea06bda25cb", size = 155608, upload-time = "2026-07-13T21:49:27.1Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7f/d3/06a1c659906f39eaf972c1b9259cfcd6e5ed2c81a2eb4061e08674c5cdf8/saber_tui-0.4.0-py3-none-any.whl", hash = "sha256:fc4e3d1bfd611e095a9781b477c1e673b2dc8dc6e31493b8b2c37a25de00691e", size = 56585, upload-time = "2026-05-15T16:33:52.04Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/0a/459dc360c6191f4cc1a1210b994380db52c97be3bd0e3be7b8d74ad8db5a/saber_tui-0.5.0-py3-none-any.whl", hash = "sha256:22a17e3f2fb2802f8da7911acd2f77fd4702969b1fb7d56b7c80681e393a92f5", size = 65247, upload-time = "2026-07-13T21:49:25.976Z" },
 ]
 
 [[package]]
@@ -3048,7 +3058,7 @@ requires-dist = [
     { name = "pydantic-ai", extras = ["cohere", "groq", "huggingface", "mistral"], specifier = ">=2.9,<3" },
     { name = "questionary", specifier = ">=2.1.0" },
     { name = "rich", specifier = ">=13.7.0" },
-    { name = "saber-tui", specifier = ">=0.4.0" },
+    { name = "saber-tui", specifier = ">=0.5.0" },
     { name = "sqlglot", extras = ["rs"], specifier = ">=27.20.0" },
     { name = "structlog", specifier = ">=25.4.0" },
     { name = "tabulate", specifier = ">=0.9.0" },

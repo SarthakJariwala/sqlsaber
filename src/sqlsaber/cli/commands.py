@@ -242,7 +242,7 @@ def query(
                     final_context = run.response.usage.input_tokens
                     model_id = getattr(session.agent.agent.model, "model_id", None)
                     session_usage.add_run(
-                        run.usage(),
+                        run.usage,
                         final_context,
                         model_name=str(model_id) if model_id else model_name,
                         request_usages=request_usages_from_run_result(run),

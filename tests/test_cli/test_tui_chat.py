@@ -6,10 +6,25 @@ from types import SimpleNamespace
 
 import pytest
 import saber_tui.utils as tui_utils
-from pydantic_ai.messages import ModelResponse, PartEndEvent, PartStartEvent, TextPart
+from pydantic_ai.messages import (
+    FunctionToolCallEvent,
+    FunctionToolResultEvent,
+    ModelResponse,
+    PartDeltaEvent,
+    PartEndEvent,
+    PartStartEvent,
+    TextPart,
+    TextPartDelta,
+    ThinkingPart,
+    ThinkingPartDelta,
+    ToolCallPart,
+    ToolCallPartDelta,
+    ToolReturnPart,
+)
 from pydantic_ai.usage import RequestUsage, RunUsage
 from rich.table import Table
 from saber_tui import PosixProcessTerminal, WindowsProcessTerminal
+from saber_tui.components import Markdown
 from saber_tui.stdin_buffer import StdinBuffer
 from saber_tui.utils import strip_ansi, visible_width
 
@@ -223,6 +238,24 @@ def test_user_message_colors_follow_active_theme(monkeypatch) -> None:
         get_theme_manager.cache_clear()
 
 
+def test_native_markdown_colors_follow_active_theme(monkeypatch) -> None:
+    monkeypatch.setenv("SQLSABER_THEME", "dracula")
+    get_theme_manager.cache_clear()
+    try:
+        app = build_chat_app(
+            terminal=FakeTerminal(columns=60), on_submit=lambda text: None
+        )
+
+        component = app.append_markdown("# Themed heading\n\n`SELECT`")
+        rendered = "\n".join(component.render(60))
+
+        assert isinstance(component, Markdown)
+        assert "\x1b[38;2;255;121;198m" in rendered
+        assert "\x1b[38;2;189;147;249m" in rendered
+    finally:
+        get_theme_manager.cache_clear()
+
+
 def test_status_uses_cancellable_loader_without_stealing_editor_focus() -> None:
     terminal = FakeTerminal(columns=80, rows=12)
     cancelled: list[bool] = []
@@ -317,6 +350,33 @@ def test_bare_slash_opens_command_palette_without_editor_autocomplete() -> None:
 
     assert app.tui.has_overlay() is False
     assert app.editor.focused is True
+
+
+def test_status_snapshots_loader_across_render_cancel_and_dispose() -> None:
+    app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
+
+    class RacingLoader:
+        def render(self, width: int) -> list[str]:
+            app.status.loader = None
+            return ["loading".ljust(width)]
+
+        def handle_input(self, data: str) -> None:
+            assert data == "\x03"
+            app.status.loader = None
+
+        def dispose(self) -> None:
+            assert app.status.loader is None
+
+    loader = RacingLoader()
+    app.status.loader = loader
+    assert app.status.render(80)[0].startswith("loading")
+
+    app.status.loader = loader
+    assert app.status.cancel_loading() is True
+
+    app.status.loader = loader
+    app.status.dispose()
+    assert app.status.loader is None
 
 
 def test_command_palette_ctrl_c_closes_without_running_cancel_handler() -> None:
@@ -531,9 +591,7 @@ async def test_execute_query_refreshes_footer_usage_cost_and_context() -> None:
 
     class FakeRunResult:
         response = SimpleNamespace(usage=SimpleNamespace(input_tokens=150_000))
-
-        def usage(self) -> RunUsage:
-            return RunUsage(input_tokens=300_000, output_tokens=0, requests=2)
+        usage = RunUsage(input_tokens=300_000, output_tokens=0, requests=2)
 
         def all_messages(self) -> list[str]:
             return ["message"]
@@ -587,30 +645,18 @@ def test_chat_app_renders_rich_output_as_ansi_inside_tui() -> None:
     assert app.editor.focused is True
 
 
-def test_finalized_markdown_does_not_rerender_rich_at_same_width(monkeypatch) -> None:
+def test_chat_app_uses_native_saber_tui_markdown() -> None:
     terminal = FakeTerminal(columns=80, rows=12)
     app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
     app.tui.start()
 
-    calls = 0
-    original_capture = tui_chat.RichCapture.capture
-
-    def capture(self, render, width):
-        nonlocal calls
-        calls += 1
-        return original_capture(self, render, width)
-
-    monkeypatch.setattr(tui_chat.RichCapture, "capture", capture)
-
-    component = app.append_markdown("**cached markdown**")
-    app.tui.flush_render()
-    app.freeze_markdown(component)
-    calls_after_freeze = calls
-
-    app.tui.flush_render()
+    component = app.append_markdown("**streamed**")
+    component.append_text(" markdown")
     app.tui.flush_render()
 
-    assert calls == calls_after_freeze
+    assert isinstance(component, Markdown)
+    assert app.freeze_markdown(component) is component
+    assert "streamed markdown" in "\n".join(app.render_plain_viewport())
 
 
 def test_ansi_block_wraps_once_per_width(monkeypatch) -> None:
@@ -667,7 +713,7 @@ def test_streaming_handler_resolves_current_display_registry() -> None:
 
 
 @pytest.mark.asyncio
-async def test_streaming_handler_freezes_markdown_on_part_end(monkeypatch) -> None:
+async def test_streaming_handler_keeps_native_markdown_on_part_end() -> None:
     terminal = FakeTerminal(columns=80, rows=12)
     app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
     app.tui.start()
@@ -676,27 +722,547 @@ async def test_streaming_handler_freezes_markdown_on_part_end(monkeypatch) -> No
         create_console(file=StringIO(), width=80, legacy_windows=False),
     )
 
-    calls = 0
-    original_capture = tui_chat.RichCapture.capture
-
-    def capture(self, render, width):
-        nonlocal calls
-        calls += 1
-        return original_capture(self, render, width)
-
-    monkeypatch.setattr(tui_chat.RichCapture, "capture", capture)
-
     await handler.on_event(PartStartEvent(index=0, part=TextPart("**hello**")))
     app.tui.flush_render()
+    component = app.chat_container.children[-1]
     await handler.on_event(
         PartEndEvent(index=0, part=TextPart("**hello**"), next_part_kind=None)
     )
-    calls_after_part_end = calls
 
-    app.tui.flush_render()
+    assert isinstance(component, Markdown)
+    assert component in app.chat_container.children
+    assert "hello" in "\n".join(app.render_plain_viewport())
+
+
+@pytest.mark.asyncio
+async def test_streaming_handler_writes_first_markdown_chunk_immediately() -> None:
+    terminal = FakeTerminal(columns=80, rows=12)
+    app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
+    app.tui.start()
+    terminal.writes.clear()
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=80, legacy_windows=False),
+    )
+
+    await handler.on_event(PartStartEvent(index=0, part=TextPart("first chunk")))
+
+    assert "first chunk" in strip_ansi("".join(terminal.writes))
+
+
+@pytest.mark.asyncio
+async def test_streaming_handler_replaces_restarted_text_part() -> None:
+    app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=80, legacy_windows=False),
+    )
+
+    await handler.on_event(PartStartEvent(index=2, part=TextPart("obsolete")))
+    obsolete = handler._stream_components[2]
+    await handler.on_event(PartStartEvent(index=3, part=TextPart("sibling")))
+    sibling = handler._stream_components[3]
+    await handler.on_event(
+        PartEndEvent(
+            index=2,
+            part=TextPart("obsolete"),
+            next_part_kind="text",
+        )
+    )
+    await handler.on_event(PartStartEvent(index=2, part=TextPart("replacement")))
+
+    replacement = handler._stream_components[2]
+    assert replacement is not obsolete
+    assert obsolete not in app.chat_container.children
+    assert replacement.text == "replacement"
+    markdown_components = [
+        child for child in app.chat_container.children if isinstance(child, Markdown)
+    ]
+    assert markdown_components == [replacement, sibling]
+    assert not any(
+        isinstance(left, tui_chat._AnsiBlock)
+        and not left.ansi_text
+        and isinstance(right, tui_chat._AnsiBlock)
+        and not right.ansi_text
+        for left, right in zip(
+            app.chat_container.children, app.chat_container.children[1:]
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_streaming_handler_replaces_parts_across_text_sql_and_thinking() -> None:
+    app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=80, legacy_windows=False),
+    )
+    index = 4
+
+    await handler.on_event(PartStartEvent(index=index, part=TextPart("obsolete text")))
+    await handler.on_event(
+        PartEndEvent(
+            index=index,
+            part=TextPart("obsolete text"),
+            next_part_kind="tool-call",
+        )
+    )
+    await handler.on_event(
+        PartStartEvent(
+            index=index,
+            part=ToolCallPart(
+                "execute_sql",
+                {"query": "SELECT replacement"},
+                tool_call_id="cross-kind",
+            ),
+        )
+    )
+
+    markdown_components = [
+        child for child in app.chat_container.children if isinstance(child, Markdown)
+    ]
+    assert len(markdown_components) == 1
+    assert markdown_components[0].text == "```sql\nSELECT replacement\n```"
+    assert index not in handler._stream_components
+    assert handler._tool_call_names == {index: "execute_sql"}
+    assert handler._sql_stream_components == {index: markdown_components[0]}
+
+    await handler.on_event(
+        PartStartEvent(index=index, part=ThinkingPart("replacement reasoning"))
+    )
+
+    replacement = handler._stream_components[index]
+    assert app.chat_container.children == [replacement]
+    assert replacement.text == "replacement reasoning"
+    assert handler._stream_kinds == {index: ThinkingPart}
+    assert handler._tool_call_names == {}
+    assert handler._tool_call_args == {}
+    assert handler._tool_call_ids == {}
+    assert handler._sql_stream_components == {}
+    assert handler._sql_stream_queries == {}
+
+
+@pytest.mark.asyncio
+async def test_streaming_handler_routes_interleaved_text_and_thinking_by_index() -> (
+    None
+):
+    app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=80, legacy_windows=False),
+    )
+
+    await handler.on_event(PartStartEvent(index=0, part=TextPart("answer")))
+    await handler.on_event(PartStartEvent(index=1, part=ThinkingPart("reason")))
+    await handler.on_event(
+        PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=" continued"))
+    )
+    await handler.on_event(
+        PartDeltaEvent(index=1, delta=ThinkingPartDelta(content_delta="ing"))
+    )
+
+    assert handler._stream_components[0].text == "answer continued"
+    assert handler._stream_components[1].text == "reasoning"
+    await handler.on_event(
+        PartEndEvent(
+            index=0,
+            part=TextPart("answer continued"),
+            next_part_kind="thinking",
+        )
+    )
+    assert 0 in handler._stream_components
+    assert 0 in handler._finished_stream_indexes
+    assert 1 in handler._stream_components
+
+
+@pytest.mark.asyncio
+async def test_streaming_handler_renders_sql_and_results_as_native_markdown() -> None:
+    terminal = FakeTerminal(columns=80, rows=20)
+    app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
+    app.tui.start()
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=80, legacy_windows=False),
+    )
+
+    await handler.on_event(
+        FunctionToolCallEvent(ToolCallPart("execute_sql", {"query": "SELECT 42"}))
+    )
+    await handler.on_event(
+        FunctionToolResultEvent(
+            ToolReturnPart(
+                "execute_sql",
+                '{"success": true, "results": [{"answer": 42}]}',
+            )
+        )
+    )
     app.tui.flush_render()
 
-    assert calls == calls_after_part_end
+    markdown_components = [
+        child for child in app.chat_container.children if isinstance(child, Markdown)
+    ]
+    viewport = "\n".join(app.render_plain_viewport())
+    assert [component.text for component in markdown_components] == [
+        "```sql\nSELECT 42\n```",
+        "**Results (1 rows):**\n\n| answer |\n| --- |\n| 42 |",
+    ]
+    assert "SELECT 42" in viewport
+    assert "answer" in viewport
+    assert "42" in viewport
+
+
+@pytest.mark.asyncio
+async def test_streaming_handler_streams_partial_sql_tool_arguments_without_duplicate() -> (
+    None
+):
+    terminal = FakeTerminal(columns=100, rows=20)
+    app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
+    app.tui.start()
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=100, legacy_windows=False),
+    )
+    tool_call_id = "sql-stream"
+
+    await handler.on_event(
+        PartStartEvent(
+            index=0,
+            part=ToolCallPart(
+                "execute_sql",
+                '{"query":"SELECT id,',
+                tool_call_id="provisional-id",
+            ),
+        )
+    )
+    component = next(
+        child for child in app.chat_container.children if isinstance(child, Markdown)
+    )
+    assert "SELECT id," in component.text
+    assert "FROM legislators" not in component.text
+    assert "SELECT id," in strip_ansi("".join(terminal.writes))
+
+    await handler.on_event(
+        PartDeltaEvent(
+            index=0,
+            delta=ToolCallPartDelta(args_delta=' name\\nFROM legislators"}'),
+        )
+    )
+    assert "SELECT id, name\nFROM legislators" in component.text
+
+    await handler.on_event(
+        PartEndEvent(
+            index=0,
+            part=ToolCallPart(
+                "execute_sql",
+                {"query": "SELECT id, name\nFROM legislators"},
+                tool_call_id=tool_call_id,
+            ),
+            next_part_kind=None,
+        )
+    )
+    await handler.on_event(
+        FunctionToolCallEvent(
+            ToolCallPart(
+                "execute_sql",
+                {"query": "SELECT id, name\nFROM legislators"},
+                tool_call_id=tool_call_id,
+            )
+        )
+    )
+
+    markdown_components = [
+        child for child in app.chat_container.children if isinstance(child, Markdown)
+    ]
+    assert markdown_components == [component]
+    assert component.text == "```sql\nSELECT id, name\nFROM legislators\n```"
+
+
+@pytest.mark.asyncio
+async def test_streaming_handler_streams_args_after_fragmented_tool_name() -> None:
+    app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=80, legacy_windows=False),
+    )
+
+    await handler.on_event(
+        PartStartEvent(
+            index=0,
+            part=ToolCallPart(
+                "execute_", {"query": "SELECT 1 + 1"}, tool_call_id="sql"
+            ),
+        )
+    )
+    assert not any(isinstance(child, Markdown) for child in app.chat_container.children)
+
+    await handler.on_event(
+        PartDeltaEvent(
+            index=0,
+            delta=ToolCallPartDelta(tool_name_delta="sql"),
+        )
+    )
+
+    component = next(
+        child for child in app.chat_container.children if isinstance(child, Markdown)
+    )
+    assert "SELECT 1 + 1" in component.text
+
+
+@pytest.mark.asyncio
+async def test_streaming_handler_reconciles_interleaved_sql_calls_by_final_id() -> None:
+    app = build_chat_app(
+        terminal=FakeTerminal(columns=100), on_submit=lambda text: None
+    )
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=100, legacy_windows=False),
+    )
+
+    await handler.on_event(
+        PartStartEvent(
+            index=0,
+            part=ToolCallPart("execute_sql", '{"query":', tool_call_id="provisional-0"),
+        )
+    )
+    await handler.on_event(
+        PartStartEvent(
+            index=1,
+            part=ToolCallPart(
+                "execute_sql", {"query": "SELECT 2"}, tool_call_id="provisional-1"
+            ),
+        )
+    )
+    await handler.on_event(
+        PartDeltaEvent(index=0, delta=ToolCallPartDelta(args_delta='"SELECT 1"}'))
+    )
+    components = [handler._sql_stream_components[index] for index in (0, 1)]
+
+    for index, query in ((0, "SELECT 1"), (1, "SELECT 2")):
+        await handler.on_event(
+            PartEndEvent(
+                index=index,
+                part=ToolCallPart(
+                    "execute_sql", {"query": query}, tool_call_id=f"final-{index}"
+                ),
+                next_part_kind=None,
+            )
+        )
+
+    for index in (1, 0):
+        await handler.on_event(
+            FunctionToolCallEvent(
+                ToolCallPart(
+                    "execute_sql",
+                    {"query": f"SELECT {index + 1}"},
+                    tool_call_id=f"final-{index}",
+                )
+            )
+        )
+
+    markdown_components = [
+        child for child in app.chat_container.children if isinstance(child, Markdown)
+    ]
+    assert markdown_components == components
+    assert app.chat_container.children == [
+        components[0],
+        next(
+            child
+            for child in app.chat_container.children
+            if isinstance(child, tui_chat._AnsiBlock)
+        ),
+        components[1],
+    ]
+    assert [component.text for component in components] == [
+        "```sql\nSELECT 1\n```",
+        "```sql\nSELECT 2\n```",
+    ]
+    assert handler._tool_call_names == {}
+    assert handler._sql_stream_components == {}
+
+
+@pytest.mark.asyncio
+async def test_streaming_handler_removes_sql_preview_rejected_by_final_call() -> None:
+    app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=80, legacy_windows=False),
+    )
+    tool_call_id = "invalid-sql"
+
+    await handler.on_event(
+        PartStartEvent(
+            index=0,
+            part=ToolCallPart(
+                "execute_sql",
+                {"query": "SELECT stale_preview"},
+                tool_call_id=tool_call_id,
+            ),
+        )
+    )
+    assert any(isinstance(child, Markdown) for child in app.chat_container.children)
+
+    await handler.on_event(
+        FunctionToolCallEvent(
+            ToolCallPart(
+                "execute_sql",
+                {"query": "SELECT stale_preview", "unexpected": True},
+                tool_call_id=tool_call_id,
+            ),
+            args_valid=False,
+        )
+    )
+
+    assert not any(isinstance(child, Markdown) for child in app.chat_container.children)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_run_removes_partial_sql_preview_and_state() -> None:
+    terminal = FakeTerminal(columns=80, rows=12)
+    app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
+    app.tui.start()
+    terminal.writes.clear()
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=80, legacy_windows=False),
+    )
+
+    async def run_query(*args, event_stream_handler, **kwargs):
+        async def events():
+            yield PartStartEvent(
+                index=0,
+                part=ToolCallPart(
+                    "execute_sql",
+                    '{"query":"SELECT unfinished',
+                    tool_call_id="cancelled-sql",
+                ),
+            )
+            raise asyncio.CancelledError
+
+        await event_stream_handler(SimpleNamespace(messages=[]), events())
+
+    result = await handler.execute_streaming_query("cancel", run_query)
+
+    assert result is None
+    assert "SELECT unfinished" in strip_ansi("".join(terminal.writes))
+    assert not any(isinstance(child, Markdown) for child in app.chat_container.children)
+    assert handler._tool_call_names == {}
+    assert handler._tool_call_args == {}
+    assert handler._tool_call_ids == {}
+    assert handler._sql_stream_components == {}
+    assert handler._sql_stream_queries == {}
+    assert not any(
+        isinstance(child, tui_chat._AnsiBlock) and not child.ansi_text
+        for child in app.chat_container.children
+    )
+
+
+@pytest.mark.asyncio
+async def test_successful_run_preserves_reconciled_sql_after_state_cleanup() -> None:
+    app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=80, legacy_windows=False),
+    )
+    run_result = object()
+    tool_call_id = "successful-sql"
+
+    async def run_query(*args, event_stream_handler, **kwargs):
+        async def events():
+            yield PartStartEvent(
+                index=0,
+                part=ToolCallPart(
+                    "execute_sql",
+                    '{"query":"SELECT preserved"',
+                    tool_call_id=tool_call_id,
+                ),
+            )
+            yield PartEndEvent(
+                index=0,
+                part=ToolCallPart(
+                    "execute_sql",
+                    {"query": "SELECT preserved"},
+                    tool_call_id=tool_call_id,
+                ),
+                next_part_kind=None,
+            )
+            yield FunctionToolCallEvent(
+                ToolCallPart(
+                    "execute_sql",
+                    {"query": "SELECT preserved"},
+                    tool_call_id=tool_call_id,
+                )
+            )
+
+        await event_stream_handler(SimpleNamespace(messages=[]), events())
+        return run_result
+
+    assert await handler.execute_streaming_query("success", run_query) is run_result
+
+    markdown_components = [
+        child for child in app.chat_container.children if isinstance(child, Markdown)
+    ]
+    assert [component.text for component in markdown_components] == [
+        "```sql\nSELECT preserved\n```"
+    ]
+    assert handler._tool_call_names == {}
+    assert handler._tool_call_args == {}
+    assert handler._tool_call_ids == {}
+    assert handler._sql_stream_components == {}
+    assert handler._sql_stream_queries == {}
+
+
+@pytest.mark.asyncio
+async def test_sql_result_replaces_loader_without_idle_render(monkeypatch) -> None:
+    app = build_chat_app(
+        terminal=FakeTerminal(columns=80, rows=20), on_submit=lambda text: None
+    )
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=80, legacy_windows=False),
+    )
+    app.set_loading("Executing SQL...")
+
+    monkeypatch.setattr(
+        app,
+        "clear_status",
+        lambda: pytest.fail("result rendering must not create an idle status frame"),
+    )
+    await handler.on_event(
+        FunctionToolResultEvent(
+            ToolReturnPart(
+                "execute_sql",
+                '{"success": true, "results": [{"name": "Andrew Jackson"}, '
+                '{"name": "Martin Van Buren"}]}',
+            )
+        )
+    )
+
+    assert app.status.loader is not None
+    assert app.status.text == "Crunching data..."
+
+
+@pytest.mark.asyncio
+async def test_streaming_handler_uses_safe_fence_and_escapes_terminal_controls() -> (
+    None
+):
+    app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=80, legacy_windows=False),
+    )
+
+    await handler.on_event(
+        FunctionToolCallEvent(
+            ToolCallPart("execute_sql", {"query": "SELECT '```'\x1b[2J"})
+        )
+    )
+    await handler.on_event(PartStartEvent(index=0, part=TextPart("answer\x1b[2J")))
+
+    markdown_components = [
+        child for child in app.chat_container.children if isinstance(child, Markdown)
+    ]
+    assert markdown_components[0].text == ("````sql\nSELECT '```'\\x1B[2J\n````")
+    assert markdown_components[-1].text == "answer\\x1B[2J"
 
 
 @pytest.mark.asyncio

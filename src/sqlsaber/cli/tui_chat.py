@@ -6,13 +6,16 @@ import io
 import platform
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 import saber_tui.utils as tui_utils
+from pygments import highlight
+from pygments.formatters.terminal256 import TerminalTrueColorFormatter
+from pygments.lexers import get_lexer_by_name
+from pygments.lexers.special import TextLexer
 from pygments.styles import get_style_by_name
 from pygments.util import ClassNotFound
 from rich.console import Console
-from rich.markdown import Markdown
 from saber_tui import (
     PosixProcessTerminal,
     TUI,
@@ -22,8 +25,11 @@ from saber_tui import (
 )
 from saber_tui.components import (
     CancellableLoader,
+    DefaultTextStyle,
     Editor,
     EditorTheme,
+    Markdown,
+    MarkdownTheme,
     SettingItem,
     SettingsList,
     SettingsListOptions,
@@ -57,6 +63,18 @@ def _bg(r: int, g: int, b: int) -> Callable[[str], str]:
 
 def _bold(text: str) -> str:
     return f"\x1b[1m{text}\x1b[22m"
+
+
+def _italic(text: str) -> str:
+    return f"\x1b[3m{text}\x1b[23m"
+
+
+def _strikethrough(text: str) -> str:
+    return f"\x1b[9m{text}\x1b[29m"
+
+
+def _underline(text: str) -> str:
+    return f"\x1b[4m{text}\x1b[24m"
 
 
 INFO_FALLBACK = (125, 211, 252)
@@ -161,17 +179,50 @@ class _TUITheme:
     spinner_fg: Callable[[str], str]
     status_fg: Callable[[str], str]
     user_bg: Callable[[str], str]
+    markdown: MarkdownTheme
 
 
 def _build_tui_theme() -> _TUITheme:
+    primary = _theme_fg("primary", INFO_FALLBACK)
+    accent = _theme_fg("accent", SUCCESS_FALLBACK)
+    info = _theme_fg("info", INFO_FALLBACK)
+    warning = _theme_fg("warning", WARNING_FALLBACK)
+    muted = _theme_fg("muted", MUTED_FALLBACK)
+    tm = get_theme_manager()
+    formatter = TerminalTrueColorFormatter(style=tm.pygments_style_name)
+
+    def highlight_code(code: str, language: str | None) -> list[str]:
+        try:
+            lexer = get_lexer_by_name(language) if language else TextLexer()
+        except ClassNotFound:
+            lexer = TextLexer()
+        rendered = highlight(code, lexer, formatter).rstrip("\n")
+        return rendered.split("\n") if rendered else []
+
     return _TUITheme(
         user_fg=_theme_fg("panel.border.user", INFO_FALLBACK),
         assistant_fg=_theme_fg("panel.border.assistant", SUCCESS_FALLBACK),
         system_fg=_theme_fg("warning", WARNING_FALLBACK),
-        muted_fg=_theme_fg("muted", MUTED_FALLBACK),
+        muted_fg=muted,
         spinner_fg=_theme_fg("spinner", WARNING_FALLBACK),
         status_fg=_theme_fg("status", WARNING_FALLBACK),
         user_bg=_theme_user_bg(),
+        markdown=MarkdownTheme(
+            heading=primary,
+            link=info,
+            link_url=muted,
+            code=warning,
+            code_block_border=muted,
+            quote=muted,
+            quote_border=muted,
+            hr=muted,
+            list_bullet=accent,
+            bold=_bold,
+            italic=_italic,
+            strikethrough=_strikethrough,
+            underline=_underline,
+            highlight_code=highlight_code,
+        ),
     )
 
 
@@ -199,105 +250,6 @@ class _AnsiBlock:
         for line in self.ansi_text.splitlines():
             lines.extend(wrap_text_with_ansi(line, max(1, width)))
         lines = lines or [""]
-        self._cache_width = width
-        self._cache_lines = lines
-        return list(lines)
-
-    def invalidate(self) -> None:
-        self._cache_width = None
-        self._cache_lines = None
-
-
-def _capture_markdown(
-    rich_capture: RichCapture,
-    text: str,
-    muted: bool,
-    width: int,
-) -> str:
-    tm = get_theme_manager()
-    style = "muted" if muted else "none"
-    return rich_capture.capture(
-        lambda console: console.print(
-            Markdown(
-                text or "",
-                style=style,
-                code_theme=tm.pygments_style_name,
-            )
-        ),
-        width,
-    )
-
-
-class _RichMarkdownComponent:
-    def __init__(
-        self, rich_capture: RichCapture, text: str = "", *, muted: bool = False
-    ) -> None:
-        self._rich_capture = rich_capture
-        self.text = text
-        self.muted = muted
-        self._cache_width: int | None = None
-        self._cache_text: str | None = None
-        self._cache_lines: list[str] | None = None
-
-    def set_text(self, text: str) -> None:
-        if text == self.text:
-            return
-        self.text = text
-        self.invalidate()
-
-    def render(self, width: int) -> list[str]:
-        if (
-            self._cache_width == width
-            and self._cache_text == self.text
-            and self._cache_lines is not None
-        ):
-            return list(self._cache_lines)
-
-        ansi = _capture_markdown(self._rich_capture, self.text, self.muted, width)
-        lines = _AnsiBlock(ansi).render(width)
-        self._cache_width = width
-        self._cache_text = self.text
-        self._cache_lines = lines
-        return list(lines)
-
-    def invalidate(self) -> None:
-        self._cache_width = None
-        self._cache_text = None
-        self._cache_lines = None
-
-    def freeze(self, width: int) -> _FrozenMarkdownComponent:
-        lines = self.render(width)
-        return _FrozenMarkdownComponent(
-            self._rich_capture,
-            self.text,
-            muted=self.muted,
-            cached_width=width,
-            cached_lines=lines,
-        )
-
-
-class _FrozenMarkdownComponent:
-    def __init__(
-        self,
-        rich_capture: RichCapture,
-        text: str,
-        *,
-        muted: bool = False,
-        cached_width: int | None = None,
-        cached_lines: list[str] | None = None,
-    ) -> None:
-        self._rich_capture = rich_capture
-        self.text = text
-        self.muted = muted
-        self._cache_width = cached_width
-        self._cache_lines = list(cached_lines) if cached_lines is not None else None
-
-    def render(self, width: int) -> list[str]:
-        if self._cache_width == width and self._cache_lines is not None:
-            return list(self._cache_lines)
-
-        ansi = _capture_markdown(self._rich_capture, self.text, self.muted, width)
-        lines = _AnsiBlock(ansi).render(width)
         self._cache_width = width
         self._cache_lines = lines
         return list(lines)
@@ -398,8 +350,9 @@ class _StatusComponent:
             self.loader.on_cancel = self.on_cancel
 
     def render(self, width: int) -> list[str]:
-        if self.loader is not None:
-            return self.loader.render(width)
+        loader = self.loader
+        if loader is not None:
+            return loader.render(width)
         if not self.text:
             return [" " * width]
         return [self.theme.status_fg(_pad_to_width(f"  {self.text}", width))]
@@ -408,18 +361,20 @@ class _StatusComponent:
         return None
 
     def cancel_loading(self) -> bool:
-        if self.loader is None:
+        loader = self.loader
+        if loader is None:
             return False
-        self.loader.handle_input("\x03")
+        loader.handle_input("\x03")
         return True
 
     def dispose(self) -> None:
         self._dispose_loader()
 
     def _dispose_loader(self) -> None:
-        if self.loader is not None:
-            self.loader.dispose()
-            self.loader = None
+        loader = self.loader
+        self.loader = None
+        if loader is not None:
+            loader.dispose()
 
 
 class _FooterComponent:
@@ -523,7 +478,7 @@ class RichCapture:
             return "truecolor"
         color_system = self._base_console.color_system
         if color_system in {"auto", "standard", "256", "truecolor", "windows"}:
-            return cast(ColorSystem, color_system)
+            return color_system
         return "truecolor"
 
 
@@ -617,25 +572,74 @@ class ChatApp:
         ansi = self.rich_capture.capture(render, self.tui.terminal.columns)
         self._append_component(_AnsiBlock(ansi))
 
-    def append_markdown(
-        self, text: str = "", *, muted: bool = False
-    ) -> _RichMarkdownComponent:
-        component = _RichMarkdownComponent(self.rich_capture, text, muted=muted)
+    def append_markdown(self, text: str = "", *, muted: bool = False) -> Markdown:
+        component = self._create_markdown(text, muted=muted)
         self._append_component(component)
         return component
 
-    def freeze_markdown(
-        self, component: _RichMarkdownComponent
-    ) -> _FrozenMarkdownComponent:
-        frozen = component.freeze(self.tui.terminal.columns)
+    def insert_markdown_before(
+        self, before: Markdown, text: str = "", *, muted: bool = False
+    ) -> Markdown:
+        component = self._create_markdown(text, muted=muted)
+        children = self.chat_container.children
+        try:
+            index = children.index(before)
+        except ValueError:
+            self._append_component(component)
+            return component
+        children.insert(index, component)
+        children.insert(index + 1, _AnsiBlock(""))
+        self.tui.request_render()
+        return component
+
+    def replace_markdown(
+        self, previous: Markdown, text: str = "", *, muted: bool = False
+    ) -> Markdown:
+        component = self._create_markdown(text, muted=muted)
+        children = self.chat_container.children
+        try:
+            index = children.index(previous)
+        except ValueError:
+            self._append_component(component)
+            return component
+        children[index] = component
+        self.tui.request_render()
+        return component
+
+    def _create_markdown(self, text: str, *, muted: bool) -> Markdown:
+        default_style = DefaultTextStyle(color=self.theme.muted_fg) if muted else None
+        return Markdown(
+            text,
+            theme=self.theme.markdown,
+            default_text_style=default_style,
+        )
+
+    def freeze_markdown(self, component: Markdown) -> Markdown:
+        """Finalize a stream; saber-tui's Markdown owns its render cache."""
+        return component
+
+    def remove_markdown(self, component: Markdown) -> None:
+        """Remove a speculative Markdown component and its leading spacer."""
         children = self.chat_container.children
         try:
             index = children.index(component)
         except ValueError:
-            return frozen
-        children[index] = frozen
+            return
+        del children[index]
+        if (
+            index > 0
+            and isinstance(children[index - 1], _AnsiBlock)
+            and not children[index - 1].ansi_text
+        ):
+            del children[index - 1]
+        elif (
+            index == 0
+            and children
+            and isinstance(children[0], _AnsiBlock)
+            and not children[0].ansi_text
+        ):
+            del children[0]
         self.tui.request_render()
-        return frozen
 
     def set_status(self, text: str | None) -> None:
         self.status.set_text(text)

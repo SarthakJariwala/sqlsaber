@@ -4,6 +4,8 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from saber_tui.components import Markdown
+from saber_tui.utils import strip_ansi
 
 from sqlsaber.database import SQLiteConnection
 from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
@@ -164,6 +166,33 @@ class TestExecuteSQLTool:
         """Test tool properties."""
         tool = ExecuteSQLTool()
         assert tool.name == "execute_sql"
+
+    def test_result_markdown_preserves_literal_values_and_all_columns(self):
+        tool = ExecuteSQLTool()
+
+        source = tool.render_result_markdown(
+            {
+                "results": [
+                    {},
+                    {
+                        "later|column": "a\\|b\r\n**literal**\x1b[2J",
+                    },
+                ]
+            }
+        )
+
+        assert source is not None
+        rendered = strip_ansi("\n".join(Markdown(source).render(80)))
+        assert "later|column" in rendered
+        assert "a\\|b\\x0D **literal**\\x1B[2J" in rendered
+        assert "\x1b[2J" not in source
+
+    def test_result_markdown_handles_rows_without_columns(self):
+        tool = ExecuteSQLTool()
+
+        assert tool.render_result_markdown({"results": [{}, {}]}) == (
+            "*2 rows returned with no columns.*"
+        )
 
     @pytest.mark.asyncio
     async def test_execute_select_query(self):

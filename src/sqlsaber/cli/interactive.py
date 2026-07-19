@@ -336,7 +336,7 @@ class InteractiveSession:
                 self.message_history = run_result.all_messages()
                 final_context = run_result.response.usage.input_tokens
                 self.session_usage.add_run(
-                    run_result.usage(),
+                    run_result.usage,
                     final_context,
                     model_name=self._model_id(),
                     request_usages=request_usages_from_run_result(run_result),

@@ -1,6 +1,7 @@
 """SQL-related tools for database operations."""
 
 import json
+import string
 from dataclasses import dataclass
 from html import escape
 from typing import Any, cast
@@ -17,6 +18,7 @@ from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.registry import DatabaseRegistry, UnknownDatabaseError
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.utils.json_utils import json_dumps
+from sqlsaber.utils.text_input import sanitize_terminal_text
 
 from .base import Tool
 from .display import (
@@ -544,6 +546,27 @@ class ExecuteSQLTool(SQLTool):
 
         return False
 
+    def render_result_markdown(self, result: object) -> str | None:
+        """Render a SQL result for saber-tui's native Markdown component."""
+        data = self._parse_result(result)
+        mapping = self._coerce_mapping(data)
+        if mapping is None:
+            return None
+
+        if "error" in mapping and mapping["error"]:
+            return f"**SQL error:** {self._markdown_literal(mapping['error'])}"
+
+        results = mapping.get("results")
+        if isinstance(results, list) and results:
+            return self._render_results_table_markdown(
+                self._coerce_rows(cast(list[object], results))
+            )
+        if isinstance(results, list):
+            return "*0 rows returned*"
+        if mapping.get("success"):
+            return "✓ Query completed successfully"
+        return None
+
     def render_result_html(self, result: object) -> str | None:
         data = self._parse_result(result)
         mapping = self._coerce_mapping(data)
@@ -599,6 +622,46 @@ class ExecuteSQLTool(SQLTool):
         console.print(table)
         if len(results) > 20:
             console.print(f"[warning]... and {len(results) - 20} more rows[/warning]")
+
+    def _render_results_table_markdown(self, results: list[dict]) -> str:
+        all_columns = list(dict.fromkeys(key for row in results for key in row))
+        if not all_columns:
+            return f"*{len(results)} rows returned with no columns.*"
+        columns = all_columns[:15]
+
+        def cell(value: object) -> str:
+            normalized = sanitize_terminal_text(value if value is not None else "")
+            normalized = normalized.replace("\n", " ").replace("\t", " ")
+            return self._markdown_literal(normalized)
+
+        lines = [f"**Results ({len(results)} rows):**", ""]
+        if len(all_columns) > 15:
+            lines.extend([f"*Showing first 15 of {len(all_columns)} columns.*", ""])
+        lines.extend(
+            [
+                "| " + " | ".join(cell(column) for column in columns) + " |",
+                "| " + " | ".join("---" for _ in columns) + " |",
+            ]
+        )
+        lines.extend(
+            "| " + " | ".join(cell(row.get(column, "")) for column in columns) + " |"
+            for row in results[:20]
+        )
+        if len(results) > 20:
+            lines.extend(["", f"*... and {len(results) - 20} more rows.*"])
+        return "\n".join(lines)
+
+    @staticmethod
+    def _markdown_literal(value: object) -> str:
+        text = sanitize_terminal_text(value)
+        return "".join(
+            "`\\`"
+            if char == "\\"
+            else f"\\{char}"
+            if char in string.punctuation
+            else char
+            for char in text
+        )
 
     def _render_results_table_html(self, results: list[dict]) -> str:
         if not results:

@@ -5,6 +5,22 @@ import os
 from pathlib import Path
 
 
+def sanitize_terminal_text(value: object) -> str:
+    """Make untrusted text safe to pass to an ANSI-aware terminal renderer."""
+    safe: list[str] = []
+    for char in str(value):
+        codepoint = ord(char)
+        if char in {"\n", "\t"} or 0x20 <= codepoint < 0x7F or codepoint >= 0xA0:
+            safe.append(char)
+        elif codepoint < 0x20 or codepoint == 0x7F:
+            safe.append(f"\\x{codepoint:02X}")
+        elif codepoint < 0xA0:
+            safe.append(f"\\u{codepoint:04X}")
+        else:
+            safe.append(char)
+    return "".join(safe)
+
+
 def resolve_text_input(value: str | Path | None) -> str | None:
     """Resolve a text input that may be a file path.
 
