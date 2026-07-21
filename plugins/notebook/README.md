@@ -10,10 +10,15 @@ Implemented components:
 - fresh-kernel transactional notebook sessions,
 - bounded notebook/image rendering and history collapse,
 - `list_workspace` and `edit_cell` analyst tools,
-- a Pydantic AI notebook analyst, and
+- a Pydantic AI notebook analyst,
+- a managed SQLsaber `analyze_data` capability, and
 - the standalone `sqlsaber-notebook` CLI.
 
-The managed SQLsaber `analyze_data` capability is added in the next integration phase.
+When installed with SQLsaber, the main agent can hand prior successful SQL results to
+`analyze_data` for multi-step calculations, statistics, transformations, and plots.
+The terminal displays the bounded executed notebook and plot previews before the main
+agent's text response. Notebook bytes and images are display-only in managed mode:
+they are not sent to the parent model or persisted in conversation threads.
 
 The default balanced runtime targets larger EDA and classical ML: 4 CPUs, 8 GiB
 memory, and up to 100 MiB per input/250 MiB total. SQLsaber does not cap model
@@ -22,6 +27,26 @@ cells retain a 10-minute timeout so a stuck computation can be diagnosed without
 ending the overall analysis. These are fixed product defaults rather than CLI tuning
 flags. Use an immutable custom image through `SQLSABER_NOTEBOOK_IMAGE` when
 additional ML libraries are required.
+
+## Managed SQLsaber usage
+
+```bash
+uv tool install --with sqlsaber-notebook sqlsaber
+saber
+```
+
+Docker is the default local backend. Select Modal explicitly because query results
+will be uploaded to a third party:
+
+```bash
+SQLSABER_NOTEBOOK_BACKEND=modal saber
+```
+
+Configure a dedicated analyst model with:
+
+```bash
+saber models set --agent notebook
+```
 
 ## Standalone usage
 

@@ -185,6 +185,7 @@ class TestConfig:
 
     def test_in_memory_config_avoids_platformdirs(self, monkeypatch):
         """Config.in_memory should not touch filesystem-backed platformdirs paths."""
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
         def _fail(*args, **kwargs):
             _ = args, kwargs
@@ -203,6 +204,19 @@ class TestConfig:
         assert config.model.thinking_enabled is True
         assert config.model.thinking_level == ThinkingLevel.HIGH
         assert config.api_key == "test-api-key"
+
+    def test_in_memory_config_accepts_notebook_subagent(self):
+        config = Config.in_memory(
+            model_name="openai:gpt-5-mini",
+            subagent_models={
+                "notebook": "anthropic:claude-sonnet",
+                "unknown": "openai:gpt-unknown",
+            },
+        )
+
+        assert config.model.get_subagent_models() == {
+            "notebook": "anthropic:claude-sonnet"
+        }
 
     def test_in_memory_config_validate_errors_without_api_key(self, monkeypatch):
         """In-memory config should fail validation when no API key is provided."""

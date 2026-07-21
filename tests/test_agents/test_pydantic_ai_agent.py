@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
+from sqlsaber.capabilities.base import SqlSaberCapability
 from sqlsaber.database.sqlite import SQLiteConnection
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
@@ -83,6 +84,14 @@ class TestSQLSaberAgentDeps:
         assert viz.model_overide.api_key == "override-api-key"
 
 
+class _ClosingCapability(SqlSaberCapability):
+    def __init__(self) -> None:
+        self.close_calls = 0
+
+    async def close(self) -> None:
+        self.close_calls += 1
+
+
 class TestSQLSaberAgentLifecycle:
     @pytest.mark.asyncio
     async def test_close_does_not_close_injected_knowledge_manager(
@@ -109,6 +118,22 @@ class TestSQLSaberAgentLifecycle:
         await agent.close()
 
         assert close_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_close_closes_sqlsaber_capabilities_once(self, in_memory_db):
+        agent = SQLSaberAgent(
+            db_connection=in_memory_db,
+            database_name="test-db",
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+        )
+        capability = _ClosingCapability()
+        agent.capabilities.append(capability)
+
+        await agent.close()
+        await agent.close()
+
+        assert capability.close_calls == 1
 
     @pytest.mark.asyncio
     async def test_close_closes_owned_knowledge_manager_once(

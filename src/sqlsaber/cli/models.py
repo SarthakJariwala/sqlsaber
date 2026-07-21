@@ -275,7 +275,7 @@ def set_model_command(
         str,
         cyclopts.Parameter(
             ["--agent"],
-            help="Target agent (main, handoff, viz)",
+            help="Target agent (main, handoff, viz, notebook)",
         ),
     ] = "main",
 ) -> None:
@@ -364,7 +364,7 @@ def current_model(
         str | None,
         cyclopts.Parameter(
             ["--agent"],
-            help="Show model for agent (main, handoff, viz)",
+            help="Show model for agent (main, handoff, viz, notebook)",
         ),
     ] = None,
 ) -> None:
@@ -443,7 +443,7 @@ def reset_model_command(
         str,
         cyclopts.Parameter(
             ["--agent"],
-            help="Reset model for agent (main, handoff, viz)",
+            help="Reset model for agent (main, handoff, viz, notebook)",
         ),
     ] = "main",
 ) -> None:

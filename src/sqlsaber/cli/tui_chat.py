@@ -6,7 +6,7 @@ import io
 import platform
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import saber_tui.utils as tui_utils
 from pygments import highlight
@@ -478,7 +478,7 @@ class RichCapture:
             return "truecolor"
         color_system = self._base_console.color_system
         if color_system in {"auto", "standard", "256", "truecolor", "windows"}:
-            return color_system
+            return cast(ColorSystem, color_system)
         return "truecolor"
 
 

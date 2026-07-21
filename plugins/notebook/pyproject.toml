@@ -19,6 +19,9 @@ sqlsaber = { path = "../..", editable = true }
 [project.scripts]
 sqlsaber-notebook = "sqlsaber_notebook.cli:main"
 
+[project.entry-points."sqlsaber.capabilities"]
+notebook = "sqlsaber_notebook.capability:capability"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

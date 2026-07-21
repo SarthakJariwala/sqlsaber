@@ -13,6 +13,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+import nbformat
 from PIL import Image, UnidentifiedImageError
 
 from ._shared import (
@@ -148,6 +149,30 @@ def view_notebook(
     # Budget allocation retains every cell header. This final bound is defensive
     # against Markdown overhead estimation rather than the primary truncation path.
     return limit_output("\n".join(markdown), MAX_SNAPSHOT_CHARS), images
+
+
+def render_notebook_bytes(notebook: bytes) -> tuple[str, list[bytes]]:
+    """Render an executed notebook for a bounded application display."""
+
+    try:
+        parsed = nbformat.reads(notebook.decode("utf-8"), as_version=4)
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ValueError("Executed notebook could not be rendered") from exc
+
+    cells: list[str] = []
+    outputs: list[list[dict[str, Any]]] = []
+    for cell in parsed.cells:
+        if cell.get("cell_type") != "code":
+            continue
+        cells.append(str(cell.get("source", "")))
+        outputs.append(
+            [
+                dict(output)
+                for output in cell.get("outputs", [])
+                if isinstance(output, dict)
+            ]
+        )
+    return view_notebook(cells, outputs)
 
 
 def render_snapshot_for_model(session: NotebookSession) -> tuple[str, list[bytes]]:

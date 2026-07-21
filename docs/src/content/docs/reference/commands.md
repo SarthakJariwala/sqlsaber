@@ -376,7 +376,7 @@ saber models set
 
 **Options:**
 
-- `--agent` - Target agent to configure (`main`, `handoff`, `viz`). Defaults to `main`.
+- `--agent` - Target agent to configure (`main`, `handoff`, `viz`, `notebook`). Defaults to `main`.
 
 #### `saber models current`
 
@@ -390,7 +390,7 @@ saber models current
 
 **Options:**
 
-- `--agent` - Show model for a specific agent (`main`, `handoff`, `viz`).
+- `--agent` - Show model for a specific agent (`main`, `handoff`, `viz`, `notebook`).
 
 #### `saber models reset`
 
@@ -404,7 +404,7 @@ saber models reset
 
 **Options:**
 
-- `--agent` - Reset a specific agent (`main`, `handoff`, `viz`). Defaults to `main`.
+- `--agent` - Reset a specific agent (`main`, `handoff`, `viz`, `notebook`). Defaults to `main`.
 
 ---
 

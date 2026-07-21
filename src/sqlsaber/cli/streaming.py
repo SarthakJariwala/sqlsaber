@@ -134,7 +134,12 @@ class StreamingQueryHandler:
         content = event.part.content
         if tool_name is None:
             return
-        self.display.show_tool_result(tool_name, content)
+        self.display.show_tool_result(
+            tool_name,
+            content,
+            tool_call_id=event.part.tool_call_id,
+            metadata=getattr(event.part, "metadata", None),
+        )
         # Add a blank line after tool output to separate from next segment
         self.display.show_newline()
         # Show status while agent sends a follow-up request to the model

@@ -267,7 +267,14 @@ class DisplayManager:
         if text is not None:  # Extra safety check
             self.console.print(text, end="", markup=False)
 
-    def show_tool_result(self, tool_name: str, result: object) -> None:
+    def show_tool_result(
+        self,
+        tool_name: str,
+        result: object,
+        *,
+        tool_call_id: str | None = None,
+        metadata: object = None,
+    ) -> None:
         """Display tool result using override/spec/fallback resolution."""
         tool = self._get_tool(tool_name)
         if tool:
@@ -275,7 +282,12 @@ class DisplayManager:
                 tool, "set_replay_messages"
             ):
                 tool.set_replay_messages(self._replay_messages)
-            if tool.render_result(self.console, result):
+            if tool.render_result_event(
+                self.console,
+                result,
+                tool_call_id=tool_call_id,
+                metadata=metadata,
+            ):
                 return
 
         spec = tool.display_spec if tool else None

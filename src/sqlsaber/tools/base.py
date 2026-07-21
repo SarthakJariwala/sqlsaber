@@ -1,7 +1,7 @@
 """Base class for SQLSaber tools."""
 
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from rich.console import Console
 
@@ -26,7 +26,7 @@ class Tool(ABC):
         pass
 
     @abstractmethod
-    async def execute(self, *args, **kwargs) -> str:
+    async def execute(self, *args, **kwargs) -> Any:
         """Execute the tool with given inputs.
 
         Args:
@@ -45,6 +45,18 @@ class Tool(ABC):
     def render_result(self, console: Console, result: object) -> bool:
         """Optionally render tool results. Return True if handled."""
         return False
+
+    def render_result_event(
+        self,
+        console: Console,
+        result: object,
+        *,
+        tool_call_id: str | None = None,
+        metadata: object = None,
+    ) -> bool:
+        """Render a live/replayed result with framework event context."""
+        del tool_call_id, metadata
+        return self.render_result(console, result)
 
     def render_result_html(self, result: object) -> str | None:
         """Optionally render tool results as HTML."""

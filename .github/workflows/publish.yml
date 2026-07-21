@@ -36,6 +36,9 @@ jobs:
           if [[ "$TAG" == sqlsaber-viz-v* ]]; then
             echo "name=sqlsaber-viz" >> $GITHUB_OUTPUT
             echo "dir=plugins/viz" >> $GITHUB_OUTPUT
+          elif [[ "$TAG" == sqlsaber-notebook-v* ]]; then
+            echo "name=sqlsaber-notebook" >> $GITHUB_OUTPUT
+            echo "dir=plugins/notebook" >> $GITHUB_OUTPUT
           elif [[ "$TAG" == sqlsaber-sandbox-v* ]]; then
             echo "name=sqlsaber-sandbox" >> $GITHUB_OUTPUT
             echo "dir=plugins/sandbox" >> $GITHUB_OUTPUT

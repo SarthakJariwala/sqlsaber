@@ -6,6 +6,7 @@ from pydantic_ai.capabilities import Capability
 
 from sqlsaber.capabilities import plugins
 from sqlsaber.capabilities.plugins import PluginContext, discover_capabilities
+from sqlsaber.config.settings import Config
 from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
 from sqlsaber.database.sqlite import SQLiteConnection
 from sqlsaber.knowledge.manager import KnowledgeManager
@@ -28,6 +29,12 @@ def _context() -> PluginContext:
         knowledge_manager=KnowledgeManager(),
         allow_dangerous=True,
         tool_overrides={"viz": ModelOverides(model_name="openai:gpt-test")},
+        config=Config.in_memory(
+            model_name="anthropic:claude-main",
+            api_keys={"anthropic": "main-key", "openai": "openai-key"},
+        ),
+        main_model_name="anthropic:claude-main",
+        main_api_key="main-key",
     )
 
 
@@ -52,6 +59,36 @@ def test_discover_capabilities_delivers_plugin_context(monkeypatch) -> None:
     assert received == [context]
     assert received[0].allow_dangerous is True
     assert received[0].tool_overrides["viz"].model_name == "openai:gpt-test"
+
+
+def test_plugin_context_resolves_subagent_precedence(monkeypatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    context = _context()
+
+    model_name, model, provider = context.resolve_subagent_model("notebook")
+    assert model_name == "anthropic:claude-main"
+    assert model.model_name == "claude-main"
+    assert provider == "anthropic"
+
+    context.config.model.set_subagent_model("notebook", "openai:gpt-notebook")
+    model_name, model, provider = context.resolve_subagent_model("notebook")
+    assert model_name == "openai:gpt-notebook"
+    assert model.model_name == "gpt-notebook"
+    assert provider == "openai"
+
+
+def test_plugin_context_tool_override_wins(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    context = _context()
+
+    model_name, model, provider = context.resolve_subagent_model(
+        "notebook", tool_name="viz"
+    )
+
+    assert model_name == "openai:gpt-test"
+    assert model.model_name == "gpt-test"
+    assert provider == "openai"
 
 
 def test_discover_capabilities_isolates_broken_plugin(monkeypatch) -> None:

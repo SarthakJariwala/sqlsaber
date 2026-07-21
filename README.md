@@ -107,11 +107,14 @@ Install official plugins alongside SQLsaber:
 # Render charts in your terminal
 uv tool install --with sqlsaber-viz sqlsaber
 
-# Run Python in a secure sandbox
+# Delegate multi-step analysis to a sandboxed notebook agent (recommended)
+uv tool install --with sqlsaber-notebook sqlsaber
+
+# Run one-off Python snippets in a remote sandbox
 uv tool install --with sqlsaber-sandbox sqlsaber
 
-# Install both
-uv tool install --with sqlsaber-viz,sqlsaber-sandbox sqlsaber
+# Install all official analysis plugins
+uv tool install --with sqlsaber-viz,sqlsaber-notebook,sqlsaber-sandbox sqlsaber
 ```
 
 ## Python SDK

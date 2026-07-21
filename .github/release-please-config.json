@@ -15,6 +15,13 @@
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": true
     },
+    "plugins/notebook": {
+      "package-name": "sqlsaber-notebook",
+      "release-type": "python",
+      "component": "sqlsaber-notebook",
+      "changelog-path": "CHANGELOG.md",
+      "bump-minor-pre-major": true
+    },
     "plugins/sandbox": {
       "package-name": "sqlsaber-sandbox",
       "release-type": "python",

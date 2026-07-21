@@ -16,7 +16,7 @@ def test_plugins_require_capabilities_compatible_sqlsaber() -> None:
     core_version = tuple(int(part) for part in core["version"].split("."))
     assert core_version >= (0, 69, 0)
 
-    for plugin in ("sandbox", "viz"):
+    for plugin in ("sandbox", "viz", "notebook"):
         metadata = _project_metadata(
             _REPOSITORY_ROOT / "plugins" / plugin / "pyproject.toml"
         )

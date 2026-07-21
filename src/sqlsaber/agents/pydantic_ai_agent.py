@@ -95,6 +95,7 @@ class SQLSaberAgent:
 
         self.capabilities: list[AbstractCapability[Any]] = []
         self._tools: dict[str, Tool] = {}
+        self._closed = False
         self.agent = self._build_agent()
 
     @property
@@ -140,6 +141,9 @@ class SQLSaberAgent:
                     knowledge_manager=self.knowledge_manager,
                     allow_dangerous=self.allow_dangerous,
                     tool_overrides=self._tool_overides,
+                    config=self.config,
+                    main_model_name=model_name,
+                    main_api_key=api_key,
                 )
             )
         )
@@ -205,7 +209,30 @@ class SQLSaberAgent:
         )
 
     async def close(self) -> None:
-        """Close resources owned by the managed wrapper."""
+        """Close capability and wrapper resources without masking cleanup failures."""
+        if self._closed:
+            return
+        self._closed = True
+        errors: list[BaseException] = []
+
+        for capability in self.capabilities:
+            if not isinstance(capability, SqlSaberCapability):
+                continue
+            try:
+                await capability.close()
+            except BaseException as exc:  # pragma: no cover - defensive cleanup
+                errors.append(exc)
+
         if self._owns_knowledge_manager:
-            await self.knowledge_manager.close()
-            self._owns_knowledge_manager = False
+            try:
+                await self.knowledge_manager.close()
+            except BaseException as exc:  # pragma: no cover - defensive cleanup
+                errors.append(exc)
+            finally:
+                self._owns_knowledge_manager = False
+
+        if errors:
+            primary = errors[0]
+            for extra in errors[1:]:
+                primary.add_note(f"Additional cleanup failure: {extra!r}")
+            raise primary

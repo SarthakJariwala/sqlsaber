@@ -15,3 +15,6 @@ class SqlSaberCapability(AbstractCapability[Any]):
     def display_specs(self) -> Mapping[str, Tool]:
         """Return model tool names mapped to their CLI display implementations."""
         return {}
+
+    async def close(self) -> None:
+        """Release resources owned by this capability, if any."""
