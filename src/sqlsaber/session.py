@@ -17,6 +17,7 @@ from sqlsaber.database.registry import DatabaseRegistry
 from sqlsaber.database.resolver import resolve_databases
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.options import SQLSaberOptions
+from sqlsaber.query_results import InMemoryQueryResultStore
 from sqlsaber.threads.metadata import (
     encode_thread_extra_metadata,
     encode_thread_resume_disabled_metadata,
@@ -59,6 +60,11 @@ class SQLSaberSession:
         self.settings = options.settings or Config.default()
         self.knowledge_manager = options.knowledge_manager or KnowledgeManager()
         self.thread_manager = options.thread_manager
+        self.query_result_store = (
+            options.query_result_store
+            if options.query_result_store is not None
+            else InMemoryQueryResultStore()
+        )
         self._owns_knowledge_manager = options.knowledge_manager is None
 
         resolved_thinking_level: ThinkingLevel | None = None
@@ -88,6 +94,7 @@ class SQLSaberSession:
             extra_capabilities=options.extra_capabilities,
             artifact_publisher=options.artifact_publisher,
             artifact_failure_mode=options.artifact_failure_mode,
+            query_result_store=self.query_result_store,
         )
 
     async def query(
@@ -146,6 +153,18 @@ class SQLSaberSession:
                     model_name=resolved_model_name,
                     extra_metadata=extra_metadata,
                 )
+                # CLI filesystem maintenance is best-effort and daily rate-limited.
+                from sqlsaber.query_results import FilesystemQueryResultStore
+
+                if isinstance(self.query_result_store, FilesystemQueryResultStore):
+                    from sqlsaber.cli.query_result_gc import (
+                        collect_cli_query_results,
+                    )
+
+                    await collect_cli_query_results(
+                        self.thread_manager.storage,
+                        self.query_result_store,
+                    )
             except Exception as exc:
                 logger.warning("sdk.thread.save_failed", error=str(exc))
 

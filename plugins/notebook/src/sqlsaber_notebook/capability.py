@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import io
-import json
 import re
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
@@ -29,6 +28,17 @@ from sqlsaber.artifacts import (
 )
 from sqlsaber.capabilities.base import SqlSaberCapability
 from sqlsaber.capabilities.plugins import PluginContext
+from sqlsaber.query_result_resolution import (
+    find_query_result_reference,
+    query_result_context_from_run,
+    query_result_references_from_messages,
+    resolve_query_result,
+)
+from sqlsaber.query_results import (
+    InMemoryQueryResultStore,
+    QueryResultStore,
+    QueryResultUnavailable,
+)
 from sqlsaber.tools.base import Tool
 from sqlsaber.utils.json_utils import json_dumps
 
@@ -93,7 +103,15 @@ class AnalyzeDataTool(Tool):
         """
 
         try:
-            workspace = build_workspace_from_history(ctx, only=files)
+            workspace = await build_workspace_from_history(
+                ctx,
+                only=files,
+                query_result_store=getattr(
+                    self._context,
+                    "query_result_store",
+                    InMemoryQueryResultStore(),
+                ),
+            )
             model_name, model, provider = self._context.resolve_subagent_model(
                 "notebook",
                 tool_name=self.name,
@@ -290,27 +308,13 @@ def _artifact_bundle(
     )
 
 
-def build_workspace_from_history(
+async def build_workspace_from_history(
     ctx: RunContext,
     only: list[str] | None,
+    *,
+    query_result_store: QueryResultStore,
 ) -> Workspace:
-    """Build a bounded workspace from successful execute_sql history."""
-
-    queries_by_id: dict[str, str] = {}
-    for message in ctx.messages:
-        for part in getattr(message, "parts", []):
-            if (
-                getattr(part, "part_kind", "") not in ("tool-call", "builtin-tool-call")
-                or getattr(part, "tool_name", "") != "execute_sql"
-            ):
-                continue
-            tool_call_id = getattr(part, "tool_call_id", None)
-            if not isinstance(tool_call_id, str) or not tool_call_id:
-                continue
-            args = _args_as_dict(part)
-            query = args.get("query")
-            if isinstance(query, str) and query.strip():
-                queries_by_id[tool_call_id] = query
+    """Build a bounded workspace from validated complete execute_sql results."""
 
     requested = _normalize_requested_files(only)
     if requested is not None and len(requested) > MAX_WORKSPACE_FILES:
@@ -320,76 +324,63 @@ def build_workspace_from_history(
             phase="input-validation",
         )
 
-    eligible: OrderedDict[str, tuple[bytes, ManifestEntry]] = OrderedDict()
-    eligible_bytes = 0
-    done = False
-    for message in reversed(ctx.messages):
-        for part in reversed(getattr(message, "parts", [])):
-            if (
-                getattr(part, "part_kind", "")
-                not in ("tool-return", "builtin-tool-return")
-                or getattr(part, "tool_name", "") != "execute_sql"
-            ):
-                continue
-            tool_call_id = getattr(part, "tool_call_id", None)
-            if not isinstance(tool_call_id, str) or not tool_call_id:
-                continue
-            payload = _payload_as_dict(getattr(part, "content", None))
-            if payload is None or payload.get("success") is not True:
-                continue
-            if "results" not in payload:
-                continue
-            key = payload.get("file")
-            expected_key = f"result_{tool_call_id}.json"
-            if (
-                not isinstance(key, str)
-                or key != expected_key
-                or not _RESULT_FILE_PATTERN.fullmatch(key)
-                or key in eligible
-                or (requested is not None and key not in requested)
-            ):
-                continue
-            data = json_dumps(payload).encode("utf-8")
-            _validate_file_size(key, data)
-            if eligible_bytes + len(data) > MAX_WORKSPACE_TOTAL_BYTES:
-                if requested is not None:
-                    raise NotebookLimitExceeded(
-                        f"Workspace exceeds {MAX_WORKSPACE_TOTAL_BYTES} total bytes",
-                        backend="notebook",
-                        phase="input-validation",
-                    )
-                done = True
-                break
-            eligible[key] = (
-                data,
-                ManifestEntry(file=key, sql=queries_by_id.get(tool_call_id)),
-            )
-            eligible_bytes += len(data)
-            done = (
-                len(eligible) >= MAX_DEFAULT_RESULTS
-                if requested is None
-                else len(eligible) == len(requested)
-            )
-            if done:
-                break
-        if done:
-            break
-
-    if requested is not None:
-        missing = [key for key in requested if key not in eligible]
+    if requested is None:
+        references = list(reversed(query_result_references_from_messages(ctx.messages)))
+        references = references[:MAX_DEFAULT_RESULTS]
+    else:
+        references = []
+        missing: list[str] = []
+        for file in requested:
+            reference = find_query_result_reference(ctx.messages, file)
+            if reference is None:
+                missing.append(file)
+            else:
+                references.append(reference)
         if missing:
             raise ValueError(
                 "Requested SQL result files were not found: " + ", ".join(missing)
             )
-        selected = [(key, *eligible[key]) for key in requested]
-    else:
-        selected = [(key, data, manifest) for key, (data, manifest) in eligible.items()]
 
-    if not selected:
+    if not references:
         raise ValueError(
             "No successful row-returning execute_sql results are available to analyze"
         )
 
+    selected: list[tuple[str, bytes, ManifestEntry]] = []
+    total_bytes = 0
+    for reference in references:
+        try:
+            resolved = await resolve_query_result(
+                reference,
+                store=query_result_store,
+                context=query_result_context_from_run(ctx),
+            )
+        except QueryResultUnavailable as exc:
+            raise ValueError(
+                f"Complete SQL result is unavailable: {reference.file}"
+            ) from exc
+        _validate_file_size(reference.file, resolved.data)
+        if total_bytes + len(resolved.data) > MAX_WORKSPACE_TOTAL_BYTES:
+            if requested is not None:
+                raise NotebookLimitExceeded(
+                    f"Workspace exceeds {MAX_WORKSPACE_TOTAL_BYTES} total bytes",
+                    backend="notebook",
+                    phase="input-validation",
+                )
+            break
+        selected.append(
+            (
+                reference.file,
+                resolved.data,
+                ManifestEntry(file=reference.file, sql=reference.query),
+            )
+        )
+        total_bytes += len(resolved.data)
+
+    if not selected:
+        raise ValueError(
+            "No complete execute_sql results fit within the notebook workspace limits"
+        )
     files = tuple(NotebookInput(key, data) for key, data, _ in selected)
     manifest = tuple(entry for _, _, entry in selected)
     _validate_workspace(files)
@@ -438,38 +429,6 @@ def _validate_file_size(key: str, data: bytes) -> None:
             backend="notebook",
             phase="input-validation",
         )
-
-
-def _args_as_dict(part: object) -> dict[str, Any]:
-    method = getattr(part, "args_as_dict", None)
-    if callable(method):
-        try:
-            value = method()
-        except ValueError:
-            return {}
-        return value if isinstance(value, dict) else {}
-    args = getattr(part, "args", None)
-    if isinstance(args, dict):
-        return args
-    if isinstance(args, str):
-        try:
-            parsed = json.loads(args)
-        except json.JSONDecodeError:
-            return {}
-        return parsed if isinstance(parsed, dict) else {}
-    return {}
-
-
-def _payload_as_dict(content: object) -> dict[str, Any] | None:
-    if isinstance(content, dict):
-        return cast(dict[str, Any], content)
-    if not isinstance(content, str):
-        return None
-    try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
 
 
 def _error_result(

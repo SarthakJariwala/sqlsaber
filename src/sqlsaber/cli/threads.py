@@ -39,7 +39,12 @@ def _human_readable(timestamp: float | None) -> str:
 
 
 def _render_transcript(
-    console: Console, all_msgs: list[ModelMessage], last_n: int | None = None
+    console: Console,
+    all_msgs: list[ModelMessage],
+    last_n: int | None = None,
+    *,
+    hydrated_results: dict[str, str] | None = None,
+    unavailable_results: set[str] | None = None,
 ) -> None:
     """Render conversation turns from ModelMessage[] using DisplayManager."""
     # Lazy import to avoid pulling UI helpers at startup
@@ -143,13 +148,21 @@ def _render_transcript(
                 dm.show_tool_executing(name, args_dict)
             elif kind in ("tool-return", "builtin-tool-return"):
                 name = getattr(part, "tool_name", "tool")
+                tool_call_id = getattr(part, "tool_call_id", None)
                 content = getattr(part, "content", None)
+                if hydrated_results and tool_call_id in hydrated_results:
+                    content = hydrated_results[tool_call_id]
                 dm.show_tool_result(
                     name,
                     content,
-                    tool_call_id=getattr(part, "tool_call_id", None),
+                    tool_call_id=tool_call_id,
                     metadata=getattr(part, "metadata", None),
                 )
+                if unavailable_results and tool_call_id in unavailable_results:
+                    console.print(
+                        "[warning]Complete query result unavailable; "
+                        "showing preview.[/warning]"
+                    )
         # Thinking parts omitted
 
     for start_idx, end_idx in slices or [(0, len(all_msgs))]:
@@ -214,6 +227,24 @@ def show(
         logger.error("threads.cli.show.not_found", thread_id=thread_id)
         return
     msgs = asyncio.run(store.get_thread_messages(thread_id))
+    from sqlsaber.cli.query_results import (
+        cli_query_result_store,
+        hydrate_query_result_contents,
+    )
+
+    from sqlsaber.query_result_resolution import (
+        query_result_references_from_messages,
+    )
+
+    if any(
+        reference.descriptor is not None
+        for reference in query_result_references_from_messages(msgs)
+    ):
+        hydrated, unavailable = asyncio.run(
+            hydrate_query_result_contents(msgs, store=cli_query_result_store())
+        )
+    else:
+        hydrated, unavailable = {}, set()
     console.print(f"[bold]Thread: {thread.id}[/bold]")
     console.print("")
     console.print(f"Database: {thread.database_name}")
@@ -222,7 +253,16 @@ def show(
     console.print(f"Model: {thread.model_name}")
     console.print("")
 
-    _render_transcript(console, msgs, None)
+    if hydrated or unavailable:
+        _render_transcript(
+            console,
+            msgs,
+            None,
+            hydrated_results=hydrated,
+            unavailable_results=unavailable,
+        )
+    else:
+        _render_transcript(console, msgs, None)
     logger.info("threads.cli.show.complete", thread_id=thread_id)
 
 
@@ -246,6 +286,7 @@ def resume(
     async def _run() -> None:
         # Lazy imports to avoid heavy modules at CLI startup
         from sqlsaber.cli.interactive import InteractiveSession
+        from sqlsaber.cli.query_results import cli_query_result_store
         from sqlsaber.config.database import DatabaseConfigManager
         from sqlsaber.database.resolver import DatabaseResolutionError
         from sqlsaber.options import SQLSaberOptions
@@ -310,6 +351,7 @@ def resume(
                 SQLSaberOptions(
                     database=db_selector,
                     thread_manager=session_thread_manager,
+                    query_result_store=cli_query_result_store(),
                 )
             )
         except DatabaseResolutionError as e:
@@ -329,7 +371,33 @@ def resume(
                 )
             else:
                 console.print(f"# Thread: {thread.id}\n")
-            _render_transcript(console, history, None)
+            from sqlsaber.cli.query_results import hydrate_query_result_contents
+
+            from sqlsaber.query_result_resolution import (
+                query_result_references_from_messages,
+            )
+
+            if any(
+                reference.descriptor is not None
+                for reference in query_result_references_from_messages(history)
+            ):
+                result_store = getattr(
+                    sqlsaber_session,
+                    "query_result_store",
+                    cli_query_result_store(),
+                )
+                hydrated, unavailable = await hydrate_query_result_contents(
+                    history, store=result_store
+                )
+            else:
+                hydrated, unavailable = {}, set()
+            _render_transcript(
+                console,
+                history,
+                None,
+                hydrated_results=hydrated,
+                unavailable_results=unavailable,
+            )
             interactive_session = InteractiveSession(
                 console=console,
                 session=sqlsaber_session,
@@ -362,7 +430,22 @@ def prune(
     async def _run() -> None:
         deleted = await store.prune_threads(older_than_days=days)
         console.print(f"[success]✓ Pruned {deleted} thread(s).[/success]")
-        logger.info("threads.cli.prune.complete", deleted=deleted)
+        from sqlsaber.cli.query_result_gc import collect_cli_query_results
+        from sqlsaber.cli.query_results import cli_query_result_store
+
+        cleanup = await collect_cli_query_results(
+            store, cli_query_result_store(), force=True
+        )
+        if not cleanup.complete:
+            console.print(
+                "[warning]Thread pruning succeeded, but query result cleanup "
+                "was incomplete.[/warning]"
+            )
+        logger.info(
+            "threads.cli.prune.complete",
+            deleted=deleted,
+            query_results_deleted=cleanup.deleted,
+        )
 
     asyncio.run(_run())
 
@@ -397,7 +480,20 @@ def export(
             return
 
         messages = await store.get_thread_messages(thread_id)
-        html = render_thread_html(thread, messages)
+        from sqlsaber.cli.query_results import (
+            cli_query_result_store,
+            hydrate_query_result_contents,
+        )
+
+        hydrated, unavailable = await hydrate_query_result_contents(
+            messages, store=cli_query_result_store()
+        )
+        html = render_thread_html(
+            thread,
+            messages,
+            hydrated_results=hydrated,
+            unavailable_results=unavailable,
+        )
 
         out_path = output or (Path.cwd() / f"thread-{thread.id}.html")
         out_path.parent.mkdir(parents=True, exist_ok=True)

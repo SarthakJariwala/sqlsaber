@@ -162,6 +162,7 @@ def query(
         # This is only done to speed up startup time
         from sqlsaber.cli.display import DisplayManager
         from sqlsaber.cli.interactive import InteractiveSession
+        from sqlsaber.cli.query_results import cli_query_result_store
         from sqlsaber.cli.streaming import StreamingQueryHandler
         from sqlsaber.cli.usage import SessionUsage, request_usages_from_run_result
         from sqlsaber.database.resolver import DatabaseResolutionError
@@ -198,6 +199,7 @@ def query(
                     allow_dangerous=allow_dangerous,
                     system_prompt=system_prompt,
                     thread_manager=thread_manager,
+                    query_result_store=cli_query_result_store(),
                 )
             )
             db_name = session.db_name
@@ -214,7 +216,9 @@ def query(
             if actual_query:
                 # Single query mode with streaming
                 streaming_handler = StreamingQueryHandler(
-                    console, session.agent.display_registry
+                    console,
+                    session.agent.display_registry,
+                    session.query_result_store,
                 )
                 db_type = session.agent.db_type
                 model_name = session.agent.config.model.name

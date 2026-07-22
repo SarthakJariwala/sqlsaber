@@ -244,6 +244,30 @@ class ThreadStorage:
             )
             return []
 
+    async def get_all_thread_messages_strict(self) -> list[list[ModelMessage]]:
+        """Parse every retained snapshot from one read transaction or raise.
+
+        This is intentionally not best-effort: query-result garbage collection must
+        abort rather than treating an unreadable snapshot as an empty thread.
+        """
+        await self._init_db()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("BEGIN")
+            try:
+                async with db.execute(
+                    "SELECT messages_json FROM threads ORDER BY id"
+                ) as cur:
+                    rows = await cur.fetchall()
+                snapshots = [
+                    ModelMessagesTypeAdapter.validate_json(bytes(row[0]))
+                    for row in rows
+                ]
+            except BaseException:
+                await db.rollback()
+                raise
+            await db.commit()
+        return snapshots
+
     async def list_threads(
         self, *, database_name: str | None = None, limit: int = 50
     ) -> list[Thread]:

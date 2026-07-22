@@ -24,7 +24,40 @@ print(result.messages)   # messages from this run (incl. tool calls / SQL)
 | `.usage`        | Token usage statistics for the run.                                      |
 | `.messages`     | New messages produced by this run, including tool calls and SQL.         |
 | `.all_messages` | The full message history, including any prior turns you passed in.       |
+| `.query_results` | Durable complete-query-result descriptors created during this run.      |
 | `.artifacts`    | Durable artifact references published by capabilities during this run.   |
+
+## Retrieving complete query results
+
+Complete rows are deliberately absent from model history. Use the descriptors on
+the result and retrieve bytes through the configured store:
+
+```python
+result = await saber.query(
+    "Return daily revenue",
+    conversation_id="conversation-123",
+    metadata={"tenant_id": "acme"},
+)
+
+for descriptor in result.query_results:
+    loaded = await saber.get_query_result(
+        descriptor,
+        conversation_id="conversation-123",
+        metadata={"tenant_id": "acme"},
+    )
+    print(loaded.rows())
+```
+
+These are separate concepts:
+
+- **complete result availability** means every row returned by SQLsaber remains
+  retrievable through the store;
+- **UI rendering policy** may show a bounded terminal or HTML table; and
+- **model projection** is a deterministic, byte-bounded preview and must not be
+  used for whole-dataset statistics when marked truncated.
+
+Legacy threads containing embedded complete rows remain readable during the
+compatibility window, but are not automatically imported into durable storage.
 
 ## Persisting notebooks and plots
 
@@ -107,6 +140,8 @@ async def on_event(
 ) -> None:
     async for event in events:
         print(event)
+        # execute_sql FunctionToolResultEvent parts expose the bounded projection
+        # in part.content and the descriptor in part.metadata["query_result"].
 
 
 result = await saber.query(
@@ -120,6 +155,17 @@ result = await saber.query(
   <a href="https://ai.pydantic.dev/">pydantic-ai</a>, which powers SQLsaber's
   agent. Refer to its docs for the full event taxonomy.
 </Aside>
+
+A web backend can detect `part.metadata["query_result"]`, emit a
+`query-result-created` SSE event containing the ID/columns/row count, and serve an
+authorized paginated or download endpoint separately. SQLsaber never creates a
+public URL. A typical production store writes descriptor and tenant ownership
+columns to PostgreSQL and stores payload bytes in a private `bytea` column (or an
+object key for private blob storage). Its `get` implementation should query by both
+`result_id` and the current `tenant_id` from `QueryResultContext.metadata`, then
+raise `QueryResultUnavailable` for both missing and unauthorized rows. Apply
+application retention, encryption, audit, and deletion policies there; filesystem
+storage is not suitable for horizontally scaled web deployments.
 
 ## Multi-turn conversations
 

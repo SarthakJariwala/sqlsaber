@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any
 
@@ -16,6 +16,7 @@ from sqlsaber.config.settings import Config
 from sqlsaber.database.registry import DatabaseRegistry
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.overrides import ModelOverides
+from sqlsaber.query_results import InMemoryQueryResultStore, QueryResultStore
 
 if TYPE_CHECKING:
     from sqlsaber.artifacts import ArtifactFailureMode, ArtifactPublisher
@@ -34,6 +35,9 @@ class PluginContext:
     tool_overrides: Mapping[str, ModelOverides]
     config: Config
     main_model_name: str
+    query_result_store: QueryResultStore = field(
+        default_factory=InMemoryQueryResultStore
+    )
     main_api_key: str | None = None
     artifact_publisher: ArtifactPublisher | None = None
     artifact_failure_mode: ArtifactFailureMode = "required"

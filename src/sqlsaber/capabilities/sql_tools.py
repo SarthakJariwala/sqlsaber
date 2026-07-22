@@ -19,6 +19,7 @@ from sqlsaber.database.registry import DatabaseRegistry
 from sqlsaber.database.resolver import resolve_databases
 from sqlsaber.prompts.dangerous_mode import DANGEROUS_MODE
 from sqlsaber.prompts.sql_guidance import SQL_GUIDANCE, SQL_GUIDANCE_MULTI
+from sqlsaber.query_results import InMemoryQueryResultStore, QueryResultStore
 from sqlsaber.tools.base import Tool
 from sqlsaber.tools.sql_tools import (
     ExecuteSQLTool,
@@ -48,17 +49,13 @@ class _SqlToolset(FunctionToolset[Any]):
             try:
                 await self._registry.close()
             except BaseException as cleanup_error:
-                init_error.add_note(
-                    f"Database cleanup also failed: {cleanup_error!r}"
-                )
+                init_error.add_note(f"Database cleanup also failed: {cleanup_error!r}")
             try:
                 await super().__aexit__(
                     type(init_error), init_error, init_error.__traceback__
                 )
             except BaseException as cleanup_error:
-                init_error.add_note(
-                    f"Toolset cleanup also failed: {cleanup_error!r}"
-                )
+                init_error.add_note(f"Toolset cleanup also failed: {cleanup_error!r}")
             raise
         self._entry_count += 1
         return self
@@ -95,6 +92,7 @@ class SqlTools(SqlSaberCapability):
         registry: DatabaseRegistry | None = None,
         allow_dangerous: bool = False,
         include_catalog_instructions: bool = True,
+        query_result_store: QueryResultStore | None = None,
     ) -> None:
         if registry is not None and database is not None:
             raise ValueError("Pass either `database` or `registry`, not both.")
@@ -111,6 +109,11 @@ class SqlTools(SqlSaberCapability):
             owned = False
 
         self.registry = registry
+        self.query_result_store = (
+            query_result_store
+            if query_result_store is not None
+            else InMemoryQueryResultStore()
+        )
         self.allow_dangerous = allow_dangerous
         self.include_catalog_instructions = include_catalog_instructions
         self._owned = owned
@@ -119,7 +122,7 @@ class SqlTools(SqlSaberCapability):
         tools: list[Tool] = [
             ListTablesTool(),
             IntrospectSchemaTool(),
-            ExecuteSQLTool(),
+            ExecuteSQLTool(query_result_store=self.query_result_store),
         ]
         if len(registry) > 1:
             tools.append(ListDatabasesTool())

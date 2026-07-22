@@ -1,6 +1,7 @@
 """pydantic-ai streaming adapter for the persistent saber-tui chat UI."""
 
 import asyncio
+import json
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, AsyncIterable
@@ -27,9 +28,44 @@ from saber_tui.components import Markdown
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.tui_chat import ChatApp
 from sqlsaber.config.logging import get_logger
+from sqlsaber.query_result_resolution import (
+    QueryResultReference,
+    query_result_context_from_run,
+    query_result_from_metadata,
+    resolve_query_result,
+)
+from sqlsaber.query_results import QueryResultStore, QueryResultUnavailable
 from sqlsaber.tools.base import Tool
-from sqlsaber.tools.sql_tools import ExecuteSQLTool
 from sqlsaber.utils.text_input import sanitize_terminal_text
+
+
+def _fallback_sql_markdown(content: object) -> str | None:
+    """Minimal fallback for embedding tests without a managed display registry."""
+    try:
+        payload = json.loads(content) if isinstance(content, str) else content
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    value: dict[str, Any] = {str(key): item for key, item in payload.items()}
+    rows = value.get("results")
+    if not isinstance(rows, list):
+        return "✓ Query completed successfully" if value.get("success") else None
+    if not rows:
+        return "*0 rows returned*"
+    normalized = [row if isinstance(row, dict) else {"value": row} for row in rows]
+    columns = list(dict.fromkeys(key for row in normalized for key in row))
+    lines = [
+        f"**Results ({len(normalized)} rows):**",
+        "",
+        "| " + " | ".join(str(column) for column in columns) + " |",
+        "| " + " | ".join("---" for _ in columns) + " |",
+    ]
+    lines.extend(
+        "| " + " | ".join(str(row.get(column, "")) for column in columns) + " |"
+        for row in normalized[:20]
+    )
+    return "\n".join(lines)
 
 
 class _QueryInterrupted(Exception):
@@ -62,6 +98,7 @@ class TUIStreamingQueryHandler:
         *,
         display_registry_provider: Callable[[], Mapping[str, Tool] | None]
         | None = None,
+        query_result_store: QueryResultStore | None = None,
     ):
         self.app = app
         self.console = console
@@ -79,6 +116,7 @@ class TUIStreamingQueryHandler:
         self._cancellation_token: asyncio.Event | None = None
         self._display_registry = display_registry
         self._display_registry_provider = display_registry_provider
+        self.query_result_store = query_result_store
 
     async def _event_stream_handler(
         self, ctx: RunContext, event_stream: AsyncIterable[AgentStreamEvent]
@@ -90,12 +128,14 @@ class TUIStreamingQueryHandler:
                 messages = getattr(ctx, "messages", None)
                 if isinstance(messages, list):
                     self._replay_messages = messages
-                await self.on_event(event)
+                await self.on_event(event, ctx)
                 self._raise_if_cancelled()
         finally:
             self._reset_response_stream_state()
 
-    async def on_event(self, event: AgentStreamEvent) -> None:
+    async def on_event(
+        self, event: AgentStreamEvent, ctx: RunContext | None = None
+    ) -> None:
         if isinstance(event, PartStartEvent):
             self._on_part_start(event)
         elif isinstance(event, PartDeltaEvent):
@@ -110,7 +150,7 @@ class TUIStreamingQueryHandler:
         elif isinstance(event, FunctionToolCallEvent):
             self._on_tool_call(event)
         elif isinstance(event, FunctionToolResultEvent):
-            self._on_tool_result(event)
+            await self._on_tool_result(event, ctx)
 
     def _on_part_start(self, event: PartStartEvent) -> None:
         previous = self._take_replaced_component(event.index)
@@ -195,21 +235,57 @@ class TUIStreamingQueryHandler:
         if event.part.tool_name == "viz":
             self.app.set_loading("Generating visualization...")
 
-    def _on_tool_result(self, event: FunctionToolResultEvent) -> None:
+    async def _on_tool_result(
+        self, event: FunctionToolResultEvent, ctx: RunContext | None
+    ) -> None:
         tool_name = event.part.tool_name
         if tool_name is None:
             self.app.clear_status()
             return
+        content = event.part.content
+        complete_unavailable = False
+        if (
+            tool_name == "execute_sql"
+            and ctx is not None
+            and self.query_result_store is not None
+        ):
+            descriptor = query_result_from_metadata(
+                getattr(event.part, "metadata", None)
+            )
+            if descriptor is not None:
+                reference = QueryResultReference(
+                    tool_call_id=event.part.tool_call_id,
+                    file=descriptor.file,
+                    descriptor=descriptor,
+                )
+                try:
+                    resolved = await resolve_query_result(
+                        reference,
+                        store=self.query_result_store,
+                        context=query_result_context_from_run(ctx),
+                    )
+                    content = resolved.data.decode("utf-8")
+                except (QueryResultUnavailable, UnicodeDecodeError):
+                    complete_unavailable = True
         if tool_name == "execute_sql":
-            markdown = ExecuteSQLTool().render_result_markdown(event.part.content)
+            registry = self._resolve_display_registry() or {}
+            renderer = registry.get("execute_sql")
+            render_markdown = getattr(renderer, "render_result_markdown", None)
+            markdown = (
+                render_markdown(content)
+                if callable(render_markdown)
+                else _fallback_sql_markdown(content)
+            )
             if markdown is not None:
+                if complete_unavailable:
+                    markdown += "\n\n*Complete result unavailable; showing preview.*"
                 self.app.append_markdown(markdown)
                 self.app.set_loading("Crunching data...")
                 return
         self._append_display(
             lambda display: display.show_tool_result(
                 tool_name,
-                event.part.content,
+                content,
                 tool_call_id=event.part.tool_call_id,
                 metadata=getattr(event.part, "metadata", None),
             )

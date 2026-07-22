@@ -18,8 +18,8 @@ class Sandbox(SqlSaberCapability):
     id = "sandbox"
     description = "Run Python analysis in a configured remote sandbox."
 
-    def __init__(self) -> None:
-        self.tool = RunPythonTool()
+    def __init__(self, context: PluginContext | None = None) -> None:
+        self.tool = RunPythonTool(getattr(context, "query_result_store", None))
         self._toolset = FunctionToolset[Any](id=self.id)
         self._toolset.add_function(
             self.tool.execute,
@@ -39,7 +39,6 @@ def capability(
     context: PluginContext,
 ) -> AbstractCapability[Any] | Sequence[AbstractCapability[Any]]:
     """Create sandbox tools only when a provider is configured."""
-    del context
     if not sandbox_providers_available():
         return ()
-    return Sandbox()
+    return Sandbox(context)

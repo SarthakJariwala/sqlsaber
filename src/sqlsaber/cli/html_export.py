@@ -83,7 +83,13 @@ def _human_readable_time(timestamp: float | None) -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
 
 
-def render_thread_html(thread: Thread, all_msgs: list[ModelMessage]) -> str:
+def render_thread_html(
+    thread: Thread,
+    all_msgs: list[ModelMessage],
+    *,
+    hydrated_results: dict[str, str] | None = None,
+    unavailable_results: set[str] | None = None,
+) -> str:
     """Generate a standalone HTML document for a thread transcript."""
     title = thread.title or f"SQLsaber thread {thread.id}"
     escaped_title = escape(title)
@@ -625,6 +631,8 @@ def render_thread_html(thread: Thread, all_msgs: list[ModelMessage]) -> str:
                     tool_name = str(getattr(part, "tool_name", "tool"))
                     call_id = getattr(part, "tool_call_id", None)
                     content = getattr(part, "content", None)
+                    if hydrated_results and call_id in hydrated_results:
+                        content = hydrated_results[call_id]
                     if isinstance(content, (dict, list)):
                         content_str = json.dumps(content, ensure_ascii=False, indent=2)
                     elif isinstance(content, str):
@@ -642,6 +650,11 @@ def render_thread_html(thread: Thread, all_msgs: list[ModelMessage]) -> str:
                     result_html = _render_tool_result_html(
                         display, tool_name, content_str, args=tool_args
                     )
+                    if unavailable_results and call_id in unavailable_results:
+                        result_html += (
+                            '<p class="sql-error">Complete query result unavailable; '
+                            "showing preview.</p>"
+                        )
 
                     tool_details_html.append(
                         f"""<details class="tool" open>

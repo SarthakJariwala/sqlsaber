@@ -17,6 +17,17 @@ if TYPE_CHECKING:
     from .capabilities import Knowledge, SqlTools
     from .options import SQLSaberOptions
     from .overrides import ModelOverides
+    from .query_results import (
+        FilesystemQueryResultStore,
+        InMemoryQueryResultStore,
+        LoadedQueryResult,
+        QueryResultContext,
+        QueryResultData,
+        QueryResultId,
+        QueryResultStore,
+        QueryResultUnavailable,
+        StoredQueryResult,
+    )
 
 __all__ = [
     "Artifact",
@@ -26,12 +37,21 @@ __all__ = [
     "ArtifactPublisher",
     "FilesystemArtifactPublisher",
     "InMemoryArtifactPublisher",
+    "FilesystemQueryResultStore",
+    "InMemoryQueryResultStore",
     "Knowledge",
+    "LoadedQueryResult",
     "ModelOverides",
+    "QueryResultContext",
+    "QueryResultData",
+    "QueryResultId",
+    "QueryResultStore",
+    "QueryResultUnavailable",
     "SQLSaber",
     "SQLSaberOptions",
     "SqlTools",
     "StoredArtifact",
+    "StoredQueryResult",
 ]
 
 
@@ -58,6 +78,20 @@ def __getattr__(name: str):
         from . import artifacts
 
         return getattr(artifacts, name)
+    if name in {
+        "FilesystemQueryResultStore",
+        "InMemoryQueryResultStore",
+        "LoadedQueryResult",
+        "QueryResultContext",
+        "QueryResultData",
+        "QueryResultId",
+        "QueryResultStore",
+        "QueryResultUnavailable",
+        "StoredQueryResult",
+    }:
+        from . import query_results
+
+        return getattr(query_results, name)
     if name == "ModelOverides":
         from .overrides import ModelOverides
 

@@ -4,7 +4,7 @@ from collections.abc import AsyncIterable, Awaitable, Mapping, Sequence
 from typing import Any, Callable
 
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.capabilities import AbstractCapability, Thinking
+from pydantic_ai.capabilities import AbstractCapability, ProcessHistory, Thinking
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 from pydantic_ai.models.anthropic import AnthropicModelSettings
 
@@ -21,6 +21,8 @@ from sqlsaber.database.schema import SchemaManager
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.overrides import ToolOveridesInput, normalize_tool_overides
 from sqlsaber.prompts.persona import PERSONA
+from sqlsaber.query_result_resolution import compact_legacy_query_result_history
+from sqlsaber.query_results import InMemoryQueryResultStore, QueryResultStore
 from sqlsaber.tools.base import Tool
 
 
@@ -58,6 +60,7 @@ class SQLSaberAgent:
         extra_capabilities: Sequence[AbstractCapability[Any]] = (),
         artifact_publisher: ArtifactPublisher | None = None,
         artifact_failure_mode: ArtifactFailureMode = "required",
+        query_result_store: QueryResultStore | None = None,
     ) -> None:
         if registry is None:
             if db_connection is None:
@@ -86,6 +89,11 @@ class SQLSaberAgent:
         self._extra_capabilities = tuple(extra_capabilities)
         self._artifact_publisher = artifact_publisher
         self._artifact_failure_mode = artifact_failure_mode
+        self.query_result_store = (
+            query_result_store
+            if query_result_store is not None
+            else InMemoryQueryResultStore()
+        )
         self.schema_manager: SchemaManager = primary.schema_manager
         self.thinking_enabled = (
             thinking_enabled
@@ -137,6 +145,7 @@ class SQLSaberAgent:
                 registry=self.registry,
                 allow_dangerous=self.allow_dangerous,
                 include_catalog_instructions=include_guidance,
+                query_result_store=self.query_result_store,
             ),
         ]
         capabilities.extend(
@@ -151,10 +160,12 @@ class SQLSaberAgent:
                     main_api_key=api_key,
                     artifact_publisher=self._artifact_publisher,
                     artifact_failure_mode=self._artifact_failure_mode,
+                    query_result_store=self.query_result_store,
                 )
             )
         )
         capabilities.extend(self._extra_capabilities)
+        capabilities.append(ProcessHistory(compact_legacy_query_result_history))
         if self.thinking_enabled:
             capabilities.append(
                 Thinking(effort=UNIFIED_EFFORT_MAP[self.thinking_level])
