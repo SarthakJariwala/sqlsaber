@@ -532,6 +532,9 @@ class InteractiveSession:
             display_registry_provider=lambda: getattr(
                 getattr(self, "sqlsaber_agent", None), "display_registry", None
             ),
+            query_result_store=getattr(
+                getattr(self, "session", None), "query_result_store", None
+            ),
         )
         self.show_welcome_message(app)
 

@@ -22,6 +22,10 @@ The SDK exposes its primary agent and capability building blocks from the top-le
 | `ArtifactPublisher` | Protocol for persisting notebooks, plots, and other capability artifacts. |
 | `FilesystemArtifactPublisher` | Local durable artifact publisher for servers and development. |
 | `InMemoryArtifactPublisher` | In-memory artifact publisher for tests and short-lived workflows. |
+| `QueryResultStore` | Protocol for private complete SQL result storage and retrieval. |
+| `InMemoryQueryResultStore` | Session-local SDK default and test implementation. |
+| `FilesystemQueryResultStore` | Durable private local implementation (the CLI uses this explicitly). |
+| `StoredQueryResult` / `LoadedQueryResult` | Serializable descriptor and verified complete result bytes. |
 
 See [Capabilities](/sdk/capabilities) to use SQLsaber inside your own agent or add your capabilities to its managed agent. See [Results & Streaming](/sdk/results-and-streaming#persisting-notebooks-and-plots) for artifact publishing.
 

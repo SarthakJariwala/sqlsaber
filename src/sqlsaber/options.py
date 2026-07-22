@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from sqlsaber.artifacts import ArtifactFailureMode, ArtifactPublisher
     from sqlsaber.config.settings import Config
     from sqlsaber.knowledge.manager import KnowledgeManager
+    from sqlsaber.query_results import QueryResultStore
     from sqlsaber.threads.manager import ThreadManager
 
 
@@ -42,6 +43,7 @@ class SQLSaberOptions:
     extra_capabilities: Sequence[AbstractCapability[Any]] = ()
     artifact_publisher: ArtifactPublisher | None = None
     artifact_failure_mode: ArtifactFailureMode = "required"
+    query_result_store: QueryResultStore | None = None
 
     # Tool overrides
     tool_overrides: ToolOveridesInput | None = None

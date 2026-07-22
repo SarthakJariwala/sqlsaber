@@ -29,6 +29,13 @@ from rich.console import Console
 
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.config.logging import get_logger
+from sqlsaber.query_result_resolution import (
+    QueryResultReference,
+    query_result_context_from_run,
+    query_result_from_metadata,
+    resolve_query_result,
+)
+from sqlsaber.query_results import QueryResultStore, QueryResultUnavailable
 from sqlsaber.tools.base import Tool
 
 
@@ -43,10 +50,12 @@ class StreamingQueryHandler:
         self,
         console: Console,
         display_registry: Mapping[str, Tool] | None = None,
+        query_result_store: QueryResultStore | None = None,
     ):
         self.console = console
         self.display = DisplayManager(console, display_registry)
         self.log = get_logger(__name__)
+        self.query_result_store = query_result_store
         self._tool_call_names: dict[int, str] = {}
 
     async def _event_stream_handler(
@@ -134,12 +143,36 @@ class StreamingQueryHandler:
         content = event.part.content
         if tool_name is None:
             return
+        complete_unavailable = False
+        if tool_name == "execute_sql" and self.query_result_store is not None:
+            descriptor = query_result_from_metadata(
+                getattr(event.part, "metadata", None)
+            )
+            if descriptor is not None:
+                reference = QueryResultReference(
+                    tool_call_id=event.part.tool_call_id,
+                    file=descriptor.file,
+                    descriptor=descriptor,
+                )
+                try:
+                    resolved = await resolve_query_result(
+                        reference,
+                        store=self.query_result_store,
+                        context=query_result_context_from_run(ctx),
+                    )
+                    content = resolved.data.decode("utf-8")
+                except (QueryResultUnavailable, UnicodeDecodeError):
+                    complete_unavailable = True
         self.display.show_tool_result(
             tool_name,
             content,
             tool_call_id=event.part.tool_call_id,
             metadata=getattr(event.part, "metadata", None),
         )
+        if complete_unavailable:
+            self.console.print(
+                "[warning]Complete query result unavailable; showing preview.[/warning]"
+            )
         # Add a blank line after tool output to separate from next segment
         self.display.show_newline()
         # Show status while agent sends a follow-up request to the model

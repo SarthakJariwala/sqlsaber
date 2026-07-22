@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from html import escape
 from typing import Any, cast
 
-from pydantic_ai import RunContext
+from pydantic_ai import RunContext, ToolReturn
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
@@ -17,6 +17,17 @@ from sqlsaber.theme.manager import get_theme_manager
 from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.registry import DatabaseRegistry, UnknownDatabaseError
 from sqlsaber.database.schema import SchemaManager
+from sqlsaber.query_results import (
+    MAX_CANONICAL_QUERY_RESULT_BYTES,
+    QueryResultContext,
+    QueryResultData,
+    QueryResultStore,
+    build_model_projection,
+    descriptor_for_data,
+    logical_result_file,
+    new_query_result_id,
+    query_result_columns,
+)
 from sqlsaber.utils.json_utils import json_dumps
 from sqlsaber.utils.text_input import sanitize_terminal_text
 
@@ -40,6 +51,7 @@ class _ResolvedTarget:
     connection: BaseDatabaseConnection
     schema_manager: SchemaManager
     dialect: str
+    database_name: str | None = None
 
 
 class ToolDatabaseError(Exception):
@@ -106,6 +118,7 @@ class SQLTool(Tool):
                 connection=entry.connection,
                 schema_manager=entry.schema_manager,
                 dialect=entry.dialect,
+                database_name=entry.name,
             )
 
         if not self.db:
@@ -116,6 +129,7 @@ class SQLTool(Tool):
             connection=self.db,
             schema_manager=schema_manager,
             dialect=self.db.sqlglot_dialect,
+            database_name=self.db.display_name,
         )
 
 
@@ -483,6 +497,16 @@ class IntrospectSchemaTool(SQLTool):
 class ExecuteSQLTool(SQLTool):
     """Tool for executing SQL queries."""
 
+    def __init__(
+        self,
+        db_connection: BaseDatabaseConnection | None = None,
+        schema_manager: SchemaManager | None = None,
+        *,
+        query_result_store: QueryResultStore | None = None,
+    ) -> None:
+        super().__init__(db_connection, schema_manager)
+        self.query_result_store = query_result_store
+
     display_spec = ToolDisplaySpec(
         metadata=DisplayMetadata(display_name="Execute SQL"),
     )
@@ -714,7 +738,7 @@ class ExecuteSQLTool(SQLTool):
 
     async def execute(
         self, ctx: RunContext, query: str, db_name: str | None = None
-    ) -> str:
+    ) -> str | ToolReturn:
         """
         Execute a SQL query against the database.
 
@@ -743,9 +767,13 @@ class ExecuteSQLTool(SQLTool):
                 return json_dumps({"error": validation_result.reason})
 
             # Add LIMIT if not present and it's a SELECT query
-            if validation_result.is_select and max_rows:
-                if not validation_result.has_limit:
-                    query = add_limit(query, dialect, max_rows)
+            auto_limit_applied = bool(
+                validation_result.is_select
+                and max_rows
+                and not validation_result.has_limit
+            )
+            if auto_limit_applied:
+                query = add_limit(query, dialect, max_rows)
 
             query_type = validation_result.query_type or "other"
 
@@ -759,10 +787,18 @@ class ExecuteSQLTool(SQLTool):
                 read_only=not self.allow_dangerous,
             )
 
-            # Format response based on query type
+            # Format response based on query type. Directly constructed legacy
+            # ExecuteSQLTool instances retain their old string return; managed and
+            # standalone SqlTools always inject a canonical result store.
             tool_call_id = ctx.tool_call_id
-            if query_type == "select":
-                row_count = len(results)
+            if query_type in {"dml", "ddl"}:
+                payload: dict[str, Any] = {"success": True}
+                if tool_call_id:
+                    payload["file"] = f"result_{tool_call_id}.json"
+                return json_dumps(payload)
+
+            row_count = len(results)
+            if self.query_result_store is None:
                 payload: dict[str, Any] = {
                     "success": True,
                     "row_count": row_count,
@@ -770,20 +806,79 @@ class ExecuteSQLTool(SQLTool):
                 }
                 if tool_call_id:
                     payload["file"] = f"result_{tool_call_id}.json"
+                if auto_limit_applied:
+                    payload["auto_limit_applied"] = True
                 return json_dumps(payload)
-            if query_type in {"dml", "ddl"}:
-                payload: dict[str, Any] = {"success": True}
-                if tool_call_id:
-                    payload["file"] = f"result_{tool_call_id}.json"
-                return json_dumps(payload)
-            payload: dict[str, Any] = {
+
+            result_id = new_query_result_id()
+            file = logical_result_file(tool_call_id, result_id)
+            canonical_payload: dict[str, Any] = {
                 "success": True,
-                "row_count": len(results),
+                "row_count": row_count,
                 "results": results,
+                "file": file,
             }
-            if tool_call_id:
-                payload["file"] = f"result_{tool_call_id}.json"
-            return json_dumps(payload)
+            if auto_limit_applied:
+                canonical_payload["auto_limit_applied"] = True
+            try:
+                canonical_data = json_dumps(
+                    canonical_payload, ensure_ascii=False
+                ).encode("utf-8")
+            except (TypeError, ValueError):
+                return json_dumps(
+                    {
+                        "error": (
+                            "Query completed but its result could not be serialized "
+                            "for retention."
+                        )
+                    }
+                )
+            if len(canonical_data) > MAX_CANONICAL_QUERY_RESULT_BYTES:
+                return json_dumps(
+                    {
+                        "error": (
+                            "Query completed but its result exceeds the retention "
+                            "size limit."
+                        )
+                    }
+                )
+            descriptor = descriptor_for_data(
+                canonical_data,
+                result_id=result_id,
+                file=file,
+                row_count=row_count,
+                columns=query_result_columns(cast(list[object], results)),
+                database_name=target.database_name,
+            )
+            try:
+                descriptor = await self.query_result_store.put(
+                    QueryResultData(canonical_data),
+                    descriptor=descriptor,
+                    context=QueryResultContext(
+                        run_id=getattr(ctx, "run_id", None),
+                        conversation_id=getattr(ctx, "conversation_id", None),
+                        tool_call_id=tool_call_id,
+                        metadata=getattr(ctx, "metadata", None) or {},
+                    ),
+                )
+                projection = build_model_projection(canonical_payload, descriptor)
+            except Exception:
+                return json_dumps(
+                    {
+                        "error": (
+                            "Query completed but its complete result could not be "
+                            "retained."
+                        )
+                    }
+                )
+            return ToolReturn(
+                return_value=json_dumps(
+                    projection,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                metadata={"query_result": descriptor.to_dict()},
+            )
 
         except Exception as e:
             error_msg = str(e)

@@ -7,6 +7,18 @@ SQLsaber automatically saves your conversations locally so that you can view, re
 
 Threads allow you to pick up where you left off and track your analytical work over time.
 
+Complete SQL row results are stored separately under SQLsaber's private user-data
+`query-results` directory; thread messages retain only stable bounded model
+projections and opaque descriptors. Show, export, resume, visualization, sandbox,
+and notebook paths hydrate complete data from that store without rewriting thread
+history. Terminal and HTML views may still intentionally render a bounded table.
+
+Thread retention is the source of truth for CLI result retention. After pruning,
+SQLsaber removes unreferenced entries older than a 24-hour safety grace period.
+Normal saves run the same maintenance at most daily. If an entry was deleted or is
+corrupt, replay shows the bounded preview with a “complete result unavailable”
+notice rather than presenting the preview as complete.
+
 ### Show All Threads
 
 View all your conversation threads:

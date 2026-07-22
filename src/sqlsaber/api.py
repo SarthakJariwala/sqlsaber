@@ -4,7 +4,7 @@ This module provides a simplified programmatic interface to SQLSaber's capabilit
 allowing you to run natural language queries against databases from Python code.
 """
 
-from collections.abc import AsyncIterable, Awaitable, Sequence
+from collections.abc import AsyncIterable, Awaitable, Mapping, Sequence
 from types import TracebackType
 from typing import Any, Callable, Protocol, Self
 
@@ -13,6 +13,13 @@ from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 
 from sqlsaber.artifacts import StoredArtifact, artifacts_from_metadata
 from sqlsaber.options import SQLSaberOptions
+from sqlsaber.query_result_resolution import query_result_references_from_messages
+from sqlsaber.query_results import (
+    LoadedQueryResult,
+    QueryResultContext,
+    QueryResultStore,
+    StoredQueryResult,
+)
 from sqlsaber.session import SQLSaberSession
 
 
@@ -56,6 +63,15 @@ class SQLSaberResult(str):
     def all_messages(self) -> list[ModelMessage]:
         """All messages including history."""
         return self.run_result.all_messages()
+
+    @property
+    def query_results(self) -> list[StoredQueryResult]:
+        """Durable query results created during this run, in execution order."""
+        return [
+            reference.descriptor
+            for reference in query_result_references_from_messages(self.messages)
+            if reference.descriptor is not None
+        ]
 
     @property
     def artifacts(self) -> list[StoredArtifact]:
@@ -108,6 +124,7 @@ class SQLSaber:
         self.db_name = self._session.db_name
         self.connection = self._session.connection
         self.agent = self._session.agent
+        self.query_result_store: QueryResultStore = self._session.query_result_store
 
     async def query(
         self,
@@ -154,6 +171,23 @@ class SQLSaber:
             content = str(result)
 
         return SQLSaberResult(content, result)
+
+    async def get_query_result(
+        self,
+        result: str | StoredQueryResult,
+        *,
+        conversation_id: str | None = None,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> LoadedQueryResult:
+        """Retrieve a complete result through the configured authorized store."""
+        result_id = result.id if isinstance(result, StoredQueryResult) else result
+        return await self.query_result_store.get(
+            result_id,
+            context=QueryResultContext(
+                conversation_id=conversation_id,
+                metadata=metadata or {},
+            ),
+        )
 
     async def close(self) -> None:
         """Close the database connection."""

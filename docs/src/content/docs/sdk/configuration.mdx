@@ -34,6 +34,7 @@ options = SQLSaberOptions(
 | `extra_capabilities` | `Sequence[AbstractCapability[Any]]`           | `()`    | Add pydantic-ai capabilities to the managed agent (see [Capabilities](/sdk/capabilities)).   |
 | `artifact_publisher` | `ArtifactPublisher \| None`                    | `None`  | Persist capability artifacts such as analysis notebooks and plots.                           |
 | `artifact_failure_mode` | `"required" \| "best_effort"`            | `"required"` | Fail the tool or retain its answer when artifact publication fails.                      |
+| `query_result_store` | `QueryResultStore \| None` | `None` | Store for complete SQL row results. Defaults to a session-owned in-memory store. Inject application storage for durable or tenant-scoped retrieval. |
 | `tool_overrides`    | `Mapping[str, ModelOverides] \| None`         | `None`  | Per-tool model/API-key overrides (see [Advanced](/sdk/advanced)).                            |
 | `allow_dangerous`   | `bool`                                        | `False` | Allow write operations and a restricted subset of DDL (see [Advanced](/sdk/advanced)).       |
 
@@ -42,6 +43,20 @@ options = SQLSaberOptions(
   have sensible defaults. For many use cases just `database` (plus credentials in
   your environment) is enough.
 </Aside>
+
+## Query result storage
+
+Every successful row-returning query writes its complete canonical JSON payload to
+`query_result_store`. The model and message history receive only a stable 12 KiB
+projection. An injected store is application-owned and SQLsaber does not close it.
+The SDK default is in-memory; the CLI explicitly uses private filesystem storage.
+A storage failure makes that row-returning tool call fail rather than silently
+claiming complete data is available.
+
+For web applications, implement `QueryResultStore.put/get` over a private database
+or object store. Authorize `get` from current identity in
+`QueryResultContext.metadata`; do not authorize solely from possession of a result
+ID, filename, or historical conversation metadata.
 
 ## Choosing a database
 
