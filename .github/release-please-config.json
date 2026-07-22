@@ -6,28 +6,76 @@
       "release-type": "python",
       "component": "sqlsaber",
       "changelog-path": "docs/src/content/docs/changelog.md",
-      "bump-minor-pre-major": true
+      "bump-minor-pre-major": true,
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='sqlsaber')].version"
+        },
+        {
+          "type": "toml",
+          "path": "plugins/notebook/uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='sqlsaber')].version"
+        }
+      ]
     },
     "plugins/viz": {
       "package-name": "sqlsaber-viz",
       "release-type": "python",
       "component": "sqlsaber-viz",
       "changelog-path": "CHANGELOG.md",
-      "bump-minor-pre-major": true
+      "bump-minor-pre-major": true,
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='sqlsaber-viz')].version"
+        },
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='sqlsaber-viz')].version"
+        }
+      ]
     },
     "plugins/notebook": {
       "package-name": "sqlsaber-notebook",
       "release-type": "python",
       "component": "sqlsaber-notebook",
       "changelog-path": "CHANGELOG.md",
-      "bump-minor-pre-major": true
+      "bump-minor-pre-major": true,
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='sqlsaber-notebook')].version"
+        },
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='sqlsaber-notebook')].version"
+        }
+      ]
     },
     "plugins/sandbox": {
       "package-name": "sqlsaber-sandbox",
       "release-type": "python",
       "component": "sqlsaber-sandbox",
       "changelog-path": "CHANGELOG.md",
-      "bump-minor-pre-major": true
+      "bump-minor-pre-major": true,
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "/uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='sqlsaber-sandbox')].version"
+        },
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='sqlsaber-sandbox')].version"
+        }
+      ]
     }
   },
   "separate-pull-requests": true
