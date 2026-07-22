@@ -32,7 +32,7 @@ def test_release_please_updates_lockfiles_atomically() -> None:
             for extra_file in package["extra-files"]
         }
 
-        assert {str(path) for path in lockfile_entries} == expected_lockfiles
+        assert {path.as_posix() for path in lockfile_entries} == expected_lockfiles
 
         for lockfile_path, extra_file in lockfile_entries.items():
             assert extra_file["type"] == "toml"
