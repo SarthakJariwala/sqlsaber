@@ -28,6 +28,7 @@ from sqlsaber_notebook.execution import NotebookBackendUnavailable
 from sqlsaber_notebook.result import AnalysisResult, ArtifactRef
 
 from sqlsaber.artifacts import InMemoryArtifactPublisher
+from sqlsaber.query_results import InMemoryQueryResultStore
 
 
 def _ctx(messages: list[Any], *, tool_call_id: str = "analysis-call") -> Any:
@@ -89,7 +90,8 @@ def _png_bytes() -> bytes:
     return buffer.getvalue()
 
 
-def test_workspace_selects_newest_successful_selects_and_pairs_sql() -> None:
+@pytest.mark.asyncio
+async def test_workspace_selects_newest_successful_selects_and_pairs_sql() -> None:
     messages = [
         *_sql_exchange(
             "old",
@@ -125,7 +127,11 @@ def test_workspace_selects_newest_successful_selects_and_pairs_sql() -> None:
         ),
     ]
 
-    workspace = build_workspace_from_history(_ctx(messages), only=None)
+    workspace = await build_workspace_from_history(
+        _ctx(messages),
+        only=None,
+        query_result_store=InMemoryQueryResultStore(),
+    )
 
     assert [item.name for item in workspace.files] == [
         "result_new.json",
@@ -138,7 +144,8 @@ def test_workspace_selects_newest_successful_selects_and_pairs_sql() -> None:
     assert json.loads(workspace.files[0].data)["results"] == [{"value": 2}]
 
 
-def test_workspace_explicit_selection_is_ordered_and_all_or_error() -> None:
+@pytest.mark.asyncio
+async def test_workspace_explicit_selection_is_ordered_and_all_or_error() -> None:
     messages = [
         *_sql_exchange(
             "one",
@@ -152,8 +159,10 @@ def test_workspace_explicit_selection_is_ordered_and_all_or_error() -> None:
         ),
     ]
 
-    workspace = build_workspace_from_history(
-        _ctx(messages), only=["result_one.json", "result_two.json"]
+    workspace = await build_workspace_from_history(
+        _ctx(messages),
+        only=["result_one.json", "result_two.json"],
+        query_result_store=InMemoryQueryResultStore(),
     )
     assert [item.name for item in workspace.files] == [
         "result_one.json",
@@ -161,12 +170,15 @@ def test_workspace_explicit_selection_is_ordered_and_all_or_error() -> None:
     ]
 
     with pytest.raises(ValueError, match="not found: result_missing.json"):
-        build_workspace_from_history(
-            _ctx(messages), only=["result_one.json", "result_missing.json"]
+        await build_workspace_from_history(
+            _ctx(messages),
+            only=["result_one.json", "result_missing.json"],
+            query_result_store=InMemoryQueryResultStore(),
         )
 
 
-def test_workspace_rejects_forged_or_invalid_requested_keys() -> None:
+@pytest.mark.asyncio
+async def test_workspace_rejects_invalid_requested_keys() -> None:
     messages = _sql_exchange(
         "real",
         "select 1",
@@ -176,11 +188,19 @@ def test_workspace_rejects_forged_or_invalid_requested_keys() -> None:
             "file": "result_different.json",
         },
     )
-    with pytest.raises(ValueError, match="No successful row-returning"):
-        build_workspace_from_history(_ctx(messages), only=None)
+    workspace = await build_workspace_from_history(
+        _ctx(messages),
+        only=None,
+        query_result_store=InMemoryQueryResultStore(),
+    )
+    assert [item.name for item in workspace.files] == ["result_different.json"]
 
     with pytest.raises(ValueError, match="Invalid SQL result file key"):
-        build_workspace_from_history(_ctx(messages), only=["../secret.json"])
+        await build_workspace_from_history(
+            _ctx(messages),
+            only=["../secret.json"],
+            query_result_store=InMemoryQueryResultStore(),
+        )
 
 
 @pytest.mark.asyncio
