@@ -25,6 +25,33 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.69.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.68.0...sqlsaber-v0.69.0) (2026-07-22)
+
+
+### Features
+
+* add sandboxed notebook analysis ([#199](https://github.com/SarthakJariwala/sqlsaber/issues/199)) ([c82590f](https://github.com/SarthakJariwala/sqlsaber/commit/c82590ffa8cb93649f021d548ff4d4c12171e54e))
+* introduce SQLSaber capabilities ([#186](https://github.com/SarthakJariwala/sqlsaber/issues/186)) ([7cc2644](https://github.com/SarthakJariwala/sqlsaber/commit/7cc26446a19924b347c65a7cbd9f9c72ff1902a0))
+* migrate plugins to capabilities ([#188](https://github.com/SarthakJariwala/sqlsaber/issues/188)) ([ed758f0](https://github.com/SarthakJariwala/sqlsaber/commit/ed758f067a71845a5831d55a1c505f4ea43cf7eb))
+* publish capabilities SDK ([#189](https://github.com/SarthakJariwala/sqlsaber/issues/189)) ([90d5ddb](https://github.com/SarthakJariwala/sqlsaber/commit/90d5ddb0f46dc43e51b16211d3da21b71da37e4e))
+* use native saber-tui markdown streaming ([0c92d07](https://github.com/SarthakJariwala/sqlsaber/commit/0c92d0764e51ff5f2cbf0f864bcd205712652c79))
+
+
+### Bug Fixes
+
+* clean up partial database initialization ([#194](https://github.com/SarthakJariwala/sqlsaber/issues/194)) ([44d55a0](https://github.com/SarthakJariwala/sqlsaber/commit/44d55a0cf044d395eac54770f0692035187da808))
+* install supported provider extras ([#190](https://github.com/SarthakJariwala/sqlsaber/issues/190)) ([f3156ae](https://github.com/SarthakJariwala/sqlsaber/commit/f3156ae8dae21047261973131f68927e941d68ed))
+* reference-count SQL toolset lifecycle ([#193](https://github.com/SarthakJariwala/sqlsaber/issues/193)) ([485a412](https://github.com/SarthakJariwala/sqlsaber/commit/485a412add71ecf51e2b63a146cc5ee3d0927fa6))
+* **release:** update lockfiles in release PRs ([#201](https://github.com/SarthakJariwala/sqlsaber/issues/201)) ([2566de6](https://github.com/SarthakJariwala/sqlsaber/commit/2566de6e5393cc1f8e65651fce1485ddae48b3f7))
+* require capabilities-compatible plugin core ([#192](https://github.com/SarthakJariwala/sqlsaber/issues/192)) ([d1abfb2](https://github.com/SarthakJariwala/sqlsaber/commit/d1abfb25ed0e9fcf83987b6b1a3dd28304f70cc7))
+* resolve TUI display registry after agent rebuilds ([#195](https://github.com/SarthakJariwala/sqlsaber/issues/195)) ([fce626d](https://github.com/SarthakJariwala/sqlsaber/commit/fce626de51503f19e9610831bb3992c0b1a816fe))
+* wire knowledge manager for multiple databases ([#191](https://github.com/SarthakJariwala/sqlsaber/issues/191)) ([798275b](https://github.com/SarthakJariwala/sqlsaber/commit/798275bf4ab8ec1c49df1442080f954a920e4702))
+
+
+### Documentation
+
+* note adaptive Anthropic thinking support ([#196](https://github.com/SarthakJariwala/sqlsaber/issues/196)) ([301a25e](https://github.com/SarthakJariwala/sqlsaber/commit/301a25eac27131638ec3060d908caf8373d5d298))
+
 ## [0.68.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.67.0...sqlsaber-v0.68.0) (2026-05-29)
 
 
