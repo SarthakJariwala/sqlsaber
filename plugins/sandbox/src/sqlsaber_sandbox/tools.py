@@ -1,7 +1,6 @@
 """Sandboxed Python execution tools."""
 
 import base64
-import json
 import os
 import re
 import shlex
@@ -10,6 +9,16 @@ from typing import Iterable
 
 from pydantic_ai import RunContext
 
+from sqlsaber.query_result_resolution import (
+    find_query_result_reference,
+    query_result_context_from_run,
+    resolve_query_result,
+)
+from sqlsaber.query_results import (
+    InMemoryQueryResultStore,
+    QueryResultStore,
+    QueryResultUnavailable,
+)
 from sqlsaber.tools.base import Tool
 from sqlsaber.tools.display import (
     DisplayMetadata,
@@ -77,6 +86,14 @@ class RunPythonTool(Tool):
     """Run Python code in a sandboxed environment."""
 
     requires_ctx = True
+
+    def __init__(self, query_result_store: QueryResultStore | None = None) -> None:
+        super().__init__()
+        self.query_result_store = (
+            query_result_store
+            if query_result_store is not None
+            else InMemoryQueryResultStore()
+        )
 
     display_spec = ToolDisplaySpec(
         executing=ExecutingConfig(
@@ -169,24 +186,28 @@ class RunPythonTool(Tool):
                                 "error": "Invalid data file key format.",
                             }
                         )
-                    tool_call_id = file.removeprefix("result_").removesuffix(".json")
-                    payload = _find_tool_output_payload(ctx, tool_call_id)
-                    if payload is None:
+                    try:
+                        reference = find_query_result_reference(ctx.messages, file)
+                        if reference is None:
+                            raise QueryResultUnavailable()
+                        resolved = await resolve_query_result(
+                            reference,
+                            store=self.query_result_store,
+                            context=query_result_context_from_run(ctx),
+                        )
+                    except QueryResultUnavailable:
                         return json_dumps(
-                            {
-                                "error": "Tool output not found in message history.",
-                            }
+                            {"error": "Complete SQL result is unavailable."}
                         )
                     remote_data_path = f"/tmp/{file}"
                     temp_path = None
                     try:
                         with tempfile.NamedTemporaryFile(
-                            mode="w",
+                            mode="wb",
                             suffix=".json",
                             delete=False,
-                            encoding="utf-8",
                         ) as temp_file:
-                            temp_file.write(json_dumps(payload))
+                            temp_file.write(resolved.data)
                             temp_path = temp_file.name
                         await sandbox.upload(temp_path, remote_data_path)
                     finally:
@@ -227,27 +248,3 @@ class RunPythonTool(Tool):
                 )
         except Exception as exc:  # pragma: no cover - defensive catch-all
             return json_dumps({"error": f"Python sandbox execution failed: {exc}"})
-
-
-def _find_tool_output_payload(ctx: RunContext, tool_call_id: str) -> dict | None:
-    for message in reversed(ctx.messages):
-        for part in getattr(message, "parts", []):
-            if getattr(part, "part_kind", "") not in (
-                "tool-return",
-                "builtin-tool-return",
-            ):
-                continue
-            if getattr(part, "tool_call_id", None) != tool_call_id:
-                continue
-            content = getattr(part, "content", None)
-            if isinstance(content, dict):
-                return content
-            if isinstance(content, str):
-                try:
-                    parsed = json.loads(content)
-                except json.JSONDecodeError:
-                    return {"result": content}
-                if isinstance(parsed, dict):
-                    return parsed
-                return {"result": parsed}
-    return None
