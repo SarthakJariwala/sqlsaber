@@ -15,7 +15,7 @@ from sqlsaber_notebook.result import ArtifactRef
 
 async def test_local_workspace_uses_safe_basenames_and_manifest(tmp_path: Path) -> None:
     source = tmp_path / "data.csv"
-    source.write_text("value\n1\n")
+    source.write_bytes(b"value\n1\n")
     workspace = await _workspace_from_local_paths([source])
     assert workspace.files[0].name == "data.csv"
     assert workspace.files[0].data == b"value\n1\n"

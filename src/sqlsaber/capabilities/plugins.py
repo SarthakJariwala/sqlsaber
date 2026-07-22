@@ -99,7 +99,11 @@ def _normalize_capabilities(result: object) -> list[AbstractCapability[Any]]:
 def discover_capabilities(context: PluginContext) -> list[AbstractCapability[Any]]:
     """Load capability factories from the ``sqlsaber.capabilities`` entry group."""
     capabilities: list[AbstractCapability[Any]] = []
-    for entry_point in _select_entry_points(PLUGIN_GROUP):
+    discovered = sorted(
+        _select_entry_points(PLUGIN_GROUP),
+        key=lambda entry_point: entry_point.name,
+    )
+    for entry_point in discovered:
         try:
             factory = entry_point.load()
             if not callable(factory):

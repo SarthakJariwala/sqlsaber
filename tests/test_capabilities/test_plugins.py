@@ -61,6 +61,28 @@ def test_discover_capabilities_delivers_plugin_context(monkeypatch) -> None:
     assert received[0].tool_overrides["viz"].model_name == "openai:gpt-test"
 
 
+def test_discover_capabilities_sorts_entry_points_by_name(monkeypatch) -> None:
+    def entry_point(name: str):
+        return SimpleNamespace(
+            name=name,
+            load=lambda: (
+                lambda context: Capability(
+                    id=name, instructions=context.main_model_name
+                )
+            ),
+        )
+
+    monkeypatch.setattr(
+        plugins,
+        "_select_entry_points",
+        lambda group: [entry_point("zeta"), entry_point("alpha")],
+    )
+
+    discovered = discover_capabilities(_context())
+
+    assert [capability.id for capability in discovered] == ["alpha", "zeta"]
+
+
 def test_plugin_context_resolves_subagent_precedence(monkeypatch) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)

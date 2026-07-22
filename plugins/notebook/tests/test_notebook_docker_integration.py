@@ -17,7 +17,13 @@ from sqlsaber_notebook.session import NotebookSession
 
 from _notebooks import assert_contract_result, contract_notebook
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        os.getenv("SQLSABER_RUN_DOCKER_INTEGRATION") != "1",
+        reason="set SQLSABER_RUN_DOCKER_INTEGRATION=1 for live Docker tests",
+    ),
+]
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="Docker CLI is unavailable")

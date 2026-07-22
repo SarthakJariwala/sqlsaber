@@ -101,9 +101,12 @@ uv sync
 uv run pytest plugins/notebook/tests -q
 ```
 
-Run credentialed remote integration tests explicitly:
+Run live backend integration tests explicitly:
 
 ```bash
+SQLSABER_RUN_DOCKER_INTEGRATION=1 \
+  uv run pytest plugins/notebook/tests/test_notebook_docker_integration.py -q
+
 SQLSABER_RUN_MODAL_INTEGRATION=1 \
   uv run pytest plugins/notebook/tests/test_notebook_modal_integration.py -q
 ```
