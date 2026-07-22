@@ -3185,7 +3185,7 @@ dev = [
 
 [[package]]
 name = "sqlsaber-notebook"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "plugins/notebook" }
 dependencies = [
     { name = "nbformat" },
@@ -3216,7 +3216,7 @@ dev = [
 
 [[package]]
 name = "sqlsaber-sandbox"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "plugins/sandbox" }
 dependencies = [
     { name = "cased-sandboxes" },
