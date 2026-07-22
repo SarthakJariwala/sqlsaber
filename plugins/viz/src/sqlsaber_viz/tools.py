@@ -14,6 +14,16 @@ from rich.console import Console
 from rich.text import Text
 
 from sqlsaber.overrides import ModelOverides
+from sqlsaber.query_result_resolution import (
+    find_query_result_reference,
+    query_result_context_from_run,
+    resolve_query_result,
+)
+from sqlsaber.query_results import (
+    InMemoryQueryResultStore,
+    QueryResultStore,
+    QueryResultUnavailable,
+)
 from sqlsaber.tools.base import Tool
 from sqlsaber.utils.json_utils import json_dumps
 
@@ -35,8 +45,13 @@ class VizTool(Tool):
 
     requires_ctx = True
 
-    def __init__(self):
+    def __init__(self, query_result_store: QueryResultStore | None = None):
         super().__init__()
+        self.query_result_store = (
+            query_result_store
+            if query_result_store is not None
+            else InMemoryQueryResultStore()
+        )
         self._last_ctx: RunContext | None = None
         self._last_rows: list[dict] | None = None
         self._last_file: str | None = None
@@ -77,10 +92,24 @@ class VizTool(Tool):
         if not file or not TOOL_OUTPUT_FILE_PATTERN.match(file):
             return json_dumps({"error": "Invalid result file key format."})
 
-        tool_call_id = file.removeprefix("result_").removesuffix(".json")
-        payload = find_tool_output_payload(ctx, tool_call_id)
-        if payload is None:
-            return json_dumps({"error": "Tool output not found in message history."})
+        try:
+            reference = find_query_result_reference(ctx.messages, file)
+            if reference is None:
+                # Compatibility for early ad-hoc histories that omitted execute_sql
+                # tool metadata but still embedded complete rows.
+                tool_call_id = file.removeprefix("result_").removesuffix(".json")
+                payload = find_tool_output_payload(ctx, tool_call_id)
+                if payload is None or not isinstance(payload.get("results"), list):
+                    raise QueryResultUnavailable()
+            else:
+                resolved = await resolve_query_result(
+                    reference,
+                    store=self.query_result_store,
+                    context=query_result_context_from_run(ctx),
+                )
+                payload = resolved.payload()
+        except QueryResultUnavailable:
+            return json_dumps({"error": "Complete SQL result is unavailable."})
 
         summary = extract_data_summary(payload)
         columns = summary.get("columns", [])

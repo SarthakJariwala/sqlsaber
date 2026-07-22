@@ -18,7 +18,7 @@ class Visualization(SqlSaberCapability):
     description = "Generate a chart from the result of an SQL query."
 
     def __init__(self, context: PluginContext) -> None:
-        self.tool = VizTool()
+        self.tool = VizTool(context.query_result_store)
         self.tool.model_overide = context.tool_overrides.get(self.tool.name)
         self._toolset = FunctionToolset[Any](id=self.id)
         self._toolset.add_function(
