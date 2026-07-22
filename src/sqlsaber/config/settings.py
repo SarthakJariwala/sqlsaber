@@ -14,7 +14,7 @@ import platformdirs
 from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
 
-SUBAGENT_KEYS: tuple[str, ...] = ("handoff", "viz")
+SUBAGENT_KEYS: tuple[str, ...] = ("handoff", "viz", "notebook")
 
 
 class ThinkingLevel(str, Enum):

@@ -11,6 +11,7 @@ from typing import Any, Callable, Protocol, Self
 from pydantic_ai import RunContext
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 
+from sqlsaber.artifacts import StoredArtifact, artifacts_from_metadata
 from sqlsaber.options import SQLSaberOptions
 from sqlsaber.session import SQLSaberSession
 
@@ -55,6 +56,22 @@ class SQLSaberResult(str):
     def all_messages(self) -> list[ModelMessage]:
         """All messages including history."""
         return self.run_result.all_messages()
+
+    @property
+    def artifacts(self) -> list[StoredArtifact]:
+        """Durable artifacts published by capabilities during this run."""
+        artifacts: list[StoredArtifact] = []
+        seen: set[str] = set()
+        for message in self.messages:
+            for part in getattr(message, "parts", ()):
+                for artifact in artifacts_from_metadata(
+                    getattr(part, "metadata", None)
+                ):
+                    if artifact.id in seen:
+                        continue
+                    seen.add(artifact.id)
+                    artifacts.append(artifact)
+        return artifacts
 
 
 class SQLSaber:
@@ -101,6 +118,9 @@ class SQLSaber:
             Awaitable[None],
         ]
         | None = None,
+        *,
+        conversation_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> SQLSaberResult:
         """Run a natural language query against the database.
 
@@ -109,6 +129,9 @@ class SQLSaber:
             message_history: Optional history of messages for context.
             event_stream_handler: Optional streaming handler for AgentStreamEvent.
                 Use this to process streaming events as they arrive.
+            conversation_id: Stable Pydantic AI conversation identifier for the run.
+            metadata: Application metadata available to capabilities, such as tenant
+                and user identifiers used when publishing artifacts.
 
         Returns:
             A SQLSaberResult object (subclass of str) containing the agent's response.
@@ -118,6 +141,8 @@ class SQLSaber:
             prompt,
             message_history=message_history,
             event_stream_handler=event_stream_handler,
+            conversation_id=conversation_id,
+            metadata=metadata,
         )
 
         content = ""

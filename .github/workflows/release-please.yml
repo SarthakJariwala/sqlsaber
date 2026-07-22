@@ -40,6 +40,9 @@ jobs:
               "plugins/viz")
                 TAG="sqlsaber-viz-v${{ steps.release.outputs['plugins/viz--version'] }}"
                 ;;
+              "plugins/notebook")
+                TAG="sqlsaber-notebook-v${{ steps.release.outputs['plugins/notebook--version'] }}"
+                ;;
               "plugins/sandbox")
                 TAG="sqlsaber-sandbox-v${{ steps.release.outputs['plugins/sandbox--version'] }}"
                 ;;

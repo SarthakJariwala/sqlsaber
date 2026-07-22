@@ -126,7 +126,8 @@ def capability(context: PluginContext):
 ```
 
 The factory receives a `PluginContext` containing SQLsaber's database registry,
-knowledge manager, dangerous-mode setting, and normalized tool model overrides.
+knowledge manager, dangerous-mode setting, normalized tool model overrides, and any
+application-owned artifact publisher.
 It can return one capability or a sequence. See the [Capabilities SDK guide](/sdk/capabilities) for standalone composition and lifecycle details.
 
 :::caution[Plugin API change]

@@ -268,6 +268,8 @@ class TestThreadsCLI:
             mock_dm.show_tool_result.assert_called_with(
                 "execute_sql",
                 '{"success": true, "results": [{"id": 1, "name": "John"}]}',
+                tool_call_id="call-2",
+                metadata=None,
             )
 
     def test_create_threads_app(self):

@@ -17,6 +17,12 @@ All notable changes to SQLsaber will be documented here.
 - Maps thinking levels through pydantic-ai's unified `Thinking` capability. Anthropic support now targets newer models with adaptive thinking; SQLsaber no longer configures legacy `budget_tokens` or related `max_tokens` headroom itself.
 - Inherits pydantic-ai v2's graceful end strategy: function calls emitted beside a final text response execute instead of being skipped.
 
+#### Artifact publishing
+
+- Adds a cloud-neutral `ArtifactPublisher` protocol with filesystem and in-memory implementations.
+- Allows the notebook capability to persist executed notebooks, plots, and generated files through `SQLSaberOptions.artifact_publisher` while keeping binary data out of model and thread history.
+- Exposes durable references through `SQLSaberResult.artifacts` and forwards per-run conversation IDs and application metadata for tenant-aware storage.
+
 ---
 
 ## [0.68.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.67.0...sqlsaber-v0.68.0) (2026-05-29)

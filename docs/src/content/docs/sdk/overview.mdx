@@ -10,7 +10,7 @@ queries against your databases directly from Python code, instead of through the
 `saber` CLI. It is the same agent that powers the CLI, exposed as an `async`
 interface you can embed in scripts, notebooks, web backends, or data pipelines.
 
-The SDK exposes five names from the top-level `sqlsaber` package:
+The SDK exposes its primary agent and capability building blocks from the top-level `sqlsaber` package:
 
 | Export            | Purpose                                                       |
 | ----------------- | ------------------------------------------------------------- |
@@ -19,8 +19,11 @@ The SDK exposes five names from the top-level `sqlsaber` package:
 | `ModelOverides`   | Per-tool model/API-key overrides (see [Advanced](/sdk/advanced)). |
 | `SqlTools`        | SQL capability for composing with your own pydantic-ai agent. |
 | `Knowledge`       | Database-scoped knowledge search capability.                  |
+| `ArtifactPublisher` | Protocol for persisting notebooks, plots, and other capability artifacts. |
+| `FilesystemArtifactPublisher` | Local durable artifact publisher for servers and development. |
+| `InMemoryArtifactPublisher` | In-memory artifact publisher for tests and short-lived workflows. |
 
-See [Capabilities](/sdk/capabilities) to use SQLsaber inside your own agent or add your capabilities to its managed agent.
+See [Capabilities](/sdk/capabilities) to use SQLsaber inside your own agent or add your capabilities to its managed agent. See [Results & Streaming](/sdk/results-and-streaming#persisting-notebooks-and-plots) for artifact publishing.
 
 ## Installation
 

@@ -32,6 +32,8 @@ options = SQLSaberOptions(
 | `knowledge_manager` | `KnowledgeManager \| None`                    | `None`  | Inject your own knowledge base (see [Advanced](/sdk/advanced)).                              |
 | `thread_manager`    | `ThreadManager \| None`                       | `None`  | Persist conversation history across runs (see [Advanced](/sdk/advanced)).                    |
 | `extra_capabilities` | `Sequence[AbstractCapability[Any]]`           | `()`    | Add pydantic-ai capabilities to the managed agent (see [Capabilities](/sdk/capabilities)).   |
+| `artifact_publisher` | `ArtifactPublisher \| None`                    | `None`  | Persist capability artifacts such as analysis notebooks and plots.                           |
+| `artifact_failure_mode` | `"required" \| "best_effort"`            | `"required"` | Fail the tool or retain its answer when artifact publication fails.                      |
 | `tool_overrides`    | `Mapping[str, ModelOverides] \| None`         | `None`  | Per-tool model/API-key overrides (see [Advanced](/sdk/advanced)).                            |
 | `allow_dangerous`   | `bool`                                        | `False` | Allow write operations and a restricted subset of DDL (see [Advanced](/sdk/advanced)).       |
 

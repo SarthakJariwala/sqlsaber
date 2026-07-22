@@ -207,7 +207,12 @@ class TUIStreamingQueryHandler:
                 self.app.set_loading("Crunching data...")
                 return
         self._append_display(
-            lambda display: display.show_tool_result(tool_name, event.part.content)
+            lambda display: display.show_tool_result(
+                tool_name,
+                event.part.content,
+                tool_call_id=event.part.tool_call_id,
+                metadata=getattr(event.part, "metadata", None),
+            )
         )
         self.app.set_loading("Crunching data...")
 

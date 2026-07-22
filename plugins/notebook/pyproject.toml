@@ -1,0 +1,37 @@
+[project]
+name = "sqlsaber-notebook"
+version = "0.1.0"
+description = "Notebook analysis subagent for SQLsaber"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "sqlsaber>=0.69.0",
+    "nbformat>=5.10,<6",
+    "pillow>=11,<13",
+]
+
+[project.optional-dependencies]
+modal = ["modal>=1.4,<2"]
+
+[tool.uv.sources]
+sqlsaber = { path = "../..", editable = true }
+
+[project.scripts]
+sqlsaber-notebook = "sqlsaber_notebook.cli:main"
+
+[project.entry-points."sqlsaber.capabilities"]
+notebook = "sqlsaber_notebook.capability:capability"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sqlsaber_notebook"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.0.0",
+    "modal>=1.4,<2",
+]

@@ -35,7 +35,25 @@ def _registry(*names: str) -> DatabaseRegistry:
         (("prod", "staging"), "tool_schemas_multi.json"),
     ],
 )
-async def test_tool_schema_snapshot(names: tuple[str, ...], snapshot_name: str) -> None:
+async def test_tool_schema_snapshot(
+    names: tuple[str, ...],
+    snapshot_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    for variable in (
+        "DAYTONA_API_KEY",
+        "E2B_API_KEY",
+        "SPRITES_TOKEN",
+        "HOPX_API_KEY",
+        "MODAL_TOKEN_ID",
+        "MODAL_TOKEN_SECRET",
+        "CLOUDFLARE_SANDBOX_BASE_URL",
+        "CLOUDFLARE_API_TOKEN",
+    ):
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv("MODAL_CONFIG_PATH", str(tmp_path / "missing-modal.toml"))
+
     agent = SQLSaberAgent(
         registry=_registry(*names),
         model_name="anthropic:snapshot-model",
@@ -47,13 +65,15 @@ async def test_tool_schema_snapshot(names: tuple[str, ...], snapshot_name: str) 
         with agent.agent.override(model=model):
             await agent.run("Capture the tool schemas")
 
+        request_parameters = model.last_model_request_parameters
+        assert request_parameters is not None
         actual = [
             {
                 "name": tool.name,
                 "description": tool.description,
                 "parameters_json_schema": tool.parameters_json_schema,
             }
-            for tool in model.last_model_request_parameters.function_tools
+            for tool in request_parameters.function_tools
         ]
         expected = json.loads((_SNAPSHOT_DIR / snapshot_name).read_text())
         assert actual == expected

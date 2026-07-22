@@ -144,7 +144,12 @@ def _render_transcript(
             elif kind in ("tool-return", "builtin-tool-return"):
                 name = getattr(part, "tool_name", "tool")
                 content = getattr(part, "content", None)
-                dm.show_tool_result(name, content)
+                dm.show_tool_result(
+                    name,
+                    content,
+                    tool_call_id=getattr(part, "tool_call_id", None),
+                    metadata=getattr(part, "metadata", None),
+                )
         # Thinking parts omitted
 
     for start_idx, end_idx in slices or [(0, len(all_msgs))]:
