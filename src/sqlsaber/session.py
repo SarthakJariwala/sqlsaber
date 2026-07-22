@@ -30,6 +30,10 @@ class SQLSaberSession:
     """Owns the lifecycle of a SQLSaber SDK session."""
 
     def __init__(self, options: SQLSaberOptions):
+        if options.artifact_failure_mode not in ("required", "best_effort"):
+            raise ValueError(
+                "artifact_failure_mode must be 'required' or 'best_effort'"
+            )
         self.options = options
         self._closed = False
 
@@ -82,6 +86,8 @@ class SQLSaberSession:
             system_prompt=system_prompt_text,
             tool_overides=options.tool_overrides,
             extra_capabilities=options.extra_capabilities,
+            artifact_publisher=options.artifact_publisher,
+            artifact_failure_mode=options.artifact_failure_mode,
         )
 
     async def query(
@@ -93,12 +99,17 @@ class SQLSaberSession:
             Awaitable[None],
         ]
         | None = None,
+        *,
+        conversation_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> Any:
         """Run a natural language query against the configured database."""
         run_result = await self.agent.run(
             prompt,
             message_history=message_history,
             event_stream_handler=event_stream_handler,
+            conversation_id=conversation_id,
+            metadata=metadata,
         )
 
         if self.thread_manager is not None:

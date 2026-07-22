@@ -24,6 +24,50 @@ print(result.messages)   # messages from this run (incl. tool calls / SQL)
 | `.usage`        | Token usage statistics for the run.                                      |
 | `.messages`     | New messages produced by this run, including tool calls and SQL.         |
 | `.all_messages` | The full message history, including any prior turns you passed in.       |
+| `.artifacts`    | Durable artifact references published by capabilities during this run.   |
+
+## Persisting notebooks and plots
+
+Install `sqlsaber-notebook` and configure an artifact publisher to retain executed
+notebooks, plots, and generated files. SQLsaber includes filesystem and in-memory
+publishers; cloud applications can implement the same `ArtifactPublisher` protocol
+for S3, GCS, Azure Blob Storage, or another object store.
+
+```python
+from sqlsaber import FilesystemArtifactPublisher, SQLSaber, SQLSaberOptions
+
+options = SQLSaberOptions(
+    database="sqlite:///analytics.db",
+    artifact_publisher=FilesystemArtifactPublisher(
+        "/private/sqlsaber-artifacts",
+        namespace=lambda ctx: f"tenants/{ctx.metadata['tenant_id']}",
+    ),
+)
+
+async with SQLSaber(options=options) as saber:
+    result = await saber.query(
+        "Analyze revenue anomalies and plot them",
+        conversation_id="conversation-123",
+        metadata={"tenant_id": "acme", "user_id": "user-456"},
+    )
+
+    for artifact in result.artifacts:
+        print(artifact.kind, artifact.name, artifact.uri)
+```
+
+`ArtifactPublisher.publish()` receives an `ArtifactBundle` and an
+`ArtifactContext`. A cloud implementation should upload each artifact and return
+an `ArtifactPublication` containing stable object keys or internal IDs. Avoid
+returning expiring signed URLs; generate those when serving a request.
+
+Run metadata is available to the publisher for namespacing, but is not used as an
+unvalidated artifact filename. Keep buckets private because executed notebooks may
+contain query results. The publisher is application-owned and is not closed by
+SQLsaber.
+
+With `artifact_failure_mode="required"`, an upload failure fails `analyze_data`.
+Use `"best_effort"` to preserve the analyst's answer and expose an
+`artifact_error` in tool metadata instead.
 
 ## Inspecting the generated SQL
 

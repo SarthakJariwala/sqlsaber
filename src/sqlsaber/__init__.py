@@ -4,11 +4,35 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .api import SQLSaber
+    from .artifacts import (
+        Artifact,
+        ArtifactBundle,
+        ArtifactContext,
+        ArtifactPublication,
+        ArtifactPublisher,
+        FilesystemArtifactPublisher,
+        InMemoryArtifactPublisher,
+        StoredArtifact,
+    )
     from .capabilities import Knowledge, SqlTools
     from .options import SQLSaberOptions
     from .overrides import ModelOverides
 
-__all__ = ["SQLSaber", "SQLSaberOptions", "ModelOverides", "SqlTools", "Knowledge"]
+__all__ = [
+    "Artifact",
+    "ArtifactBundle",
+    "ArtifactContext",
+    "ArtifactPublication",
+    "ArtifactPublisher",
+    "FilesystemArtifactPublisher",
+    "InMemoryArtifactPublisher",
+    "Knowledge",
+    "ModelOverides",
+    "SQLSaber",
+    "SQLSaberOptions",
+    "SqlTools",
+    "StoredArtifact",
+]
 
 
 def __getattr__(name: str):
@@ -21,6 +45,19 @@ def __getattr__(name: str):
         from .options import SQLSaberOptions
 
         return SQLSaberOptions
+    if name in {
+        "Artifact",
+        "ArtifactBundle",
+        "ArtifactContext",
+        "ArtifactPublication",
+        "ArtifactPublisher",
+        "FilesystemArtifactPublisher",
+        "InMemoryArtifactPublisher",
+        "StoredArtifact",
+    }:
+        from . import artifacts
+
+        return getattr(artifacts, name)
     if name == "ModelOverides":
         from .overrides import ModelOverides
 

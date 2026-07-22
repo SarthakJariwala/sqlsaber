@@ -17,8 +17,10 @@ Implemented components:
 When installed with SQLsaber, the main agent can hand prior successful SQL results to
 `analyze_data` for multi-step calculations, statistics, transformations, and plots.
 The terminal displays the bounded executed notebook and plot previews before the main
-agent's text response. Notebook bytes and images are display-only in managed mode:
-they are not sent to the parent model or persisted in conversation threads.
+agent's text response. Notebook bytes and images are not sent to the parent model.
+Managed SDK applications can persist the notebook, plots, and generated files through
+`SQLSaberOptions.artifact_publisher`; only the publisher's durable references are
+stored in tool metadata and exposed through `SQLSaberResult.artifacts`.
 
 The default balanced runtime targets larger EDA and classical ML: 4 CPUs, 8 GiB
 memory, and up to 100 MiB per input/250 MiB total. SQLsaber does not cap model
@@ -47,6 +49,30 @@ Configure a dedicated analyst model with:
 ```bash
 saber models set --agent notebook
 ```
+
+For a web backend, inject an application-owned artifact publisher and pass tenant
+scope as run metadata:
+
+```python
+from sqlsaber import FilesystemArtifactPublisher, SQLSaber, SQLSaberOptions
+
+options = SQLSaberOptions(
+    database="sqlite:///analytics.db",
+    artifact_publisher=FilesystemArtifactPublisher("/private/artifacts"),
+)
+
+async with SQLSaber(options=options) as saber:
+    result = await saber.query(
+        "Analyze and plot revenue anomalies",
+        conversation_id="conversation-123",
+        metadata={"tenant_id": "acme"},
+    )
+    print(result.artifacts)
+```
+
+Implement the cloud-neutral `ArtifactPublisher` protocol to use S3, GCS, Azure
+Blob Storage, or another bucket. Return stable object references rather than
+expiring signed URLs.
 
 ## Standalone usage
 

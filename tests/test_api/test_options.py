@@ -3,7 +3,13 @@ from __future__ import annotations
 import pytest
 from pydantic_ai.capabilities import Capability
 
-from sqlsaber import Knowledge, SQLSaber, SQLSaberOptions, SqlTools
+from sqlsaber import (
+    InMemoryArtifactPublisher,
+    Knowledge,
+    SQLSaber,
+    SQLSaberOptions,
+    SqlTools,
+)
 from sqlsaber.config.settings import Config
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
@@ -18,6 +24,17 @@ def test_api_options_are_required() -> None:
 def test_capabilities_are_exported_from_top_level() -> None:
     assert SqlTools.__name__ == "SqlTools"
     assert Knowledge.__name__ == "Knowledge"
+    assert InMemoryArtifactPublisher.__name__ == "InMemoryArtifactPublisher"
+
+
+def test_invalid_artifact_failure_mode_is_rejected() -> None:
+    with pytest.raises(ValueError, match="artifact_failure_mode"):
+        SQLSaber(
+            options=SQLSaberOptions(
+                database="sqlite:///:memory:",
+                artifact_failure_mode="invalid",  # type: ignore[arg-type]
+            )
+        )
 
 
 @pytest.mark.parametrize(
@@ -56,6 +73,52 @@ async def test_extra_capabilities_are_appended_to_managed_agent() -> None:
     )
 
     assert extra in saber.agent.capabilities
+    await saber.close()
+
+
+@pytest.mark.asyncio
+async def test_artifact_options_and_run_context_reach_managed_agent(
+    monkeypatch,
+) -> None:
+    publisher = InMemoryArtifactPublisher()
+    saber = SQLSaber(
+        options=SQLSaberOptions(
+            database="sqlite:///:memory:",
+            settings=Config.in_memory(
+                model_name="anthropic:claude-3-5-sonnet",
+                api_keys={"anthropic": "test-key"},
+            ),
+            artifact_publisher=publisher,
+            artifact_failure_mode="best_effort",
+        )
+    )
+    captured: dict[str, object] = {}
+
+    class FakeResult:
+        output = "answer"
+
+        def new_messages(self):
+            return []
+
+        def all_messages(self):
+            return []
+
+    async def fake_run(prompt: str, **kwargs):
+        captured.update(prompt=prompt, **kwargs)
+        return FakeResult()
+
+    monkeypatch.setattr(saber.agent, "run", fake_run)
+    result = await saber.query(
+        "analyze",
+        conversation_id="conversation-1",
+        metadata={"tenant_id": "acme"},
+    )
+
+    assert result == "answer"
+    assert saber.agent._artifact_publisher is publisher
+    assert saber.agent._artifact_failure_mode == "best_effort"
+    assert captured["conversation_id"] == "conversation-1"
+    assert captured["metadata"] == {"tenant_id": "acme"}
     await saber.close()
 
 

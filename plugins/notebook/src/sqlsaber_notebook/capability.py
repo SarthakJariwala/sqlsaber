@@ -22,6 +22,11 @@ from rich.rule import Rule
 from rich.style import Style
 from rich.text import Text
 
+from sqlsaber.artifacts import (
+    Artifact,
+    ArtifactBundle,
+    ArtifactContext,
+)
 from sqlsaber.capabilities.base import SqlSaberCapability
 from sqlsaber.capabilities.plugins import PluginContext
 from sqlsaber.tools.base import Tool
@@ -42,7 +47,7 @@ from .execution import (
     resolve_notebook_image,
 )
 from .rendering import limit_output, render_notebook_bytes
-from .result import ManifestEntry, Workspace
+from .result import AnalysisResult, ManifestEntry, Workspace
 
 _RESULT_FILE_PATTERN = re.compile(r"^result_[A-Za-z0-9._-]+\.json$")
 _MAX_DISPLAY_RESULTS = 2
@@ -94,6 +99,7 @@ class AnalyzeDataTool(Tool):
                 tool_name=self.name,
             )
             backend = resolve_notebook_backend()
+            publisher = getattr(self._context, "artifact_publisher", None)
             result = await analyze(
                 goal,
                 workspace,
@@ -102,7 +108,7 @@ class AnalyzeDataTool(Tool):
                 backend=backend,
                 image=resolve_notebook_image(),
                 include_snapshot_images=supports_notebook_images(model_name, provider),
-                collect_files=False,
+                collect_files=publisher is not None,
                 parent_usage=ctx.usage,
             )
             markdown, notebook_images = render_notebook_bytes(result.notebook)
@@ -111,15 +117,42 @@ class AnalyzeDataTool(Tool):
                 ctx.tool_call_id,
                 _NotebookDisplay(markdown, tuple(display_images)),
             )
-            return ToolReturn(
-                return_value=result.answer,
-                metadata={
-                    "backend": backend.name,
-                    "model": model_name,
-                    "provenance": result.provenance,
-                    "files": [item.name for item in workspace.files],
-                },
-            )
+            metadata: dict[str, object] = {
+                "backend": backend.name,
+                "model": model_name,
+                "provenance": result.provenance,
+                "files": [item.name for item in workspace.files],
+            }
+            if publisher is not None:
+                try:
+                    publication = await publisher.publish(
+                        _artifact_bundle(
+                            result,
+                            backend=backend.name,
+                            model=model_name,
+                        ),
+                        context=ArtifactContext(
+                            run_id=ctx.run_id,
+                            conversation_id=ctx.conversation_id,
+                            tool_call_id=ctx.tool_call_id,
+                            metadata=ctx.metadata or {},
+                        ),
+                    )
+                except Exception as exc:
+                    failure_mode = getattr(
+                        self._context, "artifact_failure_mode", "required"
+                    )
+                    if failure_mode == "required":
+                        return _error_result(
+                            f"Analysis completed but artifacts could not be "
+                            f"published: {exc}",
+                            backend=backend.name,
+                            phase="artifact-publication",
+                        )
+                    metadata["artifact_error"] = limit_output(str(exc), 2_000)
+                else:
+                    metadata.update(publication.to_metadata())
+            return ToolReturn(return_value=result.answer, metadata=metadata)
         except NotebookExecutionError as exc:
             return _error_result(
                 str(exc),
@@ -158,9 +191,13 @@ class AnalyzeDataTool(Tool):
 
         for index, image in enumerate(display.images, start=1):
             _render_plot(console, image, index=index)
+
+        answer = limit_output(str(result)).strip()
+        if answer:
+            console.print()
+            console.print("[bold]Analysis result[/bold]")
+            console.print(Markdown(answer))
         console.print(Rule())
-        # The child answer is intentionally not printed here. It is returned to the
-        # parent model, whose response follows this notebook display.
         return True
 
     async def close(self) -> None:
@@ -208,6 +245,49 @@ def capability(
     """Always expose the installed plugin; backend checks happen on use."""
 
     return Notebook(context)
+
+
+def _artifact_bundle(
+    result: AnalysisResult,
+    *,
+    backend: str,
+    model: str,
+) -> ArtifactBundle:
+    artifacts = [
+        Artifact(
+            name="analysis.ipynb",
+            data=result.notebook,
+            media_type="application/x-ipynb+json",
+            kind="notebook",
+        )
+    ]
+    artifacts.extend(
+        Artifact(
+            name=f"plots/plot_{index}.png",
+            data=image,
+            media_type="image/png",
+            kind="image",
+        )
+        for index, image in enumerate(result.images, start=1)
+    )
+    artifacts.extend(
+        Artifact(
+            name=f"files/{artifact.name}",
+            data=artifact.data,
+            media_type=artifact.media_type,
+            kind="file",
+        )
+        for artifact in result.files
+    )
+    return ArtifactBundle(
+        kind="notebook-analysis",
+        artifacts=tuple(artifacts),
+        metadata={
+            "backend": backend,
+            "model": model,
+            "provenance": result.provenance,
+        },
+    )
 
 
 def build_workspace_from_history(

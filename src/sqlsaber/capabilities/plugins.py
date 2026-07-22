@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib.metadata import entry_points
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.models import Model
@@ -16,6 +16,9 @@ from sqlsaber.config.settings import Config
 from sqlsaber.database.registry import DatabaseRegistry
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.overrides import ModelOverides
+
+if TYPE_CHECKING:
+    from sqlsaber.artifacts import ArtifactFailureMode, ArtifactPublisher
 
 logger = get_logger(__name__)
 PLUGIN_GROUP = "sqlsaber.capabilities"
@@ -32,6 +35,8 @@ class PluginContext:
     config: Config
     main_model_name: str
     main_api_key: str | None = None
+    artifact_publisher: ArtifactPublisher | None = None
+    artifact_failure_mode: ArtifactFailureMode = "required"
 
     def resolve_subagent_model(
         self,

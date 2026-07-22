@@ -25,7 +25,9 @@ from sqlsaber_notebook.capability import (
     build_workspace_from_history,
 )
 from sqlsaber_notebook.execution import NotebookBackendUnavailable
-from sqlsaber_notebook.result import AnalysisResult
+from sqlsaber_notebook.result import AnalysisResult, ArtifactRef
+
+from sqlsaber.artifacts import InMemoryArtifactPublisher
 
 
 def _ctx(messages: list[Any], *, tool_call_id: str = "analysis-call") -> Any:
@@ -33,6 +35,9 @@ def _ctx(messages: list[Any], *, tool_call_id: str = "analysis-call") -> Any:
         messages=messages,
         tool_call_id=tool_call_id,
         usage=RunUsage(),
+        run_id="run-1",
+        conversation_id="conversation-1",
+        metadata={"tenant_id": "acme"},
     )
 
 
@@ -179,7 +184,7 @@ def test_workspace_rejects_forged_or_invalid_requested_keys() -> None:
 
 
 @pytest.mark.asyncio
-async def test_analyze_tool_returns_text_only_and_renders_ephemeral_notebook(
+async def test_analyze_tool_renders_notebook_and_child_answer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     messages = _sql_exchange(
@@ -241,12 +246,132 @@ async def test_analyze_tool_returns_text_only_and_renders_ephemeral_notebook(
     assert "print('evidence')" in rendered
     assert "evidence" in rendered
     assert "Plot 1" in rendered
-    assert "The calculated answer is 10" not in rendered
+    assert "Analysis result" in rendered
+    assert "The calculated answer is 10" in rendered
     assert not tool.render_result_event(
         console,
         returned.return_value,
         tool_call_id="analysis-call",
     )
+
+
+@pytest.mark.asyncio
+async def test_analyze_tool_publishes_notebook_images_and_generated_files(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    messages = _sql_exchange(
+        "rows",
+        "select * from sales",
+        {
+            "success": True,
+            "results": [{"amount": 10}],
+            "file": "result_rows.json",
+        },
+    )
+    publisher = InMemoryArtifactPublisher()
+    context = SimpleNamespace(
+        resolve_subagent_model=lambda *args, **kwargs: (
+            "anthropic:claude-test",
+            "anthropic:claude-test",
+            "anthropic",
+        ),
+        artifact_publisher=publisher,
+        artifact_failure_mode="required",
+    )
+    backend = SimpleNamespace(name="docker")
+    captured: dict[str, Any] = {}
+
+    async def fake_analyze(goal: str, workspace: Any, **kwargs: Any) -> AnalysisResult:
+        captured.update(goal=goal, workspace=workspace, **kwargs)
+        return AnalysisResult(
+            answer="Published answer.",
+            notebook=_notebook_bytes(),
+            images=[_png_bytes()],
+            files=[ArtifactRef("nested/evidence.txt", b"evidence", "text/plain")],
+            provenance=["input:result_rows.json", "cell:0"],
+        )
+
+    monkeypatch.setattr(capability_module, "analyze", fake_analyze)
+    monkeypatch.setattr(capability_module, "resolve_notebook_backend", lambda: backend)
+    monkeypatch.setattr(
+        capability_module, "resolve_notebook_image", lambda: "test-image"
+    )
+
+    returned = await AnalyzeDataTool(cast(Any, context)).execute(
+        _ctx(messages), "Calculate the total"
+    )
+
+    assert isinstance(returned, ToolReturn)
+    assert captured["collect_files"] is True
+    assert returned.metadata["analysis_id"]
+    assert [item["name"] for item in returned.metadata["artifacts"]] == [
+        "analysis.ipynb",
+        "plots/plot_1.png",
+        "files/nested/evidence.txt",
+    ]
+    bundle, publication_context = publisher.publications[
+        returned.metadata["analysis_id"]
+    ]
+    assert bundle.kind == "notebook-analysis"
+    assert publication_context.run_id == "run-1"
+    assert publication_context.conversation_id == "conversation-1"
+    assert publication_context.metadata == {"tenant_id": "acme"}
+
+
+@pytest.mark.parametrize("failure_mode", ["required", "best_effort"])
+@pytest.mark.asyncio
+async def test_analyze_tool_handles_artifact_publication_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    failure_mode: str,
+) -> None:
+    class FailingPublisher:
+        async def publish(self, *args: Any, **kwargs: Any) -> None:
+            del args, kwargs
+            raise RuntimeError("bucket unavailable")
+
+    context = SimpleNamespace(
+        resolve_subagent_model=lambda *args, **kwargs: (
+            "anthropic:claude-test",
+            "anthropic:claude-test",
+            "anthropic",
+        ),
+        artifact_publisher=FailingPublisher(),
+        artifact_failure_mode=failure_mode,
+    )
+    backend = SimpleNamespace(name="docker")
+
+    async def fake_analyze(goal: str, workspace: Any, **kwargs: Any) -> AnalysisResult:
+        del goal, workspace, kwargs
+        return AnalysisResult(
+            answer="Analysis answer.",
+            notebook=_notebook_bytes(),
+            images=[],
+            files=[],
+            provenance=["cell:0"],
+        )
+
+    monkeypatch.setattr(capability_module, "analyze", fake_analyze)
+    monkeypatch.setattr(capability_module, "resolve_notebook_backend", lambda: backend)
+    monkeypatch.setattr(
+        capability_module, "resolve_notebook_image", lambda: "test-image"
+    )
+    messages = _sql_exchange(
+        "rows",
+        "select 1",
+        {"success": True, "results": [{"value": 1}], "file": "result_rows.json"},
+    )
+
+    returned = await AnalyzeDataTool(cast(Any, context)).execute(
+        _ctx(messages), "Analyze"
+    )
+
+    if failure_mode == "required":
+        assert isinstance(returned, str)
+        assert json.loads(returned)["phase"] == "artifact-publication"
+    else:
+        assert isinstance(returned, ToolReturn)
+        assert returned.return_value == "Analysis answer."
+        assert returned.metadata["artifact_error"] == "bucket unavailable"
 
 
 @pytest.mark.asyncio

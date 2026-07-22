@@ -9,6 +9,7 @@ from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 from pydantic_ai.models.anthropic import AnthropicModelSettings
 
 from sqlsaber.agents.model_factory import UNIFIED_EFFORT_MAP, build_model
+from sqlsaber.artifacts import ArtifactFailureMode, ArtifactPublisher
 from sqlsaber.capabilities import Knowledge, SqlTools
 from sqlsaber.capabilities.base import SqlSaberCapability
 from sqlsaber.capabilities.plugins import PluginContext, discover_capabilities
@@ -55,6 +56,8 @@ class SQLSaberAgent:
         system_prompt: str | None = None,
         tool_overides: ToolOveridesInput | None = None,
         extra_capabilities: Sequence[AbstractCapability[Any]] = (),
+        artifact_publisher: ArtifactPublisher | None = None,
+        artifact_failure_mode: ArtifactFailureMode = "required",
     ) -> None:
         if registry is None:
             if db_connection is None:
@@ -81,6 +84,8 @@ class SQLSaberAgent:
         self.allow_dangerous = allow_dangerous
         self._tool_overides = normalize_tool_overides(tool_overides)
         self._extra_capabilities = tuple(extra_capabilities)
+        self._artifact_publisher = artifact_publisher
+        self._artifact_failure_mode = artifact_failure_mode
         self.schema_manager: SchemaManager = primary.schema_manager
         self.thinking_enabled = (
             thinking_enabled
@@ -144,6 +149,8 @@ class SQLSaberAgent:
                     config=self.config,
                     main_model_name=model_name,
                     main_api_key=api_key,
+                    artifact_publisher=self._artifact_publisher,
+                    artifact_failure_mode=self._artifact_failure_mode,
                 )
             )
         )
@@ -200,11 +207,16 @@ class SQLSaberAgent:
             Awaitable[None],
         ]
         | None = None,
+        *,
+        conversation_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> Any:
         """Run the agent without occupying the embedding agent's deps slot."""
         return await self.agent.run(
             prompt,
             message_history=message_history,
+            conversation_id=conversation_id,
+            metadata=metadata,
             event_stream_handler=event_stream_handler,
         )
 
