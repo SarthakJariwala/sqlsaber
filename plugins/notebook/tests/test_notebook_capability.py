@@ -90,6 +90,44 @@ def _png_bytes() -> bytes:
     return buffer.getvalue()
 
 
+class _RecordingTUI:
+    def __init__(self) -> None:
+        self.markdown: list[str] = []
+        self.images: list[tuple[bytes, str, dict[str, object]]] = []
+        self.panels = 0
+
+    def append_panel(self) -> _RecordingTUI:
+        self.panels += 1
+        return self
+
+    def append_markdown(self, text: str = "", *, muted: bool = False) -> object:
+        del muted
+        self.markdown.append(text)
+        return object()
+
+    def append_image(
+        self,
+        data: bytes,
+        mime_type: str,
+        *,
+        filename: str | None = None,
+        max_width_cells: int = 60,
+        max_height_cells: int | None = None,
+    ) -> object:
+        self.images.append(
+            (
+                data,
+                mime_type,
+                {
+                    "filename": filename,
+                    "max_width_cells": max_width_cells,
+                    "max_height_cells": max_height_cells,
+                },
+            )
+        )
+        return object()
+
+
 @pytest.mark.asyncio
 async def test_workspace_selects_newest_successful_selects_and_pairs_sql() -> None:
     messages = [
@@ -252,14 +290,53 @@ async def test_analyze_tool_renders_notebook_and_child_answer(
     assert captured["collect_files"] is False
     assert captured["parent_usage"] is not None
 
+    request_tui = _RecordingTUI()
+    assert tool.render_executing_tui(request_tui, {"goal": "Calculate the total"})
+    assert request_tui.panels == 1
+    assert request_tui.markdown == ["**Analyzing data**\n\nCalculate the total"]
+
+    tui = _RecordingTUI()
+    assert tool.render_result_tui(
+        tui,
+        returned.return_value,
+        tool_call_id="analysis-call",
+        metadata=returned.metadata,
+    )
+    assert tui.panels == 1
+    assert "Analysis notebook" in tui.markdown[0]
+    assert "print('evidence')" in tui.markdown[0]
+    assert tui.markdown[1] == "**Plot 1**"
+    assert tui.images == [
+        (
+            _png_bytes(),
+            "image/png",
+            {
+                "filename": "plot_1.png",
+                "max_width_cells": 80,
+                "max_height_cells": 24,
+            },
+        )
+    ]
+    assert "Analysis result" in tui.markdown[-1]
+    assert "The calculated answer is 10" in tui.markdown[-1]
+    assert not tool.render_result_tui(
+        tui,
+        returned.return_value,
+        tool_call_id="analysis-call",
+    )
+
+    rich_returned = await tool.execute(
+        _ctx(messages, tool_call_id="rich-analysis-call"), "Calculate the total"
+    )
+    assert isinstance(rich_returned, ToolReturn)
     console = Console(
         record=True, force_terminal=True, color_system="truecolor", width=60
     )
     assert tool.render_result_event(
         console,
-        returned.return_value,
-        tool_call_id="analysis-call",
-        metadata=returned.metadata,
+        rich_returned.return_value,
+        tool_call_id="rich-analysis-call",
+        metadata=rich_returned.metadata,
     )
     rendered = console.export_text()
     assert "Analysis notebook" in rendered
@@ -270,8 +347,8 @@ async def test_analyze_tool_renders_notebook_and_child_answer(
     assert "The calculated answer is 10" in rendered
     assert not tool.render_result_event(
         console,
-        returned.return_value,
-        tool_call_id="analysis-call",
+        rich_returned.return_value,
+        tool_call_id="rich-analysis-call",
     )
 
 

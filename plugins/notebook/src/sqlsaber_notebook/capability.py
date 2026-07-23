@@ -39,7 +39,7 @@ from sqlsaber.query_results import (
     QueryResultStore,
     QueryResultUnavailable,
 )
-from sqlsaber.tools.base import Tool
+from sqlsaber.tools.base import Tool, ToolResultTUI
 from sqlsaber.utils.json_utils import json_dumps
 
 from ._shared import (
@@ -186,6 +186,49 @@ class AnalyzeDataTool(Tool):
             console.print(f"[muted bold]Analyzing data:[/muted bold] {goal.strip()}")
         else:
             console.print("[muted bold]Analyzing data in notebook[/muted bold]")
+        return True
+
+    def render_executing_tui(self, tui: ToolResultTUI, args: dict) -> bool:
+        """Render the notebook request in a theme-matched panel."""
+        panel = tui.append_panel()
+        goal = args.get("goal")
+        if isinstance(goal, str) and goal.strip():
+            request = limit_output(goal.strip(), 4_000)
+            panel.append_markdown(f"**Analyzing data**\n\n{request}")
+        else:
+            panel.append_markdown("**Analyzing data in notebook**")
+        return True
+
+    def render_result_tui(
+        self,
+        tui: ToolResultTUI,
+        result: object,
+        *,
+        tool_call_id: str | None = None,
+        metadata: object = None,
+    ) -> bool:
+        """Render the notebook with native saber-tui Markdown and Image components."""
+        del metadata
+        display = self._display_results.pop(tool_call_id or "", None)
+        if display is None:
+            return False
+
+        panel = tui.append_panel()
+        notebook = display.markdown.strip() or "*No notebook cells were executed.*"
+        panel.append_markdown(f"## Analysis notebook\n\n{notebook}")
+        for index, image in enumerate(display.images, start=1):
+            panel.append_markdown(f"**Plot {index}**")
+            panel.append_image(
+                image,
+                "image/png",
+                filename=f"plot_{index}.png",
+                max_width_cells=_MAX_PLOT_COLUMNS,
+                max_height_cells=_MAX_PLOT_ROWS,
+            )
+
+        answer = limit_output(str(result)).strip()
+        if answer:
+            panel.append_markdown(f"## Analysis result\n\n{answer}")
         return True
 
     def render_result_event(

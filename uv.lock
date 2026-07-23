@@ -3022,16 +3022,16 @@ wheels = [
 
 [[package]]
 name = "saber-tui"
-version = "0.5.0"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "mistune" },
     { name = "regex" },
     { name = "wcwidth" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7d/f3/62a88e1815cd9a917c689160b6e12596bb76cc173bf68785d0f0a74ceb06/saber_tui-0.5.0.tar.gz", hash = "sha256:721fc6fde7067b32affaa019ecf5be9a4f28f5a2289837b2c767dea06bda25cb", size = 155608, upload-time = "2026-07-13T21:49:27.1Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/22/51/6757f60b7350accad4f07118e1d2285c4d3598995cd6c3085b999d8c1d77/saber_tui-0.6.0.tar.gz", hash = "sha256:f6694087b00508c36cc031a78289a1c696605a79c28331577c3b739ebd241aa5", size = 163824, upload-time = "2026-07-21T23:32:26.566Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/dc/0a/459dc360c6191f4cc1a1210b994380db52c97be3bd0e3be7b8d74ad8db5a/saber_tui-0.5.0-py3-none-any.whl", hash = "sha256:22a17e3f2fb2802f8da7911acd2f77fd4702969b1fb7d56b7c80681e393a92f5", size = 65247, upload-time = "2026-07-13T21:49:25.976Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/df/923445a3c2f15c79f35854ab2ebe007371cdd5d152569267d80ce43578cd/saber_tui-0.6.0-py3-none-any.whl", hash = "sha256:fa81993c88e09cde17647bc9057e39b90a53a9eee94f53a01b01a2a62ecb3a5f", size = 71045, upload-time = "2026-07-21T23:32:25.709Z" },
 ]
 
 [[package]]
@@ -3167,7 +3167,7 @@ requires-dist = [
     { name = "pydantic-ai", extras = ["cohere", "groq", "huggingface", "mistral"], specifier = ">=2.9,<3" },
     { name = "questionary", specifier = ">=2.1.0" },
     { name = "rich", specifier = ">=13.7.0" },
-    { name = "saber-tui", specifier = ">=0.5.0" },
+    { name = "saber-tui", specifier = ">=0.6.0" },
     { name = "sqlglot", extras = ["rs"], specifier = ">=27.20.0" },
     { name = "structlog", specifier = ">=25.4.0" },
     { name = "tabulate", specifier = ">=0.9.0" },

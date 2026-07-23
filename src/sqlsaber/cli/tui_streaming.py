@@ -226,14 +226,17 @@ class TUIStreamingQueryHandler:
                 self._clear_tool_call_state(index)
             return
 
-        self._append_display(
-            lambda display: display.show_tool_executing(event.part.tool_name, args)
-        )
+        if not self._append_tui_tool_executing(event.part.tool_name, args):
+            self._append_display(
+                lambda display: display.show_tool_executing(event.part.tool_name, args)
+            )
         if index is not None:
             self._discard_sql_stream(index)
             self._clear_tool_call_state(index)
         if event.part.tool_name == "viz":
             self.app.set_loading("Generating visualization...")
+        elif event.part.tool_name == "analyze_data":
+            self.app.set_loading("Analyzing data...")
 
     async def _on_tool_result(
         self, event: FunctionToolResultEvent, ctx: RunContext | None
@@ -282,12 +285,21 @@ class TUIStreamingQueryHandler:
                 self.app.append_markdown(markdown)
                 self.app.set_loading("Crunching data...")
                 return
+        metadata = getattr(event.part, "metadata", None)
+        if self._append_tui_tool_result(
+            tool_name,
+            content,
+            tool_call_id=event.part.tool_call_id,
+            metadata=metadata,
+        ):
+            self.app.set_loading("Crunching data...")
+            return
         self._append_display(
             lambda display: display.show_tool_result(
                 tool_name,
                 content,
                 tool_call_id=event.part.tool_call_id,
-                metadata=getattr(event.part, "metadata", None),
+                metadata=metadata,
             )
         )
         self.app.set_loading("Crunching data...")
@@ -465,6 +477,35 @@ class TUIStreamingQueryHandler:
     def _maybe_start_sql_generation_status(self, tool_name: str) -> None:
         if tool_name == "execute_sql":
             self.app.set_loading("Generating SQL...")
+
+    def _append_tui_tool_executing(self, tool_name: str, args: dict[str, Any]) -> bool:
+        registry = self._resolve_display_registry() or {}
+        tool = registry.get(tool_name)
+        if tool is None:
+            return False
+        return tool.render_executing_tui(self.app, args)
+
+    def _append_tui_tool_result(
+        self,
+        tool_name: str,
+        result: object,
+        *,
+        tool_call_id: str | None,
+        metadata: object,
+    ) -> bool:
+        registry = self._resolve_display_registry() or {}
+        tool = registry.get(tool_name)
+        if tool is None:
+            return False
+        set_replay_messages = getattr(tool, "set_replay_messages", None)
+        if self._replay_messages is not None and callable(set_replay_messages):
+            set_replay_messages(self._replay_messages)
+        return tool.render_result_tui(
+            self.app,
+            result,
+            tool_call_id=tool_call_id,
+            metadata=metadata,
+        )
 
     def _resolve_display_registry(self) -> Mapping[str, Tool] | None:
         if self._display_registry_provider is not None:
