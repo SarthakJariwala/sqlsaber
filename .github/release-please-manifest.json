@@ -1,6 +1,6 @@
 {
   ".": "0.69.0",
   "plugins/viz": "0.5.0",
-  "plugins/notebook": "0.2.0",
+  "plugins/notebook": "0.3.0",
   "plugins/sandbox": "0.3.0"
 }
