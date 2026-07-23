@@ -6,6 +6,7 @@ Implemented components:
 
 - provider-neutral notebook execution contract,
 - hardened local Docker execution (default),
+- explicit local microVM execution through the optional `microsandbox` extra,
 - explicit remote Modal Sandbox execution through the optional `modal` extra,
 - fresh-kernel transactional notebook sessions,
 - bounded notebook/image rendering and history collapse,
@@ -37,12 +38,32 @@ uv tool install --with sqlsaber-notebook sqlsaber
 saber
 ```
 
-Docker is the default local backend. Select Modal explicitly because query results
-will be uploaded to a third party:
+Docker is the default local backend. Microsandbox is an opt-in local backend that
+runs notebook code in a hardware-isolated Linux microVM without host bind mounts:
+
+```bash
+uv tool install --with 'sqlsaber-notebook[microsandbox]' sqlsaber
+SQLSABER_NOTEBOOK_BACKEND=microsandbox saber
+```
+
+Microsandbox 0.6 is beta. It supports Apple Silicon macOS, Linux x86_64/ARM64 with
+usable KVM, and preview Windows x86_64/ARM64 hosts with Windows Hypervisor Platform.
+Intel macOS is not supported. Its OCI cache under `~/.microsandbox` is separate from
+Docker, so the first image preparation can be large and slow. For private or
+overridden registry images, authenticate them with Microsandbox's registry login
+support or set `SQLSABER_NOTEBOOK_IMAGE` to an immutable digest in an accessible
+registry.
+Guest networking is disabled, the restricted security profile is requested, and
+notebook processes receive a process-level PID rlimit. Microsandbox runs locally;
+query results are not uploaded to a third-party sandbox service.
+
+Select Modal explicitly because query results will be uploaded to a third party:
 
 ```bash
 SQLSABER_NOTEBOOK_BACKEND=modal saber
 ```
+
+Backends never fall back automatically after selection or failure.
 
 Configure a dedicated analyst model with:
 
@@ -106,6 +127,10 @@ Run live backend integration tests explicitly:
 ```bash
 SQLSABER_RUN_DOCKER_INTEGRATION=1 \
   uv run pytest plugins/notebook/tests/test_notebook_docker_integration.py -q
+
+SQLSABER_RUN_MICROSANDBOX_INTEGRATION=1 \
+  uv run --project plugins/notebook pytest \
+  plugins/notebook/tests/test_notebook_microsandbox_integration.py -q
 
 SQLSABER_RUN_MODAL_INTEGRATION=1 \
   uv run pytest plugins/notebook/tests/test_notebook_modal_integration.py -q

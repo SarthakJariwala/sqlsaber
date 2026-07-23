@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- add an opt-in local Microsandbox microVM execution backend while retaining Docker as the default
+
 ## [0.2.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-notebook-v0.1.0...sqlsaber-notebook-v0.2.0) (2026-07-22)
 
 

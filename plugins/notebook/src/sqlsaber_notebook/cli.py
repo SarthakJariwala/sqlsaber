@@ -74,7 +74,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--backend",
-        choices=("docker", "modal"),
+        choices=("docker", "microsandbox", "modal"),
         default=os.getenv("SQLSABER_NOTEBOOK_BACKEND", "docker"),
     )
     parser.add_argument("--output", type=Path, default=Path("analysis.ipynb"))

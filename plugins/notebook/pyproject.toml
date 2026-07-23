@@ -11,6 +11,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+microsandbox = ["microsandbox>=0.6.6,<0.7"]
 modal = ["modal>=1.4,<2"]
 
 [tool.uv.sources]
@@ -33,5 +34,6 @@ packages = ["src/sqlsaber_notebook"]
 dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=1.0.0",
+    "microsandbox>=0.6.6,<0.7; (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and platform_machine == 'x86_64') or (sys_platform == 'linux' and platform_machine == 'aarch64') or (sys_platform == 'win32' and platform_machine == 'AMD64') or (sys_platform == 'win32' and platform_machine == 'ARM64')",
     "modal>=1.4,<2",
 ]
