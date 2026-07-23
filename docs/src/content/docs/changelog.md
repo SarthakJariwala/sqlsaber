@@ -25,6 +25,15 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.70.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.69.0...sqlsaber-v0.70.0) (2026-07-23)
+
+
+### Features
+
+* add durable query result storage ([#205](https://github.com/SarthakJariwala/sqlsaber/issues/205)) ([6573f1e](https://github.com/SarthakJariwala/sqlsaber/commit/6573f1e8ae0b20e5f69bf81495a8ce3ab420c290))
+* add Microsandbox execution backend for notebook ([#211](https://github.com/SarthakJariwala/sqlsaber/issues/211)) ([b960092](https://github.com/SarthakJariwala/sqlsaber/commit/b960092d53263ffa9ee6c3e96bcc7a0b1b2d014a))
+* render analyses with native TUI ([#210](https://github.com/SarthakJariwala/sqlsaber/issues/210)) ([607e10f](https://github.com/SarthakJariwala/sqlsaber/commit/607e10fd8a0443783edba76be5ec042fa1e20d5a))
+
 ## [0.69.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.68.0...sqlsaber-v0.69.0) (2026-07-22)
 
 
