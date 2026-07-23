@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.5.0...sqlsaber-viz-v0.6.0) (2026-07-23)
+
+
+### Features
+
+* add durable query result storage ([#205](https://github.com/SarthakJariwala/sqlsaber/issues/205)) ([6573f1e](https://github.com/SarthakJariwala/sqlsaber/commit/6573f1e8ae0b20e5f69bf81495a8ce3ab420c290))
+
 ## [0.5.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.4.0...sqlsaber-viz-v0.5.0) (2026-07-22)
 
 
