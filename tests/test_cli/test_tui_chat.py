@@ -1,7 +1,7 @@
 import asyncio
 import time
 from collections.abc import Callable
-from io import StringIO
+from io import BytesIO, StringIO
 from types import SimpleNamespace
 
 import pytest
@@ -23,7 +23,9 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.usage import RequestUsage, RunUsage
 from rich.table import Table
-from saber_tui import PosixProcessTerminal, WindowsProcessTerminal
+from saber_tui import PosixProcessTerminal, TerminalCapabilities, WindowsProcessTerminal
+from saber_tui.components import Box
+from saber_tui.components import Image as TUIImage
 from saber_tui.components import Markdown
 from saber_tui.stdin_buffer import StdinBuffer
 from saber_tui.utils import strip_ansi, visible_width
@@ -659,6 +661,50 @@ def test_chat_app_uses_native_saber_tui_markdown() -> None:
     assert "streamed markdown" in "\n".join(app.render_plain_viewport())
 
 
+def test_chat_app_appends_theme_matched_tool_panel() -> None:
+    app = build_chat_app(
+        terminal=FakeTerminal(columns=80, rows=12), on_submit=lambda text: None
+    )
+
+    panel = app.append_panel()
+    panel.append_markdown("**Analyzing data**\n\nFind the strongest peaks")
+    panel.append_markdown("```python\nimport json\nprint(json.dumps({}))\n```")
+
+    component = app.chat_container.children[-1]
+    assert isinstance(component, Box)
+    rendered = component.render(80)
+    assert any("Analyzing data" in strip_ansi(line) for line in rendered)
+    assert all("\x1b[48;2;" in line for line in rendered)
+    assert all(visible_width(line) == 80 for line in rendered)
+    assert any("\x1b[39;00m\x1b[48;2;" in line for line in rendered)
+
+
+def test_chat_app_appends_native_terminal_image() -> None:
+    from PIL import Image as PillowImage
+
+    png = BytesIO()
+    PillowImage.new("RGB", (8, 4), "red").save(png, format="PNG")
+
+    app = build_chat_app(
+        terminal=FakeTerminal(columns=80, rows=12), on_submit=lambda text: None
+    )
+    app.tui.capabilities = TerminalCapabilities("kitty")
+    component = app.append_image(
+        png.getvalue(),
+        "image/png",
+        filename="plot_1.png",
+        max_width_cells=40,
+        max_height_cells=10,
+    )
+
+    assert isinstance(component, TUIImage)
+    assert component.options.filename == "plot_1.png"
+    assert component.options.max_width_cells == 40
+    assert component.options.max_height_cells == 10
+    assert component in app.chat_container.children
+    assert component.render(80)[0].startswith("\x1b_G")
+
+
 def test_ansi_block_wraps_once_per_width(monkeypatch) -> None:
     calls = 0
     original_wrap = tui_chat.wrap_text_with_ansi
@@ -1209,6 +1255,64 @@ async def test_successful_run_preserves_reconciled_sql_after_state_cleanup() -> 
     assert handler._tool_call_ids == {}
     assert handler._sql_stream_components == {}
     assert handler._sql_stream_queries == {}
+
+
+@pytest.mark.asyncio
+async def test_streaming_handler_prefers_native_tool_result_tui() -> None:
+    class NativeRenderer:
+        def render_executing_tui(self, tui, args: dict) -> bool:
+            tui.append_markdown(f"native request: {args['goal']}")
+            return True
+
+        def render_result_tui(
+            self,
+            tui,
+            result: object,
+            *,
+            tool_call_id: str | None = None,
+            metadata: object = None,
+        ) -> bool:
+            tui.append_markdown(f"native {result} ({tool_call_id}, {metadata})")
+            return True
+
+    app = build_chat_app(
+        terminal=FakeTerminal(columns=80, rows=20), on_submit=lambda text: None
+    )
+    handler = TUIStreamingQueryHandler(
+        app,
+        create_console(file=StringIO(), width=80, legacy_windows=False),
+        display_registry={"analyze_data": NativeRenderer()},
+    )
+
+    await handler.on_event(
+        FunctionToolCallEvent(
+            ToolCallPart(
+                "analyze_data",
+                {"goal": "Find peaks"},
+                tool_call_id="native-call",
+            )
+        )
+    )
+    assert app.status.text == "Analyzing data..."
+
+    await handler.on_event(
+        FunctionToolResultEvent(
+            ToolReturnPart(
+                "analyze_data",
+                "result",
+                tool_call_id="native-call",
+                metadata={"source": "test"},
+            )
+        )
+    )
+
+    components = [
+        child for child in app.chat_container.children if isinstance(child, Markdown)
+    ]
+    assert [component.text for component in components] == [
+        "native request: Find peaks",
+        "native result (native-call, {'source': 'test'})",
+    ]
 
 
 @pytest.mark.asyncio

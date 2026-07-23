@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import platform
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
@@ -24,10 +25,14 @@ from saber_tui import (
     matches_key,
 )
 from saber_tui.components import (
+    Box,
     CancellableLoader,
     DefaultTextStyle,
     Editor,
     EditorTheme,
+    Image,
+    ImageOptions,
+    ImageTheme,
     Markdown,
     MarkdownTheme,
     SettingItem,
@@ -56,9 +61,26 @@ def _fg(r: int, g: int, b: int) -> Callable[[str], str]:
     return lambda text: f"{code}{text}\x1b[39m"
 
 
+_SGR_RE = re.compile(r"\x1b\[([0-9;]*)m")
+
+
 def _bg(r: int, g: int, b: int) -> Callable[[str], str]:
     code = f"\x1b[48;2;{r};{g};{b}m"
-    return lambda text: f"{code}{text}\x1b[49m"
+
+    def apply(text: str) -> str:
+        # Syntax highlighters may emit a full SGR reset (for example ``39;00``),
+        # which also clears an enclosing panel background. Restore it after any
+        # full/background reset so highlighted code stays visually continuous.
+        def restore(match: re.Match[str]) -> str:
+            parameters = match.group(1).split(";")
+            clears_background = not match.group(1) or any(
+                parameter in {"0", "00", "49"} for parameter in parameters
+            )
+            return match.group(0) + code if clears_background else match.group(0)
+
+        return f"{code}{_SGR_RE.sub(restore, text)}\x1b[49m"
+
+    return apply
 
 
 def _bold(text: str) -> str:
@@ -170,6 +192,21 @@ def _theme_user_bg() -> Callable[[str], str]:
     return _bg(*_blend(background, accent, 0.16))
 
 
+def _theme_tool_bg() -> Callable[[str], str]:
+    """Derive a subtle tool panel background from the selected theme."""
+    tm = get_theme_manager()
+    try:
+        style = get_style_by_name(tm.pygments_style_name)
+    except ClassNotFound:
+        return _bg(*USER_BG_FALLBACK)
+
+    background = _hex_to_rgb(getattr(style, "background_color", None))
+    if background is None:
+        background = USER_BG_FALLBACK
+    accent = _theme_fg_rgb("panel.border.assistant", SUCCESS_FALLBACK)
+    return _bg(*_blend(background, accent, 0.10))
+
+
 @dataclass(frozen=True)
 class _TUITheme:
     user_fg: Callable[[str], str]
@@ -179,6 +216,7 @@ class _TUITheme:
     spinner_fg: Callable[[str], str]
     status_fg: Callable[[str], str]
     user_bg: Callable[[str], str]
+    tool_bg: Callable[[str], str]
     markdown: MarkdownTheme
 
 
@@ -207,6 +245,7 @@ def _build_tui_theme() -> _TUITheme:
         spinner_fg=_theme_fg("spinner", WARNING_FALLBACK),
         status_fg=_theme_fg("status", WARNING_FALLBACK),
         user_bg=_theme_user_bg(),
+        tool_bg=_theme_tool_bg(),
         markdown=MarkdownTheme(
             heading=primary,
             link=info,
@@ -501,6 +540,44 @@ class ChatConsole(Console):
         self._app.append_rich(lambda console: console.print_json(*args, **kwargs))
 
 
+class _PanelTUIView:
+    """Tool renderer surface backed by one themed saber-tui box."""
+
+    def __init__(self, app: ChatApp, box: Box) -> None:
+        self.app = app
+        self.box = box
+
+    def append_markdown(self, text: str = "", *, muted: bool = False) -> Markdown:
+        component = self.app._create_markdown(text, muted=muted)
+        self._append(component)
+        return component
+
+    def append_image(
+        self,
+        data: bytes,
+        mime_type: str,
+        *,
+        filename: str | None = None,
+        max_width_cells: int = 60,
+        max_height_cells: int | None = None,
+    ) -> Image:
+        component = self.app._create_image(
+            data,
+            mime_type,
+            filename=filename,
+            max_width_cells=max_width_cells,
+            max_height_cells=max_height_cells,
+        )
+        self._append(component)
+        return component
+
+    def _append(self, component) -> None:
+        if self.box.children:
+            self.box.add_child(_AnsiBlock(""))
+        self.box.add_child(component)
+        self.app.tui.request_render()
+
+
 class ChatApp:
     """Small persistent chat shell built on saber-tui."""
 
@@ -577,6 +654,33 @@ class ChatApp:
         self._append_component(component)
         return component
 
+    def append_panel(self) -> _PanelTUIView:
+        """Append a theme-derived background panel for a tool interaction."""
+        box = Box(padding_x=2, padding_y=1, bg_fn=self.theme.tool_bg)
+        panel = _PanelTUIView(self, box)
+        self._append_component(box)
+        return panel
+
+    def append_image(
+        self,
+        data: bytes,
+        mime_type: str,
+        *,
+        filename: str | None = None,
+        max_width_cells: int = 60,
+        max_height_cells: int | None = None,
+    ) -> Image:
+        """Append a terminal-native image with saber-tui's text fallback."""
+        component = self._create_image(
+            data,
+            mime_type,
+            filename=filename,
+            max_width_cells=max_width_cells,
+            max_height_cells=max_height_cells,
+        )
+        self._append_component(component)
+        return component
+
     def insert_markdown_before(
         self, before: Markdown, text: str = "", *, muted: bool = False
     ) -> Markdown:
@@ -612,6 +716,27 @@ class ChatApp:
             text,
             theme=self.theme.markdown,
             default_text_style=default_style,
+        )
+
+    def _create_image(
+        self,
+        data: bytes,
+        mime_type: str,
+        *,
+        filename: str | None,
+        max_width_cells: int,
+        max_height_cells: int | None,
+    ) -> Image:
+        return Image(
+            self.tui,
+            data,
+            mime_type,
+            theme=ImageTheme(fallback_color=self.theme.muted_fg),
+            options=ImageOptions(
+                filename=filename,
+                max_width_cells=max_width_cells,
+                max_height_cells=max_height_cells,
+            ),
         )
 
     def freeze_markdown(self, component: Markdown) -> Markdown:
