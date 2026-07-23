@@ -22,8 +22,8 @@ from .docker import DockerNotebookBackend
 
 DEFAULT_NOTEBOOK_BACKEND = "docker"
 DEFAULT_NOTEBOOK_IMAGE = (
-    "jupyter/scipy-notebook@sha256:"
-    "fca4bcc9cbd49d9a15e0e4df6c666adf17776c950da9fa94a4f0a045d5c4ad33"
+    "quay.io/jupyter/scipy-notebook@sha256:"
+    "e6e8baae46b5e62bbc26910169082639a6fd96f90e9f6fc52e0c0389df92d35c"
 )
 
 
@@ -34,12 +34,17 @@ def resolve_notebook_backend(name: str | None = None) -> NotebookBackend:
     normalized = selected.strip().lower()
     if normalized == "docker":
         return DockerNotebookBackend()
+    if normalized == "microsandbox":
+        from .microsandbox import MicrosandboxNotebookBackend
+
+        return MicrosandboxNotebookBackend()
     if normalized == "modal":
         from .modal import ModalNotebookBackend
 
         return ModalNotebookBackend()
     raise NotebookBackendUnavailable(
-        f"Unknown notebook backend {selected!r}; expected 'docker' or 'modal'",
+        f"Unknown notebook backend {selected!r}; expected 'docker', "
+        "'microsandbox', or 'modal'",
         backend=normalized or "unknown",
         phase="configuration",
     )

@@ -56,8 +56,11 @@ def test_backend_selection_is_explicit_without_fallback(
     assert resolve_notebook_backend().name == "modal"
     assert resolve_notebook_backend("docker").name == "docker"
 
+    assert resolve_notebook_backend("microsandbox").name == "microsandbox"
+
     with pytest.raises(
-        NotebookBackendUnavailable, match="expected 'docker' or 'modal'"
+        NotebookBackendUnavailable,
+        match="expected 'docker', 'microsandbox', or 'modal'",
     ):
         resolve_notebook_backend("daytona")
 
