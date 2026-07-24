@@ -73,6 +73,7 @@ async def test_live_daytona_notebook_contract_and_deletion() -> None:
         limits=ExecutionLimits(),
     )
     name = environment.sandbox_name
+    assert environment.remote_root.startswith("/tmp/sqlsaber-notebook/")
     try:
         first = await environment.execute(
             contract_notebook(),

@@ -48,15 +48,56 @@ _AUTO_STOP_MINUTES = 24 * 60
 _DELETE_TIMEOUT_SECONDS = 60
 _INVENTORY_MAX_BYTES = 128 * 1024
 _DOWNLOAD_CHUNK_BYTES = 1024 * 1024
+_REMOTE_PARENT = "/tmp/sqlsaber-notebook"
+
+_SECURE_PARENT_SCRIPT = r"""
+import os
+import pathlib
+import stat
+import sys
+
+parent = pathlib.Path(sys.argv[1])
+
+def validate_directory(path, *, allow_sticky_writable):
+    info = os.lstat(path)
+    mode = stat.S_IMODE(info.st_mode)
+    if not stat.S_ISDIR(info.st_mode):
+        raise SystemExit(f"trusted ancestor is not a directory: {path}")
+    if info.st_uid != 0:
+        raise SystemExit(f"trusted ancestor is not root-owned: {path}")
+    if mode & 0o022 and not (allow_sticky_writable and mode & stat.S_ISVTX):
+        raise SystemExit(f"trusted ancestor is writable by non-root users: {path}")
+
+for ancestor in (*reversed(parent.parent.parents), parent.parent):
+    validate_directory(ancestor, allow_sticky_writable=True)
+try:
+    parent.mkdir(mode=0o711)
+except FileExistsError:
+    pass
+validate_directory(parent, allow_sticky_writable=False)
+""".strip()
 
 _ROOT_PREFLIGHT_SCRIPT = r"""
 import os
 import pathlib
 import pwd
 import shutil
+import stat
 import sys
 
 run = pathlib.Path(sys.argv[1])
+trusted_root = run.parent
+
+def validate_directory(path, *, allow_sticky_writable):
+    info = os.lstat(path)
+    mode = stat.S_IMODE(info.st_mode)
+    if not stat.S_ISDIR(info.st_mode):
+        raise SystemExit(f"trusted ancestor is not a directory: {path}")
+    if info.st_uid != 0:
+        raise SystemExit(f"trusted ancestor is not root-owned: {path}")
+    if mode & 0o022 and not (allow_sticky_writable and mode & stat.S_ISVTX):
+        raise SystemExit(f"trusted ancestor is writable by non-root users: {path}")
+
 if os.geteuid() != 0:
     raise SystemExit("Daytona control process is not root")
 if pwd.getpwnam("jovyan").pw_name != "jovyan":
@@ -66,6 +107,10 @@ for path in ("/usr/sbin/runuser", "/opt/conda/bin/python"):
         raise SystemExit(f"required executable is missing: {path}")
 if shutil.which("jupyter") is None:
     raise SystemExit("jupyter is missing")
+for ancestor in reversed(trusted_root.parent.parents):
+    validate_directory(ancestor, allow_sticky_writable=True)
+validate_directory(trusted_root.parent, allow_sticky_writable=False)
+validate_directory(trusted_root, allow_sticky_writable=False)
 probe = run / ".root-write-probe"
 probe.write_bytes(b"ok")
 probe.unlink()
@@ -79,6 +124,7 @@ import sys
 
 source = pathlib.Path(sys.argv[1])
 run = pathlib.Path(sys.argv[2])
+trusted_root = run.parent
 if pwd.getpwuid(os.geteuid()).pw_name != "jovyan":
     raise SystemExit("notebook process is not jovyan")
 source.read_bytes()
@@ -98,6 +144,19 @@ for operation in operations:
     except OSError:
         continue
     raise SystemExit("protected notebook input was mutable")
+for protected_directory in (trusted_root, trusted_root.parent):
+    target = protected_directory.with_name(f"{protected_directory.name}-moved")
+    try:
+        protected_directory.rename(target)
+    except OSError:
+        continue
+    raise SystemExit("trusted notebook control directory was renamable")
+try:
+    (trusted_root.parent / "replacement").mkdir()
+except OSError:
+    pass
+else:
+    raise SystemExit("trusted notebook parent was writable")
 """.strip()
 
 _STOP_USER_PROCESSES_SCRIPT = r"""
@@ -283,9 +342,7 @@ class DaytonaNotebookBackend(NotebookBackend):
                     params,
                     timeout=limits.image_prepare_seconds,
                 )
-            async with asyncio.timeout(limits.open_seconds):
-                work_dir = await sandbox.get_work_dir()
-            remote_root = f"{work_dir.rstrip('/')}/sqlsaber-notebook-{uuid.uuid4().hex}"
+            remote_root = f"{_REMOTE_PARENT}/{uuid.uuid4().hex}"
             environment = DaytonaNotebookEnvironment(
                 sdk=sdk,
                 client=client,
@@ -381,6 +438,20 @@ class DaytonaNotebookEnvironment(NotebookEnvironment):
     async def stage(self, inputs: Sequence[NotebookInput]) -> None:
         sentinel = f"{self.inputs_path}/.sqlsaber-preflight"
         try:
+            result = await self._exec(
+                "image-preflight",
+                _PYTHON,
+                "-c",
+                _SECURE_PARENT_SCRIPT,
+                _REMOTE_PARENT,
+                timeout=self.limits.open_seconds,
+            )
+            self._require_success(
+                result,
+                "Notebook image cannot provide a secure Daytona control parent",
+                phase="image-preflight",
+                image_error=True,
+            )
             result = await self._exec(
                 "input-upload",
                 "mkdir",
@@ -1199,8 +1270,13 @@ async def _delete_resources(
     sandbox_name: str,
 ) -> None:
     try:
-        async with asyncio.timeout(_DELETE_TIMEOUT_SECONDS + 5):
-            await sandbox.delete(timeout=_DELETE_TIMEOUT_SECONDS)
+        try:
+            async with asyncio.timeout(_DELETE_TIMEOUT_SECONDS + 5):
+                await sandbox.delete(timeout=_DELETE_TIMEOUT_SECONDS)
+        except Exception as exc:
+            if _is_sdk_exception(exc, sdk, "DaytonaNotFoundError"):
+                return
+            raise
         await _wait_until_deleted(
             client,
             sandbox_name,

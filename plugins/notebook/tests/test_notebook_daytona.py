@@ -349,12 +349,13 @@ async def test_open_uses_root_wrapper_blocked_network_and_immutable_staging(
     assert params.resources.cpu == 4
     assert params.resources.memory == 8
     assert client.create_timeout == 600
-    assert environment.remote_root.startswith("/home/jovyan/sqlsaber-notebook-")
+    assert environment.remote_root.startswith("/tmp/sqlsaber-notebook/")
     assert (
         environment.sandbox.fs.files[f"{environment.inputs_path}/data file;$x.json"]
         == b"{}"
     )
     commands = [call[1] for call in environment.sandbox.process.calls]
+    assert any(daytona_backend._SECURE_PARENT_SCRIPT in command for command in commands)
     assert any(command[:3] == ("chown", "-R", "root:root") for command in commands)
     assert any(command[:3] == ("chmod", "-R", "a-w") for command in commands)
     assert any(
@@ -610,6 +611,26 @@ async def test_client_closes_when_sandbox_deletion_fails() -> None:
             sandbox,
             sandbox.name,
         )
+    assert client.closed is True
+
+
+async def test_already_deleted_sandbox_is_successful_cleanup() -> None:
+    sdk = fake_sdk()
+    client = FakeClient(sdk)
+    sandbox = FakeSandbox(client, "already-deleted")
+
+    async def already_deleted(timeout: float | None = None) -> None:
+        del timeout
+        raise DaytonaNotFoundError("already deleted")
+
+    sandbox.delete = already_deleted
+    await daytona_backend._delete_resources(
+        sdk,
+        client,
+        sandbox,
+        sandbox.name,
+    )
+    assert client.get_calls == 0
     assert client.closed is True
 
 
