@@ -704,6 +704,13 @@ def test_chat_app_appends_native_terminal_image() -> None:
     assert component in app.chat_container.children
     assert component.render(80)[0].startswith("\x1b_G")
 
+    responsive = app.append_image(
+        png.getvalue(),
+        "image/png",
+        max_width_cells=None,
+    )
+    assert responsive.options.max_width_cells == tui_chat._RESPONSIVE_IMAGE_MAX_CELLS
+
 
 def test_ansi_block_wraps_once_per_width(monkeypatch) -> None:
     calls = 0

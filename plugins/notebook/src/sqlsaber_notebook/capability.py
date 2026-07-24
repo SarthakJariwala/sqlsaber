@@ -61,8 +61,6 @@ from .result import AnalysisResult, ManifestEntry, Workspace
 
 _RESULT_FILE_PATTERN = re.compile(r"^result_[A-Za-z0-9._-]+\.json$")
 _MAX_DISPLAY_RESULTS = 2
-_MAX_PLOT_COLUMNS = 80
-_MAX_PLOT_ROWS = 24
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,8 +220,7 @@ class AnalyzeDataTool(Tool):
                 image,
                 "image/png",
                 filename=f"plot_{index}.png",
-                max_width_cells=_MAX_PLOT_COLUMNS,
-                max_height_cells=_MAX_PLOT_ROWS,
+                max_width_cells=None,
             )
 
         answer = limit_output(str(result)).strip()
@@ -514,10 +511,8 @@ def _render_plot(console: Console, image_data: bytes, *, index: int) -> None:
         console.print(f"[Plot {index} omitted: invalid PNG]")
         return
 
-    max_columns = max(1, min(_MAX_PLOT_COLUMNS, console.width - 4))
-    width = min(max_columns, image.width)
+    width = min(max(1, console.width - 4), image.width)
     pixel_height = max(2, round(image.height * width / max(1, image.width)))
-    pixel_height = min(pixel_height, _MAX_PLOT_ROWS * 2)
     if pixel_height % 2:
         pixel_height += 1
     image.thumbnail((width, pixel_height), Image.Resampling.LANCZOS)
