@@ -62,6 +62,9 @@ def _fg(r: int, g: int, b: int) -> Callable[[str], str]:
 
 
 _SGR_RE = re.compile(r"\x1b\[([0-9;]*)m")
+# saber-tui clamps this ceiling to the component width on every render. A large
+# sentinel therefore means "use available width" and remains responsive to resize.
+_RESPONSIVE_IMAGE_MAX_CELLS = 2**31 - 1
 
 
 def _bg(r: int, g: int, b: int) -> Callable[[str], str]:
@@ -558,7 +561,7 @@ class _PanelTUIView:
         mime_type: str,
         *,
         filename: str | None = None,
-        max_width_cells: int = 60,
+        max_width_cells: int | None = 60,
         max_height_cells: int | None = None,
     ) -> Image:
         component = self.app._create_image(
@@ -667,7 +670,7 @@ class ChatApp:
         mime_type: str,
         *,
         filename: str | None = None,
-        max_width_cells: int = 60,
+        max_width_cells: int | None = 60,
         max_height_cells: int | None = None,
     ) -> Image:
         """Append a terminal-native image with saber-tui's text fallback."""
@@ -724,7 +727,7 @@ class ChatApp:
         mime_type: str,
         *,
         filename: str | None,
-        max_width_cells: int,
+        max_width_cells: int | None,
         max_height_cells: int | None,
     ) -> Image:
         return Image(
@@ -734,7 +737,11 @@ class ChatApp:
             theme=ImageTheme(fallback_color=self.theme.muted_fg),
             options=ImageOptions(
                 filename=filename,
-                max_width_cells=max_width_cells,
+                max_width_cells=(
+                    max_width_cells
+                    if max_width_cells is not None
+                    else _RESPONSIVE_IMAGE_MAX_CELLS
+                ),
                 max_height_cells=max_height_cells,
             ),
         )

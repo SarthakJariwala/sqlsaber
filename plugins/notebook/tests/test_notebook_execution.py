@@ -57,12 +57,13 @@ def test_backend_selection_is_explicit_without_fallback(
     assert resolve_notebook_backend("docker").name == "docker"
 
     assert resolve_notebook_backend("microsandbox").name == "microsandbox"
+    assert resolve_notebook_backend("daytona").name == "daytona"
 
     with pytest.raises(
         NotebookBackendUnavailable,
-        match="expected 'docker', 'microsandbox', or 'modal'",
+        match="expected 'docker', 'microsandbox', 'modal', or 'daytona'",
     ):
-        resolve_notebook_backend("daytona")
+        resolve_notebook_backend("unknown")
 
 
 def test_image_resolution(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -111,7 +111,7 @@ class _RecordingTUI:
         mime_type: str,
         *,
         filename: str | None = None,
-        max_width_cells: int = 60,
+        max_width_cells: int | None = 60,
         max_height_cells: int | None = None,
     ) -> object:
         self.images.append(
@@ -312,8 +312,8 @@ async def test_analyze_tool_renders_notebook_and_child_answer(
             "image/png",
             {
                 "filename": "plot_1.png",
-                "max_width_cells": 80,
-                "max_height_cells": 24,
+                "max_width_cells": None,
+                "max_height_cells": None,
             },
         )
     ]

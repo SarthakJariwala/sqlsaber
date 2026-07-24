@@ -19,7 +19,7 @@ class ToolResultPanel(Protocol):
         mime_type: str,
         *,
         filename: str | None = None,
-        max_width_cells: int = 60,
+        max_width_cells: int | None = 60,
         max_height_cells: int | None = None,
     ) -> object: ...
 
