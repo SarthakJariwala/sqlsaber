@@ -8,6 +8,7 @@ Implemented components:
 - hardened local Docker execution (default),
 - explicit local microVM execution through the optional `microsandbox` extra,
 - explicit remote Modal Sandbox execution through the optional `modal` extra,
+- explicit remote Daytona execution through the pinned `daytona` extra,
 - fresh-kernel transactional notebook sessions,
 - bounded notebook/image rendering and history collapse,
 - `list_workspace` and `edit_cell` analyst tools,
@@ -63,6 +64,37 @@ Select Modal explicitly because query results will be uploaded to a third party:
 SQLSABER_NOTEBOOK_BACKEND=modal saber
 ```
 
+Daytona is also an explicit remote backend. The deployed legacy control plane requires
+exactly `daytona==0.143.0`, which is installed by the extra:
+
+```bash
+uv tool install --with 'sqlsaber-notebook[daytona]' sqlsaber
+export DAYTONA_API_KEY=...
+export DAYTONA_API_URL=https://your-daytona.example/api
+SQLSABER_NOTEBOOK_BACKEND=daytona saber
+```
+
+SQL query results and selected local files are uploaded to the configured Daytona
+service. SQLsaber derives a minimal `USER root` control image from the exact configured
+`SQLSABER_NOTEBOOK_IMAGE` parent, protects inputs as root, and executes notebooks as
+`jovyan`. The sandbox requests blocked outbound networking and ephemeral deletion.
+Daytona 0.143.0 has no hard age-based TTL: its 24-hour setting is inactivity-based.
+Deployments requiring a strict maximum resource age must run a label-based reaper for
+sandboxes labeled `application=sqlsaber,purpose=notebook`.
+
+Backend isolation differs by provider:
+
+| Backend | Location | Guest network | CPU/memory units | PID limit | Abandonment cleanup |
+| --- | --- | --- | --- | --- | --- |
+| Docker | Local | Docker `none` | Fractional CPU / MiB | Enforced | Per-run container removal |
+| Microsandbox | Local microVM | Disabled | Whole CPU / MiB | Process rlimit | 24-hour max duration |
+| Modal | Remote | Blocked | Fractional CPU / MiB | Not exposed | 24-hour platform lifetime |
+| Daytona | Remote | Provider block requested | Whole CPU / GiB | Not exposed | Ephemeral 24-hour inactivity stop; no hard TTL |
+
+Daytona image derivation can make the first cold start slower. Network denial, root
+input ownership, and deletion are verified by credentialed tests, but do not assume
+PID-limit or complete isolation parity across providers.
+
 Backends never fall back automatically after selection or failure.
 
 Configure a dedicated analyst model with:
@@ -105,12 +137,17 @@ uv run sqlsaber-notebook \
   "Compare revenue by region and explain material anomalies" data.csv
 ```
 
-Modal is never selected as an automatic fallback. Select it explicitly because local
-files will be uploaded to Modal:
+Remote backends are never selected as automatic fallbacks. Select one explicitly
+because local files will be uploaded to that provider:
 
 ```bash
 modal setup
 SQLSABER_NOTEBOOK_BACKEND=modal uv run sqlsaber-notebook \
+  --model anthropic:claude-sonnet-4-6 \
+  "Analyze this dataset" data.csv
+
+DAYTONA_API_KEY=... DAYTONA_API_URL=https://your-daytona.example/api \
+  SQLSABER_NOTEBOOK_BACKEND=daytona uv run sqlsaber-notebook \
   --model anthropic:claude-sonnet-4-6 \
   "Analyze this dataset" data.csv
 ```
@@ -134,4 +171,7 @@ SQLSABER_RUN_MICROSANDBOX_INTEGRATION=1 \
 
 SQLSABER_RUN_MODAL_INTEGRATION=1 \
   uv run pytest plugins/notebook/tests/test_notebook_modal_integration.py -q
+
+SQLSABER_RUN_DAYTONA_INTEGRATION=1 \
+  uv run pytest plugins/notebook/tests/test_notebook_daytona_integration.py -q
 ```
