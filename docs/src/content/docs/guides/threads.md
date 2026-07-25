@@ -13,11 +13,19 @@ projections and opaque descriptors. Show, export, resume, visualization, sandbox
 and notebook paths hydrate complete data from that store without rewriting thread
 history. Terminal and HTML views may still intentionally render a bounded table.
 
-Thread retention is the source of truth for CLI result retention. After pruning,
-SQLsaber removes unreferenced entries older than a 24-hour safety grace period.
-Normal saves run the same maintenance at most daily. If an entry was deleted or is
-corrupt, replay shows the bounded preview with a “complete result unavailable”
-notice rather than presenting the preview as complete.
+Capability artifacts are stored separately under the private user-data `artifacts`
+directory. Thread messages retain only publication references, not notebook, image,
+or generated-file bytes. For retained notebook analyses, show and resume reconstruct
+bounded notebook cells and available plots and list generated-file locations. If the
+notebook is missing or invalid, replay falls back to the generic artifact listing
+with an availability notice. Resume is read-only: it never reopens an old notebook
+kernel.
+
+Thread retention is the source of truth for both CLI query-result and artifact
+retention. After pruning, SQLsaber removes unreferenced entries older than a 24-hour
+creation-time safety grace period. Normal saves run maintenance at most daily. If a
+query result or artifact is missing or corrupt, replay marks it unavailable rather
+than trusting or rewriting the historical descriptor.
 
 ### Show All Threads
 
@@ -33,6 +41,15 @@ View the complete transcript of a thread:
 
 ```bash
 saber threads show bb7b4d72
+```
+
+### List Thread Artifacts
+
+List publication IDs, artifact names, kinds, sizes, and local URIs without replaying
+the full transcript:
+
+```bash
+saber threads artifacts bb7b4d72
 ```
 
 ### Continue Previous Thread
@@ -69,6 +86,7 @@ Check thread commands and options:
 saber threads --help
 saber threads list --help
 saber threads resume --help
+saber threads artifacts --help
 ```
 
 ### What's Next?

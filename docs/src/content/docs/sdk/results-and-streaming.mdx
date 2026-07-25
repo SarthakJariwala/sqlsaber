@@ -61,20 +61,19 @@ compatibility window, but are not automatically imported into durable storage.
 
 ## Persisting notebooks and plots
 
-Install `sqlsaber-notebook` and configure an artifact publisher to retain executed
-notebooks, plots, and generated files. SQLsaber includes filesystem and in-memory
-publishers; cloud applications can implement the same `ArtifactPublisher` protocol
-for S3, GCS, Azure Blob Storage, or another object store.
+Install `sqlsaber-notebook` and configure an artifact store to retain and later
+retrieve executed notebooks, plots, and generated files. Embedded SQLsaber does not
+persist artifacts unless the application injects a store. SQLsaber includes
+filesystem and in-memory stores; cloud applications can implement the same
+`ArtifactStore` protocol for private database/object storage.
 
 ```python
-from sqlsaber import FilesystemArtifactPublisher, SQLSaber, SQLSaberOptions
+from sqlsaber import FilesystemArtifactStore, SQLSaber, SQLSaberOptions
 
+store = FilesystemArtifactStore("/private/sqlsaber-artifacts")
 options = SQLSaberOptions(
     database="sqlite:///analytics.db",
-    artifact_publisher=FilesystemArtifactPublisher(
-        "/private/sqlsaber-artifacts",
-        namespace=lambda ctx: f"tenants/{ctx.metadata['tenant_id']}",
-    ),
+    artifact_store=store,
 )
 
 async with SQLSaber(options=options) as saber:
@@ -84,23 +83,60 @@ async with SQLSaber(options=options) as saber:
         metadata={"tenant_id": "acme", "user_id": "user-456"},
     )
 
-    for artifact in result.artifacts:
-        print(artifact.kind, artifact.name, artifact.uri)
+    for descriptor in result.artifacts:
+        loaded = await saber.get_artifact(
+            descriptor,
+            conversation_id="conversation-123",
+            metadata={"tenant_id": "acme", "user_id": "user-456"},
+        )
+        print(descriptor.kind, descriptor.name, descriptor.uri, len(loaded.data))
 ```
 
-`ArtifactPublisher.publish()` receives an `ArtifactBundle` and an
-`ArtifactContext`. A cloud implementation should upload each artifact and return
-an `ArtifactPublication` containing stable object keys or internal IDs. Avoid
-returning expiring signed URLs; generate those when serving a request.
+`ArtifactStore.publish()` receives an `ArtifactBundle` and current
+`ArtifactContext`; `get()` retrieves one artifact by opaque ID. A cloud store must
+authorize retrieval from the *current* context metadata, return
+`ArtifactUnavailable` for both missing and unauthorized IDs, and return stable
+private object keys/internal URIs rather than expiring signed URLs. Generate signed
+download URLs only in the host application's serving layer.
 
-Run metadata is available to the publisher for namespacing, but is not used as an
-unvalidated artifact filename. Keep buckets private because executed notebooks may
-contain query results. The publisher is application-owned and is not closed by
-SQLsaber.
+The store is application-owned and SQLsaber never closes or garbage-collects it.
+Keep object storage private because executed notebooks may contain query results.
+The SQLsaber CLI separately configures private local storage under its user-data
+directory and applies thread-aware retention.
 
 With `artifact_failure_mode="required"`, an upload failure fails `analyze_data`.
 Use `"best_effort"` to preserve the analyst's answer and expose an
 `artifact_error` in tool metadata instead.
+
+The same application-owned store also supports direct `sqlsaber-notebook`
+embedding. Analysis remains storage-independent; publish its completed result in a
+second explicit operation:
+
+```python
+from sqlsaber import ArtifactContext
+from sqlsaber_notebook import Workspace, analyze, publish_analysis
+
+analysis = await analyze(
+    "Plot monthly revenue",
+    Workspace.from_files([("revenue.csv", revenue_bytes)]),
+    model="anthropic:claude-sonnet-4-6",
+    model_provider="anthropic",
+    collect_files=True,
+)
+publication = await publish_analysis(
+    analysis,
+    store=store,
+    context=ArtifactContext(
+        conversation_id="conversation-123",
+        metadata={"tenant_id": "acme", "user_id": "user-456"},
+    ),
+)
+```
+
+Managed SQLsaber calls this same publication operation. The standalone
+`sqlsaber-notebook --output analysis.ipynb` command is different: it writes the
+explicit notebook and sibling artifact directory and never silently uses SQLsaber's
+user-data store.
 
 ## Inspecting the generated SQL
 

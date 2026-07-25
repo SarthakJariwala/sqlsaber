@@ -127,12 +127,25 @@ def capability(context: PluginContext):
 
 The factory receives a `PluginContext` containing SQLsaber's database registry,
 knowledge manager, dangerous-mode setting, normalized tool model overrides, the
-session's required `query_result_store`, and any application-owned artifact
-publisher. Plugins that consume SQL rows should use
+session's required `query_result_store`, and the optional application-owned
+`artifact_store`. Plugins that consume SQL rows should use
 `query_result_references_from_messages()` and `resolve_query_result()` instead of
 parsing `execute_sql` content; this provides verified complete bytes, current-context
 authorization, and the compatibility-only legacy fallback.
 It can return one capability or a sequence. See the [Capabilities SDK guide](/sdk/capabilities) for standalone composition and lifecycle details.
+
+Plugins that can reconstruct durable results during `saber threads show` may also
+register context-free display tools:
+
+```toml
+[project.entry-points."sqlsaber.display_tools"]
+my_plugin = "my_plugin:display_tools"
+```
+
+The factory takes no arguments and returns a mapping from tool name to `Tool`
+renderer. These renderers must not require live execution resources; SQLsaber may
+supply verified resolved artifact publications through
+`set_resolved_artifact_publications()` before replay.
 
 :::caution[Plugin API change]
 The former `sqlsaber.tools` entry-point group and global `ToolRegistry` no longer load. Existing plugins should keep their execution function or `Tool` class, wrap it in a capability, and export a `capability(context)` factory through `sqlsaber.capabilities`.

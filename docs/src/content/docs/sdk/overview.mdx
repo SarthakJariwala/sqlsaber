@@ -19,9 +19,10 @@ The SDK exposes its primary agent and capability building blocks from the top-le
 | `ModelOverides`   | Per-tool model/API-key overrides (see [Advanced](/sdk/advanced)). |
 | `SqlTools`        | SQL capability for composing with your own pydantic-ai agent. |
 | `Knowledge`       | Database-scoped knowledge search capability.                  |
-| `ArtifactPublisher` | Protocol for persisting notebooks, plots, and other capability artifacts. |
-| `FilesystemArtifactPublisher` | Local durable artifact publisher for servers and development. |
-| `InMemoryArtifactPublisher` | In-memory artifact publisher for tests and short-lived workflows. |
+| `ArtifactStore` | Protocol for immutable artifact publication and authorized retrieval. |
+| `FilesystemArtifactStore` | Durable private local artifact store for CLI/server development. |
+| `InMemoryArtifactStore` | Explicit in-memory artifact store for tests and short-lived workflows. |
+| `StoredArtifact` / `LoadedArtifact` | Serializable descriptor and verified artifact bytes. |
 | `QueryResultStore` | Protocol for private complete SQL result storage and retrieval. |
 | `InMemoryQueryResultStore` | Session-local SDK default and test implementation. |
 | `FilesystemQueryResultStore` | Durable private local implementation (the CLI uses this explicitly). |
