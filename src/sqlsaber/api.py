@@ -11,7 +11,15 @@ from typing import Any, Callable, Protocol, Self
 from pydantic_ai import RunContext
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 
-from sqlsaber.artifacts import StoredArtifact, artifacts_from_metadata
+from sqlsaber.artifact_resolution import artifact_references_from_messages
+from sqlsaber.artifacts import (
+    ArtifactContext,
+    ArtifactStore,
+    ArtifactUnavailable,
+    LoadedArtifact,
+    StoredArtifact,
+    validate_loaded_artifact,
+)
 from sqlsaber.options import SQLSaberOptions
 from sqlsaber.query_result_resolution import query_result_references_from_messages
 from sqlsaber.query_results import (
@@ -76,18 +84,11 @@ class SQLSaberResult(str):
     @property
     def artifacts(self) -> list[StoredArtifact]:
         """Durable artifacts published by capabilities during this run."""
-        artifacts: list[StoredArtifact] = []
-        seen: set[str] = set()
-        for message in self.messages:
-            for part in getattr(message, "parts", ()):
-                for artifact in artifacts_from_metadata(
-                    getattr(part, "metadata", None)
-                ):
-                    if artifact.id in seen:
-                        continue
-                    seen.add(artifact.id)
-                    artifacts.append(artifact)
-        return artifacts
+        return [
+            artifact
+            for reference in artifact_references_from_messages(self.messages)
+            for artifact in reference.artifacts
+        ]
 
 
 class SQLSaber:
@@ -124,6 +125,7 @@ class SQLSaber:
         self.db_name = self._session.db_name
         self.connection = self._session.connection
         self.agent = self._session.agent
+        self.artifact_store: ArtifactStore | None = self._session.artifact_store
         self.query_result_store: QueryResultStore = self._session.query_result_store
 
     async def query(
@@ -171,6 +173,32 @@ class SQLSaber:
             content = str(result)
 
         return SQLSaberResult(content, result)
+
+    async def get_artifact(
+        self,
+        artifact: str | StoredArtifact,
+        *,
+        conversation_id: str | None = None,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> LoadedArtifact:
+        """Retrieve an artifact through the configured authorized store."""
+
+        if self.artifact_store is None:
+            raise ArtifactUnavailable("No artifact store is configured.")
+        if isinstance(artifact, StoredArtifact):
+            expected = artifact
+            artifact_id = artifact.id
+        else:
+            expected = None
+            artifact_id = artifact
+        loaded = await self.artifact_store.get(
+            artifact_id,
+            context=ArtifactContext(
+                conversation_id=conversation_id,
+                metadata=metadata or {},
+            ),
+        )
+        return validate_loaded_artifact(loaded, expected=expected)
 
     async def get_query_result(
         self,

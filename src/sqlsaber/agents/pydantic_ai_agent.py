@@ -9,7 +9,7 @@ from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 from pydantic_ai.models.anthropic import AnthropicModelSettings
 
 from sqlsaber.agents.model_factory import UNIFIED_EFFORT_MAP, build_model
-from sqlsaber.artifacts import ArtifactFailureMode, ArtifactPublisher
+from sqlsaber.artifacts import ArtifactFailureMode, ArtifactStore
 from sqlsaber.capabilities import Knowledge, SqlTools
 from sqlsaber.capabilities.base import SqlSaberCapability
 from sqlsaber.capabilities.plugins import PluginContext, discover_capabilities
@@ -58,7 +58,7 @@ class SQLSaberAgent:
         system_prompt: str | None = None,
         tool_overides: ToolOveridesInput | None = None,
         extra_capabilities: Sequence[AbstractCapability[Any]] = (),
-        artifact_publisher: ArtifactPublisher | None = None,
+        artifact_store: ArtifactStore | None = None,
         artifact_failure_mode: ArtifactFailureMode = "required",
         query_result_store: QueryResultStore | None = None,
     ) -> None:
@@ -87,7 +87,7 @@ class SQLSaberAgent:
         self.allow_dangerous = allow_dangerous
         self._tool_overides = normalize_tool_overides(tool_overides)
         self._extra_capabilities = tuple(extra_capabilities)
-        self._artifact_publisher = artifact_publisher
+        self._artifact_store = artifact_store
         self._artifact_failure_mode = artifact_failure_mode
         self.query_result_store = (
             query_result_store
@@ -158,7 +158,7 @@ class SQLSaberAgent:
                     config=self.config,
                     main_model_name=model_name,
                     main_api_key=api_key,
-                    artifact_publisher=self._artifact_publisher,
+                    artifact_store=self._artifact_store,
                     artifact_failure_mode=self._artifact_failure_mode,
                     query_result_store=self.query_result_store,
                 )

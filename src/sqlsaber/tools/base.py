@@ -1,11 +1,17 @@
 """Base class for SQLSaber tools."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Protocol
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
 from rich.console import Console
 
 from sqlsaber.tools.display import ToolDisplaySpec
+
+if TYPE_CHECKING:
+    from sqlsaber.artifact_resolution import ResolvedArtifactPublication
 
 
 class ToolResultPanel(Protocol):
@@ -100,3 +106,11 @@ class Tool(ABC):
     def render_result_html(self, result: object) -> str | None:
         """Optionally render tool results as HTML."""
         return None
+
+    def set_resolved_artifact_publications(
+        self,
+        publications: Mapping[str, ResolvedArtifactPublication],
+    ) -> None:
+        """Accept verified publications for optional read-only replay rendering."""
+
+        del publications

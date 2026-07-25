@@ -27,7 +27,7 @@ from sqlsaber_notebook.capability import (
 from sqlsaber_notebook.execution import NotebookBackendUnavailable
 from sqlsaber_notebook.result import AnalysisResult, ArtifactRef
 
-from sqlsaber.artifacts import InMemoryArtifactPublisher
+from sqlsaber.artifacts import InMemoryArtifactStore
 from sqlsaber.query_results import InMemoryQueryResultStore
 
 
@@ -365,25 +365,35 @@ async def test_analyze_tool_publishes_notebook_images_and_generated_files(
             "file": "result_rows.json",
         },
     )
-    publisher = InMemoryArtifactPublisher()
+
+    class RecordingStore(InMemoryArtifactStore):
+        published: tuple[Any, Any] | None = None
+
+        async def publish(self, bundle: Any, *, context: Any):
+            self.published = (bundle, context)
+            return await super().publish(bundle, context=context)
+
+    store = RecordingStore()
     context = SimpleNamespace(
         resolve_subagent_model=lambda *args, **kwargs: (
             "anthropic:claude-test",
             "anthropic:claude-test",
             "anthropic",
         ),
-        artifact_publisher=publisher,
+        artifact_store=store,
         artifact_failure_mode="required",
     )
     backend = SimpleNamespace(name="docker")
     captured: dict[str, Any] = {}
+    notebook_bytes = _notebook_bytes()
+    png_bytes = _png_bytes()
 
     async def fake_analyze(goal: str, workspace: Any, **kwargs: Any) -> AnalysisResult:
         captured.update(goal=goal, workspace=workspace, **kwargs)
         return AnalysisResult(
             answer="Published answer.",
-            notebook=_notebook_bytes(),
-            images=[_png_bytes()],
+            notebook=notebook_bytes,
+            images=[png_bytes],
             files=[ArtifactRef("nested/evidence.txt", b"evidence", "text/plain")],
             provenance=["input:result_rows.json", "cell:0"],
         )
@@ -400,16 +410,27 @@ async def test_analyze_tool_publishes_notebook_images_and_generated_files(
 
     assert isinstance(returned, ToolReturn)
     assert captured["collect_files"] is True
-    assert returned.metadata["analysis_id"]
-    assert [item["name"] for item in returned.metadata["artifacts"]] == [
+    reference = returned.metadata["artifact_publication"]
+    assert reference["id"]
+    assert reference["kind"] == "notebook-analysis"
+    assert [item["name"] for item in reference["artifacts"]] == [
         "analysis.ipynb",
         "plots/plot_1.png",
         "files/nested/evidence.txt",
     ]
-    bundle, publication_context = publisher.publications[
-        returned.metadata["analysis_id"]
-    ]
+    assert store.published is not None
+    bundle, publication_context = store.published
     assert bundle.kind == "notebook-analysis"
+    assert bundle.metadata == {"provenance": ["input:result_rows.json", "cell:0"]}
+    loaded = [
+        await store.get(artifact["id"], context=publication_context)
+        for artifact in reference["artifacts"]
+    ]
+    assert [artifact.data for artifact in loaded] == [
+        notebook_bytes,
+        png_bytes,
+        b"evidence",
+    ]
     assert publication_context.run_id == "run-1"
     assert publication_context.conversation_id == "conversation-1"
     assert publication_context.metadata == {"tenant_id": "acme"}
@@ -421,7 +442,7 @@ async def test_analyze_tool_handles_artifact_publication_failure(
     monkeypatch: pytest.MonkeyPatch,
     failure_mode: str,
 ) -> None:
-    class FailingPublisher:
+    class FailingStore:
         async def publish(self, *args: Any, **kwargs: Any) -> None:
             del args, kwargs
             raise RuntimeError("bucket unavailable")
@@ -432,7 +453,7 @@ async def test_analyze_tool_handles_artifact_publication_failure(
             "anthropic:claude-test",
             "anthropic",
         ),
-        artifact_publisher=FailingPublisher(),
+        artifact_store=FailingStore(),
         artifact_failure_mode=failure_mode,
     )
     backend = SimpleNamespace(name="docker")
@@ -468,7 +489,9 @@ async def test_analyze_tool_handles_artifact_publication_failure(
     else:
         assert isinstance(returned, ToolReturn)
         assert returned.return_value == "Analysis answer."
-        assert returned.metadata["artifact_error"] == "bucket unavailable"
+        assert returned.metadata["artifact_error"] == (
+            "Artifacts could not be published."
+        )
 
 
 @pytest.mark.asyncio

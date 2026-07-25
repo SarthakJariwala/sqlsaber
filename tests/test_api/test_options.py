@@ -4,7 +4,7 @@ import pytest
 from pydantic_ai.capabilities import Capability
 
 from sqlsaber import (
-    InMemoryArtifactPublisher,
+    InMemoryArtifactStore,
     Knowledge,
     SQLSaber,
     SQLSaberOptions,
@@ -24,7 +24,7 @@ def test_api_options_are_required() -> None:
 def test_capabilities_are_exported_from_top_level() -> None:
     assert SqlTools.__name__ == "SqlTools"
     assert Knowledge.__name__ == "Knowledge"
-    assert InMemoryArtifactPublisher.__name__ == "InMemoryArtifactPublisher"
+    assert InMemoryArtifactStore.__name__ == "InMemoryArtifactStore"
 
 
 def test_invalid_artifact_failure_mode_is_rejected() -> None:
@@ -80,7 +80,7 @@ async def test_extra_capabilities_are_appended_to_managed_agent() -> None:
 async def test_artifact_options_and_run_context_reach_managed_agent(
     monkeypatch,
 ) -> None:
-    publisher = InMemoryArtifactPublisher()
+    store = InMemoryArtifactStore()
     saber = SQLSaber(
         options=SQLSaberOptions(
             database="sqlite:///:memory:",
@@ -88,7 +88,7 @@ async def test_artifact_options_and_run_context_reach_managed_agent(
                 model_name="anthropic:claude-3-5-sonnet",
                 api_keys={"anthropic": "test-key"},
             ),
-            artifact_publisher=publisher,
+            artifact_store=store,
             artifact_failure_mode="best_effort",
         )
     )
@@ -115,7 +115,8 @@ async def test_artifact_options_and_run_context_reach_managed_agent(
     )
 
     assert result == "answer"
-    assert saber.agent._artifact_publisher is publisher
+    assert saber.artifact_store is store
+    assert saber.agent._artifact_store is store
     assert saber.agent._artifact_failure_mode == "best_effort"
     assert captured["conversation_id"] == "conversation-1"
     assert captured["metadata"] == {"tenant_id": "acme"}

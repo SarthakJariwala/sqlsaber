@@ -19,7 +19,7 @@ from sqlsaber.overrides import ModelOverides
 from sqlsaber.query_results import InMemoryQueryResultStore, QueryResultStore
 
 if TYPE_CHECKING:
-    from sqlsaber.artifacts import ArtifactFailureMode, ArtifactPublisher
+    from sqlsaber.artifacts import ArtifactFailureMode, ArtifactStore
 
 logger = get_logger(__name__)
 PLUGIN_GROUP = "sqlsaber.capabilities"
@@ -39,7 +39,7 @@ class PluginContext:
         default_factory=InMemoryQueryResultStore
     )
     main_api_key: str | None = None
-    artifact_publisher: ArtifactPublisher | None = None
+    artifact_store: ArtifactStore | None = None
     artifact_failure_mode: ArtifactFailureMode = "required"
 
     def resolve_subagent_model(

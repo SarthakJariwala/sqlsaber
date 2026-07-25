@@ -5,6 +5,7 @@ from html import escape
 
 from pydantic_ai.messages import ModelMessage
 
+from sqlsaber.artifacts import artifact_publication_from_metadata
 from sqlsaber.cli.display import DisplayManager
 from sqlsaber.theme.manager import create_console
 from sqlsaber.threads.storage import Thread
@@ -72,6 +73,26 @@ def _render_tool_result_html(
             )
             return sql_html + html
     return html
+
+
+def _render_artifact_links(metadata: object) -> str:
+    publication = artifact_publication_from_metadata(metadata)
+    if publication is None:
+        return ""
+    items = "".join(
+        "<li>"
+        f"{escape(artifact.name)} "
+        f"({escape(artifact.kind)}, {artifact.size} bytes) — "
+        f'<a href="{escape(artifact.uri, quote=True)}">'
+        f"{escape(artifact.uri)}</a>"
+        "</li>"
+        for artifact in publication.artifacts
+    )
+    return (
+        '<div class="artifact-publication">'
+        f"<strong>Artifacts ({escape(publication.kind)})</strong>"
+        f"<ul>{items}</ul></div>"
+    )
 
 
 def _human_readable_time(timestamp: float | None) -> str:
@@ -649,6 +670,9 @@ def render_thread_html(
                     tool_args = {"sql": sql_query} if sql_query else None
                     result_html = _render_tool_result_html(
                         display, tool_name, content_str, args=tool_args
+                    )
+                    result_html += _render_artifact_links(
+                        getattr(part, "metadata", None)
                     )
                     if unavailable_results and call_id in unavailable_results:
                         result_html += (
