@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import pytest
 from pydantic_ai.messages import ModelRequest, ToolReturnPart
@@ -35,7 +36,9 @@ async def test_resolution_keeps_valid_members_when_one_is_unavailable(
         ),
         context=context,
     )
-    Path(unquote(urlparse(publication.artifacts[1].uri).path)).write_bytes(b"changed")
+    Path(url2pathname(urlparse(publication.artifacts[1].uri).path)).write_bytes(
+        b"changed"
+    )
     messages = [
         ModelRequest(
             parts=[

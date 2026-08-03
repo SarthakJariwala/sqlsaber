@@ -4,7 +4,8 @@ import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import pytest
 from pydantic_ai.messages import ModelRequest, ToolReturnPart
@@ -100,7 +101,7 @@ async def test_filesystem_store_rejects_changed_bytes(tmp_path) -> None:
     store = FilesystemArtifactStore(tmp_path)
     publication = await store.publish(_bundle(), context=context)
     artifact = publication.artifacts[0]
-    Path(unquote(urlparse(artifact.uri).path)).write_bytes(b"changed")
+    Path(url2pathname(urlparse(artifact.uri).path)).write_bytes(b"changed")
 
     with pytest.raises(ArtifactUnavailable, match="Artifact is unavailable"):
         await store.get(artifact.id, context=context)
@@ -124,7 +125,7 @@ async def test_filesystem_store_rejects_symlinked_artifact(tmp_path) -> None:
     store = FilesystemArtifactStore(tmp_path)
     publication = await store.publish(_bundle(), context=context)
     artifact = publication.artifacts[0]
-    artifact_path = Path(unquote(urlparse(artifact.uri).path))
+    artifact_path = Path(url2pathname(urlparse(artifact.uri).path))
     replacement = tmp_path / "replacement.ipynb"
     replacement.write_bytes(b"notebook")
     artifact_path.unlink()

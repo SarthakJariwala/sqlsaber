@@ -7,7 +7,8 @@ import io
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 import nbformat
 import pytest
@@ -382,7 +383,7 @@ async def test_missing_persisted_notebook_is_reported_unavailable(tmp_path) -> N
         context=ArtifactContext(),
     )
     notebook_descriptor = publication.artifacts[0]
-    Path(unquote(urlsplit(notebook_descriptor.uri).path)).unlink()
+    Path(url2pathname(urlsplit(notebook_descriptor.uri).path)).unlink()
     resolved = await resolve_artifact_publication(
         ArtifactReference(
             tool_call_id="tool-1",
