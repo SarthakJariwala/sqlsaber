@@ -60,6 +60,7 @@ class SQLSaberSession:
         self.settings = options.settings or Config.default()
         self.knowledge_manager = options.knowledge_manager or KnowledgeManager()
         self.thread_manager = options.thread_manager
+        self.artifact_store = options.artifact_store
         self.query_result_store = (
             options.query_result_store
             if options.query_result_store is not None
@@ -92,7 +93,7 @@ class SQLSaberSession:
             system_prompt=system_prompt_text,
             tool_overides=options.tool_overrides,
             extra_capabilities=options.extra_capabilities,
-            artifact_publisher=options.artifact_publisher,
+            artifact_store=options.artifact_store,
             artifact_failure_mode=options.artifact_failure_mode,
             query_result_store=self.query_result_store,
         )
@@ -164,6 +165,16 @@ class SQLSaberSession:
                     await collect_cli_query_results(
                         self.thread_manager.storage,
                         self.query_result_store,
+                    )
+
+                from sqlsaber.cli.artifacts import is_cli_artifact_store
+
+                if is_cli_artifact_store(self.artifact_store):
+                    from sqlsaber.cli.artifact_gc import collect_cli_artifacts
+
+                    await collect_cli_artifacts(
+                        self.thread_manager.storage,
+                        self.artifact_store,
                     )
             except Exception as exc:
                 logger.warning("sdk.thread.save_failed", error=str(exc))

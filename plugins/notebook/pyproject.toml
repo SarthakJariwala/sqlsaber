@@ -5,7 +5,7 @@ description = "Notebook analysis subagent for SQLsaber"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "sqlsaber>=0.69.0",
+    "sqlsaber>=0.70.0",
     "nbformat>=5.10,<6",
     "pillow>=11,<13",
 ]
@@ -23,6 +23,9 @@ sqlsaber-notebook = "sqlsaber_notebook.cli:main"
 
 [project.entry-points."sqlsaber.capabilities"]
 notebook = "sqlsaber_notebook.capability:capability"
+
+[project.entry-points."sqlsaber.display_tools"]
+notebook = "sqlsaber_notebook.capability:display_tools"
 
 [build-system]
 requires = ["hatchling"]

@@ -13,7 +13,7 @@ from sqlsaber.overrides import ToolOveridesInput
 if TYPE_CHECKING:
     from pydantic_ai.capabilities import AbstractCapability
 
-    from sqlsaber.artifacts import ArtifactFailureMode, ArtifactPublisher
+    from sqlsaber.artifacts import ArtifactFailureMode, ArtifactStore
     from sqlsaber.config.settings import Config
     from sqlsaber.knowledge.manager import KnowledgeManager
     from sqlsaber.query_results import QueryResultStore
@@ -41,7 +41,7 @@ class SQLSaberOptions:
     knowledge_manager: KnowledgeManager | None = None
     thread_manager: ThreadManager | None = None
     extra_capabilities: Sequence[AbstractCapability[Any]] = ()
-    artifact_publisher: ArtifactPublisher | None = None
+    artifact_store: ArtifactStore | None = None
     artifact_failure_mode: ArtifactFailureMode = "required"
     query_result_store: QueryResultStore | None = None
 

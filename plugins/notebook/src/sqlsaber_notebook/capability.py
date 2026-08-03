@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import logging
 import re
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
@@ -21,11 +22,11 @@ from rich.rule import Rule
 from rich.style import Style
 from rich.text import Text
 
-from sqlsaber.artifacts import (
-    Artifact,
-    ArtifactBundle,
-    ArtifactContext,
+from sqlsaber.artifact_resolution import (
+    ResolvedArtifactPublication,
+    artifact_context_from_run,
 )
+from sqlsaber.artifacts import ArtifactUnavailable, artifact_publication_from_metadata
 from sqlsaber.capabilities.base import SqlSaberCapability
 from sqlsaber.capabilities.plugins import PluginContext
 from sqlsaber.query_result_resolution import (
@@ -56,8 +57,11 @@ from .execution import (
     resolve_notebook_backend,
     resolve_notebook_image,
 )
+from .publication import display_from_publication, publish_analysis
 from .rendering import limit_output, render_notebook_bytes
-from .result import AnalysisResult, ManifestEntry, Workspace
+from .result import ManifestEntry, Workspace
+
+logger = logging.getLogger(__name__)
 
 _RESULT_FILE_PATTERN = re.compile(r"^result_[A-Za-z0-9._-]+\.json$")
 _MAX_DISPLAY_RESULTS = 2
@@ -78,6 +82,7 @@ class AnalyzeDataTool(Tool):
         super().__init__()
         self._context = context
         self._display_results: OrderedDict[str, _NotebookDisplay] = OrderedDict()
+        self._resolved_publications: Mapping[str, ResolvedArtifactPublication] = {}
 
     @property
     def name(self) -> str:
@@ -115,7 +120,7 @@ class AnalyzeDataTool(Tool):
                 tool_name=self.name,
             )
             backend = resolve_notebook_backend()
-            publisher = getattr(self._context, "artifact_publisher", None)
+            store = getattr(self._context, "artifact_store", None)
             result = await analyze(
                 goal,
                 workspace,
@@ -124,7 +129,7 @@ class AnalyzeDataTool(Tool):
                 backend=backend,
                 image=resolve_notebook_image(),
                 include_snapshot_images=supports_notebook_images(model_name, provider),
-                collect_files=publisher is not None,
+                collect_files=store is not None,
                 parent_usage=ctx.usage,
             )
             markdown, notebook_images = render_notebook_bytes(result.notebook)
@@ -139,33 +144,26 @@ class AnalyzeDataTool(Tool):
                 "provenance": result.provenance,
                 "files": [item.name for item in workspace.files],
             }
-            if publisher is not None:
+            if store is not None:
                 try:
-                    publication = await publisher.publish(
-                        _artifact_bundle(
-                            result,
-                            backend=backend.name,
-                            model=model_name,
-                        ),
-                        context=ArtifactContext(
-                            run_id=ctx.run_id,
-                            conversation_id=ctx.conversation_id,
-                            tool_call_id=ctx.tool_call_id,
-                            metadata=ctx.metadata or {},
-                        ),
+                    publication = await publish_analysis(
+                        result,
+                        store=store,
+                        context=artifact_context_from_run(ctx),
                     )
-                except Exception as exc:
+                except Exception:
+                    logger.exception("Notebook artifact publication failed")
                     failure_mode = getattr(
                         self._context, "artifact_failure_mode", "required"
                     )
+                    public_error = "Artifacts could not be published."
                     if failure_mode == "required":
                         return _error_result(
-                            f"Analysis completed but artifacts could not be "
-                            f"published: {exc}",
+                            public_error,
                             backend=backend.name,
                             phase="artifact-publication",
                         )
-                    metadata["artifact_error"] = limit_output(str(exc), 2_000)
+                    metadata["artifact_error"] = public_error
                 else:
                     metadata.update(publication.to_metadata())
             return ToolReturn(return_value=result.answer, metadata=metadata)
@@ -206,9 +204,14 @@ class AnalyzeDataTool(Tool):
         metadata: object = None,
     ) -> bool:
         """Render the notebook with native saber-tui Markdown and Image components."""
-        del metadata
-        display = self._display_results.pop(tool_call_id or "", None)
+        display, reconstruction_failed = self._display_for(tool_call_id, metadata)
         if display is None:
+            if reconstruction_failed:
+                panel = tui.append_panel()
+                panel.append_markdown(
+                    "*Persisted notebook could not be reconstructed; "
+                    "showing its generic artifact references.*"
+                )
             return False
 
         panel = tui.append_panel()
@@ -226,6 +229,13 @@ class AnalyzeDataTool(Tool):
         answer = limit_output(str(result)).strip()
         if answer:
             panel.append_markdown(f"## Analysis result\n\n{answer}")
+        publication = artifact_publication_from_metadata(metadata)
+        if publication is not None:
+            artifact_lines = "\n".join(
+                f"- `{artifact.name}`: `{artifact.uri}`"
+                for artifact in publication.artifacts
+            )
+            panel.append_markdown(f"## Artifacts\n\n{artifact_lines}")
         return True
 
     def render_result_event(
@@ -236,9 +246,13 @@ class AnalyzeDataTool(Tool):
         tool_call_id: str | None = None,
         metadata: object = None,
     ) -> bool:
-        del metadata
-        display = self._display_results.pop(tool_call_id or "", None)
+        display, reconstruction_failed = self._display_for(tool_call_id, metadata)
         if display is None:
+            if reconstruction_failed:
+                console.print(
+                    "[warning]Persisted notebook could not be reconstructed; "
+                    "showing generic artifact references.[/warning]"
+                )
             return False
 
         console.print(Rule("Analysis notebook"))
@@ -258,8 +272,37 @@ class AnalyzeDataTool(Tool):
         console.print(Rule())
         return True
 
+    def set_resolved_artifact_publications(
+        self,
+        publications: Mapping[str, ResolvedArtifactPublication],
+    ) -> None:
+        """Supply verified publications for read-only transcript replay."""
+
+        self._resolved_publications = publications
+
     async def close(self) -> None:
         self._display_results.clear()
+        self._resolved_publications = {}
+
+    def _display_for(
+        self,
+        tool_call_id: str | None,
+        metadata: object,
+    ) -> tuple[_NotebookDisplay | None, bool]:
+        live = self._display_results.pop(tool_call_id or "", None)
+        if live is not None:
+            return live, False
+        reference = artifact_publication_from_metadata(metadata)
+        if reference is None:
+            return None, False
+        publication = self._resolved_publications.get(reference.id)
+        if publication is None:
+            return None, False
+        try:
+            persisted = display_from_publication(publication)
+        except ArtifactUnavailable:
+            return None, True
+        return _NotebookDisplay(persisted.markdown, persisted.images), False
 
     def _remember_display(
         self, tool_call_id: str | None, display: _NotebookDisplay
@@ -297,55 +340,18 @@ class Notebook(SqlSaberCapability):
         await self.tool.close()
 
 
+def display_tools() -> Mapping[str, Tool]:
+    """Return storage-independent notebook renderers for transcript replay."""
+
+    return {"analyze_data": AnalyzeDataTool(cast(PluginContext, object()))}
+
+
 def capability(
     context: PluginContext,
 ) -> AbstractCapability[Any] | Sequence[AbstractCapability[Any]]:
     """Always expose the installed plugin; backend checks happen on use."""
 
     return Notebook(context)
-
-
-def _artifact_bundle(
-    result: AnalysisResult,
-    *,
-    backend: str,
-    model: str,
-) -> ArtifactBundle:
-    artifacts = [
-        Artifact(
-            name="analysis.ipynb",
-            data=result.notebook,
-            media_type="application/x-ipynb+json",
-            kind="notebook",
-        )
-    ]
-    artifacts.extend(
-        Artifact(
-            name=f"plots/plot_{index}.png",
-            data=image,
-            media_type="image/png",
-            kind="image",
-        )
-        for index, image in enumerate(result.images, start=1)
-    )
-    artifacts.extend(
-        Artifact(
-            name=f"files/{artifact.name}",
-            data=artifact.data,
-            media_type=artifact.media_type,
-            kind="file",
-        )
-        for artifact in result.files
-    )
-    return ArtifactBundle(
-        kind="notebook-analysis",
-        artifacts=tuple(artifacts),
-        metadata={
-            "backend": backend,
-            "model": model,
-            "provenance": result.provenance,
-        },
-    )
 
 
 async def build_workspace_from_history(

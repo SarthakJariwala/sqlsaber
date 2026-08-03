@@ -5,17 +5,25 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
+import re
+import secrets
 import shutil
-import uuid
-from collections.abc import Callable, Mapping, Sequence
+import stat
+import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, Protocol, cast, runtime_checkable
+from urllib.parse import urlsplit
 
 ArtifactFailureMode = Literal["required", "best_effort"]
 ArtifactKind = Literal["notebook", "image", "file"]
 _FILESYSTEM_ARTIFACTS_DIRECTORY = "artifacts"
 _FILESYSTEM_MANIFEST_NAME = "manifest.json"
+_ARTIFACT_SCHEMA_VERSION = 1
+_PUBLICATION_ID_RE = re.compile(r"^ap_[a-f0-9]{32}$")
+_ARTIFACT_ID_RE = re.compile(r"^ar_[a-f0-9]{32}$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,20 +107,47 @@ class StoredArtifact:
             return None
         mapping = cast(Mapping[str, Any], value)
         try:
+            artifact_id = mapping["id"]
+            name = mapping["name"]
+            media_type = mapping["media_type"]
+            size = mapping["size"]
+            digest = mapping["sha256"]
+            uri = mapping["uri"]
             kind = mapping.get("kind", "file")
-            if kind not in ("notebook", "image", "file"):
-                return None
-            return cls(
-                id=str(mapping["id"]),
-                name=str(mapping["name"]),
-                media_type=str(mapping["media_type"]),
-                size=int(mapping["size"]),
-                sha256=str(mapping["sha256"]),
-                uri=str(mapping["uri"]),
-                kind=kind,
-            )
-        except (KeyError, TypeError, ValueError):
+        except KeyError:
             return None
+        if (
+            not isinstance(artifact_id, str)
+            or _ARTIFACT_ID_RE.fullmatch(artifact_id) is None
+            or not isinstance(name, str)
+            or not isinstance(media_type, str)
+            or not media_type.strip()
+            or not isinstance(size, int)
+            or isinstance(size, bool)
+            or size < 0
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[a-f0-9]{64}", digest) is None
+            or not isinstance(uri, str)
+            or not uri
+            or not urlsplit(uri).scheme
+            or urlsplit(uri).scheme.lower() in {"data", "javascript", "vbscript"}
+            or any(ord(char) < 32 for char in uri)
+            or kind not in ("notebook", "image", "file")
+        ):
+            return None
+        try:
+            _validate_relative_name(name)
+        except ValueError:
+            return None
+        return cls(
+            id=artifact_id,
+            name=name,
+            media_type=media_type,
+            size=size,
+            sha256=digest,
+            uri=uri,
+            kind=kind,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,18 +155,83 @@ class ArtifactPublication:
     """Durable result of publishing one artifact bundle."""
 
     id: str
+    kind: str
     artifacts: tuple[StoredArtifact, ...]
+    created_at: float | None = None
+
+    def __post_init__(self) -> None:
+        if _PUBLICATION_ID_RE.fullmatch(self.id) is None:
+            raise ValueError("Invalid artifact publication ID")
+        if not self.kind.strip():
+            raise ValueError("Artifact publication kind cannot be empty")
+        parsed = _stored_artifacts_from_values(
+            [artifact.to_dict() for artifact in self.artifacts]
+        )
+        if parsed != self.artifacts:
+            raise ValueError("Invalid artifact publication descriptors")
+        if self.created_at is not None and (
+            isinstance(self.created_at, bool) or self.created_at < 0
+        ):
+            raise ValueError("Invalid artifact publication creation time")
 
     def to_metadata(self) -> dict[str, object]:
         return {
-            "analysis_id": self.id,
-            "artifacts": [artifact.to_dict() for artifact in self.artifacts],
+            "artifact_publication": {
+                "id": self.id,
+                "kind": self.kind,
+                "artifacts": [artifact.to_dict() for artifact in self.artifacts],
+            }
         }
 
 
+@dataclass(frozen=True, slots=True)
+class LoadedArtifact:
+    """Verified artifact bytes and their authoritative descriptor."""
+
+    descriptor: StoredArtifact
+    data: bytes
+
+
+def validate_loaded_artifact(
+    loaded: LoadedArtifact,
+    *,
+    expected: StoredArtifact | None = None,
+) -> LoadedArtifact:
+    """Verify artifact bytes against authoritative and expected descriptors."""
+
+    descriptor = loaded.descriptor
+    if StoredArtifact.from_dict(descriptor.to_dict()) is None:
+        raise ArtifactUnavailable()
+    if len(loaded.data) != descriptor.size:
+        raise ArtifactUnavailable()
+    if hashlib.sha256(loaded.data).hexdigest() != descriptor.sha256:
+        raise ArtifactUnavailable()
+    if expected is not None and descriptor != expected:
+        raise ArtifactUnavailable()
+    return loaded
+
+
+class ArtifactStoreError(Exception):
+    """Base error for artifact persistence."""
+
+
+class ArtifactPublicationError(ArtifactStoreError):
+    """Artifact publication failed."""
+
+    def __init__(self, message: str = "Artifacts could not be published.") -> None:
+        super().__init__(message)
+
+
+class ArtifactUnavailable(ArtifactStoreError):
+    """An artifact is missing, unauthorized, malformed, or corrupt."""
+
+    def __init__(self, message: str = "Artifact is unavailable.") -> None:
+        super().__init__(message)
+
+
 @runtime_checkable
-class ArtifactPublisher(Protocol):
-    """Application-owned persistence boundary for capability artifacts."""
+class ArtifactStore(Protocol):
+    """Application-owned storage boundary for capability artifacts."""
 
     async def publish(
         self,
@@ -140,12 +240,20 @@ class ArtifactPublisher(Protocol):
         context: ArtifactContext,
     ) -> ArtifactPublication: ...
 
+    async def get(
+        self,
+        artifact_id: str,
+        *,
+        context: ArtifactContext,
+    ) -> LoadedArtifact: ...
 
-class InMemoryArtifactPublisher:
-    """Artifact publisher for tests and short-lived programmatic workflows."""
+
+class InMemoryArtifactStore:
+    """Artifact store for tests and short-lived programmatic workflows."""
 
     def __init__(self) -> None:
-        self.publications: dict[str, tuple[ArtifactBundle, ArtifactContext]] = {}
+        self._artifacts: dict[str, LoadedArtifact] = {}
+        self._lock = asyncio.Lock()
 
     async def publish(
         self,
@@ -153,11 +261,12 @@ class InMemoryArtifactPublisher:
         *,
         context: ArtifactContext,
     ) -> ArtifactPublication:
-        publication_id = uuid.uuid4().hex
-        self.publications[publication_id] = (bundle, context)
+        del context
+        publication_id = _new_publication_id()
+        created_at = time.time()
         artifacts = tuple(
             StoredArtifact(
-                id=f"{publication_id}:{artifact.name}",
+                id=_new_artifact_id(),
                 name=artifact.name,
                 media_type=artifact.media_type,
                 size=artifact.size,
@@ -167,20 +276,43 @@ class InMemoryArtifactPublisher:
             )
             for artifact in bundle.artifacts
         )
-        return ArtifactPublication(publication_id, artifacts)
+        async with self._lock:
+            self._artifacts.update(
+                {
+                    descriptor.id: LoadedArtifact(descriptor, bytes(artifact.data))
+                    for artifact, descriptor in zip(
+                        bundle.artifacts, artifacts, strict=True
+                    )
+                }
+            )
+        return ArtifactPublication(
+            publication_id,
+            bundle.kind,
+            artifacts,
+            created_at,
+        )
 
-
-class FilesystemArtifactPublisher:
-    """Atomically persist metadata and artifacts in separate filesystem namespaces."""
-
-    def __init__(
+    async def get(
         self,
-        root: str | Path,
+        artifact_id: str,
         *,
-        namespace: Callable[[ArtifactContext], str | None] | None = None,
-    ) -> None:
-        self.root = Path(root)
-        self.namespace = namespace
+        context: ArtifactContext,
+    ) -> LoadedArtifact:
+        del context
+        async with self._lock:
+            loaded = self._artifacts.get(artifact_id)
+        if loaded is None:
+            raise ArtifactUnavailable()
+        return validate_loaded_artifact(
+            LoadedArtifact(loaded.descriptor, bytes(loaded.data))
+        )
+
+
+class FilesystemArtifactStore:
+    """Immutable filesystem artifact storage used by the SQLsaber CLI."""
+
+    def __init__(self, root: str | Path) -> None:
+        self.root = Path(root).expanduser().absolute()
 
     async def publish(
         self,
@@ -188,42 +320,49 @@ class FilesystemArtifactPublisher:
         *,
         context: ArtifactContext,
     ) -> ArtifactPublication:
-        return await asyncio.to_thread(self._publish_sync, bundle, context)
+        try:
+            return await asyncio.to_thread(self._publish_sync, bundle, context)
+        except asyncio.CancelledError:
+            raise
+        except ArtifactPublicationError:
+            raise
+        except Exception as exc:
+            raise ArtifactPublicationError("Artifacts could not be published.") from exc
 
     def _publish_sync(
         self,
         bundle: ArtifactBundle,
         context: ArtifactContext,
     ) -> ArtifactPublication:
-        publication_id = uuid.uuid4().hex
-        relative_parent = PurePosixPath()
-        if self.namespace is not None:
-            selected = self.namespace(context)
-            if selected:
-                _validate_relative_name(selected)
-                relative_parent = PurePosixPath(selected)
-
-        parent = self.root.joinpath(*relative_parent.parts)
-        target = parent / publication_id
-        temporary = parent / f".{publication_id}.tmp"
-        parent.mkdir(parents=True, exist_ok=True)
+        publication_id = _new_publication_id()
+        self._ensure_root()
+        shard = self.root / publication_id[3:5]
+        self._ensure_directory(shard)
+        target = shard / publication_id
+        if target.exists() or target.is_symlink():
+            raise ArtifactPublicationError()
+        temporary = shard / f".tmp-{publication_id}-{secrets.token_hex(8)}"
         temporary.mkdir(mode=0o700)
         artifact_root = temporary / _FILESYSTEM_ARTIFACTS_DIRECTORY
         stored: list[StoredArtifact] = []
+        created_at = time.time()
         try:
             artifact_root.mkdir(mode=0o700)
             for artifact in bundle.artifacts:
                 relative = PurePosixPath(artifact.name)
+                parent = artifact_root
+                for part in relative.parts[:-1]:
+                    parent /= part
+                    parent.mkdir(mode=0o700, exist_ok=True)
+                    parent.chmod(0o700)
                 path = artifact_root.joinpath(*relative.parts)
-                path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-                path.write_bytes(artifact.data)
-                path.chmod(0o600)
+                self._write_durable(path, artifact.data)
                 final_path = target.joinpath(
                     _FILESYSTEM_ARTIFACTS_DIRECTORY, *relative.parts
-                ).resolve()
+                )
                 stored.append(
                     StoredArtifact(
-                        id=f"{publication_id}:{artifact.name}",
+                        id=_new_artifact_id(),
                         name=artifact.name,
                         media_type=artifact.media_type,
                         size=artifact.size,
@@ -233,39 +372,416 @@ class FilesystemArtifactPublisher:
                     )
                 )
             manifest = {
+                "schema_version": _ARTIFACT_SCHEMA_VERSION,
                 "id": publication_id,
                 "kind": bundle.kind,
-                "run_id": context.run_id,
-                "conversation_id": context.conversation_id,
-                "tool_call_id": context.tool_call_id,
+                "created_at": created_at,
+                "context": {
+                    key: value
+                    for key, value in {
+                        "run_id": context.run_id,
+                        "conversation_id": context.conversation_id,
+                        "tool_call_id": context.tool_call_id,
+                    }.items()
+                    if value is not None
+                },
                 "metadata": _json_safe(bundle.metadata),
                 "artifacts": [artifact.to_dict() for artifact in stored],
             }
             manifest_path = temporary / _FILESYSTEM_MANIFEST_NAME
-            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
-            manifest_path.chmod(0o600)
-            temporary.replace(target)
+            self._write_durable(
+                manifest_path,
+                json.dumps(manifest, sort_keys=True).encode("utf-8"),
+            )
+            self._fsync_tree_directories(artifact_root)
+            self._fsync_directory(temporary)
+            os.rename(temporary, target)
+            self._fsync_directory(shard)
         except BaseException:
             shutil.rmtree(temporary, ignore_errors=True)
             raise
-        return ArtifactPublication(publication_id, tuple(stored))
+        return ArtifactPublication(
+            publication_id,
+            bundle.kind,
+            tuple(stored),
+            created_at,
+        )
+
+    async def get(
+        self,
+        artifact_id: str,
+        *,
+        context: ArtifactContext,
+    ) -> LoadedArtifact:
+        del context
+        try:
+            return await asyncio.to_thread(self._get_sync, artifact_id)
+        except ArtifactUnavailable:
+            raise
+        except Exception as exc:
+            raise ArtifactUnavailable() from exc
+
+    def _get_sync(self, artifact_id: str) -> LoadedArtifact:
+        if _ARTIFACT_ID_RE.fullmatch(artifact_id) is None:
+            raise ArtifactUnavailable()
+        self._reject_symlink_components(self.root)
+        self._require_directory(self.root)
+        for shard in self.root.iterdir():
+            if shard.name.startswith("."):
+                continue
+            if shard.is_symlink():
+                raise ArtifactUnavailable()
+            if re.fullmatch(r"[a-f0-9]{2}", shard.name) is None:
+                continue
+            self._require_directory(shard)
+            for entry in shard.iterdir():
+                if entry.name.startswith("."):
+                    continue
+                if _PUBLICATION_ID_RE.fullmatch(entry.name) is None:
+                    continue
+                if entry.is_symlink():
+                    continue
+                try:
+                    self._require_directory(entry)
+                    names = {child.name for child in entry.iterdir()}
+                except (ArtifactUnavailable, OSError):
+                    continue
+                if entry.name[3:5] != shard.name or names != {
+                    _FILESYSTEM_MANIFEST_NAME,
+                    _FILESYSTEM_ARTIFACTS_DIRECTORY,
+                }:
+                    continue
+                artifact_root = entry / _FILESYSTEM_ARTIFACTS_DIRECTORY
+                try:
+                    self._require_directory(artifact_root)
+                except ArtifactUnavailable:
+                    continue
+                try:
+                    manifest = json.loads(
+                        self._read_regular_file(entry / _FILESYSTEM_MANIFEST_NAME)
+                    )
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if not isinstance(manifest, Mapping):
+                    continue
+                publication_id = manifest.get("id")
+                if (
+                    manifest.get("schema_version") != _ARTIFACT_SCHEMA_VERSION
+                    or publication_id != entry.name
+                ):
+                    continue
+                values = manifest.get("artifacts")
+                descriptors = _stored_artifacts_from_values(values)
+                if descriptors is None:
+                    continue
+                for descriptor in descriptors:
+                    if descriptor.id != artifact_id:
+                        continue
+                    relative = PurePosixPath(descriptor.name)
+                    parent = artifact_root
+                    for part in relative.parts[:-1]:
+                        parent /= part
+                        self._require_directory(parent)
+                    path = artifact_root.joinpath(*relative.parts)
+                    if descriptor.uri != path.as_uri():
+                        raise ArtifactUnavailable()
+                    try:
+                        return validate_loaded_artifact(
+                            LoadedArtifact(
+                                descriptor,
+                                self._read_regular_file(path),
+                            )
+                        )
+                    except OSError as exc:
+                        raise ArtifactUnavailable() from exc
+        raise ArtifactUnavailable()
+
+    async def iter_publications(self) -> list[ArtifactPublication]:
+        try:
+            return await asyncio.to_thread(self._iter_publications_sync)
+        except Exception as exc:
+            raise ArtifactUnavailable() from exc
+
+    def _iter_publications_sync(self) -> list[ArtifactPublication]:
+        if not self.root.exists():
+            return []
+        self._reject_symlink_components(self.root)
+        self._require_directory(self.root)
+        publications: list[ArtifactPublication] = []
+        for shard in self.root.iterdir():
+            if shard.name.startswith("."):
+                continue
+            if shard.is_symlink():
+                raise ArtifactUnavailable()
+            if re.fullmatch(r"[a-f0-9]{2}", shard.name) is None:
+                continue
+            self._require_directory(shard)
+            for entry in shard.iterdir():
+                if entry.name.startswith("."):
+                    continue
+                if _PUBLICATION_ID_RE.fullmatch(entry.name) is None:
+                    continue
+                if entry.is_symlink():
+                    continue
+                try:
+                    self._require_directory(entry)
+                except ArtifactUnavailable:
+                    continue
+                if entry.name[3:5] != shard.name:
+                    continue
+                try:
+                    manifest = json.loads(
+                        self._read_regular_file(entry / _FILESYSTEM_MANIFEST_NAME)
+                    )
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if not isinstance(manifest, Mapping):
+                    continue
+                publication_id = manifest.get("id")
+                kind = manifest.get("kind")
+                created_at = manifest.get("created_at")
+                values = manifest.get("artifacts")
+                if (
+                    manifest.get("schema_version") != _ARTIFACT_SCHEMA_VERSION
+                    or publication_id != entry.name
+                    or not isinstance(kind, str)
+                    or not kind.strip()
+                    or not isinstance(created_at, (int, float))
+                    or isinstance(created_at, bool)
+                    or not isinstance(values, list)
+                ):
+                    continue
+                descriptors = _stored_artifacts_from_values(values)
+                if descriptors is not None:
+                    publications.append(
+                        ArtifactPublication(
+                            publication_id,
+                            kind,
+                            descriptors,
+                            float(created_at),
+                        )
+                    )
+        return publications
+
+    async def delete_publication(self, publication_id: str) -> None:
+        try:
+            await asyncio.to_thread(self._delete_publication_sync, publication_id)
+        except FileNotFoundError:
+            return
+        except ArtifactUnavailable:
+            raise
+        except Exception as exc:
+            raise ArtifactUnavailable() from exc
+
+    def _delete_publication_sync(self, publication_id: str) -> None:
+        if _PUBLICATION_ID_RE.fullmatch(publication_id) is None:
+            raise ArtifactUnavailable()
+        self._reject_symlink_components(self.root)
+        if not self.root.exists():
+            return
+        self._require_directory(self.root)
+        shard = self.root / publication_id[3:5]
+        if not shard.exists() and not shard.is_symlink():
+            return
+        self._require_directory(shard)
+        entry = shard / publication_id
+        if not entry.exists() and not entry.is_symlink():
+            return
+        self._require_directory(entry)
+        tombstone = shard / f".tombstone-{publication_id}-{secrets.token_hex(8)}"
+        os.rename(entry, tombstone)
+        self._fsync_directory(shard)
+        shutil.rmtree(tombstone, ignore_errors=True)
+
+    async def cleanup_stale_workdirs(self, *, older_than: float) -> None:
+        try:
+            await asyncio.to_thread(self._cleanup_stale_workdirs_sync, older_than)
+        except Exception as exc:
+            raise ArtifactUnavailable() from exc
+
+    def _cleanup_stale_workdirs_sync(self, older_than: float) -> None:
+        if not self.root.exists():
+            return
+        self._reject_symlink_components(self.root)
+        self._require_directory(self.root)
+        for shard in self.root.iterdir():
+            if shard.name.startswith("."):
+                continue
+            if shard.is_symlink():
+                raise ArtifactUnavailable()
+            if re.fullmatch(r"[a-f0-9]{2}", shard.name) is None:
+                continue
+            self._require_directory(shard)
+            for entry in shard.iterdir():
+                if not entry.name.startswith((".tmp-", ".tombstone-")):
+                    continue
+                try:
+                    info = entry.lstat()
+                except OSError:
+                    continue
+                if stat.S_ISDIR(info.st_mode) and info.st_mtime < older_than:
+                    shutil.rmtree(entry, ignore_errors=True)
+
+    def _ensure_root(self) -> None:
+        self._reject_symlink_components(self.root)
+        self.root.mkdir(parents=True, mode=0o700, exist_ok=True)
+        self._require_directory(self.root)
+        try:
+            self.root.chmod(0o700)
+        except OSError:
+            pass
+
+    @staticmethod
+    def _reject_symlink_components(path: Path) -> None:
+        for component in reversed([path, *path.parents]):
+            try:
+                mode = component.lstat().st_mode
+            except FileNotFoundError:
+                continue
+            if stat.S_ISLNK(mode):
+                raise ArtifactUnavailable()
+
+    @staticmethod
+    def _ensure_directory(path: Path) -> None:
+        if path.is_symlink():
+            raise ArtifactUnavailable()
+        path.mkdir(mode=0o700, exist_ok=True)
+        FilesystemArtifactStore._require_directory(path)
+        try:
+            path.chmod(0o700)
+        except OSError:
+            pass
+
+    @staticmethod
+    def _require_directory(path: Path) -> None:
+        try:
+            mode = path.lstat().st_mode
+        except OSError as exc:
+            raise ArtifactUnavailable() from exc
+        if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+            raise ArtifactUnavailable()
+
+    @staticmethod
+    def _write_durable(path: Path, data: bytes) -> None:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(fd, "wb", closefd=False) as stream:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+        finally:
+            os.close(fd)
+
+    @classmethod
+    def _fsync_tree_directories(cls, root: Path) -> None:
+        directories = [root, *(path for path in root.rglob("*") if path.is_dir())]
+        for directory in sorted(
+            directories,
+            key=lambda path: len(path.parts),
+            reverse=True,
+        ):
+            cls._fsync_directory(directory)
+
+    @staticmethod
+    def _fsync_directory(path: Path) -> None:
+        if not hasattr(os, "O_DIRECTORY"):
+            return
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+        except OSError:
+            return
+        try:
+            os.fsync(fd)
+        except OSError:
+            pass
+        finally:
+            os.close(fd)
+
+    @staticmethod
+    def _read_regular_file(path: Path) -> bytes:
+        before = path.lstat()
+        if not stat.S_ISREG(before.st_mode):
+            raise ArtifactUnavailable()
+        flags = os.O_RDONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        fd = os.open(path, flags)
+        try:
+            opened = os.fstat(fd)
+            current = path.lstat()
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or not stat.S_ISREG(current.st_mode)
+                or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+                or (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino)
+            ):
+                raise ArtifactUnavailable()
+            with os.fdopen(fd, "rb", closefd=False) as stream:
+                return stream.read()
+        finally:
+            os.close(fd)
+
+
+def artifact_publication_from_metadata(
+    metadata: object,
+) -> ArtifactPublication | None:
+    """Parse one minimal publication reference from tool-return metadata."""
+
+    if not isinstance(metadata, Mapping):
+        return None
+    mapping = cast(Mapping[str, Any], metadata)
+    value = mapping.get("artifact_publication")
+    if not isinstance(value, Mapping):
+        return None
+    publication_id = value.get("id")
+    kind = value.get("kind")
+    artifacts = value.get("artifacts")
+    if (
+        not isinstance(publication_id, str)
+        or _PUBLICATION_ID_RE.fullmatch(publication_id) is None
+        or not isinstance(kind, str)
+        or not kind.strip()
+        or not isinstance(artifacts, Sequence)
+        or isinstance(artifacts, (str, bytes))
+    ):
+        return None
+    parsed = _stored_artifacts_from_values(artifacts)
+    if parsed is None:
+        return None
+    return ArtifactPublication(publication_id, kind, parsed)
 
 
 def artifacts_from_metadata(metadata: object) -> list[StoredArtifact]:
     """Parse durable artifact references from tool-return metadata."""
 
-    if not isinstance(metadata, Mapping):
-        return []
-    mapping = cast(Mapping[str, Any], metadata)
-    values = mapping.get("artifacts")
+    publication = artifact_publication_from_metadata(metadata)
+    return list(publication.artifacts) if publication is not None else []
+
+
+def _stored_artifacts_from_values(
+    values: object,
+) -> tuple[StoredArtifact, ...] | None:
     if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
-        return []
+        return None
     parsed: list[StoredArtifact] = []
+    ids: set[str] = set()
+    names: set[str] = set()
     for value in values:
         artifact = StoredArtifact.from_dict(value)
-        if artifact is not None:
-            parsed.append(artifact)
-    return parsed
+        if artifact is None or artifact.id in ids or artifact.name in names:
+            return None
+        ids.add(artifact.id)
+        names.add(artifact.name)
+        parsed.append(artifact)
+    return tuple(parsed)
+
+
+def _new_publication_id() -> str:
+    return f"ap_{secrets.token_hex(16)}"
+
+
+def _new_artifact_id() -> str:
+    return f"ar_{secrets.token_hex(16)}"
 
 
 def _validate_relative_name(name: str) -> None:

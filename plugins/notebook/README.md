@@ -13,7 +13,8 @@ Implemented components:
 - bounded notebook/image rendering and history collapse,
 - `list_workspace` and `edit_cell` analyst tools,
 - a Pydantic AI notebook analyst,
-- a managed SQLsaber `analyze_data` capability, and
+- a managed SQLsaber `analyze_data` capability,
+- reusable artifact publication and persisted notebook replay, and
 - the standalone `sqlsaber-notebook` CLI.
 
 When installed with SQLsaber, the main agent can hand prior successful SQL results to
@@ -21,8 +22,8 @@ When installed with SQLsaber, the main agent can hand prior successful SQL resul
 The terminal displays the bounded executed notebook and plot previews before the main
 agent's text response. Notebook bytes and images are not sent to the parent model.
 Managed SDK applications can persist the notebook, plots, and generated files through
-`SQLSaberOptions.artifact_publisher`; only the publisher's durable references are
-stored in tool metadata and exposed through `SQLSaberResult.artifacts`.
+`SQLSaberOptions.artifact_store`; only the store's durable references are stored
+in tool metadata and exposed through `SQLSaberResult.artifacts`.
 
 The default balanced runtime targets larger EDA and classical ML: 4 CPUs, 8 GiB
 memory, and up to 100 MiB per input/250 MiB total. SQLsaber does not cap model
@@ -103,15 +104,15 @@ Configure a dedicated analyst model with:
 saber models set --agent notebook
 ```
 
-For a web backend, inject an application-owned artifact publisher and pass tenant
-scope as run metadata:
+For a web backend, inject an application-owned artifact store and pass tenant scope
+as run metadata:
 
 ```python
-from sqlsaber import FilesystemArtifactPublisher, SQLSaber, SQLSaberOptions
+from sqlsaber import FilesystemArtifactStore, SQLSaber, SQLSaberOptions
 
 options = SQLSaberOptions(
     database="sqlite:///analytics.db",
-    artifact_publisher=FilesystemArtifactPublisher("/private/artifacts"),
+    artifact_store=FilesystemArtifactStore("/private/artifacts"),
 )
 
 async with SQLSaber(options=options) as saber:
@@ -123,9 +124,42 @@ async with SQLSaber(options=options) as saber:
     print(result.artifacts)
 ```
 
-Implement the cloud-neutral `ArtifactPublisher` protocol to use S3, GCS, Azure
-Blob Storage, or another bucket. Return stable object references rather than
-expiring signed URLs.
+Implement the cloud-neutral `ArtifactStore` protocol to use a private database plus
+S3, GCS, Azure Blob Storage, or another bucket. Authorize `get()` from current run
+metadata and return stable private object references rather than expiring signed
+URLs.
+
+## Direct embedded usage
+
+Analysis and publication are separate operations. This keeps the analyst independent
+of SQLsaber storage while giving embedded callers the same canonical publication as
+the managed capability:
+
+```python
+from sqlsaber import ArtifactContext, FilesystemArtifactStore
+from sqlsaber_notebook import Workspace, analyze, publish_analysis
+
+workspace = Workspace.from_files([("sales.csv", sales_csv_bytes)])
+result = await analyze(
+    "Plot monthly revenue and explain anomalies",
+    workspace,
+    model="anthropic:claude-sonnet-4-6",
+    model_provider="anthropic",
+    collect_files=True,
+)
+publication = await publish_analysis(
+    result,
+    store=FilesystemArtifactStore("/private/artifacts"),
+    context=ArtifactContext(
+        conversation_id="conversation-123",
+        metadata={"tenant_id": "acme"},
+    ),
+)
+```
+
+`publish_analysis` writes `analysis.ipynb`, ordered `plots/plot_<n>.png` members,
+and bounded generated files below `files/`. It forwards the supplied context to the
+application-owned store and raises if publication fails.
 
 ## Standalone usage
 
@@ -136,6 +170,10 @@ uv run sqlsaber-notebook \
   --output analysis.ipynb \
   "Compare revenue by region and explain material anomalies" data.csv
 ```
+
+Standalone mode writes the explicit `--output` notebook and, when needed, a sibling
+`<output-stem>_artifacts` directory. It does not use SQLsaber conversation storage
+or its user-data artifact directory.
 
 Remote backends are never selected as automatic fallbacks. Select one explicitly
 because local files will be uploaded to that provider:

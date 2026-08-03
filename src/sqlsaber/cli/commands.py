@@ -160,6 +160,7 @@ def query(
         )
         # Import heavy dependencies only when actually running a query
         # This is only done to speed up startup time
+        from sqlsaber.cli.artifacts import cli_artifact_store
         from sqlsaber.cli.display import DisplayManager
         from sqlsaber.cli.interactive import InteractiveSession
         from sqlsaber.cli.query_results import cli_query_result_store
@@ -199,6 +200,7 @@ def query(
                     allow_dangerous=allow_dangerous,
                     system_prompt=system_prompt,
                     thread_manager=thread_manager,
+                    artifact_store=cli_artifact_store(),
                     query_result_store=cli_query_result_store(),
                 )
             )

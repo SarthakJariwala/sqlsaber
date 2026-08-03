@@ -480,6 +480,20 @@ saber threads show a1b2c3d4
 - Complete conversation history
 - SQL queries and results
 - Tool calls and responses
+- Durable artifact names and links
+
+#### `saber threads artifacts`
+
+List durable artifacts referenced by a thread without replaying its full transcript.
+
+**Usage:**
+
+```bash
+saber threads artifacts a1b2c3d4
+```
+
+The output includes publication ID and kind, artifact kind/name/size, local URI,
+and an unavailable marker when integrity verification fails.
 
 #### `saber threads resume`
 

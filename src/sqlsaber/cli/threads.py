@@ -6,6 +6,7 @@ import asyncio
 import json
 import time
 from pathlib import Path
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Annotated
 
 import cyclopts
@@ -19,6 +20,9 @@ from sqlsaber.theme.manager import create_console, get_theme_manager
 
 if TYPE_CHECKING:
     from pydantic_ai.messages import ModelMessage
+
+    from sqlsaber.artifact_resolution import ResolvedArtifactPublication
+    from sqlsaber.tools.base import Tool
 
 # Globals consistent with other CLI modules
 console = create_console()
@@ -45,13 +49,18 @@ def _render_transcript(
     *,
     hydrated_results: dict[str, str] | None = None,
     unavailable_results: set[str] | None = None,
+    unavailable_artifacts: set[str] | None = None,
+    resolved_artifacts: Mapping[str, ResolvedArtifactPublication] | None = None,
+    display_registry: Mapping[str, Tool] | None = None,
 ) -> None:
     """Render conversation turns from ModelMessage[] using DisplayManager."""
     # Lazy import to avoid pulling UI helpers at startup
     from sqlsaber.cli.display import DisplayManager
 
-    dm = DisplayManager(console)
+    dm = DisplayManager(console, display_registry)
     dm.set_replay_messages(all_msgs)
+    dm.set_unavailable_artifacts(unavailable_artifacts or set())
+    dm.set_resolved_artifact_publications(resolved_artifacts or {})
     # Check if output is being redirected (for clean markdown export)
     is_redirected = not console.is_terminal
 
@@ -245,6 +254,26 @@ def show(
         )
     else:
         hydrated, unavailable = {}, set()
+
+    from sqlsaber.artifact_resolution import artifact_references_from_messages
+
+    if artifact_references_from_messages(msgs):
+        from sqlsaber.cli.artifacts import (
+            cli_artifact_store,
+            resolve_cli_artifact_publications,
+        )
+
+        resolved_artifacts = asyncio.run(
+            resolve_cli_artifact_publications(msgs, store=cli_artifact_store())
+        )
+        unavailable_artifacts = {
+            artifact.id
+            for publication in resolved_artifacts.values()
+            for artifact in publication.unavailable
+        }
+    else:
+        resolved_artifacts = {}
+        unavailable_artifacts = set()
     console.print(f"[bold]Thread: {thread.id}[/bold]")
     console.print("")
     console.print(f"Database: {thread.database_name}")
@@ -253,17 +282,91 @@ def show(
     console.print(f"Model: {thread.model_name}")
     console.print("")
 
-    if hydrated or unavailable:
+    if hydrated or unavailable or unavailable_artifacts or resolved_artifacts:
         _render_transcript(
             console,
             msgs,
             None,
             hydrated_results=hydrated,
             unavailable_results=unavailable,
+            unavailable_artifacts=unavailable_artifacts,
+            resolved_artifacts=resolved_artifacts,
         )
     else:
         _render_transcript(console, msgs, None)
     logger.info("threads.cli.show.complete", thread_id=thread_id)
+
+
+@threads_app.command(name="artifacts")
+def list_artifacts(
+    thread_id: Annotated[str, cyclopts.Parameter(help="Thread ID")],
+):
+    """List durable artifacts referenced by a retained thread."""
+
+    from sqlsaber.threads import ThreadStorage
+
+    store = ThreadStorage()
+
+    async def _run() -> None:
+        from sqlsaber.artifact_resolution import (
+            artifact_references_from_messages,
+            resolve_artifact_publication,
+        )
+        from sqlsaber.artifacts import ArtifactContext
+        from sqlsaber.cli.artifacts import cli_artifact_store
+
+        thread = await store.get_thread(thread_id)
+        if thread is None:
+            console.print(f"[error]Thread not found:[/error] {thread_id}")
+            return
+        messages = await store.get_thread_messages(thread_id)
+        references = artifact_references_from_messages(messages)
+        if not references:
+            console.print("No artifacts found.")
+            return
+
+        artifact_store = cli_artifact_store()
+        rows: list[tuple[str, str, str, str, str, str]] = []
+        for reference in references:
+            resolved = await resolve_artifact_publication(
+                reference,
+                store=artifact_store,
+                context=ArtifactContext(),
+            )
+            available_ids = {loaded.descriptor.id for loaded in resolved.artifacts}
+            for descriptor in reference.artifacts:
+                rows.append(
+                    (
+                        reference.publication_id,
+                        reference.publication_kind,
+                        descriptor.kind,
+                        descriptor.name,
+                        str(descriptor.size),
+                        descriptor.uri
+                        if descriptor.id in available_ids
+                        else f"{descriptor.uri} (unavailable)",
+                    )
+                )
+
+        if not console.is_terminal:
+            for row in rows:
+                console.print("\t".join(row))
+            return
+        table = Table(title=f"Artifacts for {thread_id}")
+        for heading in (
+            "Publication",
+            "Publication kind",
+            "Kind",
+            "Name",
+            "Size",
+            "URI",
+        ):
+            table.add_column(heading)
+        for row in rows:
+            table.add_row(*row)
+        console.print(table)
+
+    asyncio.run(_run())
 
 
 @threads_app.command
@@ -285,6 +388,7 @@ def resume(
 
     async def _run() -> None:
         # Lazy imports to avoid heavy modules at CLI startup
+        from sqlsaber.cli.artifacts import cli_artifact_store
         from sqlsaber.cli.interactive import InteractiveSession
         from sqlsaber.cli.query_results import cli_query_result_store
         from sqlsaber.config.database import DatabaseConfigManager
@@ -351,6 +455,7 @@ def resume(
                 SQLSaberOptions(
                     database=db_selector,
                     thread_manager=session_thread_manager,
+                    artifact_store=cli_artifact_store(),
                     query_result_store=cli_query_result_store(),
                 )
             )
@@ -391,12 +496,30 @@ def resume(
                 )
             else:
                 hydrated, unavailable = {}, set()
+            from sqlsaber.cli.artifacts import resolve_cli_artifact_publications
+
+            artifact_store = getattr(sqlsaber_session, "artifact_store", None)
+            resolved_artifacts = (
+                await resolve_cli_artifact_publications(
+                    history,
+                    store=artifact_store,
+                )
+                if artifact_store is not None
+                else {}
+            )
+            artifact_unavailable = {
+                artifact.id
+                for publication in resolved_artifacts.values()
+                for artifact in publication.unavailable
+            }
             _render_transcript(
                 console,
                 history,
                 None,
                 hydrated_results=hydrated,
                 unavailable_results=unavailable,
+                unavailable_artifacts=artifact_unavailable,
+                resolved_artifacts=resolved_artifacts,
             )
             interactive_session = InteractiveSession(
                 console=console,
@@ -430,21 +553,27 @@ def prune(
     async def _run() -> None:
         deleted = await store.prune_threads(older_than_days=days)
         console.print(f"[success]✓ Pruned {deleted} thread(s).[/success]")
+        from sqlsaber.cli.artifact_gc import collect_cli_artifacts
+        from sqlsaber.cli.artifacts import cli_artifact_store
         from sqlsaber.cli.query_result_gc import collect_cli_query_results
         from sqlsaber.cli.query_results import cli_query_result_store
 
-        cleanup = await collect_cli_query_results(
+        query_cleanup = await collect_cli_query_results(
             store, cli_query_result_store(), force=True
         )
-        if not cleanup.complete:
+        artifact_cleanup = await collect_cli_artifacts(
+            store, cli_artifact_store(), force=True
+        )
+        if not query_cleanup.complete or not artifact_cleanup.complete:
             console.print(
-                "[warning]Thread pruning succeeded, but query result cleanup "
+                "[warning]Thread pruning succeeded, but durable output cleanup "
                 "was incomplete.[/warning]"
             )
         logger.info(
             "threads.cli.prune.complete",
             deleted=deleted,
-            query_results_deleted=cleanup.deleted,
+            query_results_deleted=query_cleanup.deleted,
+            artifacts_deleted=artifact_cleanup.deleted,
         )
 
     asyncio.run(_run())

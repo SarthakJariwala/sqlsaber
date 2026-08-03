@@ -16,7 +16,12 @@ def test_plugins_require_capabilities_compatible_sqlsaber() -> None:
     core_version = tuple(int(part) for part in core["version"].split("."))
     assert core_version >= (0, 69, 0)
 
-    for plugin in ("sandbox", "viz", "notebook"):
+    minimum_versions = {
+        "sandbox": "0.69.0",
+        "viz": "0.69.0",
+        "notebook": "0.70.0",
+    }
+    for plugin, minimum_version in minimum_versions.items():
         metadata = _project_metadata(
             _REPOSITORY_ROOT / "plugins" / plugin / "pyproject.toml"
         )
@@ -25,4 +30,4 @@ def test_plugins_require_capabilities_compatible_sqlsaber() -> None:
             for requirement in metadata["dependencies"]
             if requirement.startswith("sqlsaber")
         ]
-        assert sqlsaber_requirements == ["sqlsaber>=0.69.0"]
+        assert sqlsaber_requirements == [f"sqlsaber>={minimum_version}"]

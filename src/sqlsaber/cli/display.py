@@ -6,7 +6,9 @@ rendered with Live.
 """
 
 import json
+import logging
 from collections.abc import Mapping
+from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Type
 
 from pydantic_ai.messages import ModelResponsePart, TextPart, ThinkingPart
@@ -19,17 +21,23 @@ from rich.spinner import Spinner
 from rich.syntax import Syntax
 from rich.text import Text
 
+from sqlsaber.artifacts import artifact_publication_from_metadata
 from sqlsaber.cli.usage import format_cost_usd, format_tokens
 from sqlsaber.theme.manager import get_theme_manager
 from sqlsaber.tools.display import ResultConfig, SpecRenderer, ToolDisplaySpec
 
+logger = logging.getLogger(__name__)
+_DISPLAY_TOOLS_GROUP = "sqlsaber.display_tools"
+
 if TYPE_CHECKING:
+    from sqlsaber.artifact_resolution import ResolvedArtifactPublication
     from sqlsaber.cli.usage import SessionUsage
     from sqlsaber.tools.base import Tool
 
 
 def _core_display_registry() -> dict[str, "Tool"]:
     """Build stateless core renderers for transcript and fallback contexts."""
+    from sqlsaber.tools.base import Tool
     from sqlsaber.tools.knowledge_tool import SearchKnowledgeTool
     from sqlsaber.tools.sql_tools import (
         ExecuteSQLTool,
@@ -45,7 +53,31 @@ def _core_display_registry() -> dict[str, "Tool"]:
         ExecuteSQLTool(),
         ListDatabasesTool(),
     ]
-    return {tool.name: tool for tool in tools}
+    registry: dict[str, Tool] = {tool.name: tool for tool in tools}
+    discovered = entry_points()
+    display_entries = (
+        discovered.select(group=_DISPLAY_TOOLS_GROUP)
+        if hasattr(discovered, "select")
+        else discovered.get(_DISPLAY_TOOLS_GROUP, [])
+    )
+    for entry_point in sorted(display_entries, key=lambda item: item.name):
+        try:
+            provided = entry_point.load()()
+            if isinstance(provided, Mapping):
+                registry.update(
+                    {
+                        name: tool
+                        for name, tool in provided.items()
+                        if isinstance(name, str) and isinstance(tool, Tool)
+                    }
+                )
+        except Exception:
+            logger.warning(
+                "Failed to load display tools from %s",
+                entry_point.name,
+                exc_info=True,
+            )
+    return registry
 
 
 class _SimpleCodeBlock(CodeBlock):
@@ -240,11 +272,26 @@ class DisplayManager:
         self.tm = get_theme_manager()
         self._spec_renderer = SpecRenderer(self.tm)
         self._replay_messages: list | None = None
+        self._unavailable_artifacts: set[str] = set()
         self._display_registry = dict(display_registry or _core_display_registry())
 
     def set_replay_messages(self, messages: list) -> None:
         """Set message history for replay scenarios (e.g., threads show)."""
         self._replay_messages = messages
+
+    def set_unavailable_artifacts(self, artifact_ids: set[str]) -> None:
+        """Mark replay references whose bytes failed retrieval or verification."""
+
+        self._unavailable_artifacts = set(artifact_ids)
+
+    def set_resolved_artifact_publications(
+        self,
+        publications: Mapping[str, "ResolvedArtifactPublication"],
+    ) -> None:
+        """Supply verified publications to artifact-aware replay renderers."""
+
+        for tool in self._display_registry.values():
+            tool.set_resolved_artifact_publications(publications)
 
     def show_tool_executing(self, tool_name: str, tool_input: dict):
         """Display tool execution details."""
@@ -277,25 +324,41 @@ class DisplayManager:
     ) -> None:
         """Display tool result using override/spec/fallback resolution."""
         tool = self._get_tool(tool_name)
+        handled = False
         if tool:
             if self._replay_messages is not None and hasattr(
                 tool, "set_replay_messages"
             ):
                 tool.set_replay_messages(self._replay_messages)
-            if tool.render_result_event(
+            handled = tool.render_result_event(
                 self.console,
                 result,
                 tool_call_id=tool_call_id,
                 metadata=metadata,
-            ):
-                return
+            )
 
         spec = tool.display_spec if tool else None
-        if spec:
+        if not handled and spec:
             self._spec_renderer.render_result(self.console, tool_name, result, spec)
-            return
+            handled = True
+        if not handled:
+            self._render_fallback_result(result)
+        self._render_artifact_references(metadata)
 
-        self._render_fallback_result(result)
+    def _render_artifact_references(self, metadata: object) -> None:
+        publication = artifact_publication_from_metadata(metadata)
+        if publication is None:
+            return
+        self.console.print(f"[muted bold]Artifacts ({publication.kind})[/muted bold]")
+        for artifact in publication.artifacts:
+            status = (
+                " (unavailable)" if artifact.id in self._unavailable_artifacts else ""
+            )
+            self.console.print(
+                f"  {artifact.name} ({artifact.kind}, {artifact.size} bytes) "
+                f"{artifact.uri}{status}",
+                markup=False,
+            )
 
     def render_tool_result_html(
         self, tool_name: str, result: object, args: dict | None = None
