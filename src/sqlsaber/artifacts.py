@@ -699,12 +699,22 @@ class FilesystemArtifactStore:
 
     @staticmethod
     def _read_regular_file(path: Path) -> bytes:
+        before = path.lstat()
+        if not stat.S_ISREG(before.st_mode):
+            raise ArtifactUnavailable()
         flags = os.O_RDONLY
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         fd = os.open(path, flags)
         try:
-            if not stat.S_ISREG(os.fstat(fd).st_mode):
+            opened = os.fstat(fd)
+            current = path.lstat()
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or not stat.S_ISREG(current.st_mode)
+                or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+                or (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino)
+            ):
                 raise ArtifactUnavailable()
             with os.fdopen(fd, "rb", closefd=False) as stream:
                 return stream.read()
