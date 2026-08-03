@@ -3267,7 +3267,7 @@ dev = [
 
 [[package]]
 name = "sqlsaber-sandbox"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "plugins/sandbox" }
 dependencies = [
     { name = "cased-sandboxes" },
@@ -3288,7 +3288,7 @@ dev = [
 
 [[package]]
 name = "sqlsaber-viz"
-version = "0.5.0"
+version = "0.6.0"
 source = { editable = "plugins/viz" }
 dependencies = [
     { name = "plotext" },
