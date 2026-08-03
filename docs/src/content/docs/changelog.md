@@ -33,6 +33,17 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.70.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.69.0...sqlsaber-v0.70.0) (2026-08-03)
+
+
+### Features
+
+* add Daytona notebook execution backend ([#212](https://github.com/SarthakJariwala/sqlsaber/issues/212)) ([6317e05](https://github.com/SarthakJariwala/sqlsaber/commit/6317e05c705b1cd4d9688238f2d2884ee192669b))
+* add durable artifact storage and notebook publication ([#213](https://github.com/SarthakJariwala/sqlsaber/issues/213)) ([02ce79f](https://github.com/SarthakJariwala/sqlsaber/commit/02ce79f4776263bcf6926452b623f234c5a80918))
+* add durable query result storage ([#205](https://github.com/SarthakJariwala/sqlsaber/issues/205)) ([6573f1e](https://github.com/SarthakJariwala/sqlsaber/commit/6573f1e8ae0b20e5f69bf81495a8ce3ab420c290))
+* add Microsandbox execution backend for notebook ([#211](https://github.com/SarthakJariwala/sqlsaber/issues/211)) ([b960092](https://github.com/SarthakJariwala/sqlsaber/commit/b960092d53263ffa9ee6c3e96bcc7a0b1b2d014a))
+* render analyses with native TUI ([#210](https://github.com/SarthakJariwala/sqlsaber/issues/210)) ([607e10f](https://github.com/SarthakJariwala/sqlsaber/commit/607e10fd8a0443783edba76be5ec042fa1e20d5a))
+
 ## [0.69.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.68.0...sqlsaber-v0.69.0) (2026-07-22)
 
 
