@@ -7,6 +7,13 @@
 - add an opt-in local Microsandbox microVM execution backend while retaining Docker as the default
 - add an opt-in Daytona notebook backend pinned to the deployed legacy SDK contract
 
+## [0.4.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-notebook-v0.3.0...sqlsaber-notebook-v0.4.0) (2026-08-04)
+
+
+### Features
+
+* prompt update to use seaborn style for plots ([#214](https://github.com/SarthakJariwala/sqlsaber/issues/214)) ([6b35ceb](https://github.com/SarthakJariwala/sqlsaber/commit/6b35ceb0ec055f224414f0e4c13f16934527f115))
+
 ## [0.3.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-notebook-v0.2.0...sqlsaber-notebook-v0.3.0) (2026-08-03)
 
 
