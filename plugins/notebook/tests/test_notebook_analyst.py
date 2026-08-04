@@ -14,7 +14,6 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.usage import RunUsage
-
 from sqlsaber_notebook.analyst import (
     _cache_settings,
     analyze,
