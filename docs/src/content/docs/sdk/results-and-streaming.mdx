@@ -27,6 +27,33 @@ print(result.messages)   # messages from this run (incl. tool calls / SQL)
 | `.query_results` | Durable complete-query-result descriptors created during this run.      |
 | `.artifacts`    | Durable artifact references published by capabilities during this run.   |
 
+## Controlling run usage
+
+Pass Pydantic AI's `UsageLimits` to `query()` when a long-horizon task needs a
+larger request budget or when the embedding application needs token or tool-call
+limits:
+
+```python
+from pydantic_ai.usage import UsageLimits
+
+result = await saber.query(
+    "Investigate the revenue anomaly thoroughly",
+    usage_limits=UsageLimits(request_limit=200),
+)
+```
+
+When `usage_limits` is omitted, SQLsaber preserves Pydantic AI's safe default
+(`request_limit=50`). Set a field to `None` only when the embedding application
+explicitly intends to disable that limit, for example
+`UsageLimits(request_limit=None)`.
+
+The managed notebook analyst always shares the parent's live usage counter, so its
+model requests are included exactly once in `result.usage`. When the caller
+explicitly passes `usage_limits`, the analyst inherits that budget. When the caller
+omits `usage_limits`, the analyst itself is uncapped (`request_limit=None`) rather
+than silently acquiring Pydantic AI's per-agent default; the parent SQLsaber run
+still retains its safe default.
+
 ## Retrieving complete query results
 
 Complete rows are deliberately absent from model history. Use the descriptors on

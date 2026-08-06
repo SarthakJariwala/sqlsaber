@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from pydantic_ai import RunContext
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
+from pydantic_ai.usage import UsageLimits
 
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.config.database import DatabaseConfigManager
@@ -110,6 +111,7 @@ class SQLSaberSession:
         *,
         conversation_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        usage_limits: UsageLimits | None = None,
     ) -> Any:
         """Run a natural language query against the configured database."""
         run_result = await self.agent.run(
@@ -118,6 +120,7 @@ class SQLSaberSession:
             event_stream_handler=event_stream_handler,
             conversation_id=conversation_id,
             metadata=metadata,
+            usage_limits=usage_limits,
         )
 
         if self.thread_manager is not None:

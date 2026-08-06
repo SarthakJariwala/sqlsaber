@@ -16,7 +16,7 @@ from pydantic_ai.messages import (
     ToolCallPart,
     ToolReturnPart,
 )
-from pydantic_ai.usage import RunUsage
+from pydantic_ai.usage import RunUsage, UsageLimits
 from rich.console import Console
 from sqlsaber_notebook import capability as capability_module
 from sqlsaber_notebook.capability import (
@@ -29,6 +29,7 @@ from sqlsaber_notebook.result import AnalysisResult, ArtifactRef
 
 from sqlsaber.artifacts import InMemoryArtifactStore
 from sqlsaber.query_results import InMemoryQueryResultStore
+from sqlsaber.run_usage import bind_usage_limits
 
 
 def _ctx(messages: list[Any], *, tool_call_id: str = "analysis-call") -> Any:
@@ -36,6 +37,7 @@ def _ctx(messages: list[Any], *, tool_call_id: str = "analysis-call") -> Any:
         messages=messages,
         tool_call_id=tool_call_id,
         usage=RunUsage(),
+        usage_limits=UsageLimits(request_limit=200),
         run_id="run-1",
         conversation_id="conversation-1",
         metadata={"tenant_id": "acme"},
@@ -280,15 +282,17 @@ async def test_analyze_tool_renders_notebook_and_child_answer(
         capability_module, "resolve_notebook_image", lambda: "test-image"
     )
     tool = AnalyzeDataTool(cast(Any, context))
+    run_ctx = _ctx(messages)
 
-    returned = await tool.execute(_ctx(messages), "Calculate the total")
+    returned = await tool.execute(run_ctx, "Calculate the total")
 
     assert isinstance(returned, ToolReturn)
     assert returned.return_value == "The calculated answer is 10."
     assert returned.content is None
     assert returned.metadata["files"] == ["result_rows.json"]
     assert captured["collect_files"] is False
-    assert captured["parent_usage"] is not None
+    assert captured["usage_limits"].request_limit is None
+    assert captured["parent_usage"] is run_ctx.usage
 
     request_tui = _RecordingTUI()
     assert tool.render_executing_tui(request_tui, {"goal": "Calculate the total"})
@@ -350,6 +354,28 @@ async def test_analyze_tool_renders_notebook_and_child_answer(
         rich_returned.return_value,
         tool_call_id="rich-analysis-call",
     )
+
+
+def test_nested_usage_limits_are_unlimited_without_explicit_parent_limits() -> None:
+    nested = capability_module._nested_usage_limits()
+
+    assert nested == UsageLimits(request_limit=None)
+
+
+def test_nested_usage_limits_inherit_explicit_parent_budget() -> None:
+    parent = UsageLimits(
+        request_limit=200,
+        tool_calls_limit=10,
+        total_tokens_limit=1_000_000,
+    )
+
+    with bind_usage_limits(parent):
+        nested = capability_module._nested_usage_limits()
+
+    assert nested.request_limit == 200
+    assert nested.tool_calls_limit == 9
+    assert nested.total_tokens_limit == 1_000_000
+    assert parent.tool_calls_limit == 10
 
 
 @pytest.mark.asyncio
@@ -537,3 +563,4 @@ def test_installed_capability_is_always_registered() -> None:
     notebook = capability_module.capability(cast(Any, SimpleNamespace()))
     assert isinstance(notebook, Notebook)
     assert notebook.tool.name == "analyze_data"
+    assert notebook.get_toolset().tools["analyze_data"].sequential is True

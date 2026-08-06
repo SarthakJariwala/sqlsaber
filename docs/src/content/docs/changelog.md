@@ -7,30 +7,6 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
-#### Pydantic AI capabilities migration
-
-- Requires `pydantic-ai>=2.9,<3`. Model names must include a provider prefix and pydantic-ai's graceful end strategy is now the default.
-- Adds public `SqlTools` and `Knowledge` capabilities, plus `SQLSaberOptions.extra_capabilities`, for composing SQLsaber with other pydantic-ai agents.
-- Replaces the `sqlsaber.tools` plugin entry-point group with `sqlsaber.capabilities`. Plugin authors must export a `capability(context)` factory; see the [plugin porting guide](/guides/plugins#building-a-plugin).
-- Removes `ToolRegistry`, `ToolRunDeps`, and the unused `SQLSaberOptions.tools`, `providers`, and `hooks` placeholders. Tool overrides remain available through `SQLSaberOptions.tool_overrides` and are delivered when plugin capabilities are constructed.
-- Delivers the system prompt as non-persisted pydantic-ai instructions and uses one provider-neutral persona. Existing custom system prompts still replace SQLsaber's built-in persona and SQL guidance.
-- Maps thinking levels through pydantic-ai's unified `Thinking` capability. Anthropic support now targets newer models with adaptive thinking; SQLsaber no longer configures legacy `budget_tokens` or related `max_tokens` headroom itself.
-- Inherits pydantic-ai v2's graceful end strategy: function calls emitted beside a final text response execute instead of being skipped.
-
-#### Durable artifact storage
-
-- Replaces the write-only `ArtifactPublisher` API with the breaking `ArtifactStore` publish/get protocol; there are no compatibility aliases or legacy filesystem migration.
-- The CLI persists capability artifacts privately under its user-data directory and retains them while referenced by saved threads.
-- Embedded applications opt in through `SQLSaberOptions.artifact_store`; injected stores are application-owned and receive current context for tenant-aware retrieval.
-- Exposes descriptors through `SQLSaberResult.artifacts` and verified bytes through `SQLSaber.get_artifact()` while keeping binary data out of model and thread history.
-- Adds `saber threads artifacts THREAD_ID` plus link-only artifact metadata in transcript and HTML replay.
-
-#### Reusable notebook artifact publication
-
-- Adds lazily exported `publish_analysis(result, store=..., context=...)` so direct `sqlsaber-notebook` callers and managed SQLsaber share one canonical notebook/plot/generated-file publication mapping.
-- Keeps `analyze()` storage-independent and preserves explicit standalone `--output` behavior.
-- Reconstructs bounded notebook Markdown and deduplicated plots from verified retained publications during thread show/resume, with generic artifact fallback for missing or invalid notebooks.
-
 ---
 
 ## [0.70.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.69.0...sqlsaber-v0.70.0) (2026-08-03)

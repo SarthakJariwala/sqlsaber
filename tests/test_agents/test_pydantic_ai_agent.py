@@ -3,12 +3,14 @@
 from types import SimpleNamespace
 
 import pytest
+from pydantic_ai.usage import UsageLimits
 
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.capabilities.base import SqlSaberCapability
 from sqlsaber.database.sqlite import SQLiteConnection
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
+from sqlsaber.run_usage import current_usage_limits
 from sqlsaber.tools.knowledge_tool import SearchKnowledgeTool
 
 
@@ -73,12 +75,22 @@ class TestSQLSaberAgentDeps:
         async def fake_run(prompt: str, **kwargs):
             _ = prompt
             captured.update(kwargs)
+            captured["bound_usage_limits"] = current_usage_limits()
             return SimpleNamespace(output="ok")
 
         monkeypatch.setattr(agent.agent, "run", fake_run)
 
-        await agent.run("hello")
+        usage_limits = UsageLimits(request_limit=200)
+        await agent.run("hello", usage_limits=usage_limits)
         assert "deps" not in captured
+        assert captured["usage_limits"] is usage_limits
+        assert captured["bound_usage_limits"] is usage_limits
+
+        captured.clear()
+        await agent.run("use defaults")
+        assert "deps" not in captured
+        assert captured["usage_limits"] is None
+        assert captured["bound_usage_limits"] is None
         viz = agent._tools["viz"]
         assert viz.model_overide.model_name == "openai:gpt-5-mini"
         assert viz.model_overide.api_key == "override-api-key"
