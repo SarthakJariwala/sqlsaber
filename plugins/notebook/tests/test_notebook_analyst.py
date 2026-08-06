@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from typing import Any, cast
 
 import nbformat
+import pytest
+from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
@@ -13,7 +15,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
-from pydantic_ai.usage import RunUsage
+from pydantic_ai.usage import RunUsage, UsageLimits
 from sqlsaber_notebook.analyst import (
     _cache_settings,
     analyze,
@@ -50,6 +52,79 @@ async def test_immediate_text_answer_is_allowed_and_usage_merges_once() -> None:
     assert result.answer == "success (no tool calls)"
     assert nbformat.reads(result.notebook.decode(), as_version=4).cells == []
     assert result.files == []
+    assert parent_usage.requests == 5
+    assert backend.environments[0].closed is True
+
+
+async def test_omitted_usage_limits_leave_direct_analysis_unlimited() -> None:
+    backend = FakeNotebookBackend(_executor)
+    parent_usage = RunUsage(requests=50)
+
+    result = await analyze(
+        "Give an answer",
+        Workspace(()),
+        model=TestModel(call_tools=[]),
+        model_provider="test",
+        backend=backend,
+        parent_usage=parent_usage,
+    )
+
+    assert result.answer == "success (no tool calls)"
+    assert parent_usage.requests == 51
+
+
+async def test_exhausted_request_budget_skips_environment_provisioning() -> None:
+    backend = FakeNotebookBackend(_executor)
+
+    with pytest.raises(UsageLimitExceeded, match="request_limit of 5"):
+        await analyze(
+            "Inspect the workspace",
+            Workspace(()),
+            model=TestModel(call_tools=[]),
+            model_provider="test",
+            backend=backend,
+            usage_limits=UsageLimits(request_limit=5),
+            parent_usage=RunUsage(requests=5),
+        )
+
+    assert backend.environments == []
+
+
+async def test_nested_analysis_shares_parent_budget_and_usage() -> None:
+    def respond(messages, info) -> ModelResponse:
+        del info
+        if any(
+            isinstance(part, ToolReturnPart)
+            for message in messages
+            if isinstance(message, ModelRequest)
+            for part in message.parts
+        ):
+            return ModelResponse(parts=[TextPart(content="finished")])
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name="list_workspace",
+                    args={},
+                    tool_call_id="workspace-call",
+                )
+            ]
+        )
+
+    backend = FakeNotebookBackend(_executor)
+    parent_usage = RunUsage(requests=4)
+    usage_limits = UsageLimits(request_limit=5)
+
+    with pytest.raises(UsageLimitExceeded, match="request_limit of 5"):
+        await analyze(
+            "Inspect the workspace",
+            Workspace(()),
+            model=FunctionModel(respond),
+            model_provider="test",
+            backend=backend,
+            usage_limits=usage_limits,
+            parent_usage=parent_usage,
+        )
+
     assert parent_usage.requests == 5
     assert backend.environments[0].closed is True
 

@@ -8,13 +8,14 @@ import logging
 import re
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from PIL import Image, UnidentifiedImageError
 from pydantic_ai import RunContext, ToolReturn
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import FunctionToolset
+from pydantic_ai.usage import UsageLimits
 from rich.color import Color
 from rich.console import Console
 from rich.markdown import Markdown
@@ -40,6 +41,7 @@ from sqlsaber.query_results import (
     QueryResultStore,
     QueryResultUnavailable,
 )
+from sqlsaber.run_usage import current_usage_limits
 from sqlsaber.tools.base import Tool, ToolResultTUI
 from sqlsaber.utils.json_utils import json_dumps
 
@@ -71,6 +73,21 @@ _MAX_DISPLAY_RESULTS = 2
 class _NotebookDisplay:
     markdown: str
     images: tuple[bytes, ...]
+
+
+def _nested_usage_limits() -> UsageLimits:
+    """Resolve child limits from the parent run's explicit limit selection."""
+    parent_limits = current_usage_limits()
+    if parent_limits is None:
+        return UsageLimits(request_limit=None)
+    if parent_limits.tool_calls_limit is None:
+        return parent_limits
+    # The successful parent analyze_data call is counted after execute returns.
+    # Reserve room for it in the child's derived limit without mutating the parent.
+    return replace(
+        parent_limits,
+        tool_calls_limit=max(0, parent_limits.tool_calls_limit - 1),
+    )
 
 
 class AnalyzeDataTool(Tool):
@@ -130,6 +147,7 @@ class AnalyzeDataTool(Tool):
                 image=resolve_notebook_image(),
                 include_snapshot_images=supports_notebook_images(model_name, provider),
                 collect_files=store is not None,
+                usage_limits=_nested_usage_limits(),
                 parent_usage=ctx.usage,
             )
             markdown, notebook_images = render_notebook_bytes(result.notebook)
@@ -327,6 +345,9 @@ class Notebook(SqlSaberCapability):
             self.tool.execute,
             name=self.tool.name,
             takes_ctx=True,
+            # Notebook delegation must run as a barrier so sibling parent tools
+            # are fully accounted before the nested agent checks shared limits.
+            sequential=True,
         )
 
     @property

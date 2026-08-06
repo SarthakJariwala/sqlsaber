@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from pydantic_ai.capabilities import Capability
+from pydantic_ai.usage import UsageLimits
 
 from sqlsaber import (
     InMemoryArtifactStore,
@@ -108,10 +109,12 @@ async def test_artifact_options_and_run_context_reach_managed_agent(
         return FakeResult()
 
     monkeypatch.setattr(saber.agent, "run", fake_run)
+    usage_limits = UsageLimits(request_limit=200)
     result = await saber.query(
         "analyze",
         conversation_id="conversation-1",
         metadata={"tenant_id": "acme"},
+        usage_limits=usage_limits,
     )
 
     assert result == "answer"
@@ -120,6 +123,11 @@ async def test_artifact_options_and_run_context_reach_managed_agent(
     assert saber.agent._artifact_failure_mode == "best_effort"
     assert captured["conversation_id"] == "conversation-1"
     assert captured["metadata"] == {"tenant_id": "acme"}
+    assert captured["usage_limits"] is usage_limits
+
+    captured.clear()
+    await saber.query("use defaults")
+    assert captured["usage_limits"] is None
     await saber.close()
 
 

@@ -10,6 +10,7 @@ from typing import Any, Callable, Protocol, Self
 
 from pydantic_ai import RunContext
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
+from pydantic_ai.usage import UsageLimits
 
 from sqlsaber.artifact_resolution import artifact_references_from_messages
 from sqlsaber.artifacts import (
@@ -140,6 +141,7 @@ class SQLSaber:
         *,
         conversation_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        usage_limits: UsageLimits | None = None,
     ) -> SQLSaberResult:
         """Run a natural language query against the database.
 
@@ -151,6 +153,8 @@ class SQLSaber:
             conversation_id: Stable Pydantic AI conversation identifier for the run.
             metadata: Application metadata available to capabilities, such as tenant
                 and user identifiers used when publishing artifacts.
+            usage_limits: Optional Pydantic AI limits for this run. When omitted,
+                Pydantic AI's safe defaults apply.
 
         Returns:
             A SQLSaberResult object (subclass of str) containing the agent's response.
@@ -162,6 +166,7 @@ class SQLSaber:
             event_stream_handler=event_stream_handler,
             conversation_id=conversation_id,
             metadata=metadata,
+            usage_limits=usage_limits,
         )
 
         content = ""

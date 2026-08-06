@@ -72,7 +72,11 @@ async def analyze(
     usage_limits: UsageLimits | None = None,
     parent_usage: RunUsage | None = None,
 ) -> AnalysisResult:
-    """Run one bounded notebook-analysis environment and always clean it up."""
+    """Run one notebook-analysis environment and always clean it up.
+
+    Omitted ``usage_limits`` leave the analyst uncapped; managed SQLsaber supplies
+    limits only when its embedding caller explicitly selected them.
+    """
 
     if not goal.strip():
         raise ValueError("Analysis goal cannot be empty")
@@ -91,14 +95,18 @@ async def analyze(
         include_snapshot_images=include_snapshot_images,
     )
     agent = build_analyst_agent(model, model_provider=model_provider)
-    child_usage = RunUsage()
+    run_usage = parent_usage if parent_usage is not None else RunUsage()
+    effective_usage_limits = usage_limits or UsageLimits(request_limit=None)
     try:
+        # Avoid provisioning a local or remote notebook when the next model
+        # request is already prohibited by the aggregate parent budget.
+        effective_usage_limits.check_before_request(run_usage)
         await session.ensure_environment()
         result = await agent.run(
             goal_prompt(goal),
             deps=session,
-            usage=child_usage,
-            usage_limits=usage_limits,
+            usage=run_usage,
+            usage_limits=effective_usage_limits,
         )
         images, files = await _harvest_artifacts(
             session,
@@ -112,8 +120,6 @@ async def analyze(
             provenance=_infer_provenance(session),
         )
     finally:
-        if parent_usage is not None:
-            parent_usage.incr(child_usage)
         await _bounded_shielded_close(session)
 
 

@@ -7,6 +7,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import AbstractCapability, ProcessHistory, Thinking
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 from pydantic_ai.models.anthropic import AnthropicModelSettings
+from pydantic_ai.usage import UsageLimits
 
 from sqlsaber.agents.model_factory import UNIFIED_EFFORT_MAP, build_model
 from sqlsaber.artifacts import ArtifactFailureMode, ArtifactStore
@@ -23,6 +24,7 @@ from sqlsaber.overrides import ToolOveridesInput, normalize_tool_overides
 from sqlsaber.prompts.persona import PERSONA
 from sqlsaber.query_result_resolution import compact_legacy_query_result_history
 from sqlsaber.query_results import InMemoryQueryResultStore, QueryResultStore
+from sqlsaber.run_usage import bind_usage_limits
 from sqlsaber.tools.base import Tool
 
 
@@ -221,15 +223,18 @@ class SQLSaberAgent:
         *,
         conversation_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        usage_limits: UsageLimits | None = None,
     ) -> Any:
         """Run the agent without occupying the embedding agent's deps slot."""
-        return await self.agent.run(
-            prompt,
-            message_history=message_history,
-            conversation_id=conversation_id,
-            metadata=metadata,
-            event_stream_handler=event_stream_handler,
-        )
+        with bind_usage_limits(usage_limits):
+            return await self.agent.run(
+                prompt,
+                message_history=message_history,
+                conversation_id=conversation_id,
+                metadata=metadata,
+                usage_limits=usage_limits,
+                event_stream_handler=event_stream_handler,
+            )
 
     async def close(self) -> None:
         """Close capability and wrapper resources without masking cleanup failures."""
