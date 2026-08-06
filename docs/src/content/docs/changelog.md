@@ -9,6 +9,18 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.71.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.70.0...sqlsaber-v0.71.0) (2026-08-06)
+
+
+### Features
+
+* prompt update to use seaborn style for plots ([#214](https://github.com/SarthakJariwala/sqlsaber/issues/214)) ([6b35ceb](https://github.com/SarthakJariwala/sqlsaber/commit/6b35ceb0ec055f224414f0e4c13f16934527f115))
+
+
+### Bug Fixes
+
+* expose run-level usage limits ([#217](https://github.com/SarthakJariwala/sqlsaber/issues/217)) ([df17212](https://github.com/SarthakJariwala/sqlsaber/commit/df1721200c392986495644681f9757f19021e166))
+
 ## [0.70.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.69.0...sqlsaber-v0.70.0) (2026-08-03)
 
 
