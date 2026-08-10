@@ -31,7 +31,8 @@ requests, notebook cell count, the analyst loop, or the whole operation. Individ
 cells retain a 10-minute timeout so a stuck computation can be diagnosed without
 ending the overall analysis. These are fixed product defaults rather than CLI tuning
 flags. Use an immutable custom image through `SQLSABER_NOTEBOOK_IMAGE` when
-additional ML libraries are required.
+additional ML libraries are required. Daytona deployments may instead reuse a named
+snapshot through `SQLSABER_NOTEBOOK_SNAPSHOT`.
 
 ## Managed SQLsaber usage
 
@@ -78,10 +79,22 @@ SQLSABER_NOTEBOOK_BACKEND=daytona saber
 SQL query results and selected local files are uploaded to the configured Daytona
 service. SQLsaber derives a minimal `USER root` control image from the exact configured
 `SQLSABER_NOTEBOOK_IMAGE` parent, protects inputs as root, and executes notebooks as
-`jovyan`. The sandbox requests blocked outbound networking and ephemeral deletion.
-Daytona 0.143.0 has no hard age-based TTL: its 24-hour setting is inactivity-based.
-Deployments requiring a strict maximum resource age must run a label-based reaper for
-sandboxes labeled `application=sqlsaber,purpose=notebook`.
+`jovyan`. To reuse a prepared Daytona snapshot instead, set its name without an image
+reference:
+
+```bash
+SQLSABER_NOTEBOOK_BACKEND=daytona \
+SQLSABER_NOTEBOOK_SNAPSHOT=analytics-ready saber
+```
+
+Image and snapshot settings are mutually exclusive. A snapshot must already provide
+root execution, `jovyan`, `runuser`, Jupyter, and nbconvert; SQLsaber verifies these
+requirements before staging data. Its preconfigured resources apply because Daytona's
+snapshot creation API does not accept per-sandbox resource overrides. The sandbox
+requests blocked outbound networking and ephemeral deletion. Daytona 0.143.0 has no
+hard age-based TTL: its 24-hour setting is inactivity-based. Deployments requiring a
+strict maximum resource age must run a label-based reaper for sandboxes labeled
+`application=sqlsaber,purpose=notebook`.
 
 Backend isolation differs by provider:
 
@@ -154,6 +167,19 @@ publication = await publish_analysis(
         conversation_id="conversation-123",
         metadata={"tenant_id": "acme"},
     ),
+)
+```
+
+For a direct Daytona analysis, select a prepared snapshot instead of an image:
+
+```python
+result = await analyze(
+    "Plot monthly revenue and explain anomalies",
+    workspace,
+    model="anthropic:claude-sonnet-4-6",
+    model_provider="anthropic",
+    backend="daytona",
+    snapshot="analytics-ready",
 )
 ```
 

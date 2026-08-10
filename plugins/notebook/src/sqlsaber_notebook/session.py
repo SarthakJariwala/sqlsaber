@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import nbformat
 
@@ -34,6 +34,7 @@ class NotebookSession:
     workspace: Workspace
     backend: NotebookBackend
     image: str
+    snapshot: str | None = None
     execution_limits: ExecutionLimits = DEFAULT_EXECUTION_LIMITS
     include_snapshot_images: bool = False
     environment: NotebookEnvironment | None = None
@@ -63,11 +64,21 @@ class NotebookSession:
                 phase="lifecycle",
             )
         if self.environment is None:
-            self.environment = await self.backend.open(
-                self._staged_inputs(),
-                image=self.image,
-                limits=self.execution_limits,
-            )
+            inputs = self._staged_inputs()
+            if self.snapshot is None:
+                self.environment = await self.backend.open(
+                    inputs,
+                    image=self.image,
+                    limits=self.execution_limits,
+                )
+            else:
+                snapshot_backend = cast(Any, self.backend)
+                self.environment = await snapshot_backend.open(
+                    inputs,
+                    image=self.image,
+                    snapshot=self.snapshot,
+                    limits=self.execution_limits,
+                )
         return self.environment
 
     async def run_notebook(

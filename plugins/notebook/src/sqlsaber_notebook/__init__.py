@@ -16,6 +16,7 @@ from .execution import (
     NotebookInput,
     resolve_notebook_backend,
     resolve_notebook_image,
+    resolve_notebook_snapshot,
 )
 
 if TYPE_CHECKING:
@@ -63,4 +64,5 @@ __all__ = [
     "publish_analysis",
     "resolve_notebook_backend",
     "resolve_notebook_image",
+    "resolve_notebook_snapshot",
 ]

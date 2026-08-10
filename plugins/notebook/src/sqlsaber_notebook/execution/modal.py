@@ -92,8 +92,15 @@ class ModalNotebookBackend(NotebookBackend):
         inputs: Sequence[NotebookInput],
         *,
         image: str,
+        snapshot: str | None = None,
         limits: ExecutionLimits,
     ) -> ModalNotebookEnvironment:
+        if snapshot is not None:
+            raise NotebookImageError(
+                "Notebook snapshots are only supported by Daytona",
+                backend=self.name,
+                phase="configuration",
+            )
         validated = validate_inputs(inputs, limits, backend=self.name)
         modal = _load_modal()
         try:

@@ -56,6 +56,75 @@ async def test_immediate_text_answer_is_allowed_and_usage_merges_once() -> None:
     assert backend.environments[0].closed is True
 
 
+async def test_direct_analysis_can_select_a_daytona_snapshot() -> None:
+    backend = FakeNotebookBackend(_executor)
+    backend.name = "daytona"
+
+    result = await analyze(
+        "Give an answer",
+        Workspace(()),
+        model=TestModel(call_tools=[]),
+        model_provider="test",
+        backend=backend,
+        snapshot="analytics-ready",
+    )
+
+    assert result.answer == "success (no tool calls)"
+    assert backend.snapshots == ["analytics-ready"]
+
+
+async def test_analysis_uses_daytona_snapshot_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SQLSABER_NOTEBOOK_SNAPSHOT", "analytics-ready")
+    backend = FakeNotebookBackend(_executor)
+    backend.name = "daytona"
+
+    await analyze(
+        "Give an answer",
+        Workspace(()),
+        model=TestModel(call_tools=[]),
+        model_provider="test",
+        backend=backend,
+    )
+
+    assert backend.snapshots == ["analytics-ready"]
+
+
+async def test_snapshot_rejects_non_daytona_backend() -> None:
+    backend = FakeNotebookBackend(_executor)
+
+    with pytest.raises(ValueError, match="only supported by Daytona"):
+        await analyze(
+            "Give an answer",
+            Workspace(()),
+            model=TestModel(call_tools=[]),
+            model_provider="test",
+            backend=backend,
+            snapshot="analytics-ready",
+        )
+
+    assert backend.environments == []
+
+
+async def test_image_and_snapshot_are_mutually_exclusive() -> None:
+    backend = FakeNotebookBackend(_executor)
+    backend.name = "daytona"
+
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        await analyze(
+            "Give an answer",
+            Workspace(()),
+            model=TestModel(call_tools=[]),
+            model_provider="test",
+            backend=backend,
+            image="example/image:latest",
+            snapshot="analytics-ready",
+        )
+
+    assert backend.environments == []
+
+
 async def test_omitted_usage_limits_leave_direct_analysis_unlimited() -> None:
     backend = FakeNotebookBackend(_executor)
     parent_usage = RunUsage(requests=50)

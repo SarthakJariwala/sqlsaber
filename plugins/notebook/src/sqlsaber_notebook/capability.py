@@ -57,7 +57,6 @@ from .execution import (
     NotebookInput,
     NotebookLimitExceeded,
     resolve_notebook_backend,
-    resolve_notebook_image,
 )
 from .publication import display_from_publication, publish_analysis
 from .rendering import limit_output, render_notebook_bytes
@@ -144,7 +143,6 @@ class AnalyzeDataTool(Tool):
                 model=model,
                 model_provider=provider,
                 backend=backend,
-                image=resolve_notebook_image(),
                 include_snapshot_images=supports_notebook_images(model_name, provider),
                 collect_files=store is not None,
                 usage_limits=_nested_usage_limits(),

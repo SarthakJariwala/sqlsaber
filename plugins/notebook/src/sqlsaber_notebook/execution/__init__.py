@@ -67,6 +67,23 @@ def resolve_notebook_image(image: str | None = None) -> str:
     return selected.strip()
 
 
+def resolve_notebook_snapshot(snapshot: str | None = None) -> str | None:
+    """Resolve an explicit Daytona snapshot or its environment override."""
+
+    selected = (
+        snapshot if snapshot is not None else os.getenv("SQLSABER_NOTEBOOK_SNAPSHOT")
+    )
+    if selected is None:
+        return None
+    if not selected.strip():
+        raise NotebookImageError(
+            "Notebook snapshot cannot be empty",
+            backend="configuration",
+            phase="configuration",
+        )
+    return selected.strip()
+
+
 __all__ = [
     "ArtifactInfo",
     "DEFAULT_NOTEBOOK_BACKEND",
@@ -85,4 +102,5 @@ __all__ = [
     "NotebookLimitExceeded",
     "resolve_notebook_backend",
     "resolve_notebook_image",
+    "resolve_notebook_snapshot",
 ]

@@ -61,8 +61,15 @@ class DockerNotebookBackend(NotebookBackend):
         inputs: Sequence[NotebookInput],
         *,
         image: str,
+        snapshot: str | None = None,
         limits: ExecutionLimits,
     ) -> DockerNotebookEnvironment:
+        if snapshot is not None:
+            raise NotebookImageError(
+                "Notebook snapshots are only supported by Daytona",
+                backend=self.name,
+                phase="configuration",
+            )
         if not self.available():
             raise NotebookBackendUnavailable(
                 "Docker CLI is not installed; install/start Docker or explicitly select Modal",

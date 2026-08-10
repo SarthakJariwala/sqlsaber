@@ -312,31 +312,51 @@ class DaytonaNotebookBackend(NotebookBackend):
         inputs: Sequence[NotebookInput],
         *,
         image: str,
+        snapshot: str | None = None,
         limits: ExecutionLimits,
     ) -> DaytonaNotebookEnvironment:
         validated = validate_inputs(inputs, limits, backend=self.name)
-        cpu = _daytona_cpu(limits.cpu_cores)
-        memory = _daytona_memory_gib(limits.memory_mb)
+        if snapshot is not None:
+            snapshot = snapshot.strip()
+            if not snapshot:
+                raise NotebookImageError(
+                    "Notebook snapshot cannot be empty",
+                    backend=self.name,
+                    phase="configuration",
+                )
         sdk = _load_daytona()
         name = f"sqlsaber-notebook-{uuid.uuid4().hex}"
+        source_kind = "snapshot" if snapshot is not None else "image"
+        source_value = snapshot if snapshot is not None else image
         client: Any | None = None
         sandbox: Any | None = None
         try:
             client = sdk.AsyncDaytona()
-            runtime_image = sdk.Image.base(image).dockerfile_commands(
-                ["USER root", "WORKDIR /home/jovyan"]
-            )
-            params = sdk.CreateSandboxFromImageParams(
-                image=runtime_image,
-                language="python",
-                os_user="root",
-                name=name,
-                labels={"application": "sqlsaber", "purpose": "notebook"},
-                resources=sdk.Resources(cpu=cpu, memory=memory),
-                network_block_all=True,
-                ephemeral=True,
-                auto_stop_interval=_AUTO_STOP_MINUTES,
-            )
+            common_params = {
+                "language": "python",
+                "os_user": "root",
+                "name": name,
+                "labels": {"application": "sqlsaber", "purpose": "notebook"},
+                "network_block_all": True,
+                "ephemeral": True,
+                "auto_stop_interval": _AUTO_STOP_MINUTES,
+            }
+            if snapshot is not None:
+                params = sdk.CreateSandboxFromSnapshotParams(
+                    snapshot=snapshot,
+                    **common_params,
+                )
+            else:
+                cpu = _daytona_cpu(limits.cpu_cores)
+                memory = _daytona_memory_gib(limits.memory_mb)
+                runtime_image = sdk.Image.base(image).dockerfile_commands(
+                    ["USER root", "WORKDIR /home/jovyan"]
+                )
+                params = sdk.CreateSandboxFromImageParams(
+                    image=runtime_image,
+                    resources=sdk.Resources(cpu=cpu, memory=memory),
+                    **common_params,
+                )
             async with asyncio.timeout(limits.image_prepare_seconds):
                 sandbox = await client.create(
                     params,
@@ -375,14 +395,15 @@ class DaytonaNotebookBackend(NotebookBackend):
             await _best_effort_cleanup(sdk, client, sandbox, name)
             if _is_sdk_exception(exc, sdk, "DaytonaTimeoutError"):
                 raise NotebookExecutionTimeout(
-                    "Daytona image preparation timed out",
+                    f"Daytona {source_kind} preparation timed out",
                     backend=self.name,
                     phase="image-prepare",
                     diagnostics=bound_log(str(exc), limits.max_log_chars),
                 ) from exc
             if sandbox is None and _looks_like_image_error(exc):
                 raise NotebookImageError(
-                    f"Could not prepare Daytona notebook image {image!r}",
+                    f"Could not prepare Daytona notebook {source_kind} "
+                    f"{source_value!r}",
                     backend=self.name,
                     phase="image-prepare",
                     diagnostics=bound_log(str(exc), limits.max_log_chars),
@@ -1412,6 +1433,7 @@ def _load_daytona() -> Any:
     required = (
         "AsyncDaytona",
         "CreateSandboxFromImageParams",
+        "CreateSandboxFromSnapshotParams",
         "Image",
         "Resources",
         "DaytonaError",

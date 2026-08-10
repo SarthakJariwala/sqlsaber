@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import os
 from functools import partial
 
 from pydantic_ai import Agent
@@ -21,10 +22,12 @@ from ._shared import (
     MAX_SNAPSHOT_IMAGES,
 )
 from .execution import (
+    DEFAULT_NOTEBOOK_IMAGE,
     ExecutionLimits,
     NotebookBackend,
     resolve_notebook_backend,
     resolve_notebook_image,
+    resolve_notebook_snapshot,
 )
 from .history import collapse_old_snapshots
 from .prompts import ANALYST_SYSTEM_PROMPT, goal_prompt
@@ -66,6 +69,7 @@ async def analyze(
     model_provider: str,
     backend: NotebookBackend | str | None = None,
     image: str | None = None,
+    snapshot: str | None = None,
     include_snapshot_images: bool = False,
     collect_files: bool = True,
     execution_limits: ExecutionLimits = DEFAULT_EXECUTION_LIMITS,
@@ -74,6 +78,7 @@ async def analyze(
 ) -> AnalysisResult:
     """Run one notebook-analysis environment and always clean it up.
 
+    ``snapshot`` selects a prepared Daytona snapshot instead of an OCI ``image``.
     Omitted ``usage_limits`` leave the analyst uncapped; managed SQLsaber supplies
     limits only when its embedding caller explicitly selected them.
     """
@@ -87,10 +92,34 @@ async def analyze(
         if isinstance(backend, NotebookBackend)
         else resolve_notebook_backend(backend)
     )
+    if image is not None and snapshot is not None:
+        raise ValueError("Notebook image and snapshot are mutually exclusive")
+    if image is not None:
+        selected_image = resolve_notebook_image(image)
+        selected_snapshot = None
+    elif snapshot is not None:
+        selected_image = DEFAULT_NOTEBOOK_IMAGE
+        selected_snapshot = resolve_notebook_snapshot(snapshot)
+    else:
+        selected_snapshot = resolve_notebook_snapshot()
+        configured_image = os.getenv("SQLSABER_NOTEBOOK_IMAGE")
+        if selected_snapshot is not None and configured_image:
+            raise ValueError(
+                "SQLSABER_NOTEBOOK_IMAGE and SQLSABER_NOTEBOOK_SNAPSHOT are "
+                "mutually exclusive"
+            )
+        selected_image = (
+            DEFAULT_NOTEBOOK_IMAGE
+            if selected_snapshot is not None
+            else resolve_notebook_image()
+        )
+    if selected_snapshot is not None and selected_backend.name != "daytona":
+        raise ValueError("Notebook snapshots are only supported by Daytona")
     session = NotebookSession(
         workspace=workspace,
         backend=selected_backend,
-        image=resolve_notebook_image(image),
+        image=selected_image,
+        snapshot=selected_snapshot,
         execution_limits=execution_limits,
         include_snapshot_images=include_snapshot_images,
     )

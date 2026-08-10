@@ -260,6 +260,7 @@ def fake_sdk() -> Any:
         clients=[],
         create_error=None,
         CreateSandboxFromImageParams=FakeCreateParams,
+        CreateSandboxFromSnapshotParams=FakeCreateParams,
         Image=FakeImageFactory,
         Resources=FakeResources,
         DaytonaError=DaytonaError,
@@ -362,6 +363,29 @@ async def test_open_uses_root_wrapper_blocked_network_and_immutable_staging(
         command[:5] == (daytona_backend._RUNUSER, "-u", "jovyan", "--", "jupyter")
         for command in commands
     )
+    await environment.close()
+
+
+async def test_open_can_use_a_named_daytona_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sdk = fake_sdk()
+    monkeypatch.setattr(daytona_backend, "_load_daytona", lambda: sdk)
+
+    environment = await daytona_backend.DaytonaNotebookBackend().open(
+        [],
+        image="unused",
+        snapshot="analytics-ready",
+        limits=ExecutionLimits(),
+    )
+
+    params = sdk.clients[0].create_params
+    assert params is not None
+    assert params.snapshot == "analytics-ready"
+    assert params.os_user == "root"
+    assert params.network_block_all is True
+    assert params.ephemeral is True
+    assert FakeImageFactory.created == []
     await environment.close()
 
 

@@ -65,6 +65,30 @@ async def test_session_stages_manifest_executes_and_installs_atomically() -> Non
     assert backend.environments[0].closed is True
 
 
+async def test_session_preserves_backends_with_the_original_open_signature() -> None:
+    delegate = FakeNotebookBackend()
+
+    class LegacyBackend:
+        name = "legacy"
+
+        def available(self) -> bool:
+            return True
+
+        async def open(self, inputs, *, image, limits):
+            return await delegate.open(inputs, image=image, limits=limits)
+
+    session = NotebookSession(
+        workspace=Workspace(()),
+        backend=LegacyBackend(),
+        image="unused",
+    )
+
+    await session.ensure_environment()
+
+    assert len(delegate.environments) == 1
+    await session.close()
+
+
 async def test_session_rejects_backend_source_changes_without_installing_state() -> (
     None
 ):

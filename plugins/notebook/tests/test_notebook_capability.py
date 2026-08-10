@@ -278,9 +278,6 @@ async def test_analyze_tool_renders_notebook_and_child_answer(
 
     monkeypatch.setattr(capability_module, "analyze", fake_analyze)
     monkeypatch.setattr(capability_module, "resolve_notebook_backend", lambda: backend)
-    monkeypatch.setattr(
-        capability_module, "resolve_notebook_image", lambda: "test-image"
-    )
     tool = AnalyzeDataTool(cast(Any, context))
     run_ctx = _ctx(messages)
 
@@ -426,9 +423,6 @@ async def test_analyze_tool_publishes_notebook_images_and_generated_files(
 
     monkeypatch.setattr(capability_module, "analyze", fake_analyze)
     monkeypatch.setattr(capability_module, "resolve_notebook_backend", lambda: backend)
-    monkeypatch.setattr(
-        capability_module, "resolve_notebook_image", lambda: "test-image"
-    )
 
     returned = await AnalyzeDataTool(cast(Any, context)).execute(
         _ctx(messages), "Calculate the total"
@@ -496,9 +490,6 @@ async def test_analyze_tool_handles_artifact_publication_failure(
 
     monkeypatch.setattr(capability_module, "analyze", fake_analyze)
     monkeypatch.setattr(capability_module, "resolve_notebook_backend", lambda: backend)
-    monkeypatch.setattr(
-        capability_module, "resolve_notebook_image", lambda: "test-image"
-    )
     messages = _sql_exchange(
         "rows",
         "select 1",

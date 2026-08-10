@@ -12,6 +12,7 @@ from sqlsaber_notebook.execution import (
     NotebookLimitExceeded,
     resolve_notebook_backend,
     resolve_notebook_image,
+    resolve_notebook_snapshot,
 )
 from sqlsaber_notebook.execution.base import ArtifactInfo, NotebookInfrastructureError
 from sqlsaber_notebook.execution.fake import FakeNotebookBackend, FakeRunResult
@@ -69,6 +70,13 @@ def test_backend_selection_is_explicit_without_fallback(
 def test_image_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SQLSABER_NOTEBOOK_IMAGE", "example/image@sha256:abc")
     assert resolve_notebook_image() == "example/image@sha256:abc"
+
+
+def test_snapshot_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert resolve_notebook_snapshot() is None
+    monkeypatch.setenv("SQLSABER_NOTEBOOK_SNAPSHOT", "analytics-ready")
+    assert resolve_notebook_snapshot() == "analytics-ready"
+    assert resolve_notebook_snapshot("explicit-snapshot") == "explicit-snapshot"
 
 
 @pytest.mark.parametrize(

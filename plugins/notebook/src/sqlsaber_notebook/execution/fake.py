@@ -40,6 +40,7 @@ class FakeNotebookBackend(NotebookBackend):
     def __init__(self, executor: FakeExecutor | None = None) -> None:
         self.executor = executor or _echo_executor
         self.environments: list[FakeNotebookEnvironment] = []
+        self.snapshots: list[str | None] = []
 
     def available(self) -> bool:
         return True
@@ -49,10 +50,12 @@ class FakeNotebookBackend(NotebookBackend):
         inputs: Sequence[NotebookInput],
         *,
         image: str,
+        snapshot: str | None = None,
         limits: ExecutionLimits,
     ) -> FakeNotebookEnvironment:
         del image
         validated = validate_inputs(inputs, limits, backend=self.name)
+        self.snapshots.append(snapshot)
         environment = FakeNotebookEnvironment(validated, limits, self.executor)
         self.environments.append(environment)
         return environment
