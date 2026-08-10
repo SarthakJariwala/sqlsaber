@@ -350,7 +350,7 @@ async def test_open_uses_root_wrapper_blocked_network_and_immutable_staging(
     assert params.resources.cpu == 4
     assert params.resources.memory == 8
     assert client.create_timeout == 600
-    assert environment.remote_root.startswith("/tmp/sqlsaber-notebook/")
+    assert environment.remote_root.startswith("/sqlsaber-notebook/")
     assert (
         environment.sandbox.fs.files[f"{environment.inputs_path}/data file;$x.json"]
         == b"{}"
