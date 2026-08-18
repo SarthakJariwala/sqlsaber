@@ -32,6 +32,7 @@ if TYPE_CHECKING:
         QueryResultUnavailable,
         StoredQueryResult,
     )
+    from .workspace_inputs import WorkspaceInputResolver, WorkspaceResolutionContext
 
 __all__ = [
     "Artifact",
@@ -60,6 +61,8 @@ __all__ = [
     "SqlTools",
     "StoredArtifact",
     "StoredQueryResult",
+    "WorkspaceInputResolver",
+    "WorkspaceResolutionContext",
 ]
 
 
@@ -116,4 +119,8 @@ def __getattr__(name: str):
         from .capabilities import Knowledge
 
         return Knowledge
+    if name in {"WorkspaceInputResolver", "WorkspaceResolutionContext"}:
+        from . import workspace_inputs
+
+        return getattr(workspace_inputs, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

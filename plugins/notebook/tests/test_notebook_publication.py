@@ -49,9 +49,13 @@ import sqlsaber_notebook
 assert 'sqlsaber_notebook.analyst' not in sys.modules
 assert 'sqlsaber_notebook.publication' not in sys.modules
 from sqlsaber_notebook import (
-    AnalysisResult, ArtifactRef, ManifestEntry, Workspace, analyze, publish_analysis,
+    AnalysisResult, ArtifactRef, ManifestEntry, Workspace, WorkspaceFile,
+    WorkspaceInputResolver, WorkspaceResolutionContext, analyze, publish_analysis,
 )
-assert all((AnalysisResult, ArtifactRef, ManifestEntry, Workspace, analyze, publish_analysis))
+assert all((
+    AnalysisResult, ArtifactRef, ManifestEntry, Workspace, WorkspaceFile,
+    WorkspaceInputResolver, WorkspaceResolutionContext, analyze, publish_analysis,
+))
 """,
         ],
         capture_output=True,

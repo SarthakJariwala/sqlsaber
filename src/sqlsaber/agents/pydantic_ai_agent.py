@@ -26,6 +26,7 @@ from sqlsaber.query_result_resolution import compact_legacy_query_result_history
 from sqlsaber.query_results import InMemoryQueryResultStore, QueryResultStore
 from sqlsaber.run_usage import bind_usage_limits
 from sqlsaber.tools.base import Tool
+from sqlsaber.workspace_inputs import WorkspaceInputResolver
 
 
 def _make_single_db_registry(
@@ -63,6 +64,7 @@ class SQLSaberAgent:
         artifact_store: ArtifactStore | None = None,
         artifact_failure_mode: ArtifactFailureMode = "required",
         query_result_store: QueryResultStore | None = None,
+        workspace_input_resolver: WorkspaceInputResolver | None = None,
     ) -> None:
         if registry is None:
             if db_connection is None:
@@ -91,6 +93,7 @@ class SQLSaberAgent:
         self._extra_capabilities = tuple(extra_capabilities)
         self._artifact_store = artifact_store
         self._artifact_failure_mode = artifact_failure_mode
+        self._workspace_input_resolver = workspace_input_resolver
         self.query_result_store = (
             query_result_store
             if query_result_store is not None
@@ -163,6 +166,7 @@ class SQLSaberAgent:
                     artifact_store=self._artifact_store,
                     artifact_failure_mode=self._artifact_failure_mode,
                     query_result_store=self.query_result_store,
+                    workspace_input_resolver=self._workspace_input_resolver,
                 )
             )
         )

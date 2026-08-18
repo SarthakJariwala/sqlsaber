@@ -19,7 +19,7 @@ def test_plugins_require_capabilities_compatible_sqlsaber() -> None:
     minimum_versions = {
         "sandbox": "0.69.0",
         "viz": "0.69.0",
-        "notebook": "0.70.0",
+        "notebook": "0.72.0",
     }
     for plugin, minimum_version in minimum_versions.items():
         metadata = _project_metadata(

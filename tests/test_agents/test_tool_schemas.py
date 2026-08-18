@@ -29,15 +29,17 @@ def _registry(*names: str) -> DatabaseRegistry:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("names", "snapshot_name"),
+    ("names", "snapshot_name", "with_workspace_input_resolver"),
     [
-        (("solo",), "tool_schemas_single.json"),
-        (("prod", "staging"), "tool_schemas_multi.json"),
+        (("solo",), "tool_schemas_single.json", False),
+        (("prod", "staging"), "tool_schemas_multi.json", False),
+        (("solo",), "tool_schemas_single_with_attachments.json", True),
     ],
 )
 async def test_tool_schema_snapshot(
     names: tuple[str, ...],
     snapshot_name: str,
+    with_workspace_input_resolver: bool,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -54,10 +56,18 @@ async def test_tool_schema_snapshot(
         monkeypatch.delenv(variable, raising=False)
     monkeypatch.setenv("MODAL_CONFIG_PATH", str(tmp_path / "missing-modal.toml"))
 
+    class Resolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            return []
+
     agent = SQLSaberAgent(
         registry=_registry(*names),
         model_name="anthropic:snapshot-model",
         api_key="test-key",
+        workspace_input_resolver=(
+            Resolver() if with_workspace_input_resolver else None
+        ),
     )
     model = TestModel(call_tools=[])
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -13,6 +14,7 @@ from ._shared import (
     DEFAULT_EXECUTION_LIMITS,
     MAX_CELL_SOURCE_CHARS,
     MAX_TOTAL_SOURCE_CHARS,
+    MAX_WORKSPACE_MANIFEST_BYTES,
 )
 from .execution import (
     ArtifactInfo,
@@ -24,7 +26,7 @@ from .execution import (
     NotebookInput,
     NotebookLimitExceeded,
 )
-from .result import Workspace
+from .result import Workspace, workspace_manifest_bytes
 
 _MANIFEST_NAME = "manifest.json"
 
@@ -142,6 +144,10 @@ class NotebookSession:
                     "size": len(item.data),
                     "sql": _manifest_for(self.workspace, item.name).sql,
                     "source": _manifest_for(self.workspace, item.name).source,
+                    "media_type": _manifest_for(self.workspace, item.name).media_type,
+                    "provenance": dict(
+                        _manifest_for(self.workspace, item.name).provenance
+                    ),
                 }
                 for item in self.workspace.files
             ],
@@ -172,20 +178,16 @@ class NotebookSession:
                 backend=self.backend.name,
                 phase="input-validation",
             )
-        manifest = [
-            {
-                "file": f"../inputs/{item.name}",
-                "sql": _manifest_for(self.workspace, item.name).sql,
-                "source": _manifest_for(self.workspace, item.name).source,
-            }
-            for item in self.workspace.files
-        ]
+        manifest = workspace_manifest_bytes(self.workspace)
+        if len(manifest) > MAX_WORKSPACE_MANIFEST_BYTES:
+            raise NotebookLimitExceeded(
+                f"Workspace manifest exceeds {MAX_WORKSPACE_MANIFEST_BYTES} bytes",
+                backend=self.backend.name,
+                phase="input-validation",
+            )
         return (
             *self.workspace.files,
-            NotebookInput(
-                _MANIFEST_NAME,
-                json.dumps(manifest, indent=2, sort_keys=True).encode(),
-            ),
+            NotebookInput(_MANIFEST_NAME, manifest),
         )
 
     def _validate_sources(self, cells: list[str]) -> None:
@@ -246,6 +248,8 @@ def _manifest_for(workspace: Workspace, name: str):
 class _EmptyManifest:
     sql: None = None
     source: None = None
+    media_type: None = None
+    provenance: Mapping[str, str] = field(default_factory=dict)
 
 
 _EMPTY_MANIFEST = _EmptyManifest()

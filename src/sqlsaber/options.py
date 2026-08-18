@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from sqlsaber.knowledge.manager import KnowledgeManager
     from sqlsaber.query_results import QueryResultStore
     from sqlsaber.threads.manager import ThreadManager
+    from sqlsaber.workspace_inputs import WorkspaceInputResolver
 
 
 @dataclass(slots=True)
@@ -44,6 +45,7 @@ class SQLSaberOptions:
     artifact_store: ArtifactStore | None = None
     artifact_failure_mode: ArtifactFailureMode = "required"
     query_result_store: QueryResultStore | None = None
+    workspace_input_resolver: WorkspaceInputResolver | None = None
 
     # Tool overrides
     tool_overrides: ToolOveridesInput | None = None

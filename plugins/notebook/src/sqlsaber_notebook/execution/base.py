@@ -8,6 +8,7 @@ from pathlib import PurePosixPath
 from typing import Protocol, runtime_checkable
 
 MIB = 1024 * 1024
+_MAX_INPUT_NAME_BYTES = 255
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,7 +184,7 @@ def validate_inputs(
 
 
 def validate_input_name(name: str, *, backend: str) -> None:
-    """Require a visible, single-component POSIX workspace filename."""
+    """Require a visible, portable single-component workspace filename."""
 
     path = PurePosixPath(name)
     if (
@@ -197,6 +198,20 @@ def validate_input_name(name: str, *, backend: str) -> None:
     ):
         raise NotebookLimitExceeded(
             f"Unsafe workspace filename: {name!r}",
+            backend=backend,
+            phase="input-validation",
+        )
+    try:
+        encoded_name = name.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise NotebookLimitExceeded(
+            f"Unsafe workspace filename: {name!r}",
+            backend=backend,
+            phase="input-validation",
+        ) from exc
+    if len(encoded_name) > _MAX_INPUT_NAME_BYTES:
+        raise NotebookLimitExceeded(
+            f"Workspace filename is too long: {name!r}",
             backend=backend,
             phase="input-validation",
         )
