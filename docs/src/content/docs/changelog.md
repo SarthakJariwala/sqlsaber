@@ -9,6 +9,13 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.72.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.71.0...sqlsaber-v0.72.0) (2026-08-18)
+
+
+### Features
+
+* add managed notebook attachment inputs ([#220](https://github.com/SarthakJariwala/sqlsaber/issues/220)) ([909e19b](https://github.com/SarthakJariwala/sqlsaber/commit/909e19b3d4a7a9896cae6c9d6a0913178b34b26a))
+
 ## [0.71.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.70.0...sqlsaber-v0.71.0) (2026-08-06)
 
 
