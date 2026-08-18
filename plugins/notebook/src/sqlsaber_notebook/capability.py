@@ -44,11 +44,17 @@ from sqlsaber.query_results import (
 from sqlsaber.run_usage import current_usage_limits
 from sqlsaber.tools.base import Tool, ToolResultTUI
 from sqlsaber.utils.json_utils import json_dumps
+from sqlsaber.workspace_inputs import (
+    WorkspaceInputFile,
+    WorkspaceInputResolver,
+    WorkspaceResolutionContext,
+)
 
 from ._shared import (
     MAX_DEFAULT_RESULTS,
     MAX_WORKSPACE_FILE_BYTES,
     MAX_WORKSPACE_FILES,
+    MAX_WORKSPACE_MANIFEST_BYTES,
     MAX_WORKSPACE_TOTAL_BYTES,
 )
 from .analyst import analyze, supports_notebook_images
@@ -59,14 +65,24 @@ from .execution import (
     resolve_notebook_backend,
     resolve_notebook_image,
 )
+from .execution.base import validate_input_name
 from .publication import display_from_publication, publish_analysis
 from .rendering import limit_output, render_notebook_bytes
-from .result import ManifestEntry, Workspace
+from .result import (
+    ManifestEntry,
+    Workspace,
+    WorkspaceFile,
+    workspace_manifest_bytes,
+)
 
 logger = logging.getLogger(__name__)
 
 _RESULT_FILE_PATTERN = re.compile(r"^result_[A-Za-z0-9._-]+\.json$")
 _MAX_DISPLAY_RESULTS = 2
+
+
+class WorkspaceInputUnavailable(ValueError):
+    """A requested workspace input is unknown, invalid, or unauthorized."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,10 +138,54 @@ class AnalyzeDataTool(Tool):
                 newest bounded successful query results are included.
         """
 
+        return await self._execute(ctx, goal, files=files)
+
+    async def execute_with_attachments(
+        self,
+        ctx: RunContext,
+        goal: str,
+        files: list[str] | None = None,
+        attachment_refs: list[str] | None = None,
+    ) -> ToolReturn | str:
+        """Hand a data-analysis goal to a notebook subagent.
+
+        Use this for multi-step calculations, statistical analysis, data
+        transformations, plots, or analysis of application-provided inputs.
+
+        Args:
+            goal: The question to answer and analysis to perform.
+            files: Optional execute_sql result keys to analyze. When omitted, the
+                newest bounded successful query results are included.
+            attachment_refs: Optional opaque, application-authorized input references.
+                These are resolved by the configured host adapter, never as paths or
+                URLs by SQLSaber.
+        """
+
+        return await self._execute(
+            ctx,
+            goal,
+            files=files,
+            attachment_refs=attachment_refs,
+        )
+
+    async def _execute(
+        self,
+        ctx: RunContext,
+        goal: str,
+        *,
+        files: list[str] | None,
+        attachment_refs: list[str] | None = None,
+    ) -> ToolReturn | str:
         try:
             workspace = await build_workspace_from_history(
                 ctx,
                 only=files,
+                attachment_refs=attachment_refs,
+                workspace_input_resolver=getattr(
+                    self._context,
+                    "workspace_input_resolver",
+                    None,
+                ),
                 query_result_store=getattr(
                     self._context,
                     "query_result_store",
@@ -341,8 +401,13 @@ class Notebook(SqlSaberCapability):
     def __init__(self, context: PluginContext) -> None:
         self.tool = AnalyzeDataTool(context)
         self._toolset = FunctionToolset[Any](id=self.id)
+        execute = (
+            self.tool.execute_with_attachments
+            if getattr(context, "workspace_input_resolver", None) is not None
+            else self.tool.execute
+        )
         self._toolset.add_function(
-            self.tool.execute,
+            execute,
             name=self.tool.name,
             takes_ctx=True,
             # Notebook delegation must run as a barrier so sibling parent tools
@@ -380,8 +445,10 @@ async def build_workspace_from_history(
     only: list[str] | None,
     *,
     query_result_store: QueryResultStore,
+    attachment_refs: list[str] | None = None,
+    workspace_input_resolver: WorkspaceInputResolver | None = None,
 ) -> Workspace:
-    """Build a bounded workspace from validated complete execute_sql results."""
+    """Build one bounded workspace from SQL results and authorized inputs."""
 
     requested = _normalize_requested_files(only)
     if requested is not None and len(requested) > MAX_WORKSPACE_FILES:
@@ -390,6 +457,12 @@ async def build_workspace_from_history(
             backend="notebook",
             phase="input-validation",
         )
+    resolved_inputs = await _resolve_workspace_inputs(
+        ctx,
+        attachment_refs,
+        resolver=workspace_input_resolver,
+    )
+    external_bytes = sum(len(item.data) for item in resolved_inputs)
 
     if requested is None:
         references = list(reversed(query_result_references_from_messages(ctx.messages)))
@@ -408,14 +481,22 @@ async def build_workspace_from_history(
                 "Requested SQL result files were not found: " + ", ".join(missing)
             )
 
-    if not references:
+    if not references and not resolved_inputs:
         raise ValueError(
             "No successful row-returning execute_sql results are available to analyze"
         )
 
     selected: list[tuple[str, bytes, ManifestEntry]] = []
-    total_bytes = 0
+    total_bytes = external_bytes
     for reference in references:
+        if len(selected) + len(resolved_inputs) >= MAX_WORKSPACE_FILES:
+            if requested is not None:
+                raise NotebookLimitExceeded(
+                    f"Workspace has more than {MAX_WORKSPACE_FILES} files",
+                    backend="notebook",
+                    phase="input-validation",
+                )
+            break
         try:
             resolved = await resolve_query_result(
                 reference,
@@ -444,14 +525,119 @@ async def build_workspace_from_history(
         )
         total_bytes += len(resolved.data)
 
-    if not selected:
+    if references and not selected and not resolved_inputs:
         raise ValueError(
             "No complete execute_sql results fit within the notebook workspace limits"
         )
-    files = tuple(NotebookInput(key, data) for key, data, _ in selected)
-    manifest = tuple(entry for _, _, entry in selected)
+
+    files = tuple(NotebookInput(key, data) for key, data, _ in selected) + tuple(
+        NotebookInput(item.name, item.data) for item in resolved_inputs
+    )
+    manifest = tuple(entry for _, _, entry in selected) + tuple(
+        ManifestEntry(
+            item.name,
+            media_type=item.media_type,
+            provenance=item.provenance,
+        )
+        for item in resolved_inputs
+    )
     _validate_workspace(files)
-    return Workspace(files=files, manifest=manifest)
+    workspace = Workspace(files=files, manifest=manifest)
+    manifest_size = len(workspace_manifest_bytes(workspace))
+    if manifest_size > MAX_WORKSPACE_MANIFEST_BYTES:
+        raise NotebookLimitExceeded(
+            f"Workspace manifest exceeds {MAX_WORKSPACE_MANIFEST_BYTES} bytes",
+            backend="notebook",
+            phase="input-validation",
+        )
+    return workspace
+
+
+async def _resolve_workspace_inputs(
+    ctx: RunContext,
+    attachment_refs: list[str] | None,
+    *,
+    resolver: WorkspaceInputResolver | None,
+) -> tuple[WorkspaceFile, ...]:
+    refs = _normalize_attachment_refs(attachment_refs)
+    if refs is None:
+        return ()
+    if resolver is None:
+        raise ValueError("No workspace input resolver is configured")
+
+    metadata = getattr(ctx, "metadata", None)
+    context = WorkspaceResolutionContext(
+        run_id=getattr(ctx, "run_id", None),
+        conversation_id=getattr(ctx, "conversation_id", None),
+        tool_call_id=getattr(ctx, "tool_call_id", None),
+        metadata=metadata if isinstance(metadata, Mapping) else {},
+    )
+    try:
+        resolved = await resolver.resolve(refs, context=context)
+        if not isinstance(resolved, Sequence) or isinstance(resolved, (str, bytes)):
+            raise WorkspaceInputUnavailable(
+                "Workspace input resolver returned an invalid result"
+            )
+        supplied_files = tuple(resolved)
+    except WorkspaceInputUnavailable:
+        raise
+    except Exception as exc:
+        raise WorkspaceInputUnavailable(
+            "Attachment inputs could not be resolved"
+        ) from exc
+    if not supplied_files:
+        raise WorkspaceInputUnavailable(
+            "No attachment inputs were resolved for the requested references"
+        )
+    files: list[WorkspaceFile] = []
+    for item in supplied_files:
+        if not isinstance(item, WorkspaceInputFile):
+            raise WorkspaceInputUnavailable(
+                "Workspace input resolver returned an invalid file"
+            )
+        try:
+            workspace_file = WorkspaceFile(
+                item.name,
+                item.data,
+                media_type=item.media_type,
+                provenance=item.provenance,
+            )
+        except Exception as exc:
+            raise WorkspaceInputUnavailable(
+                "Workspace input resolver returned an invalid file"
+            ) from exc
+        _validate_workspace_file(workspace_file)
+        files.append(workspace_file)
+    _validate_workspace(tuple(NotebookInput(item.name, item.data) for item in files))
+    return tuple(files)
+
+
+def _normalize_attachment_refs(refs: list[str] | None) -> list[str] | None:
+    if refs is None:
+        return None
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for ref in refs:
+        if (
+            not isinstance(ref, str)
+            or not ref
+            or len(ref) > 2_000
+            or any(ord(char) < 32 for char in ref)
+        ):
+            raise ValueError("Invalid attachment reference")
+        if ref in seen:
+            raise ValueError("Duplicate attachment reference")
+        normalized.append(ref)
+        seen.add(ref)
+    if not normalized:
+        raise ValueError("attachment_refs must contain at least one reference")
+    if len(normalized) > MAX_WORKSPACE_FILES:
+        raise NotebookLimitExceeded(
+            f"Too many attachment references; maximum is {MAX_WORKSPACE_FILES}",
+            backend="notebook",
+            phase="input-validation",
+        )
+    return normalized
 
 
 def _normalize_requested_files(files: list[str] | None) -> list[str] | None:
@@ -478,7 +664,22 @@ def _validate_workspace(files: tuple[NotebookInput, ...]) -> None:
             phase="input-validation",
         )
     total = 0
+    names: set[str] = set()
     for item in files:
+        validate_input_name(item.name, backend="notebook")
+        if item.name == "manifest.json":
+            raise NotebookLimitExceeded(
+                "Workspace filename 'manifest.json' is reserved",
+                backend="notebook",
+                phase="input-validation",
+            )
+        if item.name in names:
+            raise NotebookLimitExceeded(
+                f"Duplicate workspace filename: {item.name}",
+                backend="notebook",
+                phase="input-validation",
+            )
+        names.add(item.name)
         _validate_file_size(item.name, item.data)
         total += len(item.data)
     if total > MAX_WORKSPACE_TOTAL_BYTES:
@@ -489,10 +690,28 @@ def _validate_workspace(files: tuple[NotebookInput, ...]) -> None:
         )
 
 
+def _validate_workspace_file(item: WorkspaceFile) -> None:
+    if item.media_type is not None and (
+        not isinstance(item.media_type, str)
+        or not item.media_type
+        or len(item.media_type) > 255
+        or any(ord(char) < 32 for char in item.media_type)
+    ):
+        raise WorkspaceInputUnavailable(
+            f"Invalid media type for workspace file: {item.name}"
+        )
+    if len(item.provenance) > 32 or any(
+        len(key) > 200 or len(value) > 2_000 for key, value in item.provenance.items()
+    ):
+        raise WorkspaceInputUnavailable(
+            f"Invalid provenance for workspace file: {item.name}"
+        )
+
+
 def _validate_file_size(key: str, data: bytes) -> None:
     if len(data) > MAX_WORKSPACE_FILE_BYTES:
         raise NotebookLimitExceeded(
-            f"SQL result exceeds {MAX_WORKSPACE_FILE_BYTES} bytes: {key}",
+            f"Workspace file exceeds {MAX_WORKSPACE_FILE_BYTES} bytes: {key}",
             backend="notebook",
             phase="input-validation",
         )

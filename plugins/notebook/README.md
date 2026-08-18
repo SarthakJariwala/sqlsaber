@@ -129,6 +129,23 @@ S3, GCS, Azure Blob Storage, or another bucket. Authorize `get()` from current r
 metadata and return stable private object references rather than expiring signed
 URLs.
 
+Managed applications can also configure
+`SQLSaberOptions.workspace_input_resolver` to expose authorized private inputs to
+`analyze_data`. The model-visible argument is `attachment_refs`, never raw bytes,
+paths, URLs, bucket names, or object keys. The resolver receives only run,
+conversation, tool-call, and application metadata context and returns ordered
+`WorkspaceFile` values. The host owns authorization and must reject invented,
+expired, cross-tenant, or out-of-history references; SQLsaber validates filenames,
+collisions, immutable bytes, MIME/provenance metadata, and aggregate limits before
+starting a notebook. When no resolver is configured, `attachment_refs` is omitted
+from the tool schema and existing SQL-only behavior is unchanged.
+
+SQL result files are staged first in their selected order, followed by resolver
+outputs in resolver order. The 50-file, 100-MiB-per-file, and 250-MiB-total limits
+apply to the combined workspace. Filenames are capped at 255 UTF-8 bytes.
+`manifest.json` is reserved, has a separate 1-MiB limit, and records each resolved
+file's media type and structured string provenance.
+
 ## Direct embedded usage
 
 Analysis and publication are separate operations. This keeps the analyst independent
@@ -137,9 +154,17 @@ the managed capability:
 
 ```python
 from sqlsaber import ArtifactContext, FilesystemArtifactStore
-from sqlsaber_notebook import Workspace, analyze, publish_analysis
+from sqlsaber_notebook import Workspace, WorkspaceFile, analyze, publish_analysis
 
-workspace = Workspace.from_files([("sales.csv", sales_csv_bytes)])
+workspace = Workspace.from_files([
+    ("sales.csv", sales_csv_bytes),  # Backwards-compatible tuple form
+    WorkspaceFile(
+        "preview.jpeg",
+        preview_bytes,
+        media_type="image/jpeg",
+        provenance={"attachment_id": "attachment-1"},
+    ),
+])
 result = await analyze(
     "Plot monthly revenue and explain anomalies",
     workspace,
@@ -156,6 +181,12 @@ publication = await publish_analysis(
     ),
 )
 ```
+
+`WorkspaceFile` is provider-neutral: embedded callers supply their own trusted
+bytes, while the standalone CLI continues to accept explicit local paths. Staged
+images are files, not initial multimodal child-model content; the analyst can display
+them and inspect the existing bounded PNG snapshots. The tuple form of
+`Workspace.from_files` remains supported.
 
 `publish_analysis` writes `analysis.ipynb`, ordered `plots/plot_<n>.png` members,
 and bounded generated files below `files/`. It forwards the supplied context to the

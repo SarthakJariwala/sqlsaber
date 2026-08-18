@@ -6,10 +6,11 @@ from collections.abc import Mapping
 import nbformat
 import pytest
 
-from sqlsaber_notebook.execution import NotebookInput
+from sqlsaber_notebook import session as session_module
+from sqlsaber_notebook.execution import NotebookInput, NotebookLimitExceeded
 from sqlsaber_notebook.execution.base import NotebookInfrastructureError
 from sqlsaber_notebook.execution.fake import FakeNotebookBackend, FakeRunResult
-from sqlsaber_notebook.result import ManifestEntry, Workspace
+from sqlsaber_notebook.result import ManifestEntry, Workspace, WorkspaceFile
 from sqlsaber_notebook.session import NotebookSession
 
 
@@ -63,6 +64,92 @@ async def test_session_stages_manifest_executes_and_installs_atomically() -> Non
     await session.close()
     await session.close()
     assert backend.environments[0].closed is True
+
+
+def test_workspace_file_rejects_mutable_bytes_and_invalid_metadata() -> None:
+    with pytest.raises(TypeError, match="data must be bytes"):
+        WorkspaceFile("data.csv", bytearray(b"data"))  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="media_type"):
+        WorkspaceFile("data.csv", b"data", media_type=42)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="provenance"):
+        WorkspaceFile(
+            "data.csv",
+            b"data",
+            provenance={"attachment_id": 42},  # type: ignore[dict-item]
+        )
+
+
+async def test_workspace_files_preserve_legacy_tuples_and_stage_rich_metadata() -> None:
+    legacy = Workspace.from_files([("legacy.csv", b"value\n1\n")], source="caller")
+    assert legacy.files == (NotebookInput("legacy.csv", b"value\n1\n"),)
+    assert legacy.manifest == (ManifestEntry("legacy.csv", source="caller"),)
+
+    provenance = {"attachment_id": "attachment-1", "variant": "preview"}
+    workspace = Workspace.from_files(
+        [
+            WorkspaceFile(
+                "preview.jpeg",
+                b"jpeg-bytes",
+                media_type="image/jpeg",
+                provenance=provenance,
+            )
+        ]
+    )
+    provenance["attachment_id"] = "changed"
+    session = NotebookSession(
+        workspace=workspace,
+        backend=FakeNotebookBackend(),
+        image="unused",
+    )
+
+    await session.ensure_environment()
+    staged = session.environment
+    assert staged is not None
+    manifest = json.loads(staged.inputs["manifest.json"])
+    assert manifest == [
+        {
+            "file": "../inputs/preview.jpeg",
+            "media_type": "image/jpeg",
+            "provenance": {
+                "attachment_id": "attachment-1",
+                "variant": "preview",
+            },
+            "source": None,
+            "sql": None,
+        }
+    ]
+    workspace_json = json.loads(await session.list_workspace())
+    assert workspace_json["inputs"][0]["media_type"] == "image/jpeg"
+    assert workspace_json["inputs"][0]["provenance"] == {
+        "attachment_id": "attachment-1",
+        "variant": "preview",
+    }
+    await session.close()
+
+
+async def test_session_rejects_oversized_manifest_before_backend_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(session_module, "MAX_WORKSPACE_MANIFEST_BYTES", 100)
+    backend = FakeNotebookBackend()
+    session = NotebookSession(
+        workspace=Workspace.from_files(
+            [
+                WorkspaceFile(
+                    "data.bin",
+                    b"data",
+                    provenance={"description": "x" * 200},
+                )
+            ]
+        ),
+        backend=backend,
+        image="unused",
+    )
+
+    with pytest.raises(NotebookLimitExceeded, match="manifest exceeds 100 bytes"):
+        await session.ensure_environment()
+    assert backend.environments == []
+    await session.close()
 
 
 async def test_session_rejects_backend_source_changes_without_installing_state() -> (

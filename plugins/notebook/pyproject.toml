@@ -5,7 +5,7 @@ description = "Notebook analysis subagent for SQLsaber"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "sqlsaber>=0.70.0",
+    "sqlsaber>=0.72.0",
     "nbformat>=5.10,<6",
     "pillow>=11,<13",
 ]

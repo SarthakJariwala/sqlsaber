@@ -152,7 +152,8 @@ class SQLSaber:
                 Use this to process streaming events as they arrive.
             conversation_id: Stable Pydantic AI conversation identifier for the run.
             metadata: Application metadata available to capabilities, such as tenant
-                and user identifiers used when publishing artifacts.
+                and user identifiers used for artifact publication and authorized
+                workspace input resolution.
             usage_limits: Optional Pydantic AI limits for this run. When omitted,
                 Pydantic AI's safe defaults apply.
 

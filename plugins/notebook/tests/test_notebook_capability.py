@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -22,10 +23,16 @@ from sqlsaber_notebook import capability as capability_module
 from sqlsaber_notebook.capability import (
     AnalyzeDataTool,
     Notebook,
+    WorkspaceInputResolver,
+    WorkspaceInputUnavailable,
+    WorkspaceResolutionContext,
     build_workspace_from_history,
 )
-from sqlsaber_notebook.execution import NotebookBackendUnavailable
-from sqlsaber_notebook.result import AnalysisResult, ArtifactRef
+from sqlsaber_notebook.execution import (
+    NotebookBackendUnavailable,
+    NotebookExecutionError,
+)
+from sqlsaber_notebook.result import AnalysisResult, ArtifactRef, WorkspaceFile
 
 from sqlsaber.artifacts import InMemoryArtifactStore
 from sqlsaber.query_results import InMemoryQueryResultStore
@@ -185,6 +192,388 @@ async def test_workspace_selects_newest_successful_selects_and_pairs_sql() -> No
 
 
 @pytest.mark.asyncio
+async def test_workspace_supports_attachment_only_analysis_with_resolver_context() -> (
+    None
+):
+    captured: dict[str, object] = {}
+
+    class Resolver:
+        async def resolve(
+            self,
+            refs: Sequence[str],
+            *,
+            context: WorkspaceResolutionContext,
+        ) -> list[WorkspaceFile]:
+            captured.update(refs=refs, context=context)
+            return [
+                WorkspaceFile(
+                    "preview.jpeg",
+                    b"jpeg",
+                    media_type="image/jpeg",
+                    provenance={"attachment_id": "attachment-1"},
+                )
+            ]
+
+    resolver: WorkspaceInputResolver = Resolver()
+    workspace = await build_workspace_from_history(
+        _ctx([]),
+        only=None,
+        attachment_refs=["opaque-ref-1"],
+        workspace_input_resolver=resolver,
+        query_result_store=InMemoryQueryResultStore(),
+    )
+
+    assert captured["refs"] == ["opaque-ref-1"]
+    resolution_context = captured["context"]
+    assert isinstance(resolution_context, WorkspaceResolutionContext)
+    assert resolution_context.run_id == "run-1"
+    assert resolution_context.conversation_id == "conversation-1"
+    assert resolution_context.tool_call_id == "analysis-call"
+    assert resolution_context.metadata == {"tenant_id": "acme"}
+    assert [item.name for item in workspace.files] == ["preview.jpeg"]
+    assert workspace.manifest[0].media_type == "image/jpeg"
+    assert workspace.manifest[0].provenance == {"attachment_id": "attachment-1"}
+
+
+@pytest.mark.asyncio
+async def test_workspace_merges_sql_then_resolved_inputs_in_stable_order() -> None:
+    class Resolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            return [
+                WorkspaceFile("second.csv", b"second"),
+                WorkspaceFile("first.csv", b"first"),
+            ]
+
+    messages = _sql_exchange(
+        "rows",
+        "select * from sales",
+        {
+            "success": True,
+            "results": [{"amount": 10}],
+            "file": "result_rows.json",
+        },
+    )
+    workspace = await build_workspace_from_history(
+        _ctx(messages),
+        only=["result_rows.json"],
+        attachment_refs=["opaque-b", "opaque-a"],
+        workspace_input_resolver=Resolver(),
+        query_result_store=InMemoryQueryResultStore(),
+    )
+
+    assert [item.name for item in workspace.files] == [
+        "result_rows.json",
+        "second.csv",
+        "first.csv",
+    ]
+    assert [item.file for item in workspace.manifest] == [
+        "result_rows.json",
+        "second.csv",
+        "first.csv",
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("resolved", "error"),
+    [
+        (
+            [
+                WorkspaceFile("duplicate.csv", b"one"),
+                WorkspaceFile("duplicate.csv", b"two"),
+            ],
+            "Duplicate workspace filename: duplicate.csv",
+        ),
+        ([WorkspaceFile("manifest.json", b"reserved")], "reserved"),
+        ([WorkspaceFile("../unsafe.csv", b"unsafe")], "Unsafe workspace filename"),
+    ],
+)
+async def test_workspace_rejects_invalid_resolved_filenames(
+    resolved: list[WorkspaceFile],
+    error: str,
+) -> None:
+    class Resolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            return resolved
+
+    with pytest.raises(NotebookExecutionError, match=error):
+        await build_workspace_from_history(
+            _ctx([]),
+            only=None,
+            attachment_refs=["opaque-ref"],
+            workspace_input_resolver=Resolver(),
+            query_result_store=InMemoryQueryResultStore(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_workspace_rejects_resolved_filename_collision_with_sql() -> None:
+    class Resolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            return [WorkspaceFile("result_rows.json", b"collision")]
+
+    messages = _sql_exchange(
+        "rows",
+        "select 1",
+        {"success": True, "results": [{"value": 1}], "file": "result_rows.json"},
+    )
+    with pytest.raises(
+        NotebookExecutionError,
+        match="Duplicate workspace filename: result_rows.json",
+    ):
+        await build_workspace_from_history(
+            _ctx(messages),
+            only=["result_rows.json"],
+            attachment_refs=["opaque-ref"],
+            workspace_input_resolver=Resolver(),
+            query_result_store=InMemoryQueryResultStore(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_workspace_requires_a_resolver_for_attachment_refs() -> None:
+    with pytest.raises(ValueError, match="No workspace input resolver is configured"):
+        await build_workspace_from_history(
+            _ctx([]),
+            only=None,
+            attachment_refs=["opaque-ref"],
+            query_result_store=InMemoryQueryResultStore(),
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("refs", [[], [""], ["duplicate", "duplicate"], ["bad\nref"]])
+async def test_workspace_rejects_invalid_attachment_refs(refs: list[str]) -> None:
+    class Resolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            raise AssertionError("invalid references must not reach the resolver")
+
+    with pytest.raises(ValueError):
+        await build_workspace_from_history(
+            _ctx([]),
+            only=None,
+            attachment_refs=refs,
+            workspace_input_resolver=Resolver(),
+            query_result_store=InMemoryQueryResultStore(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_workspace_preserves_safe_unknown_ref_errors_and_hides_failures() -> None:
+    class UnknownResolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            raise WorkspaceInputUnavailable(
+                "Unknown or unauthorized attachment reference"
+            )
+
+    with pytest.raises(
+        WorkspaceInputUnavailable,
+        match="Unknown or unauthorized attachment reference",
+    ):
+        await build_workspace_from_history(
+            _ctx([]),
+            only=None,
+            attachment_refs=["invented-ref"],
+            workspace_input_resolver=UnknownResolver(),
+            query_result_store=InMemoryQueryResultStore(),
+        )
+
+    class FailingResolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            raise RuntimeError("secret bucket provider failure")
+
+    with pytest.raises(
+        WorkspaceInputUnavailable,
+        match="Attachment inputs could not be resolved",
+    ) as captured:
+        await build_workspace_from_history(
+            _ctx([]),
+            only=None,
+            attachment_refs=["opaque-ref"],
+            workspace_input_resolver=FailingResolver(),
+            query_result_store=InMemoryQueryResultStore(),
+        )
+    assert "secret bucket" not in str(captured.value)
+
+    class FailingSequence(Sequence[WorkspaceFile]):
+        def __len__(self) -> int:
+            return 1
+
+        def __getitem__(self, index: int) -> WorkspaceFile:
+            del index
+            raise RuntimeError("secret lazy storage failure")
+
+    class LazyFailingResolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            return FailingSequence()
+
+    with pytest.raises(
+        WorkspaceInputUnavailable,
+        match="Attachment inputs could not be resolved",
+    ) as lazy_captured:
+        await build_workspace_from_history(
+            _ctx([]),
+            only=None,
+            attachment_refs=["opaque-ref"],
+            workspace_input_resolver=LazyFailingResolver(),
+            query_result_store=InMemoryQueryResultStore(),
+        )
+    assert "secret lazy" not in str(lazy_captured.value)
+
+
+@pytest.mark.asyncio
+async def test_workspace_rejects_invalid_resolver_output() -> None:
+    class Resolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            return [object()]
+
+    with pytest.raises(WorkspaceInputUnavailable, match="invalid file"):
+        await build_workspace_from_history(
+            _ctx([]),
+            only=None,
+            attachment_refs=["opaque-ref"],
+            workspace_input_resolver=Resolver(),
+            query_result_store=InMemoryQueryResultStore(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_workspace_enforces_file_count_across_sql_and_resolved_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(capability_module, "MAX_WORKSPACE_FILES", 1)
+
+    class Resolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            return [WorkspaceFile("attachment.csv", b"attachment")]
+
+    messages = _sql_exchange(
+        "rows",
+        "select 1",
+        {"success": True, "results": [{"value": 1}], "file": "result_rows.json"},
+    )
+    with pytest.raises(NotebookExecutionError, match="more than 1 files"):
+        await build_workspace_from_history(
+            _ctx(messages),
+            only=["result_rows.json"],
+            attachment_refs=["opaque-ref"],
+            workspace_input_resolver=Resolver(),
+            query_result_store=InMemoryQueryResultStore(),
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("include_sql", [False, True])
+async def test_workspace_enforces_per_file_limit_for_each_input_class(
+    monkeypatch: pytest.MonkeyPatch,
+    include_sql: bool,
+) -> None:
+    monkeypatch.setattr(capability_module, "MAX_WORKSPACE_FILE_BYTES", 3)
+    if include_sql:
+        messages = _sql_exchange(
+            "rows",
+            "select 1",
+            {
+                "success": True,
+                "results": [{"value": 1}],
+                "file": "result_rows.json",
+            },
+        )
+        kwargs = {"only": ["result_rows.json"]}
+    else:
+        messages = []
+        kwargs = {"only": None}
+
+    class Resolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            return [WorkspaceFile("attachment.bin", b"four")]
+
+    with pytest.raises(NotebookExecutionError, match="exceeds 3 bytes"):
+        await build_workspace_from_history(
+            _ctx(messages),
+            attachment_refs=None if include_sql else ["opaque-ref"],
+            workspace_input_resolver=Resolver(),
+            query_result_store=InMemoryQueryResultStore(),
+            **kwargs,
+        )
+
+
+@pytest.mark.asyncio
+async def test_workspace_enforces_aggregate_bytes_across_sql_and_resolved_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Resolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            return [WorkspaceFile("attachment.bin", b"attachment")]
+
+    messages = _sql_exchange(
+        "rows",
+        "select 1",
+        {"success": True, "results": [{"value": 1}], "file": "result_rows.json"},
+    )
+    baseline = await build_workspace_from_history(
+        _ctx(messages),
+        only=["result_rows.json"],
+        attachment_refs=["opaque-ref"],
+        workspace_input_resolver=Resolver(),
+        query_result_store=InMemoryQueryResultStore(),
+    )
+    combined_bytes = sum(len(item.data) for item in baseline.files)
+    monkeypatch.setattr(
+        capability_module,
+        "MAX_WORKSPACE_TOTAL_BYTES",
+        combined_bytes - 1,
+    )
+
+    with pytest.raises(NotebookExecutionError, match="total bytes"):
+        await build_workspace_from_history(
+            _ctx(messages),
+            only=["result_rows.json"],
+            attachment_refs=["opaque-ref"],
+            workspace_input_resolver=Resolver(),
+            query_result_store=InMemoryQueryResultStore(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_workspace_enforces_reserved_manifest_byte_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(capability_module, "MAX_WORKSPACE_MANIFEST_BYTES", 100)
+
+    class Resolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            return [
+                WorkspaceFile(
+                    "attachment.bin",
+                    b"data",
+                    provenance={"description": "x" * 200},
+                )
+            ]
+
+    with pytest.raises(NotebookExecutionError, match="manifest exceeds 100 bytes"):
+        await build_workspace_from_history(
+            _ctx([]),
+            only=None,
+            attachment_refs=["opaque-ref"],
+            workspace_input_resolver=Resolver(),
+            query_result_store=InMemoryQueryResultStore(),
+        )
+
+
+@pytest.mark.asyncio
 async def test_workspace_explicit_selection_is_ordered_and_all_or_error() -> None:
     messages = [
         *_sql_exchange(
@@ -241,6 +630,55 @@ async def test_workspace_rejects_invalid_requested_keys() -> None:
             only=["../secret.json"],
             query_result_store=InMemoryQueryResultStore(),
         )
+
+
+@pytest.mark.asyncio
+async def test_analyze_tool_runs_attachment_only_analysis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Resolver:
+        async def resolve(self, refs, *, context):
+            del context
+            assert refs == ["opaque-input"]
+            return [WorkspaceFile("measurements.npz", b"npz")]
+
+    context = SimpleNamespace(
+        workspace_input_resolver=Resolver(),
+        resolve_subagent_model=lambda *args, **kwargs: (
+            "anthropic:claude-test",
+            "anthropic:claude-test",
+            "anthropic",
+        ),
+    )
+    backend = SimpleNamespace(name="docker")
+    captured: dict[str, Any] = {}
+
+    async def fake_analyze(goal: str, workspace: Any, **kwargs: Any) -> AnalysisResult:
+        captured.update(goal=goal, workspace=workspace, **kwargs)
+        return AnalysisResult(
+            answer="Attachment analyzed.",
+            notebook=_notebook_bytes(),
+            images=[],
+            files=[],
+            provenance=["input:measurements.npz"],
+        )
+
+    monkeypatch.setattr(capability_module, "analyze", fake_analyze)
+    monkeypatch.setattr(capability_module, "resolve_notebook_backend", lambda: backend)
+    monkeypatch.setattr(
+        capability_module, "resolve_notebook_image", lambda: "test-image"
+    )
+
+    returned = await AnalyzeDataTool(cast(Any, context)).execute_with_attachments(
+        _ctx([]),
+        "Analyze the measurements",
+        attachment_refs=["opaque-input"],
+    )
+
+    assert isinstance(returned, ToolReturn)
+    assert returned.return_value == "Attachment analyzed."
+    assert returned.metadata["files"] == ["measurements.npz"]
+    assert [item.name for item in captured["workspace"].files] == ["measurements.npz"]
 
 
 @pytest.mark.asyncio
@@ -557,6 +995,29 @@ async def test_analyze_tool_maps_backend_failure_to_bounded_error(
         "backend": "docker",
         "phase": "availability",
     }
+
+
+def test_managed_schema_exposes_attachment_refs_only_with_a_resolver() -> None:
+    without_resolver = Notebook(cast(Any, SimpleNamespace()))
+    without_schema = (
+        without_resolver.get_toolset().tools["analyze_data"].function_schema.json_schema
+    )
+    assert list(without_schema["properties"]) == ["goal", "files"]
+
+    with_resolver = Notebook(
+        cast(Any, SimpleNamespace(workspace_input_resolver=object()))
+    )
+    with_schema = (
+        with_resolver.get_toolset().tools["analyze_data"].function_schema.json_schema
+    )
+    assert list(with_schema["properties"]) == [
+        "goal",
+        "files",
+        "attachment_refs",
+    ]
+    assert with_schema["properties"]["attachment_refs"]["description"].startswith(
+        "Optional opaque"
+    )
 
 
 def test_installed_capability_is_always_registered() -> None:

@@ -84,6 +84,17 @@ async def test_fake_backend_rejects_unsafe_input_names(name: str) -> None:
         )
 
 
+async def test_fake_backend_rejects_overlong_input_filename_before_open() -> None:
+    backend = FakeNotebookBackend()
+    with pytest.raises(NotebookLimitExceeded, match="filename is too long"):
+        await backend.open(
+            [NotebookInput(f"{'a' * 252}.csv", b"data")],
+            image="unused",
+            limits=ExecutionLimits(),
+        )
+    assert backend.environments == []
+
+
 async def test_fake_backend_has_clean_runs_immutable_inputs_and_lazy_artifacts() -> (
     None
 ):

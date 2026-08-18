@@ -20,14 +20,39 @@ from .execution import (
 
 if TYPE_CHECKING:
     from .analyst import analyze
+    from sqlsaber.workspace_inputs import (
+        WorkspaceInputResolver,
+        WorkspaceResolutionContext,
+    )
+
+    from .capability import WorkspaceInputUnavailable
     from .publication import publish_analysis
-    from .result import AnalysisResult, ArtifactRef, ManifestEntry, Workspace
+    from .result import (
+        AnalysisResult,
+        ArtifactRef,
+        ManifestEntry,
+        Workspace,
+        WorkspaceFile,
+    )
 
 _LAZY_EXPORTS = {
     "AnalysisResult": ("sqlsaber_notebook.result", "AnalysisResult"),
     "ArtifactRef": ("sqlsaber_notebook.result", "ArtifactRef"),
     "ManifestEntry": ("sqlsaber_notebook.result", "ManifestEntry"),
     "Workspace": ("sqlsaber_notebook.result", "Workspace"),
+    "WorkspaceFile": ("sqlsaber_notebook.result", "WorkspaceFile"),
+    "WorkspaceInputResolver": (
+        "sqlsaber.workspace_inputs",
+        "WorkspaceInputResolver",
+    ),
+    "WorkspaceInputUnavailable": (
+        "sqlsaber_notebook.capability",
+        "WorkspaceInputUnavailable",
+    ),
+    "WorkspaceResolutionContext": (
+        "sqlsaber.workspace_inputs",
+        "WorkspaceResolutionContext",
+    ),
     "analyze": ("sqlsaber_notebook.analyst", "analyze"),
     "publish_analysis": ("sqlsaber_notebook.publication", "publish_analysis"),
 }
@@ -59,6 +84,10 @@ __all__ = [
     "ManifestEntry",
     "NotebookInput",
     "Workspace",
+    "WorkspaceFile",
+    "WorkspaceInputResolver",
+    "WorkspaceInputUnavailable",
+    "WorkspaceResolutionContext",
     "analyze",
     "publish_analysis",
     "resolve_notebook_backend",

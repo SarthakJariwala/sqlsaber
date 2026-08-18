@@ -86,6 +86,90 @@ These are separate concepts:
 Legacy threads containing embedded complete rows remain readable during the
 compatibility window, but are not automatically imported into durable storage.
 
+## Analyzing application-owned inputs
+
+Install `sqlsaber-notebook` and provide a `WorkspaceInputResolver` when the managed
+agent should analyze private images, arrays, JSON, or other application-owned files.
+The model sees only opaque `attachment_refs`; your resolver converts authorized
+references into trusted `WorkspaceFile` bytes:
+
+```python
+from collections.abc import Sequence
+
+from sqlsaber import (
+    SQLSaber,
+    SQLSaberOptions,
+    WorkspaceResolutionContext,
+)
+from sqlsaber_notebook import WorkspaceFile
+
+
+class AttachmentResolver:
+    def __init__(self, repository):
+        self.repository = repository
+
+    async def resolve(
+        self,
+        refs: Sequence[str],
+        *,
+        context: WorkspaceResolutionContext,
+    ) -> Sequence[WorkspaceFile]:
+        # Query by both reference and the current identity. Missing and
+        # unauthorized values must be indistinguishable to the caller.
+        records = await self.repository.load_authorized(
+            refs,
+            tenant_id=context.metadata.get("tenant_id"),
+            user_id=context.metadata.get("user_id"),
+            conversation_id=context.conversation_id,
+        )
+        return [
+            WorkspaceFile(
+                name=record.safe_name,
+                data=record.data,
+                media_type=record.media_type,
+                provenance={
+                    "attachment_id": record.id,
+                    "sha256": record.sha256,
+                },
+            )
+            for record in records
+        ]
+
+
+options = SQLSaberOptions(
+    database="sqlite:///analytics.db",
+    workspace_input_resolver=AttachmentResolver(repository),
+)
+async with SQLSaber(options=options) as saber:
+    await saber.query(
+        "Analyze the selected measurements",
+        conversation_id="conversation-123",
+        metadata={"tenant_id": "acme", "user_id": "user-456"},
+    )
+```
+
+The host—not SQLsaber or the notebook package—owns reference issuance, retrieval,
+authorization, expiration, and history scoping. Never treat possession of a reference
+as authorization, and never interpret model-provided values as local paths, URLs,
+bucket names, or object keys. Raise `WorkspaceInputUnavailable` with the same bounded
+message for missing and unauthorized references. SQLsaber hides unexpected resolver
+exceptions so storage details do not enter model history.
+
+Resolver output is validated before any notebook starts. Names must be visible,
+single-component filenames; `manifest.json` is reserved; bytes must be immutable;
+and duplicate names or collisions with SQL result names fail the request. The managed
+workspace allows at most 50 files, 100 MiB per file, and 250 MiB total across SQL
+results and resolved inputs. Filenames are capped at 255 UTF-8 bytes, and the staged
+metadata manifest has a separate 1 MiB limit. Explicit SQL result order is preserved,
+followed by the resolver's output order. MIME type and string provenance are written
+to `manifest.json`.
+
+With no resolver, `attachment_refs` is omitted from the model-visible tool schema.
+The existing `files` selector still means only complete `execute_sql` result keys.
+Resolved images are staged as notebook files; they are not automatically sent as
+initial multimodal content to the child model. The analyst can load and display an
+image, after which existing bounded PNG snapshot behavior applies.
+
 ## Persisting notebooks and plots
 
 Install `sqlsaber-notebook` and configure an artifact store to retain and later

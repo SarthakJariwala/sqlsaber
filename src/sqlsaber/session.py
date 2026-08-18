@@ -97,6 +97,7 @@ class SQLSaberSession:
             artifact_store=options.artifact_store,
             artifact_failure_mode=options.artifact_failure_mode,
             query_result_store=self.query_result_store,
+            workspace_input_resolver=options.workspace_input_resolver,
         )
 
     async def query(

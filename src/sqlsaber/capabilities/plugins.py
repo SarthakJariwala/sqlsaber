@@ -17,6 +17,7 @@ from sqlsaber.database.registry import DatabaseRegistry
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.overrides import ModelOverides
 from sqlsaber.query_results import InMemoryQueryResultStore, QueryResultStore
+from sqlsaber.workspace_inputs import WorkspaceInputResolver
 
 if TYPE_CHECKING:
     from sqlsaber.artifacts import ArtifactFailureMode, ArtifactStore
@@ -41,6 +42,7 @@ class PluginContext:
     main_api_key: str | None = None
     artifact_store: ArtifactStore | None = None
     artifact_failure_mode: ArtifactFailureMode = "required"
+    workspace_input_resolver: WorkspaceInputResolver | None = None
 
     def resolve_subagent_model(
         self,

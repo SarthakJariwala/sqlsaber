@@ -35,6 +35,7 @@ options = SQLSaberOptions(
 | `artifact_store` | `ArtifactStore \| None`                    | `None`  | Application-owned publication and retrieval for artifacts such as analysis notebooks and plots. |
 | `artifact_failure_mode` | `"required" \| "best_effort"`            | `"required"` | Fail the tool or retain its answer when artifact publication fails.                      |
 | `query_result_store` | `QueryResultStore \| None` | `None` | Store for complete SQL row results. Defaults to a session-owned in-memory store. Inject application storage for durable or tenant-scoped retrieval. |
+| `workspace_input_resolver` | `WorkspaceInputResolver \| None` | `None` | Application-owned resolver for opaque, authorized inputs to the managed notebook analyst. |
 | `tool_overrides`    | `Mapping[str, ModelOverides] \| None`         | `None`  | Per-tool model/API-key overrides (see [Advanced](/sdk/advanced)).                            |
 | `allow_dangerous`   | `bool`                                        | `False` | Allow write operations and a restricted subset of DDL (see [Advanced](/sdk/advanced)).       |
 
@@ -69,6 +70,18 @@ For web applications, implement `QueryResultStore.put/get` over a private databa
 or object store. Authorize `get` from current identity in
 `QueryResultContext.metadata`; do not authorize solely from possession of a result
 ID, filename, or historical conversation metadata.
+
+## Managed notebook inputs
+
+When `sqlsaber-notebook` is installed, `workspace_input_resolver` lets a host
+application make authorized files available to `analyze_data` without exposing
+filesystem paths, URLs, bucket names, object keys, or raw bytes to the main model.
+See [Analyzing application-owned inputs](/sdk/results-and-streaming#analyzing-application-owned-inputs)
+for the resolver contract and trust boundary.
+
+Without a resolver, SQLsaber preserves the original `analyze_data(goal, files=None)`
+schema: `attachment_refs` is not advertised to the model and SQL result selection is
+unchanged.
 
 ## Choosing a database
 

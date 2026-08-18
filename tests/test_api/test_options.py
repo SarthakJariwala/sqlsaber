@@ -10,6 +10,8 @@ from sqlsaber import (
     SQLSaber,
     SQLSaberOptions,
     SqlTools,
+    WorkspaceInputResolver,
+    WorkspaceResolutionContext,
 )
 from sqlsaber.config.settings import Config
 from sqlsaber.knowledge.manager import KnowledgeManager
@@ -26,6 +28,8 @@ def test_capabilities_are_exported_from_top_level() -> None:
     assert SqlTools.__name__ == "SqlTools"
     assert Knowledge.__name__ == "Knowledge"
     assert InMemoryArtifactStore.__name__ == "InMemoryArtifactStore"
+    assert WorkspaceInputResolver.__name__ == "WorkspaceInputResolver"
+    assert WorkspaceResolutionContext.__name__ == "WorkspaceResolutionContext"
 
 
 def test_invalid_artifact_failure_mode_is_rejected() -> None:
@@ -74,6 +78,36 @@ async def test_extra_capabilities_are_appended_to_managed_agent() -> None:
     )
 
     assert extra in saber.agent.capabilities
+    await saber.close()
+
+
+@pytest.mark.asyncio
+async def test_workspace_input_resolver_reaches_managed_notebook_capability() -> None:
+    class Resolver:
+        async def resolve(self, refs, *, context):
+            del refs, context
+            return []
+
+    resolver: WorkspaceInputResolver = Resolver()
+    saber = SQLSaber(
+        options=SQLSaberOptions(
+            database="sqlite:///:memory:",
+            settings=Config.in_memory(
+                model_name="anthropic:claude-3-5-sonnet",
+                api_keys={"anthropic": "test-key"},
+            ),
+            workspace_input_resolver=resolver,
+        )
+    )
+
+    assert saber.agent._workspace_input_resolver is resolver
+    notebook = next(
+        capability
+        for capability in saber.agent.capabilities
+        if getattr(capability, "id", None) == "notebook"
+    )
+    schema = notebook.get_toolset().tools["analyze_data"].function_schema.json_schema
+    assert "attachment_refs" in schema["properties"]
     await saber.close()
 
 
