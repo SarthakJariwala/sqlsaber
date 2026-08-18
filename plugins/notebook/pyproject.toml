@@ -1,6 +1,6 @@
 [project]
 name = "sqlsaber-notebook"
-version = "0.4.1"
+version = "0.5.0"
 description = "Notebook analysis subagent for SQLsaber"
 readme = "README.md"
 requires-python = ">=3.12"
