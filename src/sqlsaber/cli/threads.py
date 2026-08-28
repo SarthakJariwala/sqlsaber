@@ -15,6 +15,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console, get_theme_manager
 
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 
 # Globals consistent with other CLI modules
 console = create_console()
+error_console = create_console(stderr=True)
 tm = get_theme_manager()
 logger = get_logger(__name__)
 
@@ -33,6 +35,12 @@ logger = get_logger(__name__)
 threads_app = cyclopts.App(
     name="threads",
     help="Manage SQLsaber threads",
+    help_epilogue=(
+        "Examples:\n\n"
+        "saber threads list\n\n"
+        "saber threads show THREAD_ID\n\n"
+        "saber threads prune --days 30 --dry-run"
+    ),
 )
 
 
@@ -182,7 +190,14 @@ def _render_transcript(
         console.print("")
 
 
-@threads_app.command(name="list")
+@threads_app.command(
+    name="list",
+    help_epilogue=(
+        "Examples:\n\n"
+        "saber threads list\n\n"
+        "saber threads list --database analytics --limit 10"
+    ),
+)
 def list_threads(
     database: Annotated[
         str | None,
@@ -193,7 +208,12 @@ def list_threads(
         cyclopts.Parameter(["--limit", "-n"], help="Max threads to return"),
     ] = 50,
 ):
-    """List threads (optionally filtered by database)."""
+    """List threads (optionally filtered by database).
+
+    Examples:
+        saber threads list
+        saber threads list --database analytics --limit 10
+    """
     from sqlsaber.threads import ThreadStorage
 
     logger.info("threads.cli.list.start", database=database, limit=limit)
@@ -221,20 +241,27 @@ def list_threads(
     logger.info("threads.cli.list.complete", count=len(threads))
 
 
-@threads_app.command
+@threads_app.command(help_epilogue="Example:\n\nsaber threads show THREAD_ID")
 def show(
     thread_id: Annotated[str, cyclopts.Parameter(help="Thread ID")],
 ):
-    """Show thread metadata and render the full transcript."""
+    """Show thread metadata and render the full transcript.
+
+    Example:
+        saber threads show THREAD_ID
+    """
     from sqlsaber.threads import ThreadStorage
 
     logger.info("threads.cli.show.start", thread_id=thread_id)
     store = ThreadStorage()
     thread = asyncio.run(store.get_thread(thread_id))
     if not thread:
-        console.print(f"[error]Thread not found:[/error] {thread_id}")
+        error_console.print(
+            f"[error]Error: thread not found: {thread_id}[/error]\n"
+            "  List threads with: saber threads list"
+        )
         logger.error("threads.cli.show.not_found", thread_id=thread_id)
-        return
+        raise SystemExit(1)
     msgs = asyncio.run(store.get_thread_messages(thread_id))
     from sqlsaber.cli.query_results import (
         cli_query_result_store,
@@ -297,11 +324,18 @@ def show(
     logger.info("threads.cli.show.complete", thread_id=thread_id)
 
 
-@threads_app.command(name="artifacts")
+@threads_app.command(
+    name="artifacts",
+    help_epilogue="Example:\n\nsaber threads artifacts THREAD_ID",
+)
 def list_artifacts(
     thread_id: Annotated[str, cyclopts.Parameter(help="Thread ID")],
 ):
-    """List durable artifacts referenced by a retained thread."""
+    """List durable artifacts referenced by a retained thread.
+
+    Example:
+        saber threads artifacts THREAD_ID
+    """
 
     from sqlsaber.threads import ThreadStorage
 
@@ -317,8 +351,11 @@ def list_artifacts(
 
         thread = await store.get_thread(thread_id)
         if thread is None:
-            console.print(f"[error]Thread not found:[/error] {thread_id}")
-            return
+            error_console.print(
+                f"[error]Error: thread not found: {thread_id}[/error]\n"
+                "  List threads with: saber threads list"
+            )
+            raise SystemExit(1)
         messages = await store.get_thread_messages(thread_id)
         references = artifact_references_from_messages(messages)
         if not references:
@@ -369,7 +406,13 @@ def list_artifacts(
     asyncio.run(_run())
 
 
-@threads_app.command
+@threads_app.command(
+    help_epilogue=(
+        "Examples:\n\n"
+        "saber threads resume THREAD_ID\n\n"
+        "saber threads resume THREAD_ID --database analytics"
+    )
+)
 def resume(
     thread_id: Annotated[str, cyclopts.Parameter(help="Thread ID to resume")],
     database: Annotated[
@@ -380,7 +423,12 @@ def resume(
         ),
     ] = None,
 ):
-    """Render transcript, then resume thread in interactive mode."""
+    """Render transcript, then resume thread in interactive mode.
+
+    Examples:
+        saber threads resume THREAD_ID
+        saber threads resume THREAD_ID --database analytics
+    """
     from sqlsaber.threads import ThreadStorage
 
     logger.info("threads.cli.resume.start", thread_id=thread_id, database=database)
@@ -400,9 +448,12 @@ def resume(
 
         thread = await store.get_thread(thread_id)
         if not thread:
-            console.print(f"[error]Thread not found:[/error] {thread_id}")
+            error_console.print(
+                f"[error]Error: thread not found: {thread_id}[/error]\n"
+                "  List threads with: saber threads list"
+            )
             logger.error("threads.cli.resume.not_found", thread_id=thread_id)
-            return
+            raise SystemExit(1)
         if database is not None:
             db_selector = database
         else:
@@ -412,19 +463,23 @@ def resume(
                     extra_metadata=thread.extra_metadata,
                 )
             except ValueError as e:
-                console.print(f"[error]Thread metadata error:[/error] {e}")
+                error_console.print(
+                    f"[error]Error: invalid thread metadata: {e}[/error]\n"
+                    f"  Retry with: saber threads resume {thread_id} --database DATABASE"
+                )
                 logger.error(
                     "threads.cli.resume.metadata_invalid",
                     thread_id=thread_id,
                     error=str(e),
                 )
-                return
+                raise SystemExit(1) from None
         if not db_selector:
-            console.print(
-                "[error]No database specified or stored with this thread.[/error]"
+            error_console.print(
+                "[error]Error: no database is specified or stored with this thread.[/error]\n"
+                f"  Retry with: saber threads resume {thread_id} --database DATABASE"
             )
             logger.error("threads.cli.resume.no_database", thread_id=thread_id)
-            return
+            raise SystemExit(1)
         if database is None:
             config_mgr = DatabaseConfigManager()
             selectors = [db_selector] if isinstance(db_selector, str) else db_selector
@@ -434,16 +489,17 @@ def resume(
                 if config_mgr.get_database(selector) is None
             ]
             if missing:
-                console.print(
-                    "[error]Thread database is not configured for automatic "
-                    "resume.[/error] Resume it with explicit --database/-d options."
+                error_console.print(
+                    "[error]Error: the thread database is not configured for automatic "
+                    "resume.[/error]\n"
+                    f"  Retry with: saber threads resume {thread_id} --database DATABASE"
                 )
                 logger.error(
                     "threads.cli.resume.database_not_configured",
                     thread_id=thread_id,
                     missing=missing,
                 )
-                return
+                raise SystemExit(1)
         history = await store.get_thread_messages(thread_id)
         session_thread_manager = ThreadManager(
             initial_thread_id=thread_id, storage=store
@@ -460,11 +516,14 @@ def resume(
                 )
             )
         except DatabaseResolutionError as e:
-            console.print(f"[error]Database resolution error:[/error] {e}")
+            error_console.print(
+                f"[error]Error resolving database: {e}[/error]\n"
+                f"  Retry with: saber threads resume {thread_id} --database DATABASE"
+            )
             logger.error(
                 "threads.cli.resume.resolve_failed", thread_id=thread_id, error=str(e)
             )
-            return
+            raise SystemExit(1) from None
 
         try:
             if console.is_terminal:
@@ -535,7 +594,13 @@ def resume(
     asyncio.run(_run())
 
 
-@threads_app.command
+@threads_app.command(
+    help_epilogue=(
+        "Examples:\n\n"
+        "saber threads prune --days 30 --dry-run\n\n"
+        "saber threads prune --days 30 --yes"
+    )
+)
 def prune(
     days: Annotated[
         int,
@@ -543,12 +608,54 @@ def prune(
             ["--days", "-n"], help="Delete threads older than this many days"
         ),
     ] = 30,
+    dry_run: Annotated[
+        bool,
+        cyclopts.Parameter(["--dry-run"], help="Show how many threads would be pruned"),
+    ] = False,
+    yes: Annotated[
+        bool,
+        cyclopts.Parameter(["--yes"], help="Skip confirmation prompt"),
+    ] = False,
 ):
-    """Prune old threads by last activity timestamp."""
+    """Prune old threads by last activity timestamp.
+
+    Examples:
+        saber threads prune --days 30 --dry-run
+        saber threads prune --days 30 --yes
+    """
     from sqlsaber.threads import ThreadStorage
 
     logger.info("threads.cli.prune.start", days=days)
     store = ThreadStorage()
+
+    if days < 1:
+        error_console.print(
+            "[error]Error: --days must be at least 1.[/error]\n"
+            "  Example: saber threads prune --days 30 --dry-run"
+        )
+        raise SystemExit(2)
+
+    prunable = asyncio.run(store.count_prunable_threads(older_than_days=days))
+    if dry_run:
+        console.print(
+            f"[info]Dry run: {prunable} thread(s) older than {days} day(s) would be pruned.[/info]"
+        )
+        logger.info("threads.cli.prune.dry_run", days=days, count=prunable)
+        return
+    if prunable == 0:
+        console.print(
+            f"[success]No threads older than {days} day(s) to prune.[/success]"
+        )
+        return
+    if not confirm_action(
+        yes=yes,
+        prompt=f"Prune {prunable} thread(s) older than {days} day(s)?",
+        non_interactive_command=f"saber threads prune --days {days} --yes",
+        error_console=error_console,
+    ):
+        console.print("[warning]Operation cancelled[/warning]")
+        logger.info("threads.cli.prune.cancelled", days=days)
+        return
 
     async def _run() -> None:
         deleted = await store.prune_threads(older_than_days=days)
@@ -579,7 +686,13 @@ def prune(
     asyncio.run(_run())
 
 
-@threads_app.command
+@threads_app.command(
+    help_epilogue=(
+        "Examples:\n\n"
+        "saber threads export THREAD_ID\n\n"
+        "saber threads export THREAD_ID --output analysis.html"
+    )
+)
 def export(
     thread_id: Annotated[str, cyclopts.Parameter(help="Thread ID")],
     output: Annotated[
@@ -590,7 +703,12 @@ def export(
         ),
     ] = None,
 ):
-    """Export a thread transcript as a standalone HTML file."""
+    """Export a thread transcript as a standalone HTML file.
+
+    Examples:
+        saber threads export THREAD_ID
+        saber threads export THREAD_ID --output analysis.html
+    """
     from sqlsaber.cli.html_export import render_thread_html
     from sqlsaber.threads import ThreadStorage
 
@@ -604,9 +722,12 @@ def export(
     async def _run() -> None:
         thread = await store.get_thread(thread_id)
         if not thread:
-            console.print(f"[error]Thread not found:[/error] {thread_id}")
+            error_console.print(
+                f"[error]Error: thread not found: {thread_id}[/error]\n"
+                "  List threads with: saber threads list"
+            )
             logger.error("threads.cli.share.not_found", thread_id=thread_id)
-            return
+            raise SystemExit(1)
 
         messages = await store.get_thread_messages(thread_id)
         from sqlsaber.cli.query_results import (

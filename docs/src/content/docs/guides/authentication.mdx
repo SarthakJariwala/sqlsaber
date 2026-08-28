@@ -75,12 +75,18 @@ To remove stored credentials for a provider:
 
 ```bash
 saber auth reset
+
+# Non-interactive
+saber auth reset openai --yes
 ```
 
 This will:
 
 1. Ask you to select which provider to reset
 2. Remove the stored API key from your OS credentials store
+
+When a provider is supplied directly, no selection prompt is needed. Destructive
+commands require confirmation in a terminal or an explicit `--yes` in automation.
 
 ### Multiple Providers
 

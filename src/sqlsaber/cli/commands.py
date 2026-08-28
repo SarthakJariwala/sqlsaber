@@ -46,6 +46,12 @@ class CLIError(Exception):
 app = cyclopts.App(
     name="sqlsaber",
     help="SQLsaber - Open-source agentic SQL assistant for your database",
+    help_epilogue=(
+        "Examples:\n\n"
+        'saber "show me all users"\n\n'
+        'echo "top customers by revenue" | saber\n\n'
+        'saber --thread THREAD_ID "now compare that with last quarter"'
+    ),
 )
 
 app.command(create_auth_app(), name="auth")
@@ -56,6 +62,7 @@ app.command(create_theme_app(), name="theme")
 app.command(create_threads_app(), name="threads")
 
 console = create_console()
+error_console = create_console(stderr=True)
 
 
 @app.meta.default
@@ -82,6 +89,7 @@ def meta_handler(
         saber -d "postgresql://user:pass@host:5432/db" "show users"  # PostgreSQL connection string
         saber -d "mysql://user:pass@host:3306/db" "show users"       # MySQL connection string
         saber -d "duckdb:///data.duckdb" "show users"                 # DuckDB connection string
+        saber --thread THREAD_ID "now compare that with last quarter" # Continue a saved thread
         echo "show me all users" | saber       # Read query from stdin
         cat query.txt | saber                  # Read query from file via stdin
     """
@@ -123,6 +131,13 @@ def query(
             help="Custom system prompt text or path to a file (overrides built-in prompt)",
         ),
     ] = None,
+    thread: Annotated[
+        str | None,
+        cyclopts.Parameter(
+            ["--thread"],
+            help="Continue a saved thread non-interactively",
+        ),
+    ] = None,
 ):
     """Run a query against the database or start interactive mode.
 
@@ -142,18 +157,22 @@ def query(
         saber -d "postgresql://user:pass@host:5432/db" "show users"  # PostgreSQL connection string
         saber -d "mysql://user:pass@host:3306/db" "show users"       # MySQL connection string
         saber -d "duckdb:///data.duckdb" "show users"                 # DuckDB connection string
+        saber --thread THREAD_ID "now compare that with last quarter" # Continue a saved thread
         echo "show me all users" | saber  # Read query from stdin
     """
 
     async def run_session():
         schedule_update_check(console)
 
+        selected_database: str | list[str] | None = database
+
         log = get_logger(__name__)
         log.info(
             "cli.session.start",
             argv=sys.argv[1:],
-            database=database,
+            database=selected_database,
             has_query=query_text is not None,
+            thread_id=thread,
             thinking=thinking,
             allow_dangerous=allow_dangerous,
             system_prompt_provided=system_prompt is not None,
@@ -166,10 +185,13 @@ def query(
         from sqlsaber.cli.query_results import cli_query_result_store
         from sqlsaber.cli.streaming import StreamingQueryHandler
         from sqlsaber.cli.usage import SessionUsage, request_usages_from_run_result
+        from sqlsaber.config.database import DatabaseConfigManager
         from sqlsaber.database.resolver import DatabaseResolutionError
         from sqlsaber.options import SQLSaberOptions
         from sqlsaber.session import SQLSaberSession
+        from sqlsaber.threads import ThreadStorage
         from sqlsaber.threads.manager import ThreadManager
+        from sqlsaber.threads.metadata import resolve_thread_database_selector
 
         # Check if query_text is None and stdin has data
         actual_query = query_text
@@ -180,8 +202,59 @@ def query(
                 # If stdin was empty, fall back to interactive mode
                 actual_query = None
 
+        message_history = None
+        thread_manager = ThreadManager()
+        if thread is not None:
+            if actual_query is None:
+                raise CLIError(
+                    "A query is required with --thread. Example: "
+                    f'saber --thread {thread} "follow-up question"',
+                    exit_code=2,
+                )
+            store = ThreadStorage()
+            stored_thread = await store.get_thread(thread)
+            if stored_thread is None:
+                raise CLIError(
+                    f"Thread not found: {thread}. List threads with: saber threads list"
+                )
+            message_history = await store.get_thread_messages(thread)
+            if selected_database is None:
+                try:
+                    selected_database = resolve_thread_database_selector(
+                        database_name=stored_thread.database_name,
+                        extra_metadata=stored_thread.extra_metadata,
+                    )
+                except ValueError as exc:
+                    raise CLIError(
+                        f"Invalid thread metadata: {exc}. Retry with: "
+                        f'saber --thread {thread} --database DATABASE "follow-up question"'
+                    ) from None
+                if not selected_database:
+                    raise CLIError(
+                        "No database is stored with this thread. Retry with: "
+                        f'saber --thread {thread} --database DATABASE "follow-up question"'
+                    )
+                config_manager = DatabaseConfigManager()
+                selectors = (
+                    [selected_database]
+                    if isinstance(selected_database, str)
+                    else selected_database
+                )
+                missing = [
+                    selector
+                    for selector in selectors
+                    if config_manager.get_database(selector) is None
+                ]
+                if missing:
+                    raise CLIError(
+                        "The thread database is not configured for automatic "
+                        "continuation. Retry with: "
+                        f'saber --thread {thread} --database DATABASE "follow-up question"'
+                    )
+            thread_manager = ThreadManager(initial_thread_id=thread, storage=store)
+
         # Check if onboarding is needed (only for interactive mode or when no database is configured)
-        if needs_onboarding(database):
+        if needs_onboarding(selected_database):
             # Run onboarding flow
             log.debug("cli.onboarding.start")
             onboarding_success = await run_onboarding()
@@ -191,11 +264,10 @@ def query(
                     "Setup incomplete. Please configure your database and try again."
                 )
             log.info("cli.onboarding.complete", success=True)
-        thread_manager = ThreadManager()
         try:
             session = SQLSaberSession(
                 SQLSaberOptions(
-                    database=database,
+                    database=selected_database,
                     thinking_enabled=thinking,
                     allow_dangerous=allow_dangerous,
                     system_prompt=system_prompt,
@@ -240,6 +312,7 @@ def query(
                 run = await streaming_handler.execute_streaming_query(
                     actual_query,
                     run_query=session.query,
+                    message_history=message_history,
                 )
 
                 # Track and display session usage
@@ -259,7 +332,10 @@ def query(
                 thread_id = thread_manager.current_thread_id
                 if thread_id:
                     console.print(
-                        f"[dim]You can continue this thread using:[/dim] saber threads resume {thread_id}"
+                        "[dim]Continue non-interactively:[/dim] "
+                        f'saber --thread {thread_id} "follow-up question"\n'
+                        "[dim]Continue interactively:[/dim] "
+                        f"saber threads resume {thread_id}"
                     )
                     log.info("thread.save.success", thread_id=thread_id)
             else:
@@ -288,7 +364,7 @@ def query(
         asyncio.run(run_session())
     except CLIError as e:
         get_logger(__name__).error("cli.error", error=str(e))
-        console.print(f"[error]Error:[/error] {e}")
+        error_console.print(f"[error]Error:[/error] {e}")
         sys.exit(e.exit_code)
 
 

@@ -26,6 +26,9 @@ saber -d "postgresql://user:pass@host:5432/db" "User statistics for 2024"
 
 # With multiple databases (repeat -d)
 saber -d sales -d analytics "Compare revenue to web sessions"
+
+# Continue a saved thread with one non-interactive follow-up
+saber --thread a1b2c3d4 "Now compare that with last quarter"
 ```
 
 **Parameters:**
@@ -35,6 +38,7 @@ saber -d sales -d analytics "Compare revenue to web sessions"
 - `--thinking` / `--no-thinking` - Enable/disable extended thinking/reasoning mode
 - `--allow-dangerous` - Allow INSERT/UPDATE/DELETE and restricted DDL (CREATE TABLE/VIEW/INDEX, ALTER TABLE). DROP/TRUNCATE and admin/security operations remain blocked; UPDATE/DELETE require WHERE.
 - `--system-prompt` - Custom system prompt text or path to a file (overrides built-in prompt)
+- `--thread` - Continue a saved thread non-interactively. Requires a query; uses the stored configured database unless `-d` overrides it.
 
 **Global Options:**
 
@@ -79,7 +83,13 @@ Remove stored credentials for a provider.
 
 ```bash
 saber auth reset
+
+# Non-interactive
+saber auth reset openai --yes
 ```
+
+Pass the provider directly for automation. `--yes` skips confirmation; without it,
+the command prompts only when attached to an interactive terminal.
 
 ---
 
@@ -95,6 +105,13 @@ Add a new database connection.
 
 ```bash
 saber db add my-database [OPTIONS]
+
+# Non-interactive SQLite setup
+saber db add local --type sqlite --database ./local.db --no-interactive
+
+# Read a server password from stdin instead of an argument or prompt
+printf '%s' "$DB_PASSWORD" | saber db add analytics --no-interactive \
+  --host db.example.com --database analytics --username agent --password-stdin
 ```
 
 **Parameters:**
@@ -115,6 +132,7 @@ saber db add my-database [OPTIONS]
 - `--ssl-cert` - SSL client certificate file path
 - `--ssl-key` - SSL client private key file path
 - `--interactive/--no-interactive` - Use interactive mode (default: true)
+- `--password-stdin` - Read the database password from stdin. Requires `--no-interactive`.
 
 **SSL Modes:**
 
@@ -204,9 +222,11 @@ Remove a database connection.
 
 ```bash
 saber db remove my-database
+saber db remove my-database --yes
 ```
 
-**Confirmation required** - Will prompt before deletion.
+**Confirmation required** - Will prompt before deletion in a terminal. Use `--yes`
+for a deliberate non-interactive removal.
 
 ---
 
@@ -334,6 +354,7 @@ saber knowledge remove ENTRY_ID [OPTIONS]
 **Options:**
 
 - `-d, --database` - Database connection name (uses default if not specified)
+- `--yes` - Skip confirmation prompt (required when no interactive terminal is available)
 
 #### `saber knowledge clear`
 
@@ -348,7 +369,7 @@ saber knowledge clear [OPTIONS]
 **Options:**
 
 - `-d, --database` - Database connection name (uses default if not specified)
-- `-f, --force` - Skip confirmation prompt
+- `--yes` - Skip confirmation prompt
 
 ### `saber models`
 
@@ -371,12 +392,18 @@ Set the default model and configure thinking level.
 **Usage:**
 
 ```bash
+# Interactive selection
 saber models set
+
+# Direct, non-interactive selection
+saber models set openai:gpt-5 --thinking-level medium
+saber models set openai:gpt-5 --agent handoff
 ```
 
 **Options:**
 
 - `--agent` - Target agent to configure (`main`, `handoff`, `viz`, `notebook`). Defaults to `main`.
+- `--thinking-level` - Main-model thinking mode: `off`, `minimal`, `low`, `medium`, `high`, or `maximum`.
 
 #### `saber models current`
 
@@ -400,11 +427,13 @@ Reset to the default model (Claude Sonnet 4).
 
 ```bash
 saber models reset
+saber models reset --agent handoff --yes
 ```
 
 **Options:**
 
 - `--agent` - Reset a specific agent (`main`, `handoff`, `viz`, `notebook`). Defaults to `main`.
+- `--yes` - Skip confirmation prompt (required when no interactive terminal is available).
 
 ---
 
@@ -414,12 +443,13 @@ Manage syntax highlighting theme settings.
 
 #### `saber theme set`
 
-Interactively select a syntax highlighting theme from all available Pygments themes.
+Select a syntax highlighting theme. Omit the theme name to browse interactively.
 
 **Usage:**
 
 ```bash
 saber theme set
+saber theme set dracula
 ```
 
 You can also set themes via environment variable:
@@ -437,7 +467,10 @@ Reset to the default theme (nord).
 
 ```bash
 saber theme reset
+saber theme reset --yes
 ```
+
+`--yes` skips confirmation and is required when no interactive terminal is available.
 
 ---
 
@@ -516,13 +549,20 @@ saber threads resume a1b2c3d4 [OPTIONS]
 **Features:**
 
 - Loads full conversation context
-- Uses same model as original thread
+- Uses the currently configured model
 - Reconnects to the original database(s), including [multi-database](/guides/multi-database) threads
 - Continues where conversation left off in interactive mode
 
 :::note
 Automatic resume requires every database in the thread to be a saved connection. If a thread used an ad-hoc connection string or file path, resume it with explicit `-d` flags.
 :::
+
+For one automated follow-up rather than an interactive session, use the root
+command:
+
+```bash
+saber --thread a1b2c3d4 "Now compare that with last quarter"
+```
 
 #### `saber threads prune`
 
@@ -532,7 +572,15 @@ Clean up old conversation threads.
 
 ```bash
 saber threads prune
+saber threads prune --days 30 --dry-run
+saber threads prune --days 30 --yes
 ```
+
+**Options:**
+
+- `-n, --days` - Delete threads older than this many days (default: 30)
+- `--dry-run` - Report how many threads would be deleted without deleting them
+- `--yes` - Skip confirmation prompt (required when no interactive terminal is available)
 
 ---
 

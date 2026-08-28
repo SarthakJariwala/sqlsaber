@@ -319,6 +319,22 @@ class ThreadStorage:
             logger.warning("threads.delete_failed", thread_id=thread_id, error=str(e))
             return False
 
+    async def count_prunable_threads(self, older_than_days: int = 30) -> int:
+        """Count threads whose last activity is older than the cutoff."""
+        await self._init_db()
+        cutoff = time.time() - older_than_days * 24 * 3600
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute(
+                    "SELECT COUNT(*) FROM threads WHERE last_activity_at < ?",
+                    (cutoff,),
+                ) as cur:
+                    row = await cur.fetchone()
+                    return int(row[0]) if row else 0
+        except Exception as e:  # pragma: no cover
+            logger.warning("threads.prune_count_failed", error=str(e))
+            return 0
+
     async def prune_threads(self, older_than_days: int = 30) -> int:
         """Delete threads whose last_activity_at is older than the cutoff.
 
