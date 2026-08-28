@@ -1,12 +1,14 @@
 """Authentication CLI commands."""
 
 import os
+import sys
+from typing import Annotated
 
 import cyclopts
 import keyring
-import keyring.errors
 import questionary
 
+from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
 from sqlsaber.config.auth import AuthConfigManager
@@ -14,18 +16,24 @@ from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console
 
 console = create_console()
+error_console = create_console(stderr=True)
 config_manager = AuthConfigManager()
 logger = get_logger(__name__)
 
 auth_app = cyclopts.App(
     name="auth",
     help="Manage authentication configuration",
+    help_epilogue=("Examples:\n\nsaber auth status\n\nsaber auth reset openai --yes"),
 )
 
 
-@auth_app.command
+@auth_app.command(help_epilogue="Example:\n\nsaber auth setup")
 def setup():
-    """Configure authentication for SQLsaber (API keys)."""
+    """Configure authentication for SQLsaber (API keys).
+
+    Example:
+        saber auth setup
+    """
     import asyncio
 
     from sqlsaber.application.auth_setup import setup_auth
@@ -48,16 +56,21 @@ def setup():
     logger.info("auth.setup.complete", success=bool(success), provider=str(provider))
 
     if not success:
-        console.print("\n[warning]No authentication configured.[/warning]")
+        error_console.print("[error]Error: no authentication was configured.[/error]")
+        raise SystemExit(1)
 
     console.print(
         "\nYou can change this anytime by running [info]saber auth setup[/info] again."
     )
 
 
-@auth_app.command
+@auth_app.command(help_epilogue="Example:\n\nsaber auth status")
 def status():
-    """Show current authentication configuration and provider key status."""
+    """Show current authentication configuration and provider key status.
+
+    Example:
+        saber auth status
+    """
     logger.info("auth.status.start")
     auth_method = config_manager.get_auth_method()
 
@@ -89,20 +102,54 @@ def status():
     logger.info("auth.status.complete", method=str(auth_method))
 
 
-@auth_app.command
-def reset():
-    """Reset stored API key credentials for a selected provider."""
+@auth_app.command(
+    help_epilogue=("Examples:\n\nsaber auth reset\n\nsaber auth reset openai --yes")
+)
+def reset(
+    provider: Annotated[
+        str | None,
+        cyclopts.Parameter(help="Provider to reset (omit to select interactively)"),
+    ] = None,
+    yes: Annotated[
+        bool,
+        cyclopts.Parameter(["--yes"], help="Skip confirmation prompt"),
+    ] = False,
+):
+    """Reset stored API key credentials for a selected provider.
+
+    Examples:
+        saber auth reset
+        saber auth reset openai --yes
+    """
     console.print("\n[bold]SQLsaber Authentication Reset[/bold]\n")
 
-    provider = questionary.select(
-        "Select provider to reset:",
-        choices=providers.all_keys(),
-    ).ask()
+    if provider is None:
+        if not sys.stdin.isatty():
+            error_console.print(
+                "[error]Error: PROVIDER is required when stdin is not a terminal.[/error]\n"
+                "  Example: saber auth reset openai --yes"
+            )
+            raise SystemExit(2)
+        provider = questionary.select(
+            "Select provider to reset:",
+            choices=providers.all_keys(),
+        ).ask()
 
     if provider is None:
         console.print("[warning]Reset cancelled.[/warning]")
         logger.info("auth.reset.cancelled_no_provider")
         return
+
+    canonical_provider = providers.canonical(provider.strip().lower())
+    if canonical_provider is None:
+        choices = ", ".join(providers.all_keys())
+        error_console.print(
+            f"[error]Error: unsupported provider '{provider}'.[/error]\n"
+            f"  Choose from: {choices}\n"
+            "  Example: saber auth reset openai --yes"
+        )
+        raise SystemExit(2)
+    provider = canonical_provider
 
     api_key_manager = APIKeyManager()
     service = api_key_manager._get_service_name(provider)
@@ -116,10 +163,12 @@ def reset():
         logger.info("auth.reset.nothing_to_reset", provider=provider)
         return
 
-    confirmed = questionary.confirm(
-        f"Remove the stored {provider.title()} API key from your keyring?",
-        default=False,
-    ).ask()
+    confirmed = confirm_action(
+        yes=yes,
+        prompt=f"Remove the stored {provider.title()} API key from your keyring?",
+        non_interactive_command=f"saber auth reset {provider} --yes",
+        error_console=error_console,
+    )
 
     if not confirmed:
         console.print("Reset cancelled.")
@@ -130,13 +179,12 @@ def reset():
         keyring.delete_password(service, provider)
         console.print(f"Removed {provider} API key from keyring", style="green")
         logger.info("auth.reset.api_key_removed", provider=provider)
-    except keyring.errors.PasswordDeleteError:
-        pass
     except Exception as e:
-        console.print(f"Warning: Could not remove API key: {e}", style="warning")
+        error_console.print(f"[error]Error: could not remove API key: {e}[/error]")
         logger.warning(
             "auth.reset.api_key_remove_failed", provider=provider, error=str(e)
         )
+        raise SystemExit(1) from None
 
     console.print("\n[success]✓ Reset complete.[/success]")
     logger.info("auth.reset.complete", provider=provider)

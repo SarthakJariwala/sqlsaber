@@ -1,7 +1,6 @@
 """Database management CLI commands."""
 
 import asyncio
-import getpass
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -10,6 +9,7 @@ import cyclopts
 import questionary
 from rich.table import Table
 
+from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
 from sqlsaber.config.logging import get_logger
 from sqlsaber.theme.manager import create_console
@@ -18,6 +18,7 @@ type SchemaList = list[str]
 
 # Global instances for CLI commands
 console = create_console()
+error_console = create_console(stderr=True)
 config_manager = DatabaseConfigManager()
 logger = get_logger(__name__)
 
@@ -25,6 +26,12 @@ logger = get_logger(__name__)
 db_app = cyclopts.App(
     name="db",
     help="Manage database connections",
+    help_epilogue=(
+        "Examples:\n\n"
+        "saber db list\n\n"
+        "saber db add analytics\n\n"
+        "saber db test analytics"
+    ),
 )
 
 
@@ -50,7 +57,14 @@ def _parse_schema_list(raw: str | None) -> SchemaList:
     return _normalize_schema_list(raw.split(","))
 
 
-@db_app.command
+@db_app.command(
+    help_epilogue=(
+        "Examples:\n\n"
+        "saber db add analytics\n\n"
+        "saber db add local --type sqlite --database ./local.db --no-interactive\n\n"
+        "printf '%s' \"$DB_PASSWORD\" | saber db add analytics --no-interactive --host HOST --database DB --username USER --password-stdin"
+    )
+)
 def add(
     name: Annotated[str, cyclopts.Parameter(help="Name for the database connection")],
     type: Annotated[
@@ -115,12 +129,25 @@ def add(
     interactive: Annotated[
         bool,
         cyclopts.Parameter(
-            ["--interactive", "--no-interactive"],
+            ["--interactive"],
             help="Use interactive mode",
         ),
     ] = True,
+    password_stdin: Annotated[
+        bool,
+        cyclopts.Parameter(
+            ["--password-stdin"],
+            help="Read the database password from stdin (requires --no-interactive)",
+        ),
+    ] = False,
 ) -> None:
-    """Add a new database connection."""
+    """Add a new database connection.
+
+    Examples:
+        saber db add analytics
+        saber db add local --type sqlite --database ./local.db --no-interactive
+        printf '%s' "$DB_PASSWORD" | saber db add analytics --no-interactive --type postgresql --host db.example.com --database analytics --username agent --password-stdin
+    """
     logger.info(
         "db.add.start",
         name=name,
@@ -128,6 +155,23 @@ def add(
         interactive=bool(interactive),
         has_password=False,
     )
+
+    supported_types = {"postgresql", "mysql", "sqlite", "duckdb"}
+    if type not in supported_types:
+        error_console.print(
+            f"[error]Error: unsupported database type '{type}'.[/error]\n"
+            "  Choose from: postgresql, mysql, sqlite, duckdb\n"
+            "  Example: saber db add analytics --type postgresql"
+        )
+        raise SystemExit(2)
+    if interactive and password_stdin:
+        error_console.print(
+            "[error]Error: --password-stdin requires --no-interactive.[/error]\n"
+            "  Example: printf '%s' \"$DB_PASSWORD\" | saber db add analytics "
+            "--no-interactive --host HOST --database DB --username USER "
+            "--password-stdin"
+        )
+        raise SystemExit(2)
 
     if interactive:
         # Interactive mode - prompt for all required fields
@@ -165,22 +209,26 @@ def add(
         # Non-interactive mode - use provided values or defaults
         if type == "sqlite":
             if not database:
-                console.print(
-                    "[bold error]Error:[/bold error] Database file path is required for SQLite"
+                error_console.print(
+                    "[error]Error: database file path is required for SQLite.[/error]\n"
+                    "  Example: saber db add local --no-interactive --type sqlite "
+                    "--database ./local.db"
                 )
                 logger.error("db.add.missing_path", db_type="sqlite")
-                sys.exit(1)
+                raise SystemExit(2)
             host = "localhost"
             port = 0
             username = "sqlite"
             password = ""
         elif type == "duckdb":
             if database is None:
-                console.print(
-                    "[bold error]Error:[/bold error] Database file path is required for DuckDB"
+                error_console.print(
+                    "[error]Error: database file path is required for DuckDB.[/error]\n"
+                    "  Example: saber db add warehouse --no-interactive --type duckdb "
+                    "--database ./warehouse.duckdb"
                 )
                 logger.error("db.add.missing_path", db_type="duckdb")
-                raise SystemExit(1)
+                raise SystemExit(2)
             database = str(Path(database).expanduser().resolve())
             host = "localhost"
             port = 0
@@ -188,20 +236,35 @@ def add(
             password = ""
         else:
             if not all([host, database, username]):
-                console.print(
-                    "[bold error]Error:[/bold error] Host, database, and username are required"
+                error_console.print(
+                    "[error]Error: --host, --database, and --username are required "
+                    "in non-interactive mode.[/error]\n"
+                    "  Example: saber db add analytics --no-interactive "
+                    "--host HOST --database DB --username USER"
                 )
                 logger.error("db.add.missing_fields")
-                sys.exit(1)
+                raise SystemExit(2)
 
             if port is None:
                 port = 5432 if type == "postgresql" else 3306
 
-            password = (
-                getpass.getpass("Password (stored in your OS keychain): ")
-                if questionary.confirm("Enter password?").ask()
-                else ""
-            )
+            if password_stdin:
+                if sys.stdin.isatty():
+                    error_console.print(
+                        "[error]Error: --password-stdin requires piped stdin.[/error]\n"
+                        "  Example: printf '%s' \"$DB_PASSWORD\" | saber db add "
+                        "analytics --no-interactive --host HOST --database DB "
+                        "--username USER --password-stdin"
+                    )
+                    raise SystemExit(2)
+                password = sys.stdin.read().rstrip("\r\n")
+                if not password:
+                    error_console.print(
+                        "[error]Error: --password-stdin received an empty password.[/error]"
+                    )
+                    raise SystemExit(2)
+            else:
+                password = ""
         exclude_schema_list = _parse_schema_list(exclude_schemas)
 
     # Create database config
@@ -242,13 +305,17 @@ def add(
 
     except Exception as e:
         logger.exception("db.add.error", name=name, error=str(e))
-        console.print(f"[bold error]Error adding database:[/bold error] {e}")
+        error_console.print(f"[error]Error adding database:[/error] {e}")
         sys.exit(1)
 
 
-@db_app.command(name="list")
+@db_app.command(name="list", help_epilogue="Example:\n\nsaber db list")
 def list_databases() -> None:
-    """List all configured database connections."""
+    """List all configured database connections.
+
+    Example:
+        saber db list
+    """
     logger.info("db.list.start")
     databases = config_manager.list_databases()
     default_name = config_manager.get_default_name()
@@ -298,7 +365,13 @@ def list_databases() -> None:
     logger.info("db.list.complete", count=len(databases))
 
 
-@db_app.command
+@db_app.command(
+    help_epilogue=(
+        "Examples:\n\n"
+        "saber db exclude analytics --add audit,temp\n\n"
+        "saber db exclude analytics --clear"
+    )
+)
 def exclude(
     name: Annotated[
         str,
@@ -333,7 +406,12 @@ def exclude(
         ),
     ] = False,
 ) -> None:
-    """Update excluded schemas for a database connection."""
+    """Update excluded schemas for a database connection.
+
+    Examples:
+        saber db exclude analytics --add audit,temp
+        saber db exclude analytics --clear
+    """
     logger.info(
         "db.exclude.start",
         name=name,
@@ -344,8 +422,9 @@ def exclude(
     )
     db_config = config_manager.get_database(name)
     if db_config is None:
-        console.print(
-            f"[bold error]Error: Database connection '{name}' not found[/bold error]"
+        error_console.print(
+            f"[error]Error: database connection '{name}' not found.[/error]\n"
+            "  List connections with: saber db list"
         )
         logger.error("db.exclude.not_found", name=name)
         raise SystemExit(1)
@@ -360,8 +439,9 @@ def exclude(
         ]
     )
     if actions_selected > 1:
-        console.print(
-            "[bold error]Error: Specify only one of --set, --add, --remove, or --clear[/bold error]"
+        error_console.print(
+            "[error]Error: specify only one of --set, --add, --remove, or --clear.[/error]\n"
+            "  Example: saber db exclude analytics --add audit,temp"
         )
         logger.error("db.exclude.multiple_actions", name=name)
         sys.exit(1)
@@ -408,32 +488,49 @@ def exclude(
     logger.info("db.exclude.success", name=name, count=len(db_config.exclude_schemas))
 
 
-@db_app.command
+@db_app.command(
+    help_epilogue=(
+        "Examples:\n\nsaber db remove analytics\n\nsaber db remove analytics --yes"
+    )
+)
 def remove(
     name: Annotated[
         str, cyclopts.Parameter(help="Name of the database connection to remove")
     ],
+    yes: Annotated[
+        bool,
+        cyclopts.Parameter(["--yes"], help="Skip confirmation prompt"),
+    ] = False,
 ) -> None:
-    """Remove a database connection."""
+    """Remove a database connection.
+
+    Examples:
+        saber db remove analytics
+        saber db remove analytics --yes
+    """
     logger.info("db.remove.start", name=name)
     if not config_manager.get_database(name):
-        console.print(
-            f"[bold error]Error: Database connection '{name}' not found[/bold error]"
+        error_console.print(
+            f"[error]Error: database connection '{name}' not found.[/error]\n"
+            "  List connections with: saber db list"
         )
         logger.error("db.remove.not_found", name=name)
         sys.exit(1)
 
-    if questionary.confirm(
-        f"Are you sure you want to remove database connection '{name}'?"
-    ).ask():
+    if confirm_action(
+        yes=yes,
+        prompt=f"Remove database connection '{name}'?",
+        non_interactive_command=f"saber db remove {name} --yes",
+        error_console=error_console,
+    ):
         if config_manager.remove_database(name):
             console.print(
                 f"[success]Successfully removed database connection '{name}'[/success]"
             )
             logger.info("db.remove.success", name=name)
         else:
-            console.print(
-                f"[bold error]Error: Failed to remove database connection '{name}'[/bold error]"
+            error_console.print(
+                f"[error]Error: failed to remove database connection '{name}'.[/error]"
             )
             logger.error("db.remove.failed", name=name)
             sys.exit(1)
@@ -442,18 +539,23 @@ def remove(
         logger.info("db.remove.cancelled", name=name)
 
 
-@db_app.command
+@db_app.command(help_epilogue="Example:\n\nsaber db set-default analytics")
 def set_default(
     name: Annotated[
         str,
         cyclopts.Parameter(help="Name of the database connection to set as default"),
     ],
 ) -> None:
-    """Set the default database connection."""
+    """Set the default database connection.
+
+    Example:
+        saber db set-default analytics
+    """
     logger.info("db.default.start", name=name)
     if not config_manager.get_database(name):
-        console.print(
-            f"[bold error]Error: Database connection '{name}' not found[/bold error]"
+        error_console.print(
+            f"[error]Error: database connection '{name}' not found.[/error]\n"
+            "  List connections with: saber db list"
         )
         logger.error("db.default.not_found", name=name)
         sys.exit(1)
@@ -464,14 +566,12 @@ def set_default(
         )
         logger.info("db.default.success", name=name)
     else:
-        console.print(
-            f"[bold error]Error: Failed to set '{name}' as default[/bold error]"
-        )
+        error_console.print(f"[error]Error: failed to set '{name}' as default.[/error]")
         logger.error("db.default.failed", name=name)
         sys.exit(1)
 
 
-@db_app.command
+@db_app.command(help_epilogue=("Examples:\n\nsaber db test\n\nsaber db test analytics"))
 def test(
     name: Annotated[
         str | None,
@@ -480,7 +580,12 @@ def test(
         ),
     ] = None,
 ) -> None:
-    """Test a database connection."""
+    """Test a database connection.
+
+    Examples:
+        saber db test
+        saber db test analytics
+    """
     logger.info("db.test.start")
 
     async def test_connection():
@@ -490,19 +595,18 @@ def test(
         if name:
             db_config = config_manager.get_database(name)
             if db_config is None:
-                console.print(
-                    f"[bold error]Error: Database connection '{name}' not found[/bold error]"
+                error_console.print(
+                    f"[error]Error: database connection '{name}' not found.[/error]\n"
+                    "  List connections with: saber db list"
                 )
                 logger.error("db.test.not_found", name=name)
                 raise SystemExit(1)
         else:
             db_config = config_manager.get_default_database()
             if db_config is None:
-                console.print(
-                    "[bold error]Error: No default database configured[/bold error]"
-                )
-                console.print(
-                    "Use 'sqlsaber db add <name>' to add a database connection"
+                error_console.print(
+                    "[error]Error: no default database configured.[/error]\n"
+                    "  Add one with: saber db add <name>"
                 )
                 logger.error("db.test.no_default")
                 raise SystemExit(1)
@@ -532,7 +636,7 @@ def test(
                 ),
                 error=str(e),
             )
-            console.print(f"[bold error]✗ Connection failed: {e}[/bold error]")
+            error_console.print(f"[error]Connection failed: {e}[/error]")
             sys.exit(1)
 
     asyncio.run(test_connection())

@@ -23,6 +23,17 @@ saber db add my-database
 
 This will prompt you for all necessary connection details.
 
+For scripts and coding agents, provide every required value and disable prompts:
+
+```bash
+# Local database
+saber db add local --type sqlite --database ./local.db --no-interactive
+
+# Server database; keep the password out of argv and shell history
+printf '%s' "$DB_PASSWORD" | saber db add analytics --no-interactive \
+  --host db.example.com --database analytics --username agent --password-stdin
+```
+
 You can also attach an optional description to a connection. Descriptions are
 shown to the agent when [several databases are connected at once](/guides/multi-database)
 to help it pick the right one:
@@ -110,6 +121,9 @@ saber db test my-database
 
 ```bash
 saber db remove my-database
+
+# Non-interactive, explicit deletion
+saber db remove my-database --yes
 ```
 
 ### Connecting to Multiple Databases

@@ -63,9 +63,31 @@ saber threads resume bb7b4d72
 This:
 - Loads the full conversation context
 - Connects to the same database used in the original thread
-- Uses the same model from the original conversation
+- Uses the currently configured model
 - Allows you to continue where you left off in interactive mode
 
+For one non-interactive follow-up, pass the thread to the root query command:
+
+```bash
+saber --thread bb7b4d72 "Now compare that with last quarter"
+```
+
+This loads the saved message history, keeps the same thread ID, and uses the
+stored configured database. Pass `-d DATABASE` to override it.
+
+### Prune Old Threads Safely
+
+Preview cleanup before deleting anything:
+
+```bash
+saber threads prune --days 30 --dry-run
+```
+
+Run the deletion interactively, or make the intent explicit in automation:
+
+```bash
+saber threads prune --days 30 --yes
+```
 
 ### Sharing Threads
 
@@ -77,7 +99,6 @@ saber threads show abc123 > analysis_report.md
 cat analysis_report.md
 ```
 
-
 ### Getting Help
 
 Check thread commands and options:
@@ -87,6 +108,7 @@ saber threads --help
 saber threads list --help
 saber threads resume --help
 saber threads artifacts --help
+saber threads prune --help
 ```
 
 ### What's Next?

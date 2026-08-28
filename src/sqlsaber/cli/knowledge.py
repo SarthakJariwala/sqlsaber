@@ -8,20 +8,24 @@ from collections.abc import Coroutine
 from typing import Annotated, TypeVar
 
 import cyclopts
-import questionary
 from rich.table import Table
 
+from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.config.logging import get_logger
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.theme.manager import create_console
 
 console = create_console()
+error_console = create_console(stderr=True)
 config_manager = DatabaseConfigManager()
 logger = get_logger(__name__)
 knowledge_app = cyclopts.App(
     name="knowledge",
     help="Manage database-specific knowledge entries",
+    help_epilogue=(
+        'Examples:\n\nsaber knowledge list\n\nsaber knowledge search "shipped revenue"'
+    ),
 )
 _knowledge_manager: KnowledgeManager | None = None
 T = TypeVar("T")
@@ -52,8 +56,9 @@ def _get_database_name(database: str | None = None) -> str:
     if database:
         db_config = config_manager.get_database(database)
         if not db_config:
-            console.print(
-                f"[bold error]Error:[/bold error] Database connection '{database}' not found."
+            error_console.print(
+                f"[error]Error: database connection '{database}' not found.[/error]\n"
+                "  List connections with: saber db list"
             )
             logger.error("knowledge.db.not_found", database=database)
             raise SystemExit(1)
@@ -61,16 +66,22 @@ def _get_database_name(database: str | None = None) -> str:
 
     db_config = config_manager.get_default_database()
     if db_config is None:
-        console.print(
-            "[bold error]Error:[/bold error] No database connections configured."
+        error_console.print(
+            "[error]Error: no database connections configured.[/error]\n"
+            "  Add one with: saber db add <name>"
         )
-        console.print("Use 'sqlsaber db add <name>' to add a database connection.")
         logger.error("knowledge.db.none_configured")
         raise SystemExit(1)
     return db_config.name
 
 
-@knowledge_app.command
+@knowledge_app.command(
+    help_epilogue=(
+        "Examples:\n\n"
+        'saber knowledge add "Revenue KPI" "Recognized shipped revenue"\n\n'
+        'saber knowledge add "Revenue KPI" "Recognized shipped revenue" --database analytics --source finance-wiki'
+    )
+)
 def add(
     name: Annotated[str, cyclopts.Parameter(help="Knowledge entry name")],
     description: Annotated[str, cyclopts.Parameter(help="Knowledge description")],
@@ -96,7 +107,12 @@ def add(
         ),
     ] = None,
 ):
-    """Add knowledge for the specified database."""
+    """Add knowledge for the specified database.
+
+    Examples:
+        saber knowledge add "Revenue KPI" "Recognized shipped revenue"
+        saber knowledge add "Revenue KPI" "Recognized shipped revenue" --database analytics --source finance-wiki
+    """
     database_name = _get_database_name(database)
     logger.info("knowledge.add.start", database=database_name, source=source)
 
@@ -111,7 +127,7 @@ def add(
             )
         )
     except Exception as exc:
-        console.print(f"[bold error]Error adding knowledge:[/bold error] {exc}")
+        error_console.print(f"[error]Error adding knowledge:[/error] {exc}")
         logger.exception("knowledge.add.error", database=database_name, error=str(exc))
         raise SystemExit(1)
 
@@ -123,7 +139,11 @@ def add(
     logger.info("knowledge.add.success", database=database_name, id=entry.id)
 
 
-@knowledge_app.command
+@knowledge_app.command(
+    help_epilogue=(
+        "Examples:\n\nsaber knowledge list\n\nsaber knowledge list --database analytics"
+    )
+)
 def list(
     database: Annotated[
         str | None,
@@ -133,7 +153,12 @@ def list(
         ),
     ] = None,
 ):
-    """List all knowledge entries for the specified database."""
+    """List all knowledge entries for the specified database.
+
+    Examples:
+        saber knowledge list
+        saber knowledge list --database analytics
+    """
     database_name = _get_database_name(database)
     logger.info("knowledge.list.start", database=database_name)
 
@@ -167,7 +192,9 @@ def list(
     logger.info("knowledge.list.complete", database=database_name, count=len(entries))
 
 
-@knowledge_app.command
+@knowledge_app.command(
+    help_epilogue="Example:\n\nsaber knowledge show ENTRY_ID --database analytics"
+)
 def show(
     entry_id: Annotated[str, cyclopts.Parameter(help="Knowledge entry ID")],
     database: Annotated[
@@ -178,14 +205,20 @@ def show(
         ),
     ] = None,
 ):
-    """Show a full knowledge entry."""
+    """Show a full knowledge entry.
+
+    Example:
+        saber knowledge show ENTRY_ID --database analytics
+    """
     database_name = _get_database_name(database)
     logger.info("knowledge.show.start", database=database_name, id=entry_id)
 
     entry = _run(_manager().get_knowledge(database_name, entry_id))
     if entry is None:
-        console.print(
-            f"[bold error]Error:[/bold error] Knowledge entry '{entry_id}' not found for database '{database_name}'"
+        error_console.print(
+            f"[error]Error: knowledge entry '{entry_id}' not found for database "
+            f"'{database_name}'.[/error]\n"
+            f"  List entries with: saber knowledge list --database {database_name}"
         )
         logger.error("knowledge.show.not_found", database=database_name, id=entry_id)
         raise SystemExit(1)
@@ -204,7 +237,13 @@ def show(
         console.print(f"\n[bold]Source:[/bold] {entry.source}")
 
 
-@knowledge_app.command
+@knowledge_app.command(
+    help_epilogue=(
+        "Examples:\n\n"
+        'saber knowledge search "shipped revenue"\n\n'
+        'saber knowledge search "shipped revenue" --database analytics --limit 5'
+    )
+)
 def search(
     query: Annotated[str, cyclopts.Parameter(help="Search query")],
     database: Annotated[
@@ -222,7 +261,12 @@ def search(
         ),
     ] = 10,
 ):
-    """Search knowledge entries for the specified database."""
+    """Search knowledge entries for the specified database.
+
+    Examples:
+        saber knowledge search "shipped revenue"
+        saber knowledge search "shipped revenue" --database analytics --limit 5
+    """
     database_name = _get_database_name(database)
     logger.info("knowledge.search.start", database=database_name, limit=limit)
 
@@ -252,7 +296,13 @@ def search(
     logger.info("knowledge.search.complete", database=database_name, count=len(entries))
 
 
-@knowledge_app.command
+@knowledge_app.command(
+    help_epilogue=(
+        "Examples:\n\n"
+        "saber knowledge remove ENTRY_ID\n\n"
+        "saber knowledge remove ENTRY_ID --database analytics --yes"
+    )
+)
 def remove(
     entry_id: Annotated[str, cyclopts.Parameter(help="Knowledge entry ID")],
     database: Annotated[
@@ -262,18 +312,41 @@ def remove(
             help="Database connection name (uses default if not specified)",
         ),
     ] = None,
+    yes: Annotated[
+        bool,
+        cyclopts.Parameter(["--yes"], help="Skip confirmation prompt"),
+    ] = False,
 ):
-    """Remove a specific knowledge entry by ID."""
+    """Remove a specific knowledge entry by ID.
+
+    Examples:
+        saber knowledge remove ENTRY_ID
+        saber knowledge remove ENTRY_ID --database analytics --yes
+    """
     database_name = _get_database_name(database)
     logger.info("knowledge.remove.start", database=database_name, id=entry_id)
 
     entry = _run(_manager().get_knowledge(database_name, entry_id))
     if entry is None:
-        console.print(
-            f"[bold error]Error:[/bold error] Knowledge entry '{entry_id}' not found for database '{database_name}'"
+        error_console.print(
+            f"[error]Error: knowledge entry '{entry_id}' not found for database "
+            f"'{database_name}'.[/error]\n"
+            f"  List entries with: saber knowledge list --database {database_name}"
         )
         logger.error("knowledge.remove.not_found", database=database_name, id=entry_id)
         raise SystemExit(1)
+
+    if not confirm_action(
+        yes=yes,
+        prompt=f"Remove knowledge entry '{entry.name}'?",
+        non_interactive_command=(
+            f"saber knowledge remove {entry_id} --database {database_name} --yes"
+        ),
+        error_console=error_console,
+    ):
+        console.print("Operation cancelled")
+        logger.info("knowledge.remove.cancelled", database=database_name, id=entry_id)
+        return
 
     if _run(_manager().remove_knowledge(database_name, entry_id)):
         console.print(
@@ -282,14 +355,20 @@ def remove(
         logger.info("knowledge.remove.success", database=database_name, id=entry_id)
         return
 
-    console.print(
-        f"[bold error]Error:[/bold error] Failed to remove knowledge entry '{entry_id}'"
+    error_console.print(
+        f"[error]Error: failed to remove knowledge entry '{entry_id}'.[/error]"
     )
     logger.error("knowledge.remove.failed", database=database_name, id=entry_id)
     raise SystemExit(1)
 
 
-@knowledge_app.command
+@knowledge_app.command(
+    help_epilogue=(
+        "Examples:\n\n"
+        "saber knowledge clear --database analytics\n\n"
+        "saber knowledge clear --database analytics --yes"
+    )
+)
 def clear(
     database: Annotated[
         str | None,
@@ -298,17 +377,24 @@ def clear(
             help="Database connection name (uses default if not specified)",
         ),
     ] = None,
-    force: Annotated[
+    yes: Annotated[
         bool,
         cyclopts.Parameter(
-            ["--force", "-f"],
+            ["--yes"],
             help="Skip confirmation prompt",
         ),
     ] = False,
 ):
-    """Clear all knowledge entries for the specified database."""
+    """Clear all knowledge entries for the specified database.
+
+    Examples:
+        saber knowledge clear --database analytics
+        saber knowledge clear --database analytics --yes
+    """
     database_name = _get_database_name(database)
-    logger.info("knowledge.clear.start", database=database_name, force=bool(force))
+    logger.info(
+        "knowledge.clear.start", database=database_name, confirmation_skipped=bool(yes)
+    )
 
     entries = _run(_manager().list_knowledge(database_name))
     if not entries:
@@ -318,14 +404,21 @@ def clear(
         logger.info("knowledge.clear.nothing", database=database_name)
         return
 
-    if not force:
+    if not yes:
         console.print(
             f"[warning]About to clear {len(entries)} knowledge entries for database '{database_name}'[/warning]"
         )
-        if not questionary.confirm("Are you sure you want to proceed?").ask():
-            console.print("Operation cancelled")
-            logger.info("knowledge.clear.cancelled", database=database_name)
-            return
+    if not confirm_action(
+        yes=yes,
+        prompt="Clear all knowledge entries?",
+        non_interactive_command=(
+            f"saber knowledge clear --database {database_name} --yes"
+        ),
+        error_console=error_console,
+    ):
+        console.print("Operation cancelled")
+        logger.info("knowledge.clear.cancelled", database=database_name)
+        return
 
     cleared_count = _run(_manager().clear_knowledge(database_name))
     console.print(

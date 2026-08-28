@@ -5,22 +5,26 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Annotated
 
 import cyclopts
 import questionary
 from platformdirs import user_config_dir
 from pygments.styles import get_all_styles
 
-from sqlsaber.theme.manager import DEFAULT_THEME_NAME, create_console
+from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config.logging import get_logger
+from sqlsaber.theme.manager import DEFAULT_THEME_NAME, create_console
 
 console = create_console()
+error_console = create_console(stderr=True)
 logger = get_logger(__name__)
 
 # Create the theme management CLI app
 theme_app = cyclopts.App(
     name="theme",
     help="Manage theme settings",
+    help_epilogue=("Examples:\n\nsaber theme set dracula\n\nsaber theme reset --yes"),
 )
 
 
@@ -72,7 +76,7 @@ class ThemeManager:
             self._save_config(config)
             return True
         except Exception as e:
-            console.print(f"[error]Error setting theme: {e}[/error]")
+            error_console.print(f"[error]Error setting theme: {e}[/error]")
             logger.error("theme.set.error", theme=theme_name, error=str(e))
             return False
 
@@ -83,7 +87,7 @@ class ThemeManager:
                 self.config_file.unlink()
             return True
         except Exception as e:
-            console.print(f"[error]Error resetting theme: {e}[/error]")
+            error_console.print(f"[error]Error resetting theme: {e}[/error]")
             logger.error("theme.reset.error", error=str(e))
             return False
 
@@ -95,13 +99,47 @@ class ThemeManager:
 theme_manager = ThemeManager()
 
 
-@theme_app.command
-def set():
-    """Set the theme to use for syntax highlighting."""
+@theme_app.command(
+    help_epilogue=("Examples:\n\nsaber theme set\n\nsaber theme set dracula")
+)
+def set(
+    theme_name: Annotated[
+        str | None,
+        cyclopts.Parameter(help="Pygments theme name (omit to select interactively)"),
+    ] = None,
+):
+    """Set the theme to use for syntax highlighting.
+
+    Examples:
+        saber theme set
+        saber theme set dracula
+    """
     logger.info("theme.set.start")
 
+    themes = theme_manager.get_available_themes()
+    if theme_name is not None:
+        theme_name = theme_name.strip().lower()
+        if theme_name not in themes:
+            error_console.print(
+                f"[error]Error: unknown theme '{theme_name}'.[/error]\n"
+                "  Run 'saber theme set' in a terminal to browse available themes.\n"
+                "  Example: saber theme set dracula"
+            )
+            raise SystemExit(2)
+        if not theme_manager.set_theme(theme_name):
+            raise SystemExit(1)
+        console.print(f"[success]✓ Theme set to: {theme_name}[/success]")
+        logger.info("theme.set.done", theme=theme_name)
+        return
+
+    if not sys.stdin.isatty():
+        error_console.print(
+            "[error]Error: THEME is required when stdin is not a terminal.[/error]\n"
+            "  Example: saber theme set dracula"
+        )
+        raise SystemExit(2)
+
     async def interactive_set():
-        themes = theme_manager.get_available_themes()
         current_theme = theme_manager.get_current_theme()
 
         # Create choices with current theme highlighted
@@ -126,7 +164,7 @@ def set():
                 console.print(f"[success]✓ Theme set to: {selected_theme}[/success]")
                 logger.info("theme.set.done", theme=selected_theme)
             else:
-                console.print("[error]✗ Failed to set theme[/error]")
+                error_console.print("[error]Error: failed to set theme.[/error]")
                 sys.exit(1)
         else:
             console.print("[warning]Operation cancelled[/warning]")
@@ -135,9 +173,31 @@ def set():
     asyncio.run(interactive_set())
 
 
-@theme_app.command
-def reset():
-    """Reset to the default theme."""
+@theme_app.command(
+    help_epilogue=("Examples:\n\nsaber theme reset\n\nsaber theme reset --yes")
+)
+def reset(
+    yes: Annotated[
+        bool,
+        cyclopts.Parameter(["--yes"], help="Skip confirmation prompt"),
+    ] = False,
+):
+    """Reset to the default theme.
+
+    Examples:
+        saber theme reset
+        saber theme reset --yes
+    """
+
+    if not confirm_action(
+        yes=yes,
+        prompt=f"Reset theme to {DEFAULT_THEME_NAME}?",
+        non_interactive_command="saber theme reset --yes",
+        error_console=error_console,
+    ):
+        console.print("[warning]Operation cancelled[/warning]")
+        logger.info("theme.reset.cancelled")
+        return
 
     if theme_manager.reset_theme():
         console.print(
@@ -145,7 +205,7 @@ def reset():
         )
         logger.info("theme.reset.done", theme=DEFAULT_THEME_NAME)
     else:
-        console.print("[error]✗ Failed to reset theme[/error]")
+        error_console.print("[error]Error: failed to reset theme.[/error]")
         sys.exit(1)
 
 

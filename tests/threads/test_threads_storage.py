@@ -1,8 +1,10 @@
 """Tests for ThreadStorage (pydantic-ai snapshot threads)."""
 
 import tempfile
+import time
 from pathlib import Path
 
+import aiosqlite
 import pytest
 from pydantic_ai.messages import (
     ModelMessage,
@@ -136,3 +138,25 @@ async def test_list_end_delete_threads():
         assert deleted
         remaining = await store.list_threads()
         assert len(remaining) == 1
+
+
+@pytest.mark.asyncio
+async def test_count_prunable_threads():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = ThreadStorage()
+        store.db_path = Path(tmp) / "threads.db"
+        old_thread = await store.save_snapshot(
+            messages_json=_messages_bytes("Old"), database_name="db"
+        )
+        await store.save_snapshot(
+            messages_json=_messages_bytes("Recent"), database_name="db"
+        )
+
+        async with aiosqlite.connect(store.db_path) as db:
+            await db.execute(
+                "UPDATE threads SET last_activity_at = ? WHERE id = ?",
+                (time.time() - 40 * 24 * 3600, old_thread),
+            )
+            await db.commit()
+
+        assert await store.count_prunable_threads(older_than_days=30) == 1

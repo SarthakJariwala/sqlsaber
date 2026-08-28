@@ -31,8 +31,9 @@ class TestCLICommands:
 
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
-        assert "Database connection 'nonexistent' not found" in captured.out
-        assert "sqlsaber db list" in captured.out
+        assert captured.out == ""
+        assert "Database connection 'nonexistent' not found" in captured.err
+        assert "sqlsaber db list" in captured.err
 
     def test_subcommands_registered(self, capsys):
         """Test that all subcommands are properly registered."""

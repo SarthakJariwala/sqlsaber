@@ -48,7 +48,7 @@ def test_cli_add_show_search_remove_and_list(knowledge_app, capsys):
     search_output = capsys.readouterr().out
     assert "Revenue KPI" in search_output
 
-    _run_cli(knowledge_app, ["remove", entry_id])
+    _run_cli(knowledge_app, ["remove", entry_id, "--yes"])
     remove_output = capsys.readouterr().out
     assert "removed" in remove_output.lower()
 
@@ -57,12 +57,23 @@ def test_cli_add_show_search_remove_and_list(knowledge_app, capsys):
     assert "No knowledge entries found" in list_output
 
 
-def test_cli_clear_force(knowledge_app, capsys):
+def test_cli_clear_yes(knowledge_app, capsys):
     _run_cli(knowledge_app, ["add", "One", "Description one"])
     _ = capsys.readouterr()
     _run_cli(knowledge_app, ["add", "Two", "Description two"])
     _ = capsys.readouterr()
 
-    _run_cli(knowledge_app, ["clear", "--force"])
+    _run_cli(knowledge_app, ["clear", "--yes"])
     clear_output = capsys.readouterr().out
     assert "Cleared 2 knowledge entries" in clear_output
+
+
+@pytest.mark.parametrize("removed_option", ["--force", "-f", "-y"])
+def test_cli_clear_rejects_alternate_confirmation_options(
+    knowledge_app, capsys, removed_option
+):
+    with pytest.raises(SystemExit) as exc_info:
+        knowledge_app(["clear", removed_option])
+
+    assert exc_info.value.code == 1
+    assert f'Unknown option: "{removed_option}"' in capsys.readouterr().err

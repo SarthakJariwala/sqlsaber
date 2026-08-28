@@ -52,6 +52,13 @@ This interactive command lets you:
   This list is long - type to search and filter the list.
 </Aside>
 
+For scripts and coding agents, set the model and thinking level directly without
+fetching the model list or opening a prompt:
+
+```bash
+saber models set openai:gpt-5 --thinking-level medium
+```
+
 #### Subagent Overrides
 
 You can override the model used by subagents like handoff and viz without changing
@@ -60,6 +67,9 @@ the main model:
 ```bash
 saber models set --agent handoff
 saber models set --agent viz
+
+# Direct, non-interactive override
+saber models set openai:gpt-5 --agent handoff
 ```
 
 If no override is set, the subagent uses the main model.
@@ -70,6 +80,7 @@ Return to the original default (Claude Opus 4.6):
 
 ```bash
 saber models reset
+saber models reset --yes
 ```
 
 ### Getting Help

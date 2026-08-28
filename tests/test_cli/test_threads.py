@@ -151,15 +151,18 @@ class TestThreadsCLI:
             mock_storage = MagicMock()
             mock_storage_class.return_value = mock_storage
 
-            with patch("sqlsaber.cli.threads.console") as mock_console:
+            with patch("sqlsaber.cli.threads.error_console") as mock_error_console:
                 from sqlsaber.cli.threads import show
 
                 with patch("asyncio.run") as mock_run:
                     mock_run.return_value = None
-                    show("nonexistent-thread")
+                    with pytest.raises(SystemExit) as exc_info:
+                        show("nonexistent-thread")
 
-                mock_console.print.assert_called_with(
-                    "[error]Thread not found:[/error] nonexistent-thread"
+                assert exc_info.value.code == 1
+                mock_error_console.print.assert_called_with(
+                    "[error]Error: thread not found: nonexistent-thread[/error]\n"
+                    "  List threads with: saber threads list"
                 )
 
     def test_show_thread_found(self, sample_threads, sample_messages):
@@ -445,15 +448,18 @@ class TestThreadsCLI:
                 FakeDatabaseConfigManager,
             ),
             patch("sqlsaber.session.SQLSaberSession") as mock_session,
-            patch("sqlsaber.cli.threads.console") as mock_console,
+            patch("sqlsaber.cli.threads.error_console") as mock_error_console,
         ):
-            resume("thread-missing-db")
+            with pytest.raises(SystemExit) as exc_info:
+                resume("thread-missing-db")
 
+        assert exc_info.value.code == 1
         mock_session.assert_not_called()
         store.get_thread_messages.assert_not_awaited()
-        mock_console.print.assert_called_with(
-            "[error]Thread database is not configured for automatic "
-            "resume.[/error] Resume it with explicit --database/-d options."
+        mock_error_console.print.assert_called_with(
+            "[error]Error: the thread database is not configured for automatic "
+            "resume.[/error]\n"
+            "  Retry with: saber threads resume thread-missing-db --database DATABASE"
         )
 
     def test_build_turn_slices_basic(self, sample_messages):
@@ -526,13 +532,16 @@ class TestThreadsCLI:
             mock_storage.get_thread = AsyncMock(return_value=None)
             mock_storage_class.return_value = mock_storage
 
-            with patch("sqlsaber.cli.threads.console") as mock_console:
+            with patch("sqlsaber.cli.threads.error_console") as mock_error_console:
                 from sqlsaber.cli.threads import export
 
-                export("nonexistent-thread")
+                with pytest.raises(SystemExit) as exc_info:
+                    export("nonexistent-thread")
 
-                mock_console.print.assert_called_with(
-                    "[error]Thread not found:[/error] nonexistent-thread"
+                assert exc_info.value.code == 1
+                mock_error_console.print.assert_called_with(
+                    "[error]Error: thread not found: nonexistent-thread[/error]\n"
+                    "  List threads with: saber threads list"
                 )
 
     @pytest.mark.asyncio

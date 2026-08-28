@@ -81,6 +81,7 @@ saber -d sales -d analytics "Compare last month's revenue to web sessions"
 | Compare multiple databases | `saber -d sales -d analytics "compare revenue to traffic"` |
 | Save a KPI definition | `saber knowledge add "Revenue KPI" "Recognized revenue from shipped orders only"` |
 | Resume previous analysis | `saber threads list` then `saber threads resume <id>` |
+| Automate a thread follow-up | `saber --thread <id> "compare with last quarter"` |
 | Use deeper reasoning | `saber --thinking "analyze retention by cohort"` |
 
 ## Knowledge base
