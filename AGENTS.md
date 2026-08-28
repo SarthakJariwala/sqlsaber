@@ -43,3 +43,4 @@ Note: Prefer `uv run ruff ...` over `uvx ruff ...` to avoid hitting user-level u
 - Include tests for new behavior and bug fixes; prefer async tests for async code.
 - Use fixtures from `tests/conftest.py` where possible.
 - Tests must pass without errors always.
+- Cloud Agent VMs export `FORCE_COLOR=0`, which Rich treats as "force terminal" and flips the display-detection tests (`tests/test_tools/test_display.py`, and table/markdown rendering assertions elsewhere) into the wrong branch. Run the suite the way CI does, without that variable: `env -u FORCE_COLOR uv run python -m pytest`. GitHub Actions does not set `FORCE_COLOR`, so CI is unaffected.
