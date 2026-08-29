@@ -1266,21 +1266,16 @@ async def test_successful_run_preserves_reconciled_sql_after_state_cleanup() -> 
 
 @pytest.mark.asyncio
 async def test_streaming_handler_prefers_native_tool_result_tui() -> None:
-    class NativeRenderer:
-        def render_executing_tui(self, tui, args: dict) -> bool:
-            tui.append_markdown(f"native request: {args['goal']}")
-            return True
+    from sqlsaber.render.blocks import md
 
-        def render_result_tui(
-            self,
-            tui,
-            result: object,
-            *,
-            tool_call_id: str | None = None,
-            metadata: object = None,
-        ) -> bool:
-            tui.append_markdown(f"native {result} ({tool_call_id}, {metadata})")
-            return True
+    class NativeRenderer:
+        def render_executing(self, args: dict):
+            return (md(f"native request: {args['goal']}"),)
+
+        def render_result(self, result: object, *, context=None):
+            return (
+                md(f"native {result} ({context.tool_call_id}, {context.metadata})"),
+            )
 
     app = build_chat_app(
         terminal=FakeTerminal(columns=80, rows=20), on_submit=lambda text: None

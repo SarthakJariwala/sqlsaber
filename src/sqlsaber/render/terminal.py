@@ -133,16 +133,28 @@ class TerminalSurface:
         if lines:
             self._write("\n".join(lines) + "\n")
 
-    def stream(self, *, role: Role | None = None) -> TextStream:
+    def stream(
+        self,
+        *,
+        role: Role | None = None,
+        replace: TextStream | None = None,
+        before: TextStream | None = None,
+    ) -> TextStream:
         """Open an in-place markdown stream.
 
         Args:
             role: Optional tint for the streamed markdown.
+            replace: Existing stream to discard before opening this one.
+            before: Ignored; this host has one live region.
 
         Returns:
             A live stream handle.
         """
-        self._finalize_live()
+        del before
+        if replace is not None:
+            replace.discard()
+        else:
+            self._finalize_live()
         live = _LiveStream(self, role)
         self._open_stream = live
         return live
@@ -268,17 +280,27 @@ class PlainSurface:
                 text += "\n"
             self._write(text)
 
-    def stream(self, *, role: Role | None = None) -> TextStream:
+    def stream(
+        self,
+        *,
+        role: Role | None = None,
+        replace: TextStream | None = None,
+        before: TextStream | None = None,
+    ) -> TextStream:
         """Buffer markdown and write once on close.
 
         Args:
             role: Ignored on a pipe.
+            replace: Existing stream to discard before opening this one.
+            before: Ignored on a pipe.
 
         Returns:
             A buffered stream handle.
         """
-        del role
-        if self._open is not None:
+        del role, before
+        if replace is not None:
+            replace.discard()
+        elif self._open is not None:
             self._open.close()
         buffered = _BufferedStream(self)
         self._open = buffered

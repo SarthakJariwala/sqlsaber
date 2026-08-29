@@ -1,18 +1,11 @@
 """SQL-related tools for database operations."""
 
 import json
-import string
+from collections.abc import Sequence
 from dataclasses import dataclass
-from html import escape
 from typing import Any, cast
 
 from pydantic_ai import RunContext, ToolReturn
-from rich.console import Console
-from rich.syntax import Syntax
-from rich.table import Table
-from tabulate import tabulate
-
-from sqlsaber.theme.manager import get_theme_manager
 
 from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.registry import DatabaseRegistry, UnknownDatabaseError
@@ -28,8 +21,8 @@ from sqlsaber.query_results import (
     new_query_result_id,
     query_result_columns,
 )
+from sqlsaber.render.blocks import Block, code, error, md, table
 from sqlsaber.utils.json_utils import json_dumps
-from sqlsaber.utils.text_input import sanitize_terminal_text
 
 from .base import Tool
 from .display import (
@@ -180,185 +173,77 @@ class IntrospectSchemaTool(SQLTool):
         metadata=DisplayMetadata(display_name="Introspect Schema"),
     )
 
-    def render_result(self, console: Console, result: object) -> bool:
-        data = self._parse_result(result)
-        mapping = self._coerce_mapping(data)
-        if mapping is None:
-            return False
-
-        if "error" in mapping and mapping["error"]:
-            message = str(mapping["error"])
-            if console.is_terminal:
-                console.print(f"[error]Error:[/error] {message}")
-            else:
-                console.print(f"**Error:** {message}\n")
-            return True
-
-        if not mapping:
-            if console.is_terminal:
-                console.print("[warning]No schema information found.[/warning]")
-            else:
-                console.print("*No schema information found.*\n")
-            return True
-
-        tm = get_theme_manager()
-
-        if not console.is_terminal:
-            console.print(f"\n**Schema Information ({len(mapping)} tables):**\n")
-            console.print(self._schema_to_markdown(mapping))
-            console.print()
-            return True
-
-        console.print(f"\n[title]Schema Information ({len(mapping)} tables):[/title]")
-
-        for table_name, table_info in mapping.items():
-            table_mapping = self._coerce_mapping(table_info)
-            if table_mapping is None:
-                continue
-            console.print(f"\n[heading]Table: {table_name}[/heading]")
-
-            table_comment = table_mapping.get("comment")
-            if table_comment:
-                console.print(f"[muted]Comment: {table_comment}[/muted]")
-
-            table_columns = self._coerce_mapping(table_mapping.get("columns")) or {}
-            if table_columns:
-                include_column_comments = any(
-                    (col_mapping := self._coerce_mapping(col_info))
-                    and col_mapping.get("comment")
-                    for col_info in table_columns.values()
-                )
-
-                columns = [
-                    {"name": "Column Name", "style": tm.style("column.name")},
-                    {"name": "Type", "style": tm.style("column.type")},
-                    {"name": "Nullable", "style": tm.style("info")},
-                    {"name": "Default", "style": tm.style("muted")},
-                ]
-                if include_column_comments:
-                    columns.append({"name": "Comment", "style": tm.style("muted")})
-
-                col_table = self._create_table(columns, title="Columns", tm=tm)
-
-                for col_name, col_info in table_columns.items():
-                    col_mapping = self._coerce_mapping(col_info)
-                    if col_mapping is None:
-                        continue
-                    nullable = "✓" if bool(col_mapping.get("nullable", False)) else "✗"
-                    default_value = col_mapping.get("default")
-                    default = str(default_value) if default_value else ""
-                    row = [
-                        col_name,
-                        col_mapping.get("type", ""),
-                        nullable,
-                        default,
-                    ]
-                    if include_column_comments:
-                        row.append(col_mapping.get("comment") or "")
-                    col_table.add_row(
-                        *[str(value) if value is not None else "" for value in row]
-                    )
-
-                console.print(col_table)
-
-            primary_keys = table_mapping.get("primary_keys") or []
-            if isinstance(primary_keys, list) and primary_keys:
-                console.print(
-                    f"[key.primary]Primary Keys:[/key.primary] {', '.join(self._stringify_list(primary_keys))}"
-                )
-
-            foreign_keys = table_mapping.get("foreign_keys") or []
-            if isinstance(foreign_keys, list) and foreign_keys:
-                console.print("[key.foreign]Foreign Keys:[/key.foreign]")
-                for fk in foreign_keys:
-                    console.print(f"  • {fk}")
-
-            indexes = table_mapping.get("indexes") or []
-            if isinstance(indexes, list) and indexes:
-                console.print("[key.index]Indexes:[/key.index]")
-                for idx in indexes:
-                    console.print(f"  • {idx}")
-
-        return True
-
-    def render_result_html(self, result: object) -> str | None:
+    def render_result(
+        self,
+        result: object,
+        *,
+        context: object = None,
+    ) -> Sequence[Block] | None:
+        del context
         data = self._parse_result(result)
         mapping = self._coerce_mapping(data)
         if mapping is None:
             return None
+
         if "error" in mapping and mapping["error"]:
-            return (
-                f'<div class="sql-error"><strong>Error:</strong> '
-                f"{self._escape_html(mapping['error'])}</div>"
-            )
+            return (error(str(mapping["error"])),)
+
         if not mapping:
-            return '<p class="result-count">No schema information found.</p>'
+            return (md("*No schema information found.*"),)
 
-        parts: list[str] = []
-        parts.append(
-            f'<p class="result-count">{len(mapping)} table(s) introspected</p>'
-        )
-
+        blocks: list[Block] = [
+            md(f"**Schema Information ({len(mapping)} tables):**"),
+        ]
         for table_name, table_info in mapping.items():
             table_mapping = self._coerce_mapping(table_info)
             if table_mapping is None:
                 continue
-            parts.append('<div class="schema-table">')
-            parts.append(f'<h4 class="table-name">{self._escape_html(table_name)}</h4>')
-
-            if table_mapping.get("comment"):
-                parts.append(
-                    f'<p class="table-comment">'
-                    f"{self._escape_html(table_mapping.get('comment'))}</p>"
+            blocks.append(md(f"**Table: {table_name}**"))
+            table_comment = table_mapping.get("comment")
+            if table_comment:
+                blocks.append(md(f"*Comment: {table_comment}*"))
+            table_columns = self._coerce_mapping(table_mapping.get("columns")) or {}
+            if table_columns:
+                include_comments = any(
+                    (col_mapping := self._coerce_mapping(col_info))
+                    and col_mapping.get("comment")
+                    for col_info in table_columns.values()
                 )
-
-            columns = self._coerce_mapping(table_mapping.get("columns")) or {}
-            if columns:
-                rows = []
-                for col_name, col_info in columns.items():
+                rows: list[dict[str, object]] = []
+                for col_name, col_info in table_columns.items():
                     col_mapping = self._coerce_mapping(col_info)
                     if col_mapping is None:
                         continue
-                    nullable = "✓" if col_mapping.get("nullable") else "✗"
-                    default = self._escape_html(col_mapping.get("default") or "—")
-                    comment = self._escape_html(col_mapping.get("comment") or "")
-                    rows.append(
-                        "<tr>"
-                        f"<td>{self._escape_html(col_name)}</td>"
-                        f"<td>{self._escape_html(col_mapping.get('type', ''))}</td>"
-                        f"<td>{nullable}</td>"
-                        f"<td>{default}</td>"
-                        f"<td>{comment}</td>"
-                        "</tr>"
+                    row: dict[str, object] = {
+                        "Column": col_name,
+                        "Type": col_mapping.get("type", ""),
+                        "Nullable": col_mapping.get("nullable"),
+                        "Default": col_mapping.get("default"),
+                    }
+                    if include_comments:
+                        row["Comments"] = col_mapping.get("comment", "")
+                    rows.append(row)
+                blocks.append(table(rows, max_rows=200, max_columns=8))
+            primary_keys = table_mapping.get("primary_keys") or []
+            if isinstance(primary_keys, list) and primary_keys:
+                blocks.append(
+                    md(
+                        f"**Primary Keys:** {', '.join(self._stringify_list(primary_keys))}"
                     )
-                parts.append(
-                    '<div class="table-wrapper">'
-                    '<table class="sql-results schema-columns">'
-                    "<thead><tr><th>Column</th><th>Type</th><th>Nullable</th>"
-                    "<th>Default</th><th>Comment</th></tr></thead><tbody>"
                 )
-                parts.append("".join(rows))
-                parts.append("</tbody></table></div>")
-
-            pks = table_mapping.get("primary_keys") or []
-            if isinstance(pks, list) and pks:
-                parts.append(
-                    f'<p class="key-info"><strong>Primary Keys:</strong> '
-                    f"{self._escape_html(', '.join(self._stringify_list(pks)))}"
-                    "</p>"
+            foreign_keys = table_mapping.get("foreign_keys") or []
+            if isinstance(foreign_keys, list) and foreign_keys:
+                blocks.append(
+                    md(
+                        f"**Foreign Keys:** {', '.join(self._stringify_list(foreign_keys))}"
+                    )
                 )
-
-            fks = table_mapping.get("foreign_keys") or []
-            if isinstance(fks, list) and fks:
-                fk_list = "".join(f"<li>{self._escape_html(fk)}</li>" for fk in fks)
-                parts.append(
-                    f'<p class="key-info"><strong>Foreign Keys:</strong></p>'
-                    f'<ul class="key-list">{fk_list}</ul>'
+            indexes = table_mapping.get("indexes") or []
+            if isinstance(indexes, list) and indexes:
+                blocks.append(
+                    md(f"**Indexes:** {', '.join(self._stringify_list(indexes))}")
                 )
-
-            parts.append("</div>")
-
-        return "".join(parts)
+        return tuple(blocks)
 
     def _parse_result(self, result: object) -> object:
         if isinstance(result, dict):
@@ -369,60 +254,6 @@ class IntrospectSchemaTool(SQLTool):
             except json.JSONDecodeError:
                 return {"error": result}
         return {"error": str(result)}
-
-    def _schema_to_markdown(self, data: dict[str, object]) -> str:
-        parts = []
-        for table_name, table_info in data.items():
-            table_mapping = self._coerce_mapping(table_info)
-            if table_mapping is None:
-                continue
-            columns = self._coerce_mapping(table_mapping.get("columns")) or {}
-            table_data = []
-            for col_name, col_info in columns.items():
-                col_mapping = self._coerce_mapping(col_info)
-                if col_mapping is None:
-                    continue
-                table_data.append(
-                    [
-                        col_name,
-                        col_mapping.get("type"),
-                        col_mapping.get("nullable"),
-                        col_mapping.get("default"),
-                        col_mapping.get("comment", ""),
-                    ]
-                )
-            md = f"**Table: {table_name}**\n\n"
-            md += tabulate(
-                table_data,
-                headers=["Column", "Type", "Nullable", "Default", "Comments"],
-                tablefmt="github",
-            )
-            primary_keys = table_mapping.get("primary_keys")
-            if isinstance(primary_keys, list) and primary_keys:
-                md += f"\n\n**Primary Keys:** {', '.join(self._stringify_list(primary_keys))}"
-            foreign_keys = table_mapping.get("foreign_keys")
-            if isinstance(foreign_keys, list) and foreign_keys:
-                md += f"\n\n**Foreign Keys:** {', '.join(self._stringify_list(foreign_keys))}"
-            parts.append(md)
-        return "\n\n".join(parts)
-
-    def _create_table(
-        self,
-        columns: list[dict[str, str]],
-        title: str | None,
-        tm,
-    ) -> Table:
-        table = Table(
-            show_header=True, header_style=tm.style("table.header"), title=title
-        )
-        for col in columns:
-            table.add_column(col["name"], style=col.get("style"))
-        return table
-
-    def _escape_html(self, value: object) -> str:
-        if value is None:
-            return ""
-        return escape(str(value))
 
     def _coerce_mapping(self, data: object) -> dict[str, object] | None:
         if not isinstance(data, dict):
@@ -511,103 +342,45 @@ class ExecuteSQLTool(SQLTool):
         metadata=DisplayMetadata(display_name="Execute SQL"),
     )
 
-    def render_executing(self, console: Console, args: dict) -> bool:
+    def render_executing(self, args: dict) -> Sequence[Block] | None:
         query = args.get("query") or args.get("sql") or ""
         if not isinstance(query, str) or not query.strip():
-            return False
+            return None
+        return (md("**Executing SQL:**"), code(query, "sql"))
 
-        if console.is_terminal:
-            console.print("[muted bold]:gear: Executing SQL:[/muted bold]")
-            console.print()
-            console.print(
-                Syntax(
-                    query,
-                    "sql",
-                    theme=get_theme_manager().pygments_style_name,
-                    background_color="default",
-                    word_wrap=True,
-                )
-            )
-        else:
-            console.print("**Executing SQL:**\n")
-            console.print(f"```sql\n{query}\n```\n")
-        return True
-
-    def render_result(self, console: Console, result: object) -> bool:
-        data = self._parse_result(result)
-        mapping = self._coerce_mapping(data)
-        if mapping is None:
-            return False
-
-        if "error" in mapping and mapping["error"]:
-            message = str(mapping["error"])
-            if console.is_terminal:
-                console.print(f"[error]SQL error:[/error] {message}")
-            else:
-                console.print(f"**SQL error:** {message}\n")
-            return True
-
-        results = mapping.get("results")
-        if isinstance(results, list) and results:
-            self._render_results_table(
-                console, self._coerce_rows(cast(list[object], results))
-            )
-            return True
-
-        if isinstance(results, list) and not results:
-            if console.is_terminal:
-                console.print("[warning]0 rows returned[/warning]")
-            else:
-                console.print("*0 rows returned*\n")
-            return True
-
-        if mapping.get("success"):
-            if console.is_terminal:
-                console.print("[success]✓ Query completed successfully[/success]")
-            else:
-                console.print("✓ Query completed successfully\n")
-            return True
-
-        return False
-
-    def render_result_markdown(self, result: object) -> str | None:
-        """Render a SQL result for saber-tui's native Markdown component."""
+    def render_result(
+        self,
+        result: object,
+        *,
+        context: object = None,
+    ) -> Sequence[Block] | None:
+        del context
         data = self._parse_result(result)
         mapping = self._coerce_mapping(data)
         if mapping is None:
             return None
 
         if "error" in mapping and mapping["error"]:
-            return f"**SQL error:** {self._markdown_literal(mapping['error'])}"
+            return (error(str(mapping["error"]), label="SQL error"),)
 
         results = mapping.get("results")
         if isinstance(results, list) and results:
-            return self._render_results_table_markdown(
-                self._coerce_rows(cast(list[object], results))
-            )
-        if isinstance(results, list):
-            return "*0 rows returned*"
-        if mapping.get("success"):
-            return "✓ Query completed successfully"
-        return None
-
-    def render_result_html(self, result: object) -> str | None:
-        data = self._parse_result(result)
-        mapping = self._coerce_mapping(data)
-        if mapping is None:
-            return None
-        if "error" in mapping and mapping["error"]:
+            rows = self._coerce_rows(cast(list[object], results))
+            keys = list(dict.fromkeys(key for row in rows for key in row))
+            if not keys:
+                return (md(f"*{len(rows)} rows returned with no columns.*"),)
             return (
-                f'<div class="sql-error"><strong>Error:</strong> '
-                f"{self._escape_html(mapping['error'])}</div>"
+                table(
+                    rows,
+                    caption=f"Results ({len(rows)} rows):",
+                    max_columns=15,
+                    max_rows=20,
+                ),
             )
-        results = mapping.get("results")
         if isinstance(results, list):
-            return self._render_results_table_html(
-                self._coerce_rows(cast(list[object], results))
-            )
+            return (md("*0 rows returned*"),)
         if mapping.get("success"):
-            return '<p class="result-count">Query completed successfully</p>'
+            return (md("✓ Query completed successfully"),)
         return None
 
     def _parse_result(self, result: object) -> object:
@@ -619,101 +392,6 @@ class ExecuteSQLTool(SQLTool):
             except json.JSONDecodeError:
                 return {"error": result}
         return {"error": str(result)}
-
-    def _render_results_table(self, console: Console, results: list[dict]) -> None:
-        if not results:
-            return
-
-        if not console.is_terminal:
-            console.print(f"\n**Results ({len(results)} rows):**\n")
-            console.print(tabulate(results, headers="keys", tablefmt="github"))
-            console.print()
-            return
-
-        tm = get_theme_manager()
-        console.print(f"\n[section]Results ({len(results)} rows):[/section]")
-        all_columns = list(results[0].keys())
-        display_columns = all_columns[:15]
-        if len(all_columns) > 15:
-            console.print(
-                f"[warning]Note: Showing first 15 of {len(all_columns)} columns[/warning]"
-            )
-        table = Table(show_header=True, header_style=tm.style("table.header"))
-        for col in display_columns:
-            table.add_column(col)
-        for row in results[:20]:
-            table.add_row(*[str(row.get(key, "")) for key in display_columns])
-        console.print(table)
-        if len(results) > 20:
-            console.print(f"[warning]... and {len(results) - 20} more rows[/warning]")
-
-    def _render_results_table_markdown(self, results: list[dict]) -> str:
-        all_columns = list(dict.fromkeys(key for row in results for key in row))
-        if not all_columns:
-            return f"*{len(results)} rows returned with no columns.*"
-        columns = all_columns[:15]
-
-        def cell(value: object) -> str:
-            normalized = sanitize_terminal_text(value if value is not None else "")
-            normalized = normalized.replace("\n", " ").replace("\t", " ")
-            return self._markdown_literal(normalized)
-
-        lines = [f"**Results ({len(results)} rows):**", ""]
-        if len(all_columns) > 15:
-            lines.extend([f"*Showing first 15 of {len(all_columns)} columns.*", ""])
-        lines.extend(
-            [
-                "| " + " | ".join(cell(column) for column in columns) + " |",
-                "| " + " | ".join("---" for _ in columns) + " |",
-            ]
-        )
-        lines.extend(
-            "| " + " | ".join(cell(row.get(column, "")) for column in columns) + " |"
-            for row in results[:20]
-        )
-        if len(results) > 20:
-            lines.extend(["", f"*... and {len(results) - 20} more rows.*"])
-        return "\n".join(lines)
-
-    @staticmethod
-    def _markdown_literal(value: object) -> str:
-        text = sanitize_terminal_text(value)
-        return "".join(
-            "`\\`"
-            if char == "\\"
-            else f"\\{char}"
-            if char in string.punctuation
-            else char
-            for char in text
-        )
-
-    def _render_results_table_html(self, results: list[dict]) -> str:
-        if not results:
-            return '<p class="result-count">0 rows returned</p>'
-        first = results[0]
-        headers = list(first.keys()) if isinstance(first, dict) else []
-        row_html = []
-        for row in results[:100]:
-            cells = "".join(
-                f"<td>{self._escape_html(row.get(h, ''))}</td>" for h in headers
-            )
-            row_html.append(f"<tr>{cells}</tr>")
-        header_html = "".join(f"<th>{self._escape_html(h)}</th>" for h in headers)
-        count_note = f'<p class="result-count">{len(results)} row(s) returned</p>'
-        if len(results) > 100:
-            count_note = (
-                f'<p class="result-count">Showing 100 of {len(results)} rows</p>'
-            )
-        return (
-            f'{count_note}<div class="table-wrapper">'
-            f'<table class="sql-results"><thead><tr>{header_html}</tr></thead>'
-            f"<tbody>{''.join(row_html)}</tbody></table></div>"
-        )
-
-    def _escape_html(self, value: object) -> str:
-        if value is None:
-            return ""
-        return escape(str(value))
 
     def _coerce_mapping(self, data: object) -> dict[str, object] | None:
         if not isinstance(data, dict):

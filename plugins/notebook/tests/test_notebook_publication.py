@@ -323,19 +323,23 @@ async def test_fresh_notebook_renderer_uses_resolved_publication(tmp_path) -> No
         context=ArtifactContext(),
     )
     renderer = AnalyzeDataTool(object())
-    console = Console(record=True, force_terminal=False, width=80)
+    from io import StringIO
+
+    from sqlsaber.theme.manager import create_console
+
+    buffer = StringIO()
+    console = create_console(file=buffer, width=80, legacy_windows=False)
     display_manager = DisplayManager(console, {"analyze_data": renderer})
     display_manager.set_resolved_artifact_publications({publication.id: resolved})
 
-    handled = renderer.render_result_event(
-        console,
+    display_manager.show_tool_result(
+        "analyze_data",
         "Persisted answer.",
         tool_call_id="tool-1",
         metadata=publication.to_metadata(),
     )
 
-    assert handled is True
-    rendered = console.export_text()
+    rendered = buffer.getvalue()
     assert "replayed notebook" in rendered
     assert "Persisted answer" in rendered
 
@@ -361,7 +365,12 @@ async def test_invalid_persisted_notebook_falls_back_to_generic_artifacts(
         context=ArtifactContext(),
     )
     renderer = AnalyzeDataTool(object())
-    console = Console(record=True, force_terminal=False, width=80)
+    from io import StringIO
+
+    from sqlsaber.theme.manager import create_console
+
+    buffer = StringIO()
+    console = create_console(file=buffer, width=80, legacy_windows=False)
     display = DisplayManager(console, {"analyze_data": renderer})
     display.set_resolved_artifact_publications({publication.id: resolved})
 
@@ -372,7 +381,7 @@ async def test_invalid_persisted_notebook_falls_back_to_generic_artifacts(
         metadata=publication.to_metadata(),
     )
 
-    rendered = console.export_text()
+    rendered = buffer.getvalue()
     assert "Answer survives" in rendered
     assert "could not be reconstructed" in rendered
     assert "analysis.ipynb" in rendered

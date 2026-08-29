@@ -38,10 +38,8 @@ def html_of(blocks: Sequence[Block]) -> str:
 
 def _block_html(block: Block) -> str:
     if isinstance(block, Note) and block.role == "error":
-        label = escape(block.label or "Error")
         return (
-            f'<div class="sql-error"><strong>{label}:</strong> '
-            f"{escape(block.text)}</div>"
+            f'<div class="sql-error"><strong>Error:</strong> {escape(block.text)}</div>'
         )
     if isinstance(block, Note):
         body = escape(block.text)

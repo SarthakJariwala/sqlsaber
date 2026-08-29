@@ -96,7 +96,19 @@ class Surface(Protocol):
         """Append finished blocks. Spacing between blocks belongs to the surface."""
         ...
 
-    def stream(self, *, role: Role | None = None) -> TextStream: ...
+    def stream(
+        self,
+        *,
+        role: Role | None = None,
+        replace: TextStream | None = None,
+        before: TextStream | None = None,
+    ) -> TextStream:
+        """Open a growing markdown region.
+
+        ``replace`` swaps an existing stream in place. ``before`` inserts
+        ahead of another open stream so out-of-order SQL previews keep order.
+        """
+        ...
 
     def status(
         self, text: str | None, *, on_cancel: Callable[[], None] | None = None

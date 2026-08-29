@@ -1,211 +1,50 @@
-"""Streaming query handling for the CLI (pydantic-ai based).
+"""One-shot streaming adapter. Constructs a Surface from the legacy Console."""
 
-This module uses DisplayManager's LiveMarkdownRenderer to stream Markdown
-incrementally as the agent outputs tokens. Tool calls and results are
-rendered via DisplayManager helpers.
-"""
+from __future__ import annotations
 
-import asyncio
-from collections.abc import Awaitable, Callable, Mapping
-from functools import singledispatchmethod
-from typing import Any, AsyncIterable
+import sys
+from collections.abc import Mapping
+from typing import Any
 
-from pydantic_ai import RunContext
-from pydantic_ai.messages import (
-    AgentStreamEvent,
-    FunctionToolCallEvent,
-    FunctionToolResultEvent,
-    PartDeltaEvent,
-    PartEndEvent,
-    PartStartEvent,
-    TextPart,
-    TextPartDelta,
-    ThinkingPart,
-    ThinkingPartDelta,
-    ToolCallPart,
-    ToolCallPartDelta,
-)
-from rich.console import Console
-
-from sqlsaber.cli.display import DisplayManager
-from sqlsaber.config.logging import get_logger
-from sqlsaber.query_result_resolution import (
-    QueryResultReference,
-    query_result_context_from_run,
-    query_result_from_metadata,
-    resolve_query_result,
-)
-from sqlsaber.query_results import QueryResultStore, QueryResultUnavailable
+from sqlsaber.cli.stream_presenter import AgentStreamPresenter
+from sqlsaber.query_results import QueryResultStore
+from sqlsaber.render.surface import Surface
 from sqlsaber.tools.base import Tool
 
 
-class StreamingQueryHandler:
-    """
-    Handles streaming query execution and display using pydantic-ai events.
+def surface_from_console(console: Any) -> Surface:
+    """TTY vs pipe surface from a Rich Console (transitional).
 
-    Uses DisplayManager.live to render Markdown incrementally as text streams in.
+    Args:
+        console: Legacy Rich console. ``file`` and ``is_terminal`` are read.
+
+    Returns:
+        ``TerminalSurface`` or ``PlainSurface``.
     """
+    stream = getattr(console, "file", None) or sys.stdout
+    is_tty = bool(getattr(console, "is_terminal", False))
+    if is_tty:
+        from sqlsaber.render.terminal import TerminalSurface
+        from sqlsaber.theme.styles import get_styles
+
+        return TerminalSurface(stream, get_styles())
+    from sqlsaber.render.terminal import PlainSurface
+
+    return PlainSurface(stream)
+
+
+class StreamingQueryHandler(AgentStreamPresenter):
+    """One-shot CLI streaming. Prefer ``AgentStreamPresenter`` at new call sites."""
 
     def __init__(
         self,
-        console: Console,
+        console: Any,
         display_registry: Mapping[str, Tool] | None = None,
         query_result_store: QueryResultStore | None = None,
-    ):
-        self.console = console
-        self.display = DisplayManager(console, display_registry)
-        self.log = get_logger(__name__)
-        self.query_result_store = query_result_store
-        self._tool_call_names: dict[int, str] = {}
-
-    async def _event_stream_handler(
-        self, ctx: RunContext, event_stream: AsyncIterable[AgentStreamEvent]
     ) -> None:
-        """
-        Handle pydantic-ai streaming events and update Live Markdown via DisplayManager.
-        """
-
-        async for event in event_stream:
-            messages = getattr(ctx, "messages", None)
-            if isinstance(messages, list):
-                self.display.set_replay_messages(messages)
-            await self.on_event(event, ctx)
-
-    # --- Event routing via singledispatchmethod ---------------------------------------
-    @singledispatchmethod
-    async def on_event(
-        self, event: AgentStreamEvent, ctx: RunContext
-    ) -> None:  # default
-        return
-
-    @on_event.register
-    async def _(self, event: PartStartEvent, ctx: RunContext) -> None:
-        if isinstance(event.part, TextPart):
-            self.display.live.ensure_segment(TextPart)
-            self.display.live.append(event.part.content)
-        elif isinstance(event.part, ThinkingPart):
-            self.display.live.ensure_segment(ThinkingPart)
-            self.display.live.append(event.part.content)
-        elif isinstance(event.part, ToolCallPart):
-            self._tool_call_names[event.index] = event.part.tool_name
-            self._maybe_start_sql_generation_status(event.part.tool_name)
-
-    @on_event.register
-    async def _(self, event: PartDeltaEvent, ctx: RunContext) -> None:
-        d = event.delta
-        if isinstance(d, TextPartDelta):
-            delta = d.content_delta or ""
-            if delta:
-                self.display.live.ensure_segment(TextPart)
-                self.display.live.append(delta)
-        elif isinstance(d, ThinkingPartDelta):
-            delta = d.content_delta or ""
-            if delta:
-                self.display.live.ensure_segment(ThinkingPart)
-                self.display.live.append(delta)
-        elif isinstance(d, ToolCallPartDelta):
-            if d.tool_name_delta:
-                current_name = self._tool_call_names.get(event.index, "")
-                updated_name = f"{current_name}{d.tool_name_delta}"
-                self._tool_call_names[event.index] = updated_name
-                self._maybe_start_sql_generation_status(updated_name)
-
-    @on_event.register
-    async def _(self, event: PartEndEvent, ctx: RunContext) -> None:
-        self._tool_call_names.pop(event.index, None)
-
-    @on_event.register
-    async def _(self, event: FunctionToolCallEvent, ctx: RunContext) -> None:
-        # Clear any status/markdown Live so tool output sits between
-        self.display.live.end_status()
-        self.display.live.end_if_active()
-        args = event.part.args_as_dict()
-
-        # Special handling: display SQL via Live as markdown code block
-        if event.part.tool_name == "execute_sql":
-            query = args.get("query") or ""
-            if isinstance(query, str) and query.strip():
-                self.display.live.start_sql_block(query)
-        else:
-            self.display.show_tool_executing(event.part.tool_name, args)
-            if event.part.tool_name == "viz":
-                self.display.live.start_status("Generating visualization...")
-
-    def _maybe_start_sql_generation_status(self, tool_name: str) -> None:
-        if tool_name == "execute_sql":
-            self.display.live.start_status("Generating SQL...")
-
-    @on_event.register
-    async def _(self, event: FunctionToolResultEvent, ctx: RunContext) -> None:
-        self.display.live.end_status()
-        # Route tool result to appropriate display
-        tool_name = event.part.tool_name
-        content = event.part.content
-        if tool_name is None:
-            return
-        complete_unavailable = False
-        if tool_name == "execute_sql" and self.query_result_store is not None:
-            descriptor = query_result_from_metadata(
-                getattr(event.part, "metadata", None)
-            )
-            if descriptor is not None:
-                reference = QueryResultReference(
-                    tool_call_id=event.part.tool_call_id,
-                    file=descriptor.file,
-                    descriptor=descriptor,
-                )
-                try:
-                    resolved = await resolve_query_result(
-                        reference,
-                        store=self.query_result_store,
-                        context=query_result_context_from_run(ctx),
-                    )
-                    content = resolved.data.decode("utf-8")
-                except (QueryResultUnavailable, UnicodeDecodeError):
-                    complete_unavailable = True
-        self.display.show_tool_result(
-            tool_name,
-            content,
-            tool_call_id=event.part.tool_call_id,
-            metadata=getattr(event.part, "metadata", None),
+        super().__init__(
+            surface_from_console(console),
+            display_registry=display_registry,
+            query_result_store=query_result_store,
         )
-        if complete_unavailable:
-            self.console.print(
-                "[warning]Complete query result unavailable; showing preview.[/warning]"
-            )
-        # Add a blank line after tool output to separate from next segment
-        self.display.show_newline()
-        # Show status while agent sends a follow-up request to the model
-        self.display.live.start_status("Crunching data...")
-
-    async def execute_streaming_query(
-        self,
-        user_query: str,
-        run_query: Callable[..., Awaitable[Any]],
-        cancellation_token: asyncio.Event | None = None,
-        message_history: list | None = None,
-    ):
-        self._tool_call_names.clear()
-        self.display.live.prepare_code_blocks()
-        try:
-            self.log.info("streaming.execute.start")
-            self.display.live.start_status("Crunching data...")
-
-            run = await run_query(
-                user_query,
-                message_history=message_history,
-                event_stream_handler=self._event_stream_handler,
-            )
-            self.log.info("streaming.execute.end")
-            return run
-        except asyncio.CancelledError:
-            self.display.show_newline()
-            self.console.print("[warning]Query interrupted[/warning]")
-            self.log.info("streaming.execute.cancelled")
-            return None
-        finally:
-            try:
-                self.display.live.end_status()
-            finally:
-                self.display.live.end_if_active()
-                self._tool_call_names.clear()
+        self.console = console

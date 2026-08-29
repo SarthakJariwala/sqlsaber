@@ -12,20 +12,19 @@ from pydantic_ai.messages import (
     ToolCallPartDelta,
 )
 
-from sqlsaber.cli.streaming import StreamingQueryHandler
-from sqlsaber.theme.manager import create_console
+from sqlsaber.cli.stream_presenter import AgentStreamPresenter
+from sqlsaber.render.terminal import PlainSurface
 
 
 @pytest.mark.asyncio
 async def test_event_stream_updates_replay_messages(monkeypatch: pytest.MonkeyPatch):
-    console = create_console(file=StringIO(), width=120, legacy_windows=False)
-    handler = StreamingQueryHandler(console)
+    handler = AgentStreamPresenter(PlainSurface(StringIO()))
 
     on_event = AsyncMock()
     monkeypatch.setattr(handler, "on_event", on_event)
 
-    set_replay_messages = Mock(wraps=handler.display.set_replay_messages)
-    monkeypatch.setattr(handler.display, "set_replay_messages", set_replay_messages)
+    set_replay_messages = Mock(wraps=handler.set_replay_messages)
+    monkeypatch.setattr(handler, "set_replay_messages", set_replay_messages)
 
     messages = [SimpleNamespace(parts=[])]
     ctx = SimpleNamespace(messages=messages)
@@ -45,11 +44,9 @@ async def test_event_stream_updates_replay_messages(monkeypatch: pytest.MonkeyPa
 async def test_execute_sql_part_start_shows_generating_status(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    console = create_console(file=StringIO(), width=120, legacy_windows=False)
-    handler = StreamingQueryHandler(console)
-
+    handler = AgentStreamPresenter(PlainSurface(StringIO()))
     start_status = Mock()
-    monkeypatch.setattr(handler.display.live, "start_status", start_status)
+    monkeypatch.setattr(handler.surface, "status", start_status)
 
     await handler.on_event(
         PartStartEvent(
@@ -63,18 +60,16 @@ async def test_execute_sql_part_start_shows_generating_status(
         SimpleNamespace(messages=[]),
     )
 
-    start_status.assert_called_once_with("Generating SQL...")
+    start_status.assert_called_with("Generating SQL...")
 
 
 @pytest.mark.asyncio
 async def test_execute_sql_delta_name_shows_generating_status(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    console = create_console(file=StringIO(), width=120, legacy_windows=False)
-    handler = StreamingQueryHandler(console)
-
+    handler = AgentStreamPresenter(PlainSurface(StringIO()))
     start_status = Mock()
-    monkeypatch.setattr(handler.display.live, "start_status", start_status)
+    monkeypatch.setattr(handler.surface, "status", start_status)
 
     await handler.on_event(
         PartStartEvent(
@@ -92,4 +87,4 @@ async def test_execute_sql_delta_name_shows_generating_status(
         SimpleNamespace(messages=[]),
     )
 
-    start_status.assert_called_once_with("Generating SQL...")
+    start_status.assert_called_with("Generating SQL...")

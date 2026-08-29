@@ -124,9 +124,11 @@ class TestDisplayManagerResolution:
             async def execute(self, **kwargs) -> str:
                 return "{}"
 
-            def render_result(self, console, result: object) -> bool:
-                console.print("override handled")
-                return True
+            def render_result(self, result: object, *, context=None):
+                del context
+                from sqlsaber.render.blocks import md
+
+                return (md("override handled"),)
 
         tool = OverrideTool()
         console, buffer = self._make_console()

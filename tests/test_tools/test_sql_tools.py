@@ -9,6 +9,7 @@ from saber_tui.utils import strip_ansi
 
 from sqlsaber.database import SQLiteConnection
 from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
+from sqlsaber.render.markdown_text import md_of
 from sqlsaber.tools.sql_tools import (
     ExecuteSQLTool,
     IntrospectSchemaTool,
@@ -170,15 +171,17 @@ class TestExecuteSQLTool:
     def test_result_markdown_preserves_literal_values_and_all_columns(self):
         tool = ExecuteSQLTool()
 
-        source = tool.render_result_markdown(
-            {
-                "results": [
-                    {},
-                    {
-                        "later|column": "a\\|b\r\n**literal**\x1b[2J",
-                    },
-                ]
-            }
+        source = md_of(
+            tool.render_result(
+                {
+                    "results": [
+                        {},
+                        {
+                            "later|column": "a\\|b\r\n**literal**\x1b[2J",
+                        },
+                    ]
+                }
+            )
         )
 
         assert source is not None
@@ -190,7 +193,7 @@ class TestExecuteSQLTool:
     def test_result_markdown_handles_rows_without_columns(self):
         tool = ExecuteSQLTool()
 
-        assert tool.render_result_markdown({"results": [{}, {}]}) == (
+        assert md_of(tool.render_result({"results": [{}, {}]})) == (
             "*2 rows returned with no columns.*"
         )
 

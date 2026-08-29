@@ -1,14 +1,13 @@
 """VizTool integration tests."""
 
 import json
-from io import StringIO
 from types import SimpleNamespace
 
 import pytest
-from rich.console import Console
 
 import sqlsaber_viz.tools as tools
 from sqlsaber.overrides import ModelOverides
+from sqlsaber.render.blocks import Ansi
 from sqlsaber_viz.spec import VizSpec
 from sqlsaber_viz.tools import VizTool
 
@@ -107,12 +106,11 @@ def test_viz_tool_render_result(monkeypatch: pytest.MonkeyPatch) -> None:
         plotext_renderer.PlotextRenderer, "render", lambda self, spec, rows: "chart"
     )
 
-    buffer = StringIO()
-    console = Console(file=buffer, force_terminal=False, width=80)
-    rendered = tool.render_result(console, spec)
+    rendered = tool.render_result(spec)
 
-    assert rendered is True
-    assert buffer.getvalue().strip()
+    assert rendered is not None
+    assert isinstance(rendered[0], Ansi)
+    assert rendered[0].text == "chart"
 
 
 @pytest.mark.asyncio

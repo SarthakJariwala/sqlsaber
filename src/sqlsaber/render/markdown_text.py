@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
-import string
 from collections.abc import Sequence
+
+from sqlsaber.utils.text_input import sanitize_terminal_text
 
 from .blocks import (
     Ansi,
@@ -56,10 +57,10 @@ def escape_cell(value: Cell) -> str:
     Returns:
         A single-line markdown-safe string.
     """
-    text = stringify_cell(value)
+    text = sanitize_terminal_text(stringify_cell(value))
     text = text.replace("\n", " ").replace("\t", " ").replace("\r", " ")
     return "".join(
-        "`\\`" if char == "\\" else f"\\{char}" if char in string.punctuation else char
+        "`\\`" if char == "\\" else f"\\{char}" if char in r"\`*_|[]<>" else char
         for char in text
     )
 
