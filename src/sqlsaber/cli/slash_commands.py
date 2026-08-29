@@ -1,16 +1,15 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from rich.console import Console
-
 from sqlsaber.config.settings import ThinkingLevel
+from sqlsaber.render import blocks as b
+from sqlsaber.render.surface import Surface
 
 if TYPE_CHECKING:
     from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
     from sqlsaber.cli.usage import SessionUsage
     from sqlsaber.threads.manager import ThreadManager
 
-# Valid thinking level strings for slash command
 THINKING_LEVELS = {"minimal", "low", "medium", "high", "maximum"}
 
 
@@ -18,7 +17,7 @@ THINKING_LEVELS = {"minimal", "low", "medium", "high", "maximum"}
 class CommandContext:
     """Context passed to slash command handlers."""
 
-    console: Console
+    surface: Surface
     agent: "SQLSaberAgent"
     thread_manager: "ThreadManager"
     on_clear_history: Callable[[], None]
@@ -46,7 +45,6 @@ class SlashCommandProcessor:
         """
         query = user_query.strip().lower()
 
-        # Handle exit commands
         if query in self.EXIT_COMMANDS or any(
             query.startswith(cmd) for cmd in self.EXIT_COMMANDS
         ):
@@ -55,11 +53,9 @@ class SlashCommandProcessor:
         if query == "/clear":
             return await self._handle_clear(context)
 
-        # Handle /thinking command with various arguments
         if query.startswith("/thinking"):
             return await self._handle_thinking_command(context, query)
 
-        # Handle /handoff command
         if query.startswith("/handoff"):
             return await self._handle_handoff(context, user_query)
 
@@ -70,8 +66,8 @@ class SlashCommandProcessor:
         ended_thread_id = await context.thread_manager.end_current_thread()
         if ended_thread_id:
             hint = f"saber threads resume {ended_thread_id}"
-            context.console.print(
-                f"[muted]You can continue this thread using:[/muted] {hint}"
+            context.surface.emit(
+                b.md(f"You can continue this thread using: `{hint}`", role="muted")
             )
         return CommandResult(handled=True, should_exit=True)
 
@@ -79,7 +75,7 @@ class SlashCommandProcessor:
         """Handle /clear command."""
         context.on_clear_history()
         await context.thread_manager.clear_current_thread()
-        context.console.print("[success]Conversation history cleared.[/success]\n")
+        context.surface.emit(b.success("Conversation history cleared."))
         return CommandResult(handled=True)
 
     async def _handle_thinking_command(
@@ -96,38 +92,33 @@ class SlashCommandProcessor:
         parts = query.split(maxsplit=1)
         arg = parts[1].strip() if len(parts) > 1 else ""
 
-        # No argument: show current status
         if not arg:
             return await self._show_thinking_status(context)
 
-        # Handle "on" - enable with current level
         if arg == "on":
             context.agent.set_thinking(enabled=True)
             level = context.agent.thinking_level
-            context.console.print(
-                f"[success]✓ Thinking: enabled ({level.value})[/success]\n"
+            context.surface.emit(
+                b.success(f"Thinking: enabled ({level.value})")
             )
             return CommandResult(handled=True)
 
-        # Handle "off" - disable thinking
         if arg == "off":
             context.agent.set_thinking(enabled=False)
-            context.console.print("[success]✓ Thinking: disabled[/success]\n")
+            context.surface.emit(b.success("Thinking: disabled"))
             return CommandResult(handled=True)
 
-        # Handle thinking levels
         if arg in THINKING_LEVELS:
             level = ThinkingLevel(arg)
             context.agent.set_thinking(enabled=True, level=level)
-            context.console.print(
-                f"[success]✓ Thinking: enabled ({level.value})[/success]\n"
+            context.surface.emit(
+                b.success(f"Thinking: enabled ({level.value})")
             )
             return CommandResult(handled=True)
 
-        # Invalid argument
         valid_args = ", ".join(sorted(THINKING_LEVELS | {"on", "off"}))
-        context.console.print(
-            f"[warning]Invalid argument. Use: /thinking [{valid_args}][/warning]\n"
+        context.surface.emit(
+            b.warn(f"Invalid argument. Use: /thinking [{valid_args}]")
         )
         return CommandResult(handled=True)
 
@@ -137,9 +128,9 @@ class SlashCommandProcessor:
         level = context.agent.thinking_level
 
         if enabled:
-            context.console.print(f"[info]Thinking: enabled ({level.value})[/info]\n")
+            context.surface.emit(b.md(f"Thinking: enabled ({level.value})", role="info"))
         else:
-            context.console.print("[info]Thinking: disabled[/info]\n")
+            context.surface.emit(b.md("Thinking: disabled", role="info"))
 
         return CommandResult(handled=True)
 
@@ -155,9 +146,9 @@ class SlashCommandProcessor:
         goal = parts[1].strip() if len(parts) > 1 else ""
 
         if not goal:
-            context.console.print(
-                "[warning]Usage: /handoff <goal>[/warning]\n"
-                "[muted]Example: /handoff now optimize this query for performance[/muted]\n"
+            context.surface.emit(
+                b.warn("Usage: /handoff <goal>"),
+                b.md("Example: `/handoff now optimize this query for performance`", role="muted"),
             )
             return CommandResult(handled=True)
 

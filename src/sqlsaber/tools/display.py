@@ -5,10 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from rich.console import Console
-
-from sqlsaber.theme.manager import ThemeManager, get_theme_manager
-
 ResultFormat = Literal["auto", "json", "panel", "code", "table", "key_value"]
 ShowArgs = Literal["all", "none"]
 
@@ -82,36 +78,27 @@ class ToolDisplaySpec:
 class SpecRenderer:
     """Render tool display specs. Delegates to spec_blocks plus md_of/html_of."""
 
-    def __init__(self, theme_manager: ThemeManager | None = None):
-        self.tm = theme_manager or get_theme_manager()
-
     def render_executing(
         self,
-        console: Console,
         tool_name: str,
         tool_args: dict[str, Any],
         spec: ToolDisplaySpec,
-    ) -> None:
+    ) -> str:
         from sqlsaber.render.markdown_text import md_of
         from sqlsaber.tools.spec_blocks import blocks_from_spec_executing
 
-        text = md_of(blocks_from_spec_executing(tool_name, tool_args, spec))
-        if text:
-            console.print(text, markup=False)
+        return md_of(blocks_from_spec_executing(tool_name, tool_args, spec))
 
     def render_result(
         self,
-        console: Console,
         tool_name: str,
         result: object,
         spec: ToolDisplaySpec,
-    ) -> None:
+    ) -> str:
         from sqlsaber.render.markdown_text import md_of
         from sqlsaber.tools.spec_blocks import blocks_from_spec_result
 
-        text = md_of(blocks_from_spec_result(tool_name, result, spec))
-        if text:
-            console.print(text, markup=False)
+        return md_of(blocks_from_spec_result(tool_name, result, spec))
 
     def render_result_html(
         self,

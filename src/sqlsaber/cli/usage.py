@@ -156,3 +156,36 @@ def format_tokens(count: int) -> str:
     elif count >= 1_000:
         return f"{count / 1_000:.1f}k"
     return str(count)
+
+
+def session_summary_blocks(session_usage: SessionUsage):
+    """Blocks for the TTY session summary. Empty when there were no requests.
+
+    Args:
+        session_usage: Accumulated usage for the session.
+
+    Returns:
+        Summary blocks, or an empty tuple.
+    """
+    from sqlsaber.render import blocks as b
+
+    if session_usage.requests == 0:
+        return ()
+    return (
+        b.md("**Session Summary**", role="muted"),
+        b.md(
+            f"Usage: {format_tokens(session_usage.total_input_tokens)} in / "
+            f"{format_tokens(session_usage.total_output_tokens)} out │ "
+            f"Cost: {format_cost_usd(session_usage.total_cost_usd)}",
+            role="muted",
+        ),
+        b.md(
+            f"Current context: {session_usage.current_context_tokens:,} tokens",
+            role="muted",
+        ),
+        b.md(
+            f"Requests: {session_usage.requests} │ "
+            f"Tool calls: {session_usage.tool_calls}",
+            role="muted",
+        ),
+    )

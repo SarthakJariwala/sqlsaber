@@ -8,16 +8,14 @@ from collections.abc import Coroutine
 from typing import Annotated, TypeVar
 
 import cyclopts
-from rich.table import Table
 
+from sqlsaber.cli.output import fail, out
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.config.logging import get_logger
 from sqlsaber.knowledge.manager import KnowledgeManager
-from sqlsaber.theme.manager import create_console
+from sqlsaber.render import blocks as b
 
-console = create_console()
-error_console = create_console(stderr=True)
 config_manager = DatabaseConfigManager()
 logger = get_logger(__name__)
 knowledge_app = cyclopts.App(
@@ -56,22 +54,19 @@ def _get_database_name(database: str | None = None) -> str:
     if database:
         db_config = config_manager.get_database(database)
         if not db_config:
-            error_console.print(
-                f"[error]Error: database connection '{database}' not found.[/error]\n"
+            logger.error("knowledge.db.not_found", database=database)
+            fail(
+                f"database connection '{database}' not found.\n"
                 "  List connections with: saber db list"
             )
-            logger.error("knowledge.db.not_found", database=database)
-            raise SystemExit(1)
         return database
 
     db_config = config_manager.get_default_database()
     if db_config is None:
-        error_console.print(
-            "[error]Error: no database connections configured.[/error]\n"
-            "  Add one with: saber db add <name>"
-        )
         logger.error("knowledge.db.none_configured")
-        raise SystemExit(1)
+        fail(
+            "no database connections configured.\n  Add one with: saber db add <name>"
+        )
     return db_config.name
 
 
@@ -127,15 +122,13 @@ def add(
             )
         )
     except Exception as exc:
-        error_console.print(f"[error]Error adding knowledge:[/error] {exc}")
         logger.exception("knowledge.add.error", database=database_name, error=str(exc))
-        raise SystemExit(1)
+        fail(f"Error adding knowledge: {exc}")
 
-    console.print(
-        f"[success]✓ Knowledge entry added for database '{database_name}'[/success]"
+    out(
+        b.success(f"Knowledge entry added for database '{database_name}'"),
+        b.key_values({"ID": entry.id, "Name": entry.name}),
     )
-    console.print(f"[dim]ID:[/dim] {entry.id}")
-    console.print(f"[dim]Name:[/dim] {entry.name}")
     logger.info("knowledge.add.success", database=database_name, id=entry.id)
 
 
@@ -164,31 +157,37 @@ def list(
 
     entries = _run(_manager().list_knowledge(database_name))
     if not entries:
-        console.print(
-            f"[warning]No knowledge entries found for database '{database_name}'[/warning]"
-        )
-        console.print(
-            'Use \'sqlsaber knowledge add "<name>" "<description>"\' to add entries'
+        out(
+            b.warn(f"No knowledge entries found for database '{database_name}'"),
+            b.md(
+                'Use \'sqlsaber knowledge add "<name>" "<description>"\' to add entries'
+            ),
         )
         logger.info("knowledge.list.empty", database=database_name)
         return
 
-    table = Table(title=f"Knowledge Entries for Database: {database_name}")
-    table.add_column("ID", style="info", width=36)
-    table.add_column("Name", style="column.name")
-    table.add_column("Description", style="white")
-    table.add_column("Updated", style="dim")
-
-    for entry in entries:
-        table.add_row(
-            entry.id,
-            entry.name,
-            _truncate(entry.description, 100),
-            _format_timestamp(entry.updated_at),
-        )
-
-    console.print(table)
-    console.print(f"\n[dim]Total entries: {len(entries)}[/dim]")
+    out(
+        b.table(
+            [
+                {
+                    "id": entry.id,
+                    "name": entry.name,
+                    "description": _truncate(entry.description, 100),
+                    "updated": _format_timestamp(entry.updated_at),
+                }
+                for entry in entries
+            ],
+            columns=(
+                b.Column(field="id", header="ID", role="info"),
+                b.Column(field="name", header="Name"),
+                b.Column(field="description", header="Description"),
+                b.Column(field="updated", header="Updated", role="muted"),
+            ),
+            caption=f"Knowledge Entries for Database: {database_name}",
+            max_rows=1000,
+        ),
+        b.md(f"Total entries: {len(entries)}", role="muted"),
+    )
     logger.info("knowledge.list.complete", database=database_name, count=len(entries))
 
 
@@ -215,26 +214,24 @@ def show(
 
     entry = _run(_manager().get_knowledge(database_name, entry_id))
     if entry is None:
-        error_console.print(
-            f"[error]Error: knowledge entry '{entry_id}' not found for database "
-            f"'{database_name}'.[/error]\n"
+        logger.error("knowledge.show.not_found", database=database_name, id=entry_id)
+        fail(
+            f"knowledge entry '{entry_id}' not found for database '{database_name}'.\n"
             f"  List entries with: saber knowledge list --database {database_name}"
         )
-        logger.error("knowledge.show.not_found", database=database_name, id=entry_id)
-        raise SystemExit(1)
 
-    console.print(f"[bold]ID:[/bold] {entry.id}")
-    console.print(f"[bold]Database:[/bold] {database_name}")
-    console.print(f"[bold]Name:[/bold] {entry.name}")
-    console.print(f"[bold]Created:[/bold] {_format_timestamp(entry.created_at)}")
-    console.print(f"[bold]Updated:[/bold] {_format_timestamp(entry.updated_at)}")
-    console.print("[bold]Description:[/bold]")
-    console.print(entry.description)
-    if entry.sql:
-        console.print("\n[bold]SQL:[/bold]")
-        console.print(entry.sql)
+    pairs: list[tuple[str, str]] = [
+        ("ID", entry.id),
+        ("Database", database_name),
+        ("Name", entry.name),
+        ("Created", _format_timestamp(entry.created_at)),
+        ("Updated", _format_timestamp(entry.updated_at)),
+    ]
     if entry.source:
-        console.print(f"\n[bold]Source:[/bold] {entry.source}")
+        pairs.append(("Source", entry.source))
+    out(b.key_values(pairs), b.md(f"**Description:**\n\n{entry.description}"))
+    if entry.sql:
+        out(b.md("**SQL:**"), b.code(entry.sql, "sql"))
 
 
 @knowledge_app.command(
@@ -272,27 +269,35 @@ def search(
 
     entries = _run(_manager().search_knowledge(database_name, query, limit=limit))
     if not entries:
-        console.print(
-            f"[warning]No knowledge entries matched '{query}' for database '{database_name}'[/warning]"
+        out(
+            b.warn(
+                f"No knowledge entries matched '{query}' for database '{database_name}'"
+            )
         )
         logger.info("knowledge.search.empty", database=database_name)
         return
 
-    table = Table(title=f"Knowledge Search Results ({len(entries)} matches)")
-    table.add_column("ID", style="info", width=36)
-    table.add_column("Name", style="column.name")
-    table.add_column("Description", style="white")
-    table.add_column("Source", style="dim")
-
-    for entry in entries:
-        table.add_row(
-            entry.id,
-            entry.name,
-            _truncate(entry.description, 120),
-            entry.source or "",
+    out(
+        b.table(
+            [
+                {
+                    "id": entry.id,
+                    "name": entry.name,
+                    "description": _truncate(entry.description, 120),
+                    "source": entry.source or "",
+                }
+                for entry in entries
+            ],
+            columns=(
+                b.Column(field="id", header="ID", role="info"),
+                b.Column(field="name", header="Name"),
+                b.Column(field="description", header="Description"),
+                b.Column(field="source", header="Source", role="muted"),
+            ),
+            caption=f"Knowledge Search Results ({len(entries)} matches)",
+            max_rows=1000,
         )
-
-    console.print(table)
+    )
     logger.info("knowledge.search.complete", database=database_name, count=len(entries))
 
 
@@ -328,13 +333,11 @@ def remove(
 
     entry = _run(_manager().get_knowledge(database_name, entry_id))
     if entry is None:
-        error_console.print(
-            f"[error]Error: knowledge entry '{entry_id}' not found for database "
-            f"'{database_name}'.[/error]\n"
+        logger.error("knowledge.remove.not_found", database=database_name, id=entry_id)
+        fail(
+            f"knowledge entry '{entry_id}' not found for database '{database_name}'.\n"
             f"  List entries with: saber knowledge list --database {database_name}"
         )
-        logger.error("knowledge.remove.not_found", database=database_name, id=entry_id)
-        raise SystemExit(1)
 
     if not confirm_action(
         yes=yes,
@@ -343,22 +346,17 @@ def remove(
             f"saber knowledge remove {entry_id} --database {database_name} --yes"
         ),
     ):
-        console.print("Operation cancelled")
+        out(b.warn("Operation cancelled"))
         logger.info("knowledge.remove.cancelled", database=database_name, id=entry_id)
         return
 
     if _run(_manager().remove_knowledge(database_name, entry_id)):
-        console.print(
-            f"[success]✓ Knowledge entry removed from database '{database_name}'[/success]"
-        )
+        out(b.success(f"Knowledge entry removed from database '{database_name}'"))
         logger.info("knowledge.remove.success", database=database_name, id=entry_id)
         return
 
-    error_console.print(
-        f"[error]Error: failed to remove knowledge entry '{entry_id}'.[/error]"
-    )
     logger.error("knowledge.remove.failed", database=database_name, id=entry_id)
-    raise SystemExit(1)
+    fail(f"failed to remove knowledge entry '{entry_id}'.")
 
 
 @knowledge_app.command(
@@ -397,15 +395,15 @@ def clear(
 
     entries = _run(_manager().list_knowledge(database_name))
     if not entries:
-        console.print(
-            f"[warning]No knowledge entries to clear for database '{database_name}'[/warning]"
-        )
+        out(b.warn(f"No knowledge entries to clear for database '{database_name}'"))
         logger.info("knowledge.clear.nothing", database=database_name)
         return
 
     if not yes:
-        console.print(
-            f"[warning]About to clear {len(entries)} knowledge entries for database '{database_name}'[/warning]"
+        out(
+            b.warn(
+                f"About to clear {len(entries)} knowledge entries for database '{database_name}'"
+            )
         )
     if not confirm_action(
         yes=yes,
@@ -414,13 +412,15 @@ def clear(
             f"saber knowledge clear --database {database_name} --yes"
         ),
     ):
-        console.print("Operation cancelled")
+        out(b.warn("Operation cancelled"))
         logger.info("knowledge.clear.cancelled", database=database_name)
         return
 
     cleared_count = _run(_manager().clear_knowledge(database_name))
-    console.print(
-        f"[success]✓ Cleared {cleared_count} knowledge entries for database '{database_name}'[/success]"
+    out(
+        b.success(
+            f"Cleared {cleared_count} knowledge entries for database '{database_name}'"
+        )
     )
     logger.info(
         "knowledge.clear.success", database=database_name, deleted=cleared_count

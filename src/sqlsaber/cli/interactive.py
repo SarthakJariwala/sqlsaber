@@ -9,16 +9,12 @@ from textwrap import dedent
 from typing import TYPE_CHECKING
 
 import platformdirs
-from rich.console import Console
-from rich.markdown import Markdown
-from rich.panel import Panel
 
 from sqlsaber.cli.completers import SQLSaberAutocompleteProvider
 from sqlsaber.cli.slash_commands import CommandContext, SlashCommandProcessor
 from sqlsaber.cli.tui_chat import (
     DANGEROUS_MODE_FOOTER_LABEL,
     ChatApp,
-    ChatConsole,
     build_chat_app,
 )
 from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
@@ -38,7 +34,7 @@ from sqlsaber.database import (
 from sqlsaber.database.csv import CSVConnection
 from sqlsaber.database.csvs import CSVsConnection
 from sqlsaber.database.schema import SchemaManager
-from sqlsaber.theme.manager import get_theme_manager
+from sqlsaber.render import blocks as b
 
 if TYPE_CHECKING:
     from sqlsaber.session import SQLSaberSession
@@ -51,12 +47,10 @@ class InteractiveSession:
 
     def __init__(
         self,
-        console: Console,
         session: "SQLSaberSession",
         *,
         initial_history: list | None = None,
     ):
-        self.console = console
         self.session = session
         self.sqlsaber_agent = session.agent
         self.allow_dangerous = bool(
@@ -75,7 +69,6 @@ class InteractiveSession:
         self._submit_pending = False
         self.autocomplete_provider = SQLSaberAutocompleteProvider()
         self.message_history: list | None = initial_history or []
-        self.tm = get_theme_manager()
         self._handoff_mode = False
         self._exit_finalized = False
 
@@ -117,14 +110,14 @@ class InteractiveSession:
 
     def _banner(self) -> str:
         """Get the ASCII banner."""
-        return """[primary]
+        return """
 ███████  ██████  ██      ███████  █████  ██████  ███████ ██████
 ██      ██    ██ ██      ██      ██   ██ ██   ██ ██      ██   ██
 ███████ ██    ██ ██      ███████ ███████ ██████  █████   ██████
      ██ ██ ▄▄ ██ ██           ██ ██   ██ ██   ██ ██      ██   ██
 ███████  ██████  ███████ ███████ ██   ██ ██████  ███████ ██   ██
             ▀▀
-    [/primary]"""
+""".strip()
 
     def _instructions(self) -> str:
         """Get the instruction text."""
@@ -207,24 +200,22 @@ class InteractiveSession:
 
     def show_welcome_message(self, app: ChatApp) -> None:
         """Display welcome message for interactive mode."""
+        from sqlsaber.cli.chat_surface import ChatSurface
 
-        def render(console: Console) -> None:
-            if self.thread_manager.first_message:
-                console.print(Panel.fit(self._banner(), border_style="primary"))
-                console.print(
-                    Markdown(
-                        self._instructions(),
-                        code_theme=self.tm.pygments_style_name,
-                        inline_code_theme=self.tm.pygments_style_name,
-                    )
+        surface = ChatSurface(app)
+        if self.thread_manager.first_message:
+            surface.emit(
+                b.panel((b.md(f"```\n{self._banner()}\n```"),), role="primary"),
+                b.md(self._instructions()),
+            )
+
+        if self.thread_manager.current_thread_id:
+            surface.emit(
+                b.md(
+                    f"Resuming thread: `{self.thread_manager.current_thread_id}`",
+                    role="muted",
                 )
-
-            if self.thread_manager.current_thread_id:
-                console.print(
-                    f"[muted]Resuming thread:[/muted] {self.thread_manager.current_thread_id}\n"
-                )
-
-        app.append_rich(render)
+            )
 
     async def _update_table_cache(self) -> None:
         """Update the table completer cache with fresh data."""
@@ -270,10 +261,10 @@ class InteractiveSession:
             )
         except Exception as exc:
             error_message = str(exc)
-            app.append_rich(
-                lambda console: console.print(
-                    f"[error]Failed to generate handoff prompt:[/error] {error_message}\n"
-                )
+            from sqlsaber.cli.chat_surface import ChatSurface
+
+            ChatSurface(app).emit(
+                b.error(f"Failed to generate handoff prompt: {error_message}")
             )
             return
         finally:
@@ -290,27 +281,28 @@ class InteractiveSession:
         app.clear_status()
         edited = edited.strip()
         if not edited:
-            app.append_rich(
-                lambda console: console.print(
-                    "[warning]Empty handoff prompt; cancelled.[/warning]\n"
-                )
-            )
+            from sqlsaber.cli.chat_surface import ChatSurface
+
+            ChatSurface(app).emit(b.warn("Empty handoff prompt; cancelled."))
             return
 
         old_id = await self.thread_manager.end_current_thread()
         if old_id:
-            app.append_rich(
-                lambda console: console.print(
-                    f"[muted]Previous thread saved:[/muted] {old_id}\n"
-                    f"[muted]Resume with:[/muted] saber threads resume {old_id}\n"
+            from sqlsaber.cli.chat_surface import ChatSurface
+
+            ChatSurface(app).emit(
+                b.md(
+                    f"Previous thread saved: `{old_id}`\n"
+                    f"Resume with: `saber threads resume {old_id}`",
+                    role="muted",
                 )
             )
 
         clear_history()
         await self.thread_manager.clear_current_thread()
-        app.append_rich(
-            lambda console: console.print("[heading]Starting new thread...[/heading]\n")
-        )
+        from sqlsaber.cli.chat_surface import ChatSurface
+
+        ChatSurface(app).emit(b.md("**Starting new thread...**", role="primary"))
         await self._execute_query_with_cancellation(edited)
 
     async def _execute_query_with_cancellation(self, user_query: str) -> None:
@@ -347,7 +339,7 @@ class InteractiveSession:
             self.cancellation_token = None
             self.log.info("interactive.query.end")
 
-    async def _cancel_current_task(self, app: ChatApp, chat_console: Console) -> None:
+    async def _cancel_current_task(self, app: ChatApp) -> None:
         if self.current_task and not self.current_task.done():
             task = self.current_task
             if self.cancellation_token is not None:
@@ -370,32 +362,38 @@ class InteractiveSession:
             return
 
         if self._handoff_mode:
-            self._cancel_handoff_editing(app, chat_console)
+            self._cancel_handoff_editing(app)
             return
 
-        chat_console.print(
-            "[warning]Press Ctrl+D to exit. Or use '/exit' or '/quit'.[/warning]"
+        from sqlsaber.cli.chat_surface import ChatSurface
+
+        ChatSurface(app).emit(
+            b.warn("Press Ctrl+D to exit. Or use '/exit' or '/quit'.")
         )
         app.tui.set_focus(app.editor)
 
-    def _cancel_handoff_editing(self, app: ChatApp, chat_console: Console) -> None:
+    def _cancel_handoff_editing(self, app: ChatApp) -> None:
         self._handoff_mode = False
         app.editor.set_text("")
         app.clear_status()
-        chat_console.print("[warning]Handoff cancelled.[/warning]\n")
+        from sqlsaber.cli.chat_surface import ChatSurface
+
+        ChatSurface(app).emit(b.warn("Handoff cancelled."))
         app.tui.set_focus(app.editor)
 
     async def _handle_submit(
         self,
         app: ChatApp,
-        chat_console: Console,
+        surface,
         clear_history: Callable[[], None],
         user_query: str,
     ) -> None:
         try:
             if self.current_task and not self.current_task.done():
-                chat_console.print(
-                    "[warning]A query is already running. Press Ctrl+C to interrupt it.[/warning]"
+                surface.emit(
+                    b.warn(
+                        "A query is already running. Press Ctrl+C to interrupt it."
+                    )
                 )
                 return
 
@@ -408,7 +406,7 @@ class InteractiveSession:
             self._append_history(user_query)
 
             context = CommandContext(
-                console=chat_console,
+                surface=surface,
                 agent=self.sqlsaber_agent,
                 thread_manager=self.thread_manager,
                 on_clear_history=clear_history,
@@ -430,7 +428,7 @@ class InteractiveSession:
 
             await self._execute_query_with_cancellation(user_query)
         except Exception as exc:
-            chat_console.print(f"[error]Error:[/error] {exc}")
+            surface.emit(b.error(str(exc)))
             self.log.exception("interactive.error", error=str(exc))
         finally:
             app.tui.set_focus(app.editor)
@@ -441,9 +439,9 @@ class InteractiveSession:
         ended_thread_id = await self.thread_manager.end_current_thread()
         if ended_thread_id:
             hint = f"saber threads resume {ended_thread_id}"
-            self.console.print(
-                f"[muted]You can continue this thread using:[/muted] {hint}"
-            )
+            from sqlsaber.cli.output import out
+
+            out(b.md(f"You can continue this thread using: `{hint}`", role="muted"))
         self._exit_finalized = True
 
     async def run(self) -> None:
@@ -454,20 +452,22 @@ class InteractiveSession:
         exit_event = asyncio.Event()
         loop = asyncio.get_running_loop()
         app_ref: dict[str, ChatApp] = {}
-        chat_console_ref: dict[str, ChatConsole] = {}
+        surface_ref: dict[str, object] = {}
 
         def clear_history() -> None:
             self.message_history = []
 
         def on_submit(user_query: str) -> bool:
             app = app_ref["app"]
-            chat_console = chat_console_ref["chat_console"]
+            surface = surface_ref["surface"]
 
             if self._submit_pending or (
                 self.current_task and not self.current_task.done()
             ):
-                chat_console.print(
-                    "[warning]A query is already running. Press Ctrl+C to interrupt it.[/warning]"
+                surface.emit(
+                    b.warn(
+                        "A query is already running. Press Ctrl+C to interrupt it."
+                    )
                 )
                 app.tui.set_focus(app.editor)
                 return False
@@ -478,7 +478,7 @@ class InteractiveSession:
                 try:
                     await self._handle_submit(
                         app,
-                        chat_console,
+                        surface,
                         clear_history,
                         user_query,
                     )
@@ -499,14 +499,8 @@ class InteractiveSession:
 
         def on_cancel() -> None:
             app = app_ref["app"]
-            chat_console = chat_console_ref["chat_console"]
             loop.call_soon_threadsafe(
-                lambda: asyncio.create_task(
-                    self._cancel_current_task(
-                        app,
-                        chat_console,
-                    )
-                )
+                lambda: asyncio.create_task(self._cancel_current_task(app))
             )
 
         def on_exit() -> None:
@@ -518,17 +512,17 @@ class InteractiveSession:
             on_cancel=on_cancel,
             should_submit_empty=lambda: self._handoff_mode,
             autocomplete_provider=self.autocomplete_provider,
-            console=self.console,
             footer_text=self._footer_text(),
             on_open_command_palette=open_command_palette,
         )
-        chat_console = ChatConsole(app)
+        from sqlsaber.cli.chat_surface import ChatSurface
+
+        surface = ChatSurface(app)
         app_ref["app"] = app
-        chat_console_ref["chat_console"] = chat_console
+        surface_ref["surface"] = surface
         app.editor.history = self._load_history()
         self.streaming_handler = TUIStreamingQueryHandler(
             app,
-            self.console,
             display_registry_provider=lambda: getattr(
                 getattr(self, "sqlsaber_agent", None), "display_registry", None
             ),

@@ -1,22 +1,22 @@
 """Authentication CLI commands."""
 
+import asyncio
 import os
 import sys
 from typing import Annotated
 
 import cyclopts
 import keyring
-import questionary
 
+from sqlsaber.application.prompts import AsyncPrompter
+from sqlsaber.cli.output import fail, fail_usage, out
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
 from sqlsaber.config.auth import AuthConfigManager
 from sqlsaber.config.logging import get_logger
-from sqlsaber.theme.manager import create_console
+from sqlsaber.render import blocks as b
 
-console = create_console()
-error_console = create_console(stderr=True)
 config_manager = AuthConfigManager()
 logger = get_logger(__name__)
 
@@ -34,12 +34,9 @@ def setup():
     Example:
         saber auth setup
     """
-    import asyncio
-
     from sqlsaber.application.auth_setup import setup_auth
-    from sqlsaber.application.prompts import AsyncPrompter
 
-    console.print("\n[bold]SQLsaber Authentication Setup[/bold]\n")
+    out(b.md("**SQLsaber Authentication Setup**"))
 
     async def run_setup():
         prompter = AsyncPrompter()
@@ -52,16 +49,15 @@ def setup():
         )
 
     logger.info("auth.setup.start")
-    success, provider = asyncio.run(run_setup())
-    logger.info("auth.setup.complete", success=bool(success), provider=str(provider))
-
-    if not success:
-        error_console.print("[error]Error: no authentication was configured.[/error]")
-        raise SystemExit(1)
-
-    console.print(
-        "\nYou can change this anytime by running [info]saber auth setup[/info] again."
+    configured, provider = asyncio.run(run_setup())
+    logger.info(
+        "auth.setup.complete", success=bool(configured), provider=str(provider)
     )
+
+    if not configured:
+        fail("no authentication was configured.")
+
+    out(b.md("You can change this anytime by running `saber auth setup` again."))
 
 
 @auth_app.command(help_epilogue="Example:\n\nsaber auth status")
@@ -74,31 +70,33 @@ def status():
     logger.info("auth.status.start")
     auth_method = config_manager.get_auth_method()
 
-    console.print("\n[bold blue]Authentication Status[/bold blue]")
+    out(b.md("**Authentication Status**"))
 
     if auth_method is None:
-        console.print("[warning]No authentication method configured[/warning]")
-        console.print(
-            "Run [primary]saber auth setup[/primary] to configure authentication."
+        out(
+            b.warn("No authentication method configured"),
+            b.md("Run `saber auth setup` to configure authentication."),
         )
         logger.info("auth.status.none_configured")
         return
 
-    console.print("[success]✓ API Key authentication configured[/success]\n")
+    out(b.success("API Key authentication configured"))
 
     api_key_manager = APIKeyManager()
+    rows: list[dict[str, str]] = []
     for provider in providers.all_keys():
         env_var = api_key_manager.get_env_var_name(provider)
         service = api_key_manager._get_service_name(provider)
         from_env = bool(os.getenv(env_var))
         from_keyring = bool(keyring.get_password(service, provider))
         if from_env:
-            console.print(f"> {provider}: configured via {env_var}")
+            state = f"configured via {env_var}"
         elif from_keyring:
-            console.print(f"> {provider}: [success]configured[/success]")
+            state = "configured"
         else:
-            console.print(f"> {provider}: [warning]not configured[/warning]")
-
+            state = "not configured"
+        rows.append({"provider": provider, "status": state})
+    out(b.table(rows, columns=(b.Column("provider", "Provider"), b.Column("status", "Status"))))
     logger.info("auth.status.complete", method=str(auth_method))
 
 
@@ -121,34 +119,34 @@ def reset(
         saber auth reset
         saber auth reset openai --yes
     """
-    console.print("\n[bold]SQLsaber Authentication Reset[/bold]\n")
+    out(b.md("**SQLsaber Authentication Reset**"))
 
     if provider is None:
         if not sys.stdin.isatty():
-            error_console.print(
-                "[error]Error: PROVIDER is required when stdin is not a terminal.[/error]\n"
+            fail_usage(
+                "PROVIDER is required when stdin is not a terminal.\n"
                 "  Example: saber auth reset openai --yes"
             )
-            raise SystemExit(2)
-        provider = questionary.select(
-            "Select provider to reset:",
-            choices=providers.all_keys(),
-        ).ask()
+        provider = asyncio.run(
+            AsyncPrompter().select(
+                "Select provider to reset:",
+                choices=list(providers.all_keys()),
+            )
+        )
 
     if provider is None:
-        console.print("[warning]Reset cancelled.[/warning]")
+        out(b.warn("Reset cancelled."))
         logger.info("auth.reset.cancelled_no_provider")
         return
 
     canonical_provider = providers.canonical(provider.strip().lower())
     if canonical_provider is None:
         choices = ", ".join(providers.all_keys())
-        error_console.print(
-            f"[error]Error: unsupported provider '{provider}'.[/error]\n"
+        fail_usage(
+            f"unsupported provider '{provider}'.\n"
             f"  Choose from: {choices}\n"
             "  Example: saber auth reset openai --yes"
         )
-        raise SystemExit(2)
     provider = canonical_provider
 
     api_key_manager = APIKeyManager()
@@ -157,8 +155,10 @@ def reset(
     api_key_present = bool(keyring.get_password(service, provider))
 
     if not api_key_present:
-        console.print(
-            f"[warning]No stored credentials found for {provider}. Nothing to reset.[/warning]"
+        out(
+            b.warn(
+                f"No stored credentials found for {provider}. Nothing to reset."
+            )
         )
         logger.info("auth.reset.nothing_to_reset", provider=provider)
         return
@@ -170,26 +170,25 @@ def reset(
     )
 
     if not confirmed:
-        console.print("Reset cancelled.")
+        out(b.warn("Reset cancelled."))
         logger.info("auth.reset.cancelled_confirm", provider=provider)
         return
 
     try:
         keyring.delete_password(service, provider)
-        console.print(f"Removed {provider} API key from keyring", style="green")
+        out(b.success(f"Removed {provider} API key from keyring"))
         logger.info("auth.reset.api_key_removed", provider=provider)
     except Exception as e:
-        error_console.print(f"[error]Error: could not remove API key: {e}[/error]")
         logger.warning(
             "auth.reset.api_key_remove_failed", provider=provider, error=str(e)
         )
-        raise SystemExit(1) from None
+        fail(f"could not remove API key: {e}")
 
-    console.print("\n[success]✓ Reset complete.[/success]")
-    logger.info("auth.reset.complete", provider=provider)
-    console.print(
-        "Environment variables are not modified by this command.", style="dim"
+    out(
+        b.success("Reset complete."),
+        b.md("Environment variables are not modified by this command.", role="muted"),
     )
+    logger.info("auth.reset.complete", provider=provider)
 
 
 def create_auth_app() -> cyclopts.App:

@@ -5,19 +5,18 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from pathlib import Path
 from collections.abc import Mapping
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 import cyclopts
-from rich.console import Console
-from rich.markdown import Markdown
-from rich.panel import Panel
-from rich.table import Table
 
+from sqlsaber.cli.output import fail, fail_usage, out
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config.logging import get_logger
-from sqlsaber.theme.manager import create_console, get_theme_manager
+from sqlsaber.render import blocks as b
+from sqlsaber.render import cli_out
+from sqlsaber.render.surface import Surface
 
 if TYPE_CHECKING:
     from pydantic_ai.messages import ModelMessage
@@ -25,10 +24,6 @@ if TYPE_CHECKING:
     from sqlsaber.artifact_resolution import ResolvedArtifactPublication
     from sqlsaber.tools.base import Tool
 
-# Globals consistent with other CLI modules
-console = create_console()
-error_console = create_console(stderr=True)
-tm = get_theme_manager()
 logger = get_logger(__name__)
 
 
@@ -51,7 +46,7 @@ def _human_readable(timestamp: float | None) -> str:
 
 
 def _render_transcript(
-    console: Console,
+    surface: Surface,
     all_msgs: list[ModelMessage],
     last_n: int | None = None,
     *,
@@ -61,16 +56,19 @@ def _render_transcript(
     resolved_artifacts: Mapping[str, ResolvedArtifactPublication] | None = None,
     display_registry: Mapping[str, Tool] | None = None,
 ) -> None:
-    """Render conversation turns from ModelMessage[] using DisplayManager."""
-    # Lazy import to avoid pulling UI helpers at startup
-    from sqlsaber.cli.display import DisplayManager
+    """Render conversation turns from ModelMessage[] as blocks."""
+    from sqlsaber.tools.renderer import (
+        ToolRenderContext,
+        ToolRenderer,
+        core_display_registry,
+    )
 
-    dm = DisplayManager(console, display_registry)
-    dm.set_replay_messages(all_msgs)
-    dm.set_unavailable_artifacts(unavailable_artifacts or set())
-    dm.set_resolved_artifact_publications(resolved_artifacts or {})
-    # Check if output is being redirected (for clean markdown export)
-    is_redirected = not console.is_terminal
+    registry = dict(display_registry or core_display_registry())
+    if resolved_artifacts:
+        for tool in registry.values():
+            tool.set_resolved_artifact_publications(resolved_artifacts)
+    renderer = ToolRenderer(registry)
+    unavailable = unavailable_artifacts or set()
 
     # Locate indices of user prompts
     user_indices: list[int] = []
@@ -99,7 +97,7 @@ def _render_transcript(
                 text: str | None = None
                 if isinstance(content, str):
                     text = content
-                elif isinstance(content, list):  # multimodal
+                elif isinstance(content, list):
                     parts: list[str] = []
                     for seg in content:
                         if isinstance(seg, str):
@@ -111,27 +109,11 @@ def _render_transcript(
                                 parts.append(str(seg))
                     text = "\n".join([s for s in parts if s]) or None
                 if text:
-                    if is_redirected:
-                        console.print(f"**User:**\n\n{text}\n")
-                    else:
-                        console.print(
-                            Panel.fit(
-                                Markdown(text, code_theme=tm.pygments_style_name),
-                                title="User",
-                                border_style=tm.style("panel.border.user"),
-                            )
-                        )
+                    surface.emit(
+                        b.panel((b.md(text),), title="User", role="info")
+                    )
                     return
-        if is_redirected:
-            console.print("**User:** (no content)\n")
-        else:
-            console.print(
-                Panel.fit(
-                    "(no content)",
-                    title="User",
-                    border_style=tm.style("panel.border.user"),
-                )
-            )
+        surface.emit(b.panel((b.md("(no content)"),), title="User", role="info"))
 
     def _render_response(message: ModelMessage) -> None:
         for part in getattr(message, "parts", []):
@@ -139,16 +121,9 @@ def _render_transcript(
             if kind == "text":
                 text = getattr(part, "content", "")
                 if isinstance(text, str) and text.strip():
-                    if is_redirected:
-                        console.print(f"**Assistant:**\n\n{text}\n")
-                    else:
-                        console.print(
-                            Panel.fit(
-                                Markdown(text, code_theme=tm.pygments_style_name),
-                                title="Assistant",
-                                border_style=tm.style("panel.border.assistant"),
-                            )
-                        )
+                    surface.emit(
+                        b.panel((b.md(text),), title="Assistant", role="success")
+                    )
             elif kind in ("tool-call", "builtin-tool-call"):
                 name = getattr(part, "tool_name", "tool")
                 args = getattr(part, "args", None)
@@ -162,32 +137,39 @@ def _render_transcript(
                             args_dict = parsed
                     except Exception:
                         args_dict = {}
-                dm.show_tool_executing(name, args_dict)
+                executing = renderer.executing(name, args_dict)
+                if executing:
+                    surface.emit(*executing)
             elif kind in ("tool-return", "builtin-tool-return"):
                 name = getattr(part, "tool_name", "tool")
                 tool_call_id = getattr(part, "tool_call_id", None)
                 content = getattr(part, "content", None)
                 if hydrated_results and tool_call_id in hydrated_results:
                     content = hydrated_results[tool_call_id]
-                dm.show_tool_result(
+                result_blocks = renderer.result(
                     name,
                     content,
-                    tool_call_id=tool_call_id,
-                    metadata=getattr(part, "metadata", None),
+                    context=ToolRenderContext(
+                        tool_call_id=tool_call_id,
+                        metadata=getattr(part, "metadata", None),
+                        replay_messages=all_msgs,
+                        unavailable_artifacts=frozenset(unavailable),
+                    ),
                 )
+                if result_blocks:
+                    surface.emit(*result_blocks)
                 if unavailable_results and tool_call_id in unavailable_results:
-                    console.print(
-                        "[warning]Complete query result unavailable; "
-                        "showing preview.[/warning]"
+                    surface.emit(
+                        b.warn(
+                            "Complete query result unavailable; showing preview."
+                        )
                     )
-        # Thinking parts omitted
 
     for start_idx, end_idx in slices or [(0, len(all_msgs))]:
         if start_idx < len(all_msgs):
             _render_user(all_msgs[start_idx])
         for i in range(start_idx + 1, end_idx):
             _render_response(all_msgs[i])
-        console.print("")
 
 
 @threads_app.command(
@@ -220,24 +202,34 @@ def list_threads(
     store = ThreadStorage()
     threads = asyncio.run(store.list_threads(database_name=database, limit=limit))
     if not threads:
-        console.print("No threads found.")
+        out(b.md("No threads found."))
         logger.info("threads.cli.list.empty")
         return
-    table = Table(title="Threads")
-    table.add_column("ID", style=tm.style("info"), no_wrap=True, min_width=36)
-    table.add_column("Database", style=tm.style("accent"))
-    table.add_column("Title", style=tm.style("success"))
-    table.add_column("Last Activity", style=tm.style("muted"))
-    table.add_column("Model", style=tm.style("warning"))
-    for t in threads:
-        table.add_row(
-            t.id,
-            t.database_name or "-",
-            (t.title or "-")[:60],
-            _human_readable(getattr(t, "last_activity_at", None)),
-            t.model_name or "-",
+    out(
+        b.table(
+            [
+                {
+                    "id": t.id,
+                    "database": t.database_name or "-",
+                    "title": (t.title or "-")[:60],
+                    "last_activity": _human_readable(
+                        getattr(t, "last_activity_at", None)
+                    ),
+                    "model": t.model_name or "-",
+                }
+                for t in threads
+            ],
+            columns=(
+                b.Column("id", "ID", role="info"),
+                b.Column("database", "Database", role="accent"),
+                b.Column("title", "Title", role="success"),
+                b.Column("last_activity", "Last Activity", role="muted"),
+                b.Column("model", "Model", role="warning"),
+            ),
+            caption="Threads",
+            max_rows=1000,
         )
-    console.print(table)
+    )
     logger.info("threads.cli.list.complete", count=len(threads))
 
 
@@ -256,12 +248,10 @@ def show(
     store = ThreadStorage()
     thread = asyncio.run(store.get_thread(thread_id))
     if not thread:
-        error_console.print(
-            f"[error]Error: thread not found: {thread_id}[/error]\n"
-            "  List threads with: saber threads list"
-        )
         logger.error("threads.cli.show.not_found", thread_id=thread_id)
-        raise SystemExit(1)
+        fail(
+            f"thread not found: {thread_id}\n  List threads with: saber threads list"
+        )
     msgs = asyncio.run(store.get_thread_messages(thread_id))
     from sqlsaber.cli.query_results import (
         cli_query_result_store,
@@ -301,17 +291,21 @@ def show(
     else:
         resolved_artifacts = {}
         unavailable_artifacts = set()
-    console.print(f"[bold]Thread: {thread.id}[/bold]")
-    console.print("")
-    console.print(f"Database: {thread.database_name}")
-    console.print(f"Title: {thread.title}")
-    console.print(f"Last activity: {_human_readable(thread.last_activity_at)}")
-    console.print(f"Model: {thread.model_name}")
-    console.print("")
+    out(
+        b.key_values(
+            {
+                "Thread": thread.id,
+                "Database": thread.database_name,
+                "Title": thread.title,
+                "Last activity": _human_readable(thread.last_activity_at),
+                "Model": thread.model_name,
+            }
+        )
+    )
 
     if hydrated or unavailable or unavailable_artifacts or resolved_artifacts:
         _render_transcript(
-            console,
+            cli_out(),
             msgs,
             None,
             hydrated_results=hydrated,
@@ -320,7 +314,7 @@ def show(
             resolved_artifacts=resolved_artifacts,
         )
     else:
-        _render_transcript(console, msgs, None)
+        _render_transcript(cli_out(), msgs, None)
     logger.info("threads.cli.show.complete", thread_id=thread_id)
 
 
@@ -351,15 +345,13 @@ def list_artifacts(
 
         thread = await store.get_thread(thread_id)
         if thread is None:
-            error_console.print(
-                f"[error]Error: thread not found: {thread_id}[/error]\n"
-                "  List threads with: saber threads list"
+            fail(
+                f"thread not found: {thread_id}\n  List threads with: saber threads list"
             )
-            raise SystemExit(1)
         messages = await store.get_thread_messages(thread_id)
         references = artifact_references_from_messages(messages)
         if not references:
-            console.print("No artifacts found.")
+            out(b.md("No artifacts found."))
             return
 
         artifact_store = cli_artifact_store()
@@ -385,23 +377,37 @@ def list_artifacts(
                     )
                 )
 
-        if not console.is_terminal:
+        from sqlsaber.render.terminal import PlainSurface
+
+        if isinstance(cli_out(), PlainSurface):
             for row in rows:
-                console.print("\t".join(row))
+                out(b.md("\t".join(row)))
             return
-        table = Table(title=f"Artifacts for {thread_id}")
-        for heading in (
-            "Publication",
-            "Publication kind",
-            "Kind",
-            "Name",
-            "Size",
-            "URI",
-        ):
-            table.add_column(heading)
-        for row in rows:
-            table.add_row(*row)
-        console.print(table)
+        out(
+            b.table(
+                [
+                    {
+                        "publication": row[0],
+                        "publication_kind": row[1],
+                        "kind": row[2],
+                        "name": row[3],
+                        "size": row[4],
+                        "uri": row[5],
+                    }
+                    for row in rows
+                ],
+                columns=(
+                    b.Column("publication", "Publication"),
+                    b.Column("publication_kind", "Publication kind"),
+                    b.Column("kind", "Kind"),
+                    b.Column("name", "Name"),
+                    b.Column("size", "Size"),
+                    b.Column("uri", "URI"),
+                ),
+                caption=f"Artifacts for {thread_id}",
+                max_rows=1000,
+            )
+        )
 
     asyncio.run(_run())
 
@@ -448,12 +454,10 @@ def resume(
 
         thread = await store.get_thread(thread_id)
         if not thread:
-            error_console.print(
-                f"[error]Error: thread not found: {thread_id}[/error]\n"
-                "  List threads with: saber threads list"
-            )
             logger.error("threads.cli.resume.not_found", thread_id=thread_id)
-            raise SystemExit(1)
+            fail(
+                f"thread not found: {thread_id}\n  List threads with: saber threads list"
+            )
         if database is not None:
             db_selector = database
         else:
@@ -463,23 +467,21 @@ def resume(
                     extra_metadata=thread.extra_metadata,
                 )
             except ValueError as e:
-                error_console.print(
-                    f"[error]Error: invalid thread metadata: {e}[/error]\n"
-                    f"  Retry with: saber threads resume {thread_id} --database DATABASE"
-                )
                 logger.error(
                     "threads.cli.resume.metadata_invalid",
                     thread_id=thread_id,
                     error=str(e),
                 )
-                raise SystemExit(1) from None
+                fail(
+                    f"invalid thread metadata: {e}\n"
+                    f"  Retry with: saber threads resume {thread_id} --database DATABASE"
+                )
         if not db_selector:
-            error_console.print(
-                "[error]Error: no database is specified or stored with this thread.[/error]\n"
+            logger.error("threads.cli.resume.no_database", thread_id=thread_id)
+            fail(
+                "no database is specified or stored with this thread.\n"
                 f"  Retry with: saber threads resume {thread_id} --database DATABASE"
             )
-            logger.error("threads.cli.resume.no_database", thread_id=thread_id)
-            raise SystemExit(1)
         if database is None:
             config_mgr = DatabaseConfigManager()
             selectors = [db_selector] if isinstance(db_selector, str) else db_selector
@@ -489,17 +491,15 @@ def resume(
                 if config_mgr.get_database(selector) is None
             ]
             if missing:
-                error_console.print(
-                    "[error]Error: the thread database is not configured for automatic "
-                    "resume.[/error]\n"
-                    f"  Retry with: saber threads resume {thread_id} --database DATABASE"
-                )
                 logger.error(
                     "threads.cli.resume.database_not_configured",
                     thread_id=thread_id,
                     missing=missing,
                 )
-                raise SystemExit(1)
+                fail(
+                    "the thread database is not configured for automatic resume.\n"
+                    f"  Retry with: saber threads resume {thread_id} --database DATABASE"
+                )
         history = await store.get_thread_messages(thread_id)
         session_thread_manager = ThreadManager(
             initial_thread_id=thread_id, storage=store
@@ -516,25 +516,21 @@ def resume(
                 )
             )
         except DatabaseResolutionError as e:
-            error_console.print(
-                f"[error]Error resolving database: {e}[/error]\n"
-                f"  Retry with: saber threads resume {thread_id} --database DATABASE"
-            )
             logger.error(
                 "threads.cli.resume.resolve_failed", thread_id=thread_id, error=str(e)
             )
-            raise SystemExit(1) from None
+            fail(
+                f"Error resolving database: {e}\n"
+                f"  Retry with: saber threads resume {thread_id} --database DATABASE"
+            )
 
         try:
-            if console.is_terminal:
-                console.print(
-                    Panel.fit(
-                        f"Thread: {thread.id}",
-                        border_style=tm.style("panel.border.thread"),
-                    )
-                )
+            from sqlsaber.render.terminal import TerminalSurface
+
+            if isinstance(cli_out(), TerminalSurface):
+                out(b.panel((b.md(f"Thread: {thread.id}"),), role="primary"))
             else:
-                console.print(f"# Thread: {thread.id}\n")
+                out(b.md(f"# Thread: {thread.id}"))
             from sqlsaber.cli.query_results import hydrate_query_result_contents
 
             from sqlsaber.query_result_resolution import (
@@ -572,7 +568,7 @@ def resume(
                 for artifact in publication.unavailable
             }
             _render_transcript(
-                console,
+                cli_out(),
                 history,
                 None,
                 hydrated_results=hydrated,
@@ -581,14 +577,13 @@ def resume(
                 resolved_artifacts=resolved_artifacts,
             )
             interactive_session = InteractiveSession(
-                console=console,
                 session=sqlsaber_session,
                 initial_history=history,
             )
             await interactive_session.run()
         finally:
             await sqlsaber_session.close()
-            console.print("\n[success]Goodbye![/success]")
+            out(b.success("Goodbye!"))
             logger.info("threads.cli.resume.closed")
 
     asyncio.run(_run())
@@ -629,36 +624,36 @@ def prune(
     store = ThreadStorage()
 
     if days < 1:
-        error_console.print(
-            "[error]Error: --days must be at least 1.[/error]\n"
+        fail_usage(
+            "--days must be at least 1.\n"
             "  Example: saber threads prune --days 30 --dry-run"
         )
-        raise SystemExit(2)
 
     prunable = asyncio.run(store.count_prunable_threads(older_than_days=days))
     if dry_run:
-        console.print(
-            f"[info]Dry run: {prunable} thread(s) older than {days} day(s) would be pruned.[/info]"
+        out(
+            b.md(
+                f"Dry run: {prunable} thread(s) older than {days} day(s) would be pruned.",
+                role="info",
+            )
         )
         logger.info("threads.cli.prune.dry_run", days=days, count=prunable)
         return
     if prunable == 0:
-        console.print(
-            f"[success]No threads older than {days} day(s) to prune.[/success]"
-        )
+        out(b.success(f"No threads older than {days} day(s) to prune."))
         return
     if not confirm_action(
         yes=yes,
         prompt=f"Prune {prunable} thread(s) older than {days} day(s)?",
         non_interactive_command=f"saber threads prune --days {days} --yes",
     ):
-        console.print("[warning]Operation cancelled[/warning]")
+        out(b.warn("Operation cancelled"))
         logger.info("threads.cli.prune.cancelled", days=days)
         return
 
     async def _run() -> None:
         deleted = await store.prune_threads(older_than_days=days)
-        console.print(f"[success]✓ Pruned {deleted} thread(s).[/success]")
+        out(b.success(f"Pruned {deleted} thread(s)."))
         from sqlsaber.cli.artifact_gc import collect_cli_artifacts
         from sqlsaber.cli.artifacts import cli_artifact_store
         from sqlsaber.cli.query_result_gc import collect_cli_query_results
@@ -671,9 +666,10 @@ def prune(
             store, cli_artifact_store(), force=True
         )
         if not query_cleanup.complete or not artifact_cleanup.complete:
-            console.print(
-                "[warning]Thread pruning succeeded, but durable output cleanup "
-                "was incomplete.[/warning]"
+            out(
+                b.warn(
+                    "Thread pruning succeeded, but durable output cleanup was incomplete."
+                )
             )
         logger.info(
             "threads.cli.prune.complete",
@@ -721,12 +717,10 @@ def export(
     async def _run() -> None:
         thread = await store.get_thread(thread_id)
         if not thread:
-            error_console.print(
-                f"[error]Error: thread not found: {thread_id}[/error]\n"
-                "  List threads with: saber threads list"
-            )
             logger.error("threads.cli.share.not_found", thread_id=thread_id)
-            raise SystemExit(1)
+            fail(
+                f"thread not found: {thread_id}\n  List threads with: saber threads list"
+            )
 
         messages = await store.get_thread_messages(thread_id)
         from sqlsaber.cli.query_results import (
@@ -748,7 +742,7 @@ def export(
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(html, encoding="utf-8")
 
-        console.print(f"[success]✓ Wrote thread HTML to:[/success] {out_path}")
+        out(b.success(f"Wrote thread HTML to: {out_path}"))
         logger.info(
             "threads.cli.export.complete", thread_id=thread_id, output=str(out_path)
         )

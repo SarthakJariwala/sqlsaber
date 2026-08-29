@@ -1,6 +1,5 @@
 """CLI command definitions and handlers."""
 
-# Setup logging early, before any imports that trigger plugin discovery
 from sqlsaber.config.logging import setup_logging
 
 setup_logging()
@@ -12,18 +11,18 @@ import sys
 from typing import Annotated
 
 import cyclopts
-from rich.panel import Panel
 
 from sqlsaber.cli.auth import create_auth_app
 from sqlsaber.cli.database import create_db_app
 from sqlsaber.cli.knowledge import create_knowledge_app
 from sqlsaber.cli.models import create_models_app
 from sqlsaber.cli.onboarding import needs_onboarding, run_onboarding
+from sqlsaber.cli.output import fail, fail_usage, out
 from sqlsaber.cli.theme import create_theme_app
 from sqlsaber.cli.threads import create_threads_app
 from sqlsaber.cli.update_check import schedule_update_check
 from sqlsaber.config.logging import get_logger
-from sqlsaber.theme.manager import create_console
+from sqlsaber.render import blocks as b
 
 DANGEROUS_MODE_SCOPE = (
     "INSERT/UPDATE/DELETE and restricted DDL (CREATE TABLE/VIEW/INDEX, ALTER "
@@ -60,9 +59,6 @@ app.command(create_knowledge_app(), name="knowledge")
 app.command(create_models_app(), name="models")
 app.command(create_theme_app(), name="theme")
 app.command(create_threads_app(), name="threads")
-
-console = create_console()
-error_console = create_console(stderr=True)
 
 
 @app.meta.default
@@ -162,7 +158,7 @@ def query(
     """
 
     async def run_session():
-        schedule_update_check(console)
+        schedule_update_check()
 
         selected_database: str | list[str] | None = database
 
@@ -177,29 +173,26 @@ def query(
             allow_dangerous=allow_dangerous,
             system_prompt_provided=system_prompt is not None,
         )
-        # Import heavy dependencies only when actually running a query
-        # This is only done to speed up startup time
         from sqlsaber.cli.artifacts import cli_artifact_store
-        from sqlsaber.cli.display import DisplayManager
         from sqlsaber.cli.interactive import InteractiveSession
         from sqlsaber.cli.query_results import cli_query_result_store
-        from sqlsaber.cli.streaming import StreamingQueryHandler
+        from sqlsaber.cli.stream_presenter import AgentStreamPresenter
         from sqlsaber.cli.usage import SessionUsage, request_usages_from_run_result
+        from sqlsaber.cli.usage import session_summary_blocks
         from sqlsaber.config.database import DatabaseConfigManager
         from sqlsaber.database.resolver import DatabaseResolutionError
         from sqlsaber.options import SQLSaberOptions
+        from sqlsaber.render import cli_out
+        from sqlsaber.render.terminal import TerminalSurface
         from sqlsaber.session import SQLSaberSession
         from sqlsaber.threads import ThreadStorage
         from sqlsaber.threads.manager import ThreadManager
         from sqlsaber.threads.metadata import resolve_thread_database_selector
 
-        # Check if query_text is None and stdin has data
         actual_query = query_text
         if query_text is None and not sys.stdin.isatty():
-            # Read from stdin
             actual_query = sys.stdin.read().strip()
             if not actual_query:
-                # If stdin was empty, fall back to interactive mode
                 actual_query = None
 
         message_history = None
@@ -253,13 +246,10 @@ def query(
                     )
             thread_manager = ThreadManager(initial_thread_id=thread, storage=store)
 
-        # Check if onboarding is needed (only for interactive mode or when no database is configured)
         if needs_onboarding(selected_database):
-            # Run onboarding flow
             log.debug("cli.onboarding.start")
             onboarding_success = await run_onboarding()
             if not onboarding_success:
-                # User cancelled or onboarding failed
                 raise CLIError(
                     "Setup incomplete. Please configure your database and try again."
                 )
@@ -286,26 +276,28 @@ def query(
             log.exception("db.connection.error", error=str(e))
             raise CLIError(f"Error creating database connection: {e}")
 
+        surface = cli_out()
         try:
             if actual_query:
-                # Single query mode with streaming
-                streaming_handler = StreamingQueryHandler(
-                    console,
-                    session.agent.display_registry,
-                    session.query_result_store,
+                streaming_handler = AgentStreamPresenter(
+                    surface,
+                    display_registry=session.agent.display_registry,
+                    query_result_store=session.query_result_store,
                 )
                 db_type = session.agent.db_type
                 model_name = session.agent.config.model.name
-                console.print(
-                    f"[primary]Connected to:[/primary] {db_name} ({db_type})\n"
-                    f"[primary]Model:[/primary] {model_name}\n"
+                out(
+                    b.key_values(
+                        {
+                            "Connected to": f"{db_name} ({db_type})",
+                            "Model": model_name,
+                        }
+                    )
                 )
                 if allow_dangerous:
-                    console.print(
-                        Panel(
-                            DANGEROUS_MODE_WARNING,
-                            title=":warning: DANGEROUS MODE ENABLED",
-                            style="warning",
+                    out(
+                        b.warn(
+                            DANGEROUS_MODE_WARNING, label="DANGEROUS MODE ENABLED"
                         )
                     )
                 log.info("query.execute.start", db_name=db_name, db_type=db_type)
@@ -315,7 +307,6 @@ def query(
                     message_history=message_history,
                 )
 
-                # Track and display session usage
                 if run is not None:
                     session_usage = SessionUsage()
                     final_context = run.response.usage.input_tokens
@@ -326,46 +317,43 @@ def query(
                         model_name=str(model_id) if model_id else model_name,
                         request_usages=request_usages_from_run_result(run),
                     )
-                    display = DisplayManager(console)
-                    display.show_session_summary(session_usage)
+                    if isinstance(surface, TerminalSurface):
+                        summary = session_summary_blocks(session_usage)
+                        if summary:
+                            surface.emit(*summary)
 
                 thread_id = thread_manager.current_thread_id
                 if thread_id:
-                    console.print(
-                        "[dim]Continue non-interactively:[/dim] "
-                        f'saber --thread {thread_id} "follow-up question"\n'
-                        "[dim]Continue interactively:[/dim] "
-                        f"saber threads resume {thread_id}"
+                    out(
+                        b.md(
+                            f'Continue non-interactively: `saber --thread {thread_id} "follow-up question"`\n'
+                            f"Continue interactively: `saber threads resume {thread_id}`",
+                            role="muted",
+                        )
                     )
                     log.info("thread.save.success", thread_id=thread_id)
             else:
-                # Interactive mode
                 if allow_dangerous:
-                    console.print(
-                        Panel(
-                            DANGEROUS_MODE_WARNING,
-                            title=":warning: DANGEROUS MODE ENABLED",
-                            style="warning",
+                    out(
+                        b.warn(
+                            DANGEROUS_MODE_WARNING, label="DANGEROUS MODE ENABLED"
                         )
                     )
-                interactive_session = InteractiveSession(
-                    console=console, session=session
-                )
+                interactive_session = InteractiveSession(session=session)
                 await interactive_session.run()
 
         finally:
-            # Clean up
             await session.close()
             log.info("db.connection.closed")
-            console.print("\n[success]Goodbye![/success]")
+            out(b.success("Goodbye!"))
 
-    # Run the async function with proper error handling
     try:
         asyncio.run(run_session())
     except CLIError as e:
         get_logger(__name__).error("cli.error", error=str(e))
-        error_console.print(f"[error]Error:[/error] {e}")
-        sys.exit(e.exit_code)
+        if e.exit_code == 2:
+            fail_usage(str(e))
+        fail(str(e), code=e.exit_code)
 
 
 def main():

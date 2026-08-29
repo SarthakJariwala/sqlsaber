@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import Any
 
 from sqlsaber.cli.chat_surface import ChatSurface
 from sqlsaber.cli.stream_presenter import AgentStreamPresenter
@@ -18,7 +17,6 @@ class TUIStreamingQueryHandler(AgentStreamPresenter):
     def __init__(
         self,
         app: ChatApp,
-        console: Any = None,
         display_registry: Mapping[str, Tool] | None = None,
         *,
         display_registry_provider: Callable[[], Mapping[str, Tool] | None]
@@ -32,4 +30,3 @@ class TUIStreamingQueryHandler(AgentStreamPresenter):
             query_result_store=query_result_store,
         )
         self.app = app
-        self.console = console
