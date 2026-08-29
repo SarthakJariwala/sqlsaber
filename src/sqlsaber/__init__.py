@@ -3,7 +3,6 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .api import SQLSaber, SQLSaberResult
     from .artifacts import (
         Artifact,
         ArtifactBundle,
@@ -20,7 +19,6 @@ if TYPE_CHECKING:
     )
     from .capabilities import Knowledge, SqlTools
     from .config.settings import ThinkingLevel
-    from .options import SQLSaberOptions
     from .overrides import ModelOverides
     from .query_results import (
         FilesystemQueryResultStore,
@@ -33,7 +31,8 @@ if TYPE_CHECKING:
         QueryResultUnavailable,
         StoredQueryResult,
     )
-    from .sdk_errors import (
+    from .sdk.client import SQLSaber, SQLSaberResult
+    from .sdk.errors import (
         RunInProgressError,
         SQLSaberClosedError,
         SQLSaberError,
@@ -44,7 +43,8 @@ if TYPE_CHECKING:
         ThreadResumeHistoryError,
         ThreadResumeMetadataError,
     )
-    from .sdk_types import SQLSaberInfo, TableInfo, ThinkingState
+    from .sdk.options import SQLSaberOptions
+    from .sdk.types import SQLSaberInfo, TableInfo, ThinkingState
     from .workspace_inputs import WorkspaceInputResolver, WorkspaceResolutionContext
 
 __all__ = [
@@ -96,11 +96,11 @@ __all__ = [
 def __getattr__(name: str):
     """Lazy import for SQLSaber to avoid heavy startup imports."""
     if name in {"SQLSaber", "SQLSaberResult"}:
-        from . import api
+        from .sdk import client
 
-        return getattr(api, name)
+        return getattr(client, name)
     if name == "SQLSaberOptions":
-        from .options import SQLSaberOptions
+        from .sdk.options import SQLSaberOptions
 
         return SQLSaberOptions
     if name in {
@@ -151,9 +151,9 @@ def __getattr__(name: str):
 
         return ThinkingLevel
     if name in {"SQLSaberInfo", "TableInfo", "ThinkingState"}:
-        from . import sdk_types
+        from .sdk import types
 
-        return getattr(sdk_types, name)
+        return getattr(types, name)
     if name in {
         "RunInProgressError",
         "SQLSaberClosedError",
@@ -165,9 +165,9 @@ def __getattr__(name: str):
         "ThreadResumeHistoryError",
         "ThreadResumeMetadataError",
     }:
-        from . import sdk_errors
+        from .sdk import errors
 
-        return getattr(sdk_errors, name)
+        return getattr(errors, name)
     if name in {"WorkspaceInputResolver", "WorkspaceResolutionContext"}:
         from . import workspace_inputs
 

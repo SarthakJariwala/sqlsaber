@@ -17,7 +17,7 @@ from sqlsaber.database.base import BaseDatabaseConnection
 from sqlsaber.database.registry import DatabaseRegistry
 from sqlsaber.database.resolver import resolve_databases
 from sqlsaber.knowledge.manager import KnowledgeManager
-from sqlsaber.options import SQLSaberOptions
+from .options import SQLSaberOptions
 from sqlsaber.query_results import InMemoryQueryResultStore
 from sqlsaber.threads.metadata import (
     encode_thread_extra_metadata,

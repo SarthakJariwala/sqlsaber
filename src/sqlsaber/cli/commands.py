@@ -179,6 +179,7 @@ def query(
         from sqlsaber.cli.stream_presenter import AgentStreamPresenter
         from sqlsaber import (
             SQLSaber,
+            SQLSaberOptions,
             ThreadDatabaseRequiredError,
             ThreadDatabaseUnavailableError,
             ThreadNotFoundError,
@@ -188,7 +189,6 @@ def query(
         from sqlsaber.cli.retention import run_cli_retention
         from sqlsaber.cli.usage import SessionUsage, session_summary_blocks
         from sqlsaber.database.resolver import DatabaseResolutionError
-        from sqlsaber.options import SQLSaberOptions
         from sqlsaber.render import cli_out
         from sqlsaber.render.terminal import TerminalSurface
         from sqlsaber.threads import ThreadStorage

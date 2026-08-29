@@ -10,7 +10,7 @@ from urllib.request import url2pathname
 import pytest
 from pydantic_ai.messages import ModelRequest, ToolReturnPart
 
-from sqlsaber.api import SQLSaberResult
+from sqlsaber import SQLSaberResult
 from sqlsaber.artifacts import (
     Artifact,
     ArtifactBundle,
