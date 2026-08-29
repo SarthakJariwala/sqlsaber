@@ -5,10 +5,10 @@ description: "Connect a single SQLsaber session to several databases at once. Qu
 
 import { Aside } from "@astrojs/starlight/components";
 
-A single SQLsaber session can be connected to more than one database at the same
-time. The agent picks which database to query for each step, runs the queries
-separately, and combines the results in its answer — so you can ask a question
-that spans several databases without switching sessions.
+A single SQLsaber session can connect to more than one database at the same time.
+The agent picks which database to query for each step, runs the queries separately,
+and combines the results in its answer. You can ask a question that spans several
+databases without switching sessions.
 
 <Aside type="note">
   SQLsaber does **not** attempt cross-database JOINs. When multiple databases
@@ -16,11 +16,11 @@ that spans several databases without switching sessions.
   results together in plain language in its reply.
 </Aside>
 
-### Starting a Multi-Database Session
+### Starting a multi-database session
 
 Connect to multiple databases by repeating the `-d` / `--database` flag. Each
-value can be a configured connection name, a connection string, or a file path —
-and you can mix them freely.
+value can be a configured connection name, a connection string, or a file path.
+You can mix these target types freely.
 
 ```bash
 # Two configured connections
@@ -60,7 +60,7 @@ saber -d users.csv -d orders.csv "Join users and orders"
 Multi-database mode kicks in only when more than one **non-CSV** target is
 provided (or a CSV combined with another database type).
 
-### Describing Connections
+### Describing connections
 
 When several databases are connected, the agent needs to decide which one holds
 the data for a given question. You can help it by attaching a short description
@@ -75,8 +75,8 @@ saber db add analytics \
   --description "ClickHouse warehouse: web sessions, events, funnels"
 ```
 
-You can add a description to any connection — see
-[Database Setup](/guides/database-setup) for the full `saber db add` flow.
+You can add a description to any connection. See [Database Setup](/guides/database-setup)
+for the full `saber db add` flow.
 
 <Aside type="tip">
   Clear, distinct descriptions noticeably improve how reliably the agent routes
@@ -84,7 +84,7 @@ You can add a description to any connection — see
   holds (tables, domains, environments).
 </Aside>
 
-### How the Agent Routes Queries
+### How the agent routes queries
 
 When more than one database is connected, the agent's behavior changes in a few
 ways:
@@ -99,11 +99,11 @@ ways:
 - **Per-database knowledge.** [Knowledge entries](/guides/knowledge) remain
   scoped per database, so each connection contributes its own context.
 
-In single-database sessions none of this is visible — the tool schemas and
-system prompt are identical to before, and there is no `db_name` argument or
-`list_dbs` tool.
+In single-database sessions none of this is visible. The tool schemas and system
+prompt are identical to before, and there is no `db_name` argument or `list_dbs`
+tool.
 
-### Resuming Multi-Database Threads
+### Resuming multi-database threads
 
 [Conversation threads](/guides/threads) created in a multi-database session
 record all of the connected databases. When you resume such a thread, SQLsaber
@@ -127,19 +127,27 @@ saber threads resume a1b2c3d4 -d sales -d "postgresql://user:pass@host:5432/even
 ### Using the Python SDK
 
 The SDK exposes the same capability through `SQLSaberOptions`. Pass a list of
-targets to connect to multiple databases at once:
+targets to connect to multiple databases at once. Use `saber.info.database_names`
+when you need metadata only:
 
 ```python
-from sqlsaber import SQLSaber
-from sqlsaber.options import SQLSaberOptions
+import asyncio
 
-options = SQLSaberOptions(
-    database=["sales", "postgresql://user:pass@host:5432/events"],
-)
+from sqlsaber import SQLSaber, SQLSaberOptions
 
-saber = SQLSaber(options)
-print(saber.db_names)     # ["sales", "events"]
-print(saber.connections)  # {name: connection, ...}
+
+async def main() -> None:
+    options = SQLSaberOptions(
+        database=["sales", "postgresql://user:pass@host:5432/events"],
+    )
+
+    async with SQLSaber(options=options) as saber:
+        print(saber.info.database_names)  # ("sales", "events")
+        print(saber.db_names)             # compatibility property
+        print(saber.connections)          # compatibility property
+
+
+asyncio.run(main())
 ```
 
 See the [SDK Configuration guide](/sdk/configuration) for the full set of

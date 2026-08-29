@@ -1,31 +1,37 @@
 ---
 title: Results & Streaming
-description: "Read SQLsaber SDK query results: the text answer, generated SQL, token usage, streaming events, and multi-turn conversations with message history."
+description: "Read SQLsaber SDK query results: the text answer, generated SQL, token usage, streaming events, and stateful follow-up conversations."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-`saber.query()` returns a `SQLSaberResult`. It subclasses `str`, so it *is* the
-agent's text answer, while also exposing the full execution details.
+`saber.query()` returns a `SQLSaberResult`. It subclasses `str`, so it is the
+agent's text answer, while also exposing the full execution details. A
+`SQLSaber` instance stores the completed history from each successful query, so a
+later query on the same instance continues the conversation.
 
 ```python
 result = await saber.query("How many orders shipped last week?")
 
 print(result)            # the answer, as a string
 print(result.usage)      # token usage for this run
-print(result.messages)   # messages from this run (incl. tool calls / SQL)
+print(result.new_messages)  # messages from this run (incl. tool calls / SQL)
 ```
 
 ## Result properties
 
-| Property        | Description                                                              |
-| --------------- | ------------------------------------------------------------------------ |
-| _(the value)_   | The result *is* a `str` containing the agent's final text answer.        |
-| `.usage`        | Token usage statistics for the run.                                      |
-| `.messages`     | New messages produced by this run, including tool calls and SQL.         |
-| `.all_messages` | The full message history, including any prior turns you passed in.       |
-| `.query_results` | Durable complete-query-result descriptors created during this run.      |
-| `.artifacts`    | Durable artifact references published by capabilities during this run.   |
+| Property          | Description                                                                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------------- |
+| _(the value)_     | The result is a `str` containing the agent's final text answer.                                          |
+| `.text`           | The same final answer as a plain `str`.                                                                  |
+| `.usage`          | Aggregate `RunUsage` statistics for the run, or `None` when the provider returns no usage data.         |
+| `.new_messages`   | The `pydantic_ai` `ModelMessage` values created by this query, including model requests, responses, and tool calls. |
+| `.messages`       | Compatibility alias for `.new_messages`.                                                                 |
+| `.all_messages`   | The complete `pydantic_ai` message history after this query, including earlier turns on this instance.  |
+| `.request_usages` | A list of `pydantic_ai` `RequestUsage` values in model-request order. Use it to inspect usage for each request in a multi-step run. |
+| `.final_context_tokens` | The input-token count for the final model request. It measures that request's context, not aggregate run usage, and is `0` when no value is available. |
+| `.query_results`  | Durable complete-query-result descriptors created during this run.                                      |
+| `.artifacts`      | Durable artifact references published by capabilities during this run.                                   |
 
 ## Controlling run usage
 
@@ -251,16 +257,16 @@ user-data store.
 
 ## Inspecting the generated SQL
 
-The SQL the agent ran lives in the run's messages as tool calls. The message
-objects are `pydantic_ai` message types; iterate over their parts to find tool
-calls:
+The SQL the agent ran lives in the run's messages as tool calls. Message values
+and streaming event values use `pydantic_ai` types, not framework-neutral SDK
+transcript or stream types. Iterate over message parts to find tool calls:
 
 ```python
 from pydantic_ai.messages import ModelResponse, ToolCallPart
 
 result = await saber.query("Top 5 customers by revenue")
 
-for message in result.messages:
+for message in result.new_messages:
     if isinstance(message, ModelResponse):
         for part in message.parts:
             if isinstance(part, ToolCallPart):
@@ -316,19 +322,16 @@ storage is not suitable for horizontally scaled web deployments.
 
 ## Multi-turn conversations
 
-To continue a conversation, feed the previous result's messages back into the
-next call via `message_history`:
+Run follow-up queries on the same `SQLSaber` instance. Each completed query updates
+that instance's conversation history automatically.
 
 ```python
 async with SQLSaber(options=options) as saber:
     first = await saber.query("How many active customers do we have?")
-
-    follow_up = await saber.query(
-        "Now break that down by country",
-        message_history=first.all_messages,
-    )
-    print(follow_up)
+    follow_up = await saber.query("Now break that down by country")
+    print(follow_up.text)
 ```
 
-Use `result.all_messages` to carry the whole history forward, or
-`result.messages` to pass only the latest turn.
+Use `result.all_messages` to inspect the complete history. `query()` still accepts
+`message_history` as an advanced compatibility override when an application must
+supply an explicit `pydantic_ai` history.

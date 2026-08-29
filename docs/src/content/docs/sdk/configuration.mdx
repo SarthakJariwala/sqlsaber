@@ -124,13 +124,22 @@ The agent queries each one separately and combines the results:
 SQLSaberOptions(database=["sales", "postgresql://user:pass@host:5432/events"])
 ```
 
-The resulting session exposes `db_names` and `connections` for the connected
-databases:
+The resulting session exposes database metadata through `saber.info`:
 
 ```python
-saber = SQLSaber(options)
-saber.db_names     # ["sales", "events"]
-saber.connections  # {name: connection, ...}
+from sqlsaber import SQLSaber
+
+async with SQLSaber(options=options) as saber:
+    saber.info.database_names  # ("sales", "events")
+```
+
+The compatibility properties `saber.db_names` and `saber.connections` remain
+available for callers that need the managed names or connection objects:
+
+```python
+async with SQLSaber(options=options) as saber:
+    saber.db_names     # ["sales", "events"]
+    saber.connections  # {name: connection, ...}
 ```
 
 ### A configured database
