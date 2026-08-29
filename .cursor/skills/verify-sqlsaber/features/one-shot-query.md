@@ -23,8 +23,8 @@ Preconditions:
 - A provider API key is present in the environment (`ANTHROPIC_API_KEY` for the default model `anthropic:claude-opus-4-5`, or another configured provider). If doctor reports `auth  absent`, skip this feature and record that unmet precondition. Do not mark it verified from unit tests.
 - Default database is `verify-sqlite`.
 
-- **Saved connection.** Run `control-sqlsaber cli --out artifacts/one-shot-query/saved.txt -- -d verify-sqlite "How many customers are in CA?"`. Exit code `0`. Stdout contains `Connected to: verify-sqlite (sqlite)` and an answer that reports one California customer (`Acme`).
-- **Ad-hoc file.** Run `control-sqlsaber cli --out artifacts/one-shot-query/adhoc.txt -- -d "$(control-sqlsaber path SEEDED_DB)" "How many customers live in New York?"`. Exit code `0`. Stdout contains `Connected to:` and an answer that reports one New York customer (`Globex`).
+- **Saved connection.** Run `control-sqlsaber cli --out artifacts/one-shot-query/saved.txt -- -d verify-sqlite "How many customers are in CA?"`. Exit code `0`. Stdout contains `**Connected to**: verify-sqlite (SQLite)` and an answer that reports one California customer (`Acme`).
+- **Ad-hoc file.** Run `control-sqlsaber cli --out artifacts/one-shot-query/adhoc.txt -- -d "$(control-sqlsaber path SEEDED_DB)" "How many customers live in New York?"`. Exit code `0`. Stdout contains `**Connected to**:` and an answer that reports one New York customer (`Globex`).
 - **Unknown saved name.** Run `control-sqlsaber cli --out artifacts/one-shot-query/missing.txt -- -d nonexistent "show tables"`. Exit code `1`. Stderr contains `Database connection 'nonexistent' not found`.
 - **Proof.** Keep saved and adhoc transcripts. Both must show the connected banner and a user-visible answer, not only tool-call traces. If a thread ID is printed, `saber threads list` in a follow-up `cli` call contains that ID.
 

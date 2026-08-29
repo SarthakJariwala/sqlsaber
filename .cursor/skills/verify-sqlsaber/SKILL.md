@@ -81,7 +81,7 @@ Non-interactive commands go through the helper so they inherit the isolated env:
 
 `cli --` is followed by arguments to `saber` (no extra `saber` token). Relative `--out` paths resolve from `.cursor/skills/verify-sqlsaber/`. The helper also writes `$out.err` and `$out.exit`.
 
-Stable handles — match these strings, not column layout (Rich wraps tables):
+Stable handles. Match these strings, not column layout. Piped tables are GitHub pipe tables.
 
 | Action | Command | Observable |
 | --- | --- | --- |
@@ -99,10 +99,10 @@ Stable handles — match these strings, not column layout (Rich wraps tables):
 | Knowledge show | `cli -- knowledge show UUID` | `**ID**:`, `**Name**:`, `**Description:**` |
 | Knowledge remove | `cli -- knowledge remove UUID --yes` | `Knowledge entry removed from database 'verify-sqlite'` |
 | Auth status | `cli -- auth status` | `Authentication Status` |
-| Models | `cli -- models current` | `Current model:` |
+| Models | `cli -- models current` | `**Current model**:` |
 | Threads list | `cli -- threads list` | `No threads found.` or table title `Threads` |
 | Threads show | `cli -- threads show THREAD_ID` | `**Thread**: THREAD_ID` |
-| One-shot query | `cli -- -d verify-sqlite "natural language"` | `**Connected to**: verify-sqlite (sqlite)` then streamed answer. Needs a provider key. |
+| One-shot query | `cli -- -d verify-sqlite "natural language"` | `**Connected to**: verify-sqlite (SQLite)` then streamed answer. Needs a provider key. |
 | Ad-hoc file | `cli -- -d ABS_SQLITE_OR_CSV "natural language"` | skips saved-connection lookup; still needs a provider key |
 
 Destructive commands require `--yes` when stdin is not a TTY. Do not pass `--force` or `-y`.
