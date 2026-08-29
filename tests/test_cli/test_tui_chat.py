@@ -38,6 +38,7 @@ from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
 from sqlsaber.config.settings import ThinkingLevel
 from sqlsaber.render import blocks as b
 from sqlsaber.theme.manager import get_theme_manager
+from sqlsaber.theme.styles import get_styles
 
 
 class FakeTerminal:
@@ -225,6 +226,7 @@ def test_user_messages_render_as_padded_background_blocks_without_role_label() -
 def test_user_message_colors_follow_active_theme(monkeypatch) -> None:
     monkeypatch.setenv("SQLSABER_THEME", "dracula")
     get_theme_manager.cache_clear()
+    get_styles.cache_clear()
     try:
         terminal = FakeTerminal(columns=40, rows=12)
         app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
@@ -239,11 +241,13 @@ def test_user_message_colors_follow_active_theme(monkeypatch) -> None:
         assert "\x1b[38;2;125;211;252m" not in raw_chat
     finally:
         get_theme_manager.cache_clear()
+        get_styles.cache_clear()
 
 
 def test_native_markdown_colors_follow_active_theme(monkeypatch) -> None:
     monkeypatch.setenv("SQLSABER_THEME", "dracula")
     get_theme_manager.cache_clear()
+    get_styles.cache_clear()
     try:
         app = build_chat_app(
             terminal=FakeTerminal(columns=60), on_submit=lambda text: None
@@ -257,6 +261,7 @@ def test_native_markdown_colors_follow_active_theme(monkeypatch) -> None:
         assert "\x1b[38;2;189;147;249m" in rendered
     finally:
         get_theme_manager.cache_clear()
+        get_styles.cache_clear()
 
 
 def test_status_uses_cancellable_loader_without_stealing_editor_focus() -> None:

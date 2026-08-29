@@ -235,8 +235,8 @@ def test_root_thread_option_continues_with_saved_history():
             captured["closed"] = True
 
     class FakeStreamingQueryHandler:
-        def __init__(self, *args):
-            pass
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
 
         async def execute_streaming_query(
             self, user_query, *, run_query, message_history
@@ -255,7 +255,7 @@ def test_root_thread_option_continues_with_saved_history():
         ),
         patch("sqlsaber.session.SQLSaberSession", FakeSession),
         patch(
-            "sqlsaber.cli.streaming.StreamingQueryHandler",
+            "sqlsaber.cli.stream_presenter.AgentStreamPresenter",
             FakeStreamingQueryHandler,
         ),
         patch("sqlsaber.cli.artifacts.cli_artifact_store", return_value=object()),
