@@ -17,6 +17,7 @@ from sqlsaber.cli.tui_chat import (
     build_chat_app,
 )
 from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
+from sqlsaber.cli.update_check import bind_update_notice
 from sqlsaber.cli.usage import SessionUsage, format_cost_usd, format_tokens
 from sqlsaber.config.logging import get_logger
 from sqlsaber.render import blocks as b
@@ -413,11 +414,13 @@ class InteractiveSession:
             query_result_store=self.saber.query_result_store,
         )
         self.show_welcome_message(app)
+        bind_update_notice(surface.emit)
 
         app.tui.start()
         try:
             await exit_event.wait()
         finally:
+            bind_update_notice(None)
             if not app.tui.stopped:
                 app.stop()
             await self._finalize_exit()

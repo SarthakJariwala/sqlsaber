@@ -11,7 +11,6 @@ from importlib import metadata
 
 import httpx
 
-from sqlsaber.cli.output import out
 from sqlsaber.config.logging import get_logger
 from sqlsaber.render import blocks as b
 from sqlsaber.render.blocks import Block
@@ -123,8 +122,12 @@ def bind_update_notice(emit: Callable[..., None] | None) -> None:
         emit: Block sink, or None to unbind.
     """
 
-    global _notice_emit
+    global _notice_emit, _pending_blocks
     _notice_emit = emit
+    if emit is not None and _pending_blocks is not None:
+        blocks = _pending_blocks
+        _pending_blocks = None
+        emit(*blocks)
 
 
 def reset_update_check() -> None:
@@ -137,7 +140,12 @@ def reset_update_check() -> None:
 
 
 def _print_update_notice() -> None:
-    out(*_notice_blocks())
+    global _pending_blocks
+    blocks = _notice_blocks()
+    if _notice_emit is not None:
+        _notice_emit(*blocks)
+        return
+    _pending_blocks = blocks
 
 
 async def _check_and_notify() -> None:
