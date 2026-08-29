@@ -93,16 +93,16 @@ Stable handles — match these strings, not column layout (Rich wraps tables):
 | Test | `cli -- db test NAME` | `Testing connection to 'NAME'...` then `Connection to 'NAME' successful` |
 | Default | `cli -- db set-default NAME` | `Successfully set 'NAME' as default database` |
 | Remove | `cli -- db remove NAME --yes` | `Successfully removed database connection 'NAME'` |
-| Knowledge add | `cli -- knowledge add "Name" "Description" --sql SQL --source SRC` | `Knowledge entry added for database 'verify-sqlite'` plus `ID:` UUID |
+| Knowledge add | `cli -- knowledge add "Name" "Description" --sql SQL --source SRC` | `Knowledge entry added for database 'verify-sqlite'` plus `**ID**:` UUID |
 | Knowledge list | `cli -- knowledge list` | `Knowledge Entries for Database: verify-sqlite` or `No knowledge entries found for database 'verify-sqlite'` |
 | Knowledge search | `cli -- knowledge search "query"` | `Knowledge Search Results` with the name, or `No knowledge entries matched 'query'` |
-| Knowledge show | `cli -- knowledge show UUID` | `ID:`, `Name:`, `Description:` |
+| Knowledge show | `cli -- knowledge show UUID` | `**ID**:`, `**Name**:`, `**Description:**` |
 | Knowledge remove | `cli -- knowledge remove UUID --yes` | `Knowledge entry removed from database 'verify-sqlite'` |
 | Auth status | `cli -- auth status` | `Authentication Status` |
 | Models | `cli -- models current` | `Current model:` |
 | Threads list | `cli -- threads list` | `No threads found.` or table title `Threads` |
-| Threads show | `cli -- threads show THREAD_ID` | `Thread: THREAD_ID` |
-| One-shot query | `cli -- -d verify-sqlite "natural language"` | `Connected to: verify-sqlite (sqlite)` then streamed answer. Needs a provider key. |
+| Threads show | `cli -- threads show THREAD_ID` | `**Thread**: THREAD_ID` |
+| One-shot query | `cli -- -d verify-sqlite "natural language"` | `**Connected to**: verify-sqlite (sqlite)` then streamed answer. Needs a provider key. |
 | Ad-hoc file | `cli -- -d ABS_SQLITE_OR_CSV "natural language"` | skips saved-connection lookup; still needs a provider key |
 
 Destructive commands require `--yes` when stdin is not a TTY. Do not pass `--force` or `-y`.
