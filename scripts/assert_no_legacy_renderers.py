@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if sqlsaber still imports Rich, Questionary, or Rich Console helpers.
-
-Run from the repo root. Reviewers rerun this to check the migration.
-"""
+"""Fail if sqlsaber still imports Rich, Questionary, or Rich Console helpers."""
 
 from __future__ import annotations
 
@@ -22,9 +19,6 @@ FORBIDDEN = re.compile(
     r"|from\s+questionary(?:\.\S+)?\s+import|import\s+questionary(?:\.\S+)?)\b"
 )
 CREATE_CONSOLE = re.compile(r"\bcreate_console\b")
-
-# cyclopts still imports Rich for --help. That is allowed only inside cyclopts.
-# This script only scans our trees.
 
 
 def iter_python_files() -> list[Path]:
@@ -47,9 +41,9 @@ def main() -> int:
         for lineno, line in enumerate(text.splitlines(), start=1):
             if FORBIDDEN.search(line):
                 hits.append(f"{rel}:{lineno}:{line.rstrip()}")
-            elif CREATE_CONSOLE.search(line) and "assert_no_legacy_renderers" not in str(
-                rel
-            ):
+            elif CREATE_CONSOLE.search(
+                line
+            ) and "assert_no_legacy_renderers" not in str(rel):
                 hits.append(f"{rel}:{lineno}:{line.rstrip()}")
     if hits:
         print(f"legacy renderer imports: {len(hits)}")

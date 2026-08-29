@@ -1,8 +1,4 @@
-"""TTY serializer: blocks become saber-tui components.
-
-This module may import ``saber_tui.components.markdown``. It must not be
-imported from ``cli/commands.py`` at module load.
-"""
+"""TTY serializer: blocks become saber-tui components."""
 
 from __future__ import annotations
 
@@ -37,7 +33,7 @@ class Component(Protocol):
 
 
 class AnsiLines:
-    """Wrap pre-rendered ANSI text as a component. Promoted from ``_AnsiBlock``."""
+    """Wrap pre-rendered ANSI text as a component."""
 
     def __init__(self, text: str) -> None:
         self.ansi_text = text.rstrip("\n")

@@ -19,7 +19,6 @@ type SchemaList = list[str]
 config_manager = DatabaseConfigManager()
 logger = get_logger(__name__)
 
-# Create the database management CLI app
 db_app = cyclopts.App(
     name="db",
     help="Manage database connections",
@@ -188,7 +187,6 @@ def add(
             logger.info("db.add.cancelled")
             return
 
-        # Extract values from db_input
         type = db_input.type
         host = db_input.host
         port = db_input.port
@@ -201,7 +199,6 @@ def add(
         ssl_key = db_input.ssl_key
         exclude_schema_list = _normalize_schema_list(db_input.exclude_schemas)
     else:
-        # Non-interactive mode - use provided values or defaults
         if type == "sqlite":
             if not database:
                 logger.error("db.add.missing_path", db_type="sqlite")
@@ -255,8 +252,6 @@ def add(
                 password = ""
         exclude_schema_list = _parse_schema_list(exclude_schemas)
 
-    # Create database config
-    # At this point, all required values should be set
     assert database is not None, "Database should be set by now"
     if type != "sqlite":
         assert host is not None, "Host should be set by now"
@@ -567,7 +562,6 @@ def test(
     logger.info("db.test.start")
 
     async def test_connection():
-        # Lazy import to keep CLI startup fast
         from sqlsaber.database import DatabaseConnection
 
         if name:

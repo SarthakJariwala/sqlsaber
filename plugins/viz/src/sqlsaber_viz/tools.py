@@ -94,8 +94,6 @@ class VizTool(Tool):
         try:
             reference = find_query_result_reference(ctx.messages, file)
             if reference is None:
-                # Compatibility for early ad-hoc histories that omitted execute_sql
-                # tool metadata but still embedded complete rows.
                 tool_call_id = file.removeprefix("result_").removesuffix(".json")
                 payload = find_tool_output_payload(ctx, tool_call_id)
                 if payload is None or not isinstance(payload.get("results"), list):

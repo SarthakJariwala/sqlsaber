@@ -1,4 +1,4 @@
-"""Role to ANSI callables, lifted out of cli/tui_chat.py. No Rich."""
+"""Role to ANSI callables."""
 
 from __future__ import annotations
 

@@ -70,7 +70,6 @@ def _render_transcript(
     renderer = ToolRenderer(registry)
     unavailable = unavailable_artifacts or set()
 
-    # Locate indices of user prompts
     user_indices: list[int] = []
     for idx, message in enumerate(all_msgs):
         for part in getattr(message, "parts", []):
@@ -78,7 +77,6 @@ def _render_transcript(
                 user_indices.append(idx)
                 break
 
-    # Build turn slices as (start_idx, end_idx)
     slices: list[tuple[int, int]] = []
     if user_indices:
         for i, start_idx in enumerate(user_indices):
@@ -109,9 +107,7 @@ def _render_transcript(
                                 parts.append(str(seg))
                     text = "\n".join([s for s in parts if s]) or None
                 if text:
-                    surface.emit(
-                        b.panel((b.md(text),), title="User", role="info")
-                    )
+                    surface.emit(b.panel((b.md(text),), title="User", role="info"))
                     return
         surface.emit(b.panel((b.md("(no content)"),), title="User", role="info"))
 
@@ -160,9 +156,7 @@ def _render_transcript(
                     surface.emit(*result_blocks)
                 if unavailable_results and tool_call_id in unavailable_results:
                     surface.emit(
-                        b.warn(
-                            "Complete query result unavailable; showing preview."
-                        )
+                        b.warn("Complete query result unavailable; showing preview.")
                     )
 
     for start_idx, end_idx in slices or [(0, len(all_msgs))]:
@@ -249,9 +243,7 @@ def show(
     thread = asyncio.run(store.get_thread(thread_id))
     if not thread:
         logger.error("threads.cli.show.not_found", thread_id=thread_id)
-        fail(
-            f"thread not found: {thread_id}\n  List threads with: saber threads list"
-        )
+        fail(f"thread not found: {thread_id}\n  List threads with: saber threads list")
     msgs = asyncio.run(store.get_thread_messages(thread_id))
     from sqlsaber.cli.query_results import (
         cli_query_result_store,
@@ -441,7 +433,6 @@ def resume(
     store = ThreadStorage()
 
     async def _run() -> None:
-        # Lazy imports to avoid heavy modules at CLI startup
         from sqlsaber.cli.artifacts import cli_artifact_store
         from sqlsaber.cli.interactive import InteractiveSession
         from sqlsaber.cli.query_results import cli_query_result_store

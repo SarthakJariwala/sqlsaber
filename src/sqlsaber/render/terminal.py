@@ -1,8 +1,4 @@
-"""Non-interactive hosts: TerminalSurface (TTY) and PlainSurface (pipe).
-
-``render.terminal`` may import saber-tui through ``tui_blocks``. It must not
-be imported from ``cli/commands.py`` at module load.
-"""
+"""Non-interactive hosts: TerminalSurface (TTY) and PlainSurface (pipe)."""
 
 from __future__ import annotations
 
@@ -102,7 +98,7 @@ class TerminalSurface:
         self._form: FormHost | None = None
 
     def start_form(self) -> None:
-        """Open a shared TUI so consecutive asks do not flicker."""
+        """Open a shared TUI."""
         if self._form is None:
             self._form = FormHost(self._styles)
             self._form.start()

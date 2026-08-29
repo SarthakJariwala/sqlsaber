@@ -12,7 +12,7 @@ from sqlsaber.tools.base import Tool
 
 
 class StreamingQueryHandler(AgentStreamPresenter):
-    """One-shot CLI streaming. Prefer ``AgentStreamPresenter`` at new call sites."""
+    """One-shot CLI streaming."""
 
     def __init__(
         self,

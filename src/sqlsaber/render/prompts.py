@@ -1,8 +1,4 @@
-"""PromptForm widget plus overlay and transient-TUI hosts.
-
-This module may import saber-tui Input, SelectList, and TUI. It must not be
-imported from ``cli/commands.py`` at module load.
-"""
+"""PromptForm widget plus overlay and transient-TUI hosts."""
 
 from __future__ import annotations
 
@@ -252,7 +248,7 @@ async def ask_in_transient_tui[T](prompt: Ask[T], styles: Styles) -> T | None:
 
 
 class FormHost:
-    """One TUI reused across sequential asks so onboarding does not flicker."""
+    """One TUI reused across sequential asks."""
 
     def __init__(self, styles: Styles) -> None:
         self._styles = styles

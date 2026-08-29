@@ -22,7 +22,7 @@ _DISPLAY_TOOLS_GROUP = "sqlsaber.display_tools"
 
 @dataclass(frozen=True, slots=True)
 class ToolRenderContext:
-    """Context for result rendering. One value instead of growing kwargs."""
+    """Context for result rendering."""
 
     tool_call_id: str | None = None
     metadata: object = None

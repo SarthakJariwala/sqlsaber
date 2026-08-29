@@ -1,9 +1,4 @@
-"""Session usage tracking for the CLI.
-
-Token accounting in multi-turn conversations has two useful views:
-- cumulative input/output usage: total model traffic for cost/session accounting
-- current context tokens: latest request size, useful for context-window awareness
-"""
+"""Session usage tracking for the CLI."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -20,18 +15,14 @@ class SessionUsage:
     requests: int = 0
     tool_calls: int = 0
 
-    # Cumulative input/output tokens across model requests.
     total_input_tokens: int = 0
     total_output_tokens: int = 0
 
-    # Current context window size (latest request's input tokens).
     current_context_tokens: int = 0
 
-    # Cache tokens (cumulative for reporting and cache-aware pricing).
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
 
-    # Estimated cumulative USD cost. None means pricing was unavailable.
     total_cost_usd: float | None = 0.0
 
     def add_run(

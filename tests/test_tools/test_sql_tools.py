@@ -121,7 +121,6 @@ class TestListTablesTool:
         """Test execution with database connection."""
         tool = ListTablesTool()
 
-        # Use DI to inject schema manager
         mock_db = MockDatabaseConnection()
         mock_schema_manager = MockSchemaManager(mock_db)
         tool.set_connection(mock_db, mock_schema_manager)
@@ -147,7 +146,6 @@ class TestIntrospectSchemaTool:
         """Test execution with table pattern."""
         tool = IntrospectSchemaTool()
 
-        # Use DI to inject schema manager
         mock_db = MockDatabaseConnection()
         mock_schema_manager = MockSchemaManager(mock_db)
         tool.set_connection(mock_db, mock_schema_manager)
@@ -271,7 +269,6 @@ class TestExecuteSQLTool:
         tool = ExecuteSQLTool()
         tool.set_connection(MockDatabaseConnection())
 
-        # Test various write operations
         write_queries = [
             "INSERT INTO users VALUES (1, 'test')",
             "UPDATE users SET name = 'test'",
@@ -327,12 +324,11 @@ class TestExecuteSQLTool:
         tool = ExecuteSQLTool()
         db = MockDatabaseConnection()
 
-        # Simulate database error
         async def mock_execute_error(query, *args, **kwargs):
             raise Exception("Table 'unknown_table' does not exist")
 
         db.execute_query = mock_execute_error
-        tool.db = db  # Set db directly, skip schema manager
+        tool.db = db
 
         result = await tool.execute(
             SimpleNamespace(tool_call_id=None), "SELECT * FROM unknown_table"
@@ -369,8 +365,6 @@ class TestMultiDatabaseRouting:
         result = await tool.execute(db_name="b")
         data = json.loads(result)
         assert "tables" in data
-        # Confirm we routed to db_b's schema manager (each MockSchemaManager wraps
-        # its db; the result is the same shape but came from the right one).
         assert tool._resolve("b").connection is db_b
 
     @pytest.mark.asyncio

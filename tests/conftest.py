@@ -42,7 +42,6 @@ def mock_database_config():
 @pytest.fixture
 def mock_config_manager(temp_dir, monkeypatch):
     """Provide a mock database config manager with temp directory."""
-    # Monkey patch the config directory to use temp directory
     config_dir = temp_dir / "config"
     monkeypatch.setattr(
         "platformdirs.user_config_dir", lambda *args, **kwargs: str(config_dir)

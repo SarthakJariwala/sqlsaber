@@ -1,4 +1,4 @@
-"""Immutable document vocabulary. Stdlib only; safe on the --help path."""
+"""Immutable document vocabulary."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Surface protocol, prompt types, and PromptUnavailable. Stdlib only."""
+"""Surface protocol, prompt types, and PromptUnavailable."""
 
 from __future__ import annotations
 
@@ -57,11 +57,7 @@ class AskChoice[T](Ask[T]):
 
 
 class PromptUnavailable(Exception):
-    """Raised when a prompt is asked of a surface that cannot interact.
-
-    ``cli/commands.py`` converts this into the stable non-interactive message
-    and exit code 2. ``AskConfirm.assume_yes`` is the ``--yes`` short-circuit.
-    """
+    """Raised when a prompt is asked of a surface that cannot interact."""
 
     def __init__(self, prompt: Ask[Any]) -> None:
         self.prompt = prompt

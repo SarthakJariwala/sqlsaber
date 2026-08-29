@@ -1,4 +1,4 @@
-"""Lazy CLI emit helpers. No saber-tui at import."""
+"""CLI emit helpers."""
 
 from __future__ import annotations
 

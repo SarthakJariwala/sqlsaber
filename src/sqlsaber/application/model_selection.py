@@ -34,19 +34,16 @@ async def choose_model(
         out(b.warn("No models available"))
         return None
 
-    # Filter by provider if restricted
     if restrict_provider:
         models = [m for m in models if m.get("provider") == restrict_provider]
         if not models:
             out(b.warn(f"No models available for {restrict_provider}"))
             return None
 
-    # Get recommended model for the provider
     recommended_id = None
     if restrict_provider and restrict_provider in ModelManager.RECOMMENDED_MODELS:
         recommended_id = ModelManager.RECOMMENDED_MODELS[restrict_provider]
 
-    # Build choices
     choices = []
     recommended_index = 0
 
@@ -68,11 +65,9 @@ async def choose_model(
 
         choices.append(Choice(choice_text, value=model["id"]))
 
-    # Move recommended model to top if it exists
     if recommended_index > 0:
         choices.insert(0, choices.pop(recommended_index))
 
-    # Prompt user
     selected_model = await prompter.select(
         "Select a model:",
         choices=choices,
@@ -82,7 +77,6 @@ async def choose_model(
     if selected_model:
         return selected_model
 
-    # User cancelled, return recommended or first available
     if recommended_id and restrict_provider:
         return f"{restrict_provider}:{recommended_id}"
     return models[0]["id"] if models else None

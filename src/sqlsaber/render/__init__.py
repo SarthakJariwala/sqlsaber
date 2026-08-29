@@ -1,14 +1,4 @@
-"""SQLsaber rendering: blocks out, saber-tui or markdown in.
-
-Lazy-import rules (keep ``saber --help`` under 0.5s):
-
-* This module imports stdlib plus ``render.blocks`` only at load time.
-* ``saber_tui.components.markdown`` may be imported from:
-  ``render.tui_blocks``, ``render.prompts``, ``theme.styles`` (inside
-  ``get_styles``), and ``cli.tui_chat``.
-* ``cli/commands.py`` must not import those modules at module load.
-  Call ``cli_out()`` / ``cli_err()`` from inside command functions.
-"""
+"""SQLsaber rendering: blocks out, saber-tui or markdown in."""
 
 from __future__ import annotations
 
@@ -143,7 +133,7 @@ def reset_io(
     stderr: TextIO | None = None,
     tty: bool | None = None,
 ) -> None:
-    """Rebind ``cli_out`` / ``cli_err``. Test seam.
+    """Rebind ``cli_out`` / ``cli_err``.
 
     Args:
         stdout: Stream for stdout. Defaults to ``sys.stdout``.
@@ -194,21 +184,18 @@ def _make_surface(stream: TextIO, *, stderr: bool, tty: bool | None = None) -> S
 
 
 def html_of(blocks_in: Sequence[Block]) -> str:
-    """Lazy wrapper around ``render.html.html_of``."""
     from .html import html_of as _html_of
 
     return _html_of(blocks_in)
 
 
 def md_of(blocks_in: Sequence[Block]) -> str:
-    """Lazy wrapper around ``render.markdown_text.md_of``."""
     from .markdown_text import md_of as _md_of
 
     return _md_of(blocks_in)
 
 
 def __getattr__(name: str):
-    """Lazy re-exports so importing ``sqlsaber.render`` stays cheap."""
     if name in {
         "Ask",
         "AskChoice",

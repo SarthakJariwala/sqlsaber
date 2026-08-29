@@ -1,4 +1,4 @@
-"""ChatApp-backed Surface. Imports saber-tui; keep off the --help path."""
+"""ChatApp-backed Surface."""
 
 from __future__ import annotations
 

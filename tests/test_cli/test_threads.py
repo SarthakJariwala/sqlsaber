@@ -185,19 +185,13 @@ class TestThreadsCLI:
 
     def test_human_readable_timestamp(self):
         """Test _human_readable timestamp formatting."""
-        # Test with valid timestamp (adjust for timezone differences)
-        timestamp = 1672531200.0  # 2023-01-01 00:00:00 UTC
+        timestamp = 1672531200.0
         result = _human_readable(timestamp)
-        # Just check that it contains a date format, don't be timezone specific
-        assert len(result) > 10  # Should be a formatted date string
-        assert (
-            "2022" in result or "2023" in result
-        )  # Could be either depending on timezone
+        assert len(result) > 10
+        assert "2022" in result or "2023" in result
 
-        # Test with None
         assert _human_readable(None) == "-"
 
-        # Test with zero/empty
         assert _human_readable(0.0) == "-"
 
     def test_render_transcript_with_tool_calls(self, capture_surface):
@@ -265,14 +259,12 @@ class TestThreadsCLI:
     def test_create_threads_app(self):
         """Test that threads app is created correctly."""
         app = create_threads_app()
-        # Cyclopts apps have a tuple for name attribute
         assert "threads" in str(app.name)
         assert "Manage SQLsaber threads" in app.help
 
     @pytest.mark.asyncio
     async def test_storage_integration(self, temp_storage):
         """Integration test with real ThreadStorage."""
-        # Create test thread
         messages = [
             ModelRequest(parts=[UserPromptPart("Hello")]),
             ModelResponse(parts=[TextPart("Hi there!")]),
@@ -284,12 +276,10 @@ class TestThreadsCLI:
         )
         await temp_storage.save_metadata(thread_id=thread_id, title="Test Thread")
 
-        # Test that we can retrieve threads
         threads = await temp_storage.list_threads()
         assert len(threads) == 1
         assert threads[0].title == "Test Thread"
 
-        # Test that we can get thread messages
         retrieved_messages = await temp_storage.get_thread_messages(thread_id)
         assert len(retrieved_messages) == 2
 
@@ -316,24 +306,20 @@ class TestThreadsCLI:
                     "sqlsaber.cli.interactive.InteractiveSession"
                 ) as mock_session_class,
             ):
-                # Mock database resolution
                 mock_resolved = MagicMock()
                 mock_resolved.connection_string = "postgresql://test"
                 mock_resolved.name = "prod_db"
                 mock_resolve.return_value = mock_resolved
 
-                # Mock database connection
                 mock_db_conn = MagicMock()
                 mock_db_conn_class.return_value = mock_db_conn
 
-                # Mock agent and session
                 mock_agent_instance = MagicMock()
                 mock_agent_instance.agent = MagicMock()
                 mock_agent_class.return_value = mock_agent_instance
                 mock_session = MagicMock()
                 mock_session_class.return_value = mock_session
 
-                # This would be the actual resume logic
                 resolved_thread = await store.get_thread("thread-1")
                 assert resolved_thread == thread
 
@@ -548,7 +534,7 @@ class TestThreadsCLI:
 
             thread = await temp_storage.get_thread(thread_id)
             messages = await temp_storage.get_thread_messages(thread_id)
-            html = render_thread_html(thread, messages)  # type: ignore[arg-type]
+            html = render_thread_html(thread, messages)
             output_path.write_text(html, encoding="utf-8")
 
             assert output_path.exists()

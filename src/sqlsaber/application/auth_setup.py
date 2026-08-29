@@ -39,7 +39,6 @@ async def configure_api_key(
     Returns:
         True if API key configured successfully, False otherwise
     """
-    # Get API key (cascades env -> keyring -> prompt)
     api_key = api_key_manager.get_api_key(provider)
 
     if api_key:
@@ -84,7 +83,6 @@ async def setup_auth(
         summary = ", ".join(parts)
         out(b.md(f"Existing authentication found for {provider}: {summary}"))
 
-    # API key flow
     if api_key_in_keyring:
         reset_api_key = await prompter.confirm(
             f"{provider.title()} API key is stored in your keyring. Reset before continuing?",

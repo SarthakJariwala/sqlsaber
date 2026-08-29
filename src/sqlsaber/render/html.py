@@ -1,4 +1,4 @@
-"""HTML export serializer. No terminal, no Console, no Styles."""
+"""HTML export serializer."""
 
 from __future__ import annotations
 

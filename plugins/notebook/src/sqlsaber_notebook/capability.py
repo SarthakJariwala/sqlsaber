@@ -93,8 +93,6 @@ def _nested_usage_limits() -> UsageLimits:
         return UsageLimits(request_limit=None)
     if parent_limits.tool_calls_limit is None:
         return parent_limits
-    # The successful parent analyze_data call is counted after execute returns.
-    # Reserve room for it in the child's derived limit without mutating the parent.
     return replace(
         parent_limits,
         tool_calls_limit=max(0, parent_limits.tool_calls_limit - 1),
@@ -368,8 +366,6 @@ class Notebook(SqlSaberCapability):
             execute,
             name=self.tool.name,
             takes_ctx=True,
-            # Notebook delegation must run as a barrier so sibling parent tools
-            # are fully accounted before the nested agent checks shared limits.
             sequential=True,
         )
 

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Append a well-formed row to a show-me-your-work decision log (TSV).
-# Usage: log.sh <logfile> <phase> <decision> <why> <evidence> <result>
 set -euo pipefail
 
 if [ "$#" -ne 6 ]; then

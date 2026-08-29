@@ -14,14 +14,12 @@ from pygments.util import ClassNotFound
 DEFAULT_THEME_NAME = "nord"
 
 DEFAULT_ROLE_PALETTE = {
-    # components
     "table.header": "bold $primary",
     "panel.border.user": "$info",
     "panel.border.assistant": "$success",
     "panel.border.thread": "$primary",
     "spinner": "$warning",
     "status": "$warning",
-    # domain-specific
     "key.primary": "bold $warning",
     "key.foreign": "bold $accent",
     "key.index": "bold $primary",

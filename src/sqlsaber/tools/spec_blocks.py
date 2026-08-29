@@ -1,4 +1,4 @@
-"""Turn a ToolDisplaySpec into blocks. Replaces SpecRenderer's dual path."""
+"""Turn a ToolDisplaySpec into blocks."""
 
 from __future__ import annotations
 

@@ -68,8 +68,6 @@ class SQLTool(Tool):
         """Initialize with optional database connection."""
         super().__init__()
         self.db = db_connection
-        # allow_dangerous is set by SQLSaberAgent at session level
-        # Do NOT expose this as a tool parameter to prevent LLM from escalating
         self.allow_dangerous: bool = False
         self.registry: DatabaseRegistry | None = None
         if schema_manager:
@@ -290,16 +288,13 @@ class IntrospectSchemaTool(SQLTool):
         try:
             schema_info = await target.schema_manager.get_schema_info(table_pattern)
 
-            # Format the schema information
             formatted_info = {}
             for table_name, table_info in schema_info.items():
                 table_data = {}
 
-                # Add table comment if present
                 if table_info.get("comment"):
                     table_data["comment"] = table_info["comment"]
 
-                # Add columns with comments if present
                 table_data["columns"] = {}
                 for col_name, col_info in table_info["columns"].items():
                     column_data = {
@@ -311,7 +306,6 @@ class IntrospectSchemaTool(SQLTool):
                         column_data["comment"] = col_info["comment"]
                     table_data["columns"][col_name] = column_data
 
-                # Add other schema information
                 table_data["primary_keys"] = table_info["primary_keys"]
                 table_data["foreign_keys"] = [
                     f"{fk['column']} -> {fk['references']['table']}.{fk['references']['column']}"
@@ -440,17 +434,14 @@ class ExecuteSQLTool(SQLTool):
         max_rows = self.MAX_ROWS
 
         try:
-            # Get the dialect for this database
             dialect = target.dialect
 
-            # Security check using sqlglot AST analysis
             validation_result = validate_sql(
                 query, dialect, allow_dangerous=self.allow_dangerous
             )
             if not validation_result.allowed:
                 return json_dumps({"error": validation_result.reason})
 
-            # Add LIMIT if not present and it's a SELECT query
             auto_limit_applied = bool(
                 validation_result.is_select
                 and max_rows
@@ -461,19 +452,14 @@ class ExecuteSQLTool(SQLTool):
 
             query_type = validation_result.query_type or "other"
 
-            # Commit only for DML/DDL statements in dangerous mode
             commit = bool(self.allow_dangerous and query_type in {"dml", "ddl"})
 
-            # Execute the query
             results = await target.connection.execute_query(
                 query,
                 commit=commit,
                 read_only=not self.allow_dangerous,
             )
 
-            # Format response based on query type. Directly constructed legacy
-            # ExecuteSQLTool instances retain their old string return; managed and
-            # standalone SqlTools always inject a canonical result store.
             tool_call_id = ctx.tool_call_id
             if query_type in {"dml", "ddl"}:
                 payload: dict[str, Any] = {"success": True}
@@ -567,7 +553,6 @@ class ExecuteSQLTool(SQLTool):
         except Exception as e:
             error_msg = str(e)
 
-            # Provide helpful error messages
             suggestions = []
             if "column" in error_msg.lower() and "does not exist" in error_msg.lower():
                 suggestions.append(

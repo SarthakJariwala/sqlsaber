@@ -22,7 +22,6 @@ class Tool(ABC):
     display_spec: ClassVar[ToolDisplaySpec | None] = None
 
     def __init__(self):
-        """Initialize the tool."""
         pass
 
     @property

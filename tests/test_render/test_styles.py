@@ -1,4 +1,4 @@
-"""Tests for Rich-free role style parsing."""
+"""Tests for role style parsing."""
 
 from sqlsaber.theme.styles import compile_style, hex_to_rgb, parse_role_style
 

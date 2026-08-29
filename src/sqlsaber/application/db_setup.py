@@ -60,7 +60,6 @@ async def collect_db_input(
     Returns:
         DatabaseInput with collected values or None if cancelled
     """
-    # Ask for database type
     db_type = await prompter.select(
         "Database type:",
         choices=["postgresql", "mysql", "sqlite", "duckdb"],
@@ -70,7 +69,6 @@ async def collect_db_input(
     if db_type is None:
         return None
 
-    # Handle file-based databases
     if db_type in {"sqlite", "duckdb"}:
         database_path = await prompter.path(
             f"{db_type.upper()} file path:", only_directories=False
@@ -99,7 +97,6 @@ async def collect_db_input(
             exclude_schemas = _normalize_schemas(exclude_prompt.split(","))
 
     else:
-        # PostgreSQL/MySQL need connection details
         host = await prompter.text("Host:", default="localhost")
         if host is None:
             return None
@@ -130,7 +127,6 @@ async def collect_db_input(
         ssl_cert = None
         ssl_key = None
 
-        # Ask for SSL configuration if enabled
         if include_ssl:
             configure_ssl = await prompter.confirm(
                 "Configure SSL/TLS settings?", default=False
