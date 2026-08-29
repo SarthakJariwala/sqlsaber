@@ -5,7 +5,6 @@ from __future__ import annotations
 import platform
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
 
 import saber_tui.utils as tui_utils
 from saber_tui import (

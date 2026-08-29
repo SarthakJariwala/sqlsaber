@@ -12,8 +12,6 @@ from pydantic_ai.messages import (
     ToolReturnPart,
     UserPromptPart,
 )
-from rich.console import Console
-
 from sqlsaber.cli.html_export import (
     build_turn_slices,
     render_thread_html,
@@ -24,6 +22,7 @@ from sqlsaber.cli.threads import (
     create_threads_app,
 )
 from sqlsaber.config.database import DatabaseConfigManager
+from sqlsaber.render.markdown_text import md_of
 from sqlsaber.threads.metadata import encode_thread_extra_metadata
 from sqlsaber.threads.storage import Thread, ThreadStorage
 
@@ -32,9 +31,15 @@ class TestThreadsCLI:
     """Test CLI thread commands."""
 
     @pytest.fixture
-    def mock_console(self):
-        """Mock console for testing output."""
-        return MagicMock(spec=Console)
+    def capture_surface(self):
+        class CaptureSurface:
+            def __init__(self):
+                self.blocks = []
+
+            def emit(self, *blocks):
+                self.blocks.extend(blocks)
+
+        return CaptureSurface()
 
     @pytest.fixture
     def temp_storage(self):
@@ -111,59 +116,54 @@ class TestThreadsCLI:
         """Convert messages to JSON bytes."""
         return ModelMessagesTypeAdapter.dump_json(messages)
 
-    def test_list_threads_function_call(self, sample_threads):
+    def test_list_threads_function_call(self, sample_threads, capsys):
         """Test the list_threads functionality via ThreadStorage."""
         with patch("sqlsaber.threads.ThreadStorage") as mock_storage_class:
-            # Use MagicMock instead of AsyncMock
             mock_storage = MagicMock()
             mock_storage_class.return_value = mock_storage
 
-            with patch("sqlsaber.cli.threads.console") as mock_console:
-                from sqlsaber.cli.threads import list_threads
+            from sqlsaber.cli.threads import list_threads
 
-                # Mock asyncio.run to avoid event loop conflicts
-                with patch("asyncio.run") as mock_run:
-                    mock_run.return_value = sample_threads
-                    list_threads()
+            with patch("asyncio.run") as mock_run:
+                mock_run.return_value = sample_threads
+                list_threads()
 
-                # Verify the function was called correctly
-                mock_run.assert_called_once()
-                mock_console.print.assert_called()
+            mock_run.assert_called_once()
+            output = capsys.readouterr().out
+            assert "thread-1" in output
+            assert "Users query" in output
 
-    def test_list_threads_empty(self):
+    def test_list_threads_empty(self, capsys):
         """Test listing threads when no threads exist."""
         with patch("sqlsaber.threads.ThreadStorage") as mock_storage_class:
             mock_storage = MagicMock()
             mock_storage_class.return_value = mock_storage
 
-            with patch("sqlsaber.cli.threads.console") as mock_console:
-                from sqlsaber.cli.threads import list_threads
+            from sqlsaber.cli.threads import list_threads
 
-                with patch("asyncio.run") as mock_run:
-                    mock_run.return_value = []
-                    list_threads()
+            with patch("asyncio.run") as mock_run:
+                mock_run.return_value = []
+                list_threads()
 
-                mock_console.print.assert_called_with("No threads found.")
+            assert "No threads found." in capsys.readouterr().out
 
-    def test_show_thread_not_found(self):
+    def test_show_thread_not_found(self, capsys):
         """Test showing a thread that doesn't exist."""
         with patch("sqlsaber.threads.ThreadStorage") as mock_storage_class:
             mock_storage = MagicMock()
             mock_storage_class.return_value = mock_storage
 
-            with patch("sqlsaber.cli.threads.error_console") as mock_error_console:
-                from sqlsaber.cli.threads import show
+            from sqlsaber.cli.threads import show
 
-                with patch("asyncio.run") as mock_run:
-                    mock_run.return_value = None
-                    with pytest.raises(SystemExit) as exc_info:
-                        show("nonexistent-thread")
+            with patch("asyncio.run") as mock_run:
+                mock_run.return_value = None
+                with pytest.raises(SystemExit) as exc_info:
+                    show("nonexistent-thread")
 
-                assert exc_info.value.code == 1
-                mock_error_console.print.assert_called_with(
-                    "[error]Error: thread not found: nonexistent-thread[/error]\n"
-                    "  List threads with: saber threads list"
-                )
+            assert exc_info.value.code == 1
+            err = capsys.readouterr().err
+            assert "**Error:** thread not found: nonexistent-thread" in err
+            assert "List threads with: saber threads list" in err
 
     def test_show_thread_found(self, sample_threads, sample_messages):
         """Test showing a thread that exists."""
@@ -173,16 +173,15 @@ class TestThreadsCLI:
             mock_storage = MagicMock()
             mock_storage_class.return_value = mock_storage
 
-            with patch("sqlsaber.cli.threads.console") as mock_console:
-                with patch("sqlsaber.cli.threads._render_transcript") as mock_render:
-                    from sqlsaber.cli.threads import show
+            with patch("sqlsaber.cli.threads._render_transcript") as mock_render:
+                from sqlsaber.cli.threads import show
 
-                    with patch("asyncio.run", side_effect=[thread, sample_messages]):
-                        show("thread-1")
+                with patch("asyncio.run", side_effect=[thread, sample_messages]):
+                    show("thread-1")
 
-                    mock_render.assert_called_once_with(
-                        mock_console, sample_messages, None
-                    )
+                mock_render.assert_called_once()
+                assert mock_render.call_args.args[1] == sample_messages
+                assert mock_render.call_args.args[2] is None
 
     def test_human_readable_timestamp(self):
         """Test _human_readable timestamp formatting."""
@@ -201,7 +200,7 @@ class TestThreadsCLI:
         # Test with zero/empty
         assert _human_readable(0.0) == "-"
 
-    def test_render_transcript_with_tool_calls(self, mock_console):
+    def test_render_transcript_with_tool_calls(self, capture_surface):
         """Test _render_transcript with various message types."""
         messages = [
             ModelRequest(parts=[UserPromptPart("List all tables")]),
@@ -228,16 +227,13 @@ class TestThreadsCLI:
             ),
         ]
 
-        with patch("sqlsaber.cli.display.DisplayManager") as mock_dm_class:
-            mock_dm = MagicMock()
-            mock_dm_class.return_value = mock_dm
+        _render_transcript(capture_surface, messages)
+        output = md_of(capture_surface.blocks)
+        assert "List all tables" in output
+        assert "Here are your tables." in output
+        assert capture_surface.blocks
 
-            _render_transcript(mock_console, messages)
-
-            # Verify DisplayManager was used for tool calls
-            mock_dm.show_tool_executing.assert_called()
-
-    def test_render_transcript_sql_execution(self, mock_console):
+    def test_render_transcript_sql_execution(self, capture_surface):
         """Test _render_transcript with SQL execution results."""
         messages = [
             ModelRequest(parts=[UserPromptPart("SELECT * FROM users LIMIT 5")]),
@@ -261,19 +257,10 @@ class TestThreadsCLI:
             ),
         ]
 
-        with patch("sqlsaber.cli.display.DisplayManager") as mock_dm_class:
-            mock_dm = MagicMock()
-            mock_dm_class.return_value = mock_dm
-
-            _render_transcript(mock_console, messages)
-
-            # Verify tool results were shown
-            mock_dm.show_tool_result.assert_called_with(
-                "execute_sql",
-                '{"success": true, "results": [{"id": 1, "name": "John"}]}',
-                tool_call_id="call-2",
-                metadata=None,
-            )
+        _render_transcript(capture_surface, messages)
+        output = md_of(capture_surface.blocks)
+        assert "SELECT * FROM users LIMIT 5" in output
+        assert "John" in output
 
     def test_create_threads_app(self):
         """Test that threads app is created correctly."""
@@ -408,9 +395,7 @@ class TestThreadsCLI:
                 "sqlsaber.cli.interactive.InteractiveSession", FakeInteractiveSession
             ),
             patch("sqlsaber.cli.threads._render_transcript"),
-            patch("sqlsaber.cli.threads.console") as mock_console,
         ):
-            mock_console.is_terminal = False
             resume("thread-multi")
 
         assert captured["database"] == ["prod", "staging"]
@@ -418,7 +403,7 @@ class TestThreadsCLI:
         assert captured["ran"] is True
         assert captured["closed"] is True
 
-    def test_resume_requires_configured_database_for_automatic_resume(self):
+    def test_resume_requires_configured_database_for_automatic_resume(self, capsys):
         """Automatic resume stops before constructing a session for unknown DBs."""
         from sqlsaber.cli.threads import resume
 
@@ -448,7 +433,6 @@ class TestThreadsCLI:
                 FakeDatabaseConfigManager,
             ),
             patch("sqlsaber.session.SQLSaberSession") as mock_session,
-            patch("sqlsaber.cli.threads.error_console") as mock_error_console,
         ):
             with pytest.raises(SystemExit) as exc_info:
                 resume("thread-missing-db")
@@ -456,10 +440,14 @@ class TestThreadsCLI:
         assert exc_info.value.code == 1
         mock_session.assert_not_called()
         store.get_thread_messages.assert_not_awaited()
-        mock_error_console.print.assert_called_with(
-            "[error]Error: the thread database is not configured for automatic "
-            "resume.[/error]\n"
-            "  Retry with: saber threads resume thread-missing-db --database DATABASE"
+        err = capsys.readouterr().err
+        assert (
+            "**Error:** the thread database is not configured for automatic resume."
+            in err
+        )
+        assert (
+            "Retry with: saber threads resume thread-missing-db --database DATABASE"
+            in err
         )
 
     def test_build_turn_slices_basic(self, sample_messages):
@@ -525,24 +513,22 @@ class TestThreadsCLI:
         assert "&amp;" in html
         assert "&lt;test&gt;" in html
 
-    def test_export_thread_not_found(self):
+    def test_export_thread_not_found(self, capsys):
         """Test exporting a thread that doesn't exist."""
         with patch("sqlsaber.threads.ThreadStorage") as mock_storage_class:
             mock_storage = MagicMock()
             mock_storage.get_thread = AsyncMock(return_value=None)
             mock_storage_class.return_value = mock_storage
 
-            with patch("sqlsaber.cli.threads.error_console") as mock_error_console:
-                from sqlsaber.cli.threads import export
+            from sqlsaber.cli.threads import export
 
-                with pytest.raises(SystemExit) as exc_info:
-                    export("nonexistent-thread")
+            with pytest.raises(SystemExit) as exc_info:
+                export("nonexistent-thread")
 
-                assert exc_info.value.code == 1
-                mock_error_console.print.assert_called_with(
-                    "[error]Error: thread not found: nonexistent-thread[/error]\n"
-                    "  List threads with: saber threads list"
-                )
+            assert exc_info.value.code == 1
+            err = capsys.readouterr().err
+            assert "**Error:** thread not found: nonexistent-thread" in err
+            assert "List threads with: saber threads list" in err
 
     @pytest.mark.asyncio
     async def test_share_thread_integration(self, temp_storage):

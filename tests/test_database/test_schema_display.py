@@ -1,18 +1,16 @@
 """Tests for schema display functionality and field mappings."""
 
-from io import StringIO
-
 import aiosqlite
 import duckdb
 import pytest
 
-from sqlsaber.cli.display import DisplayManager
 from sqlsaber.database import DuckDBConnection, SQLiteConnection
 from sqlsaber.database.csv import CSVConnection
 from sqlsaber.database.duckdb import DuckDBSchemaIntrospector
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.database.sqlite import SQLiteSchemaIntrospector
-from sqlsaber.theme.manager import create_console
+from sqlsaber.render.markdown_text import md_of
+from sqlsaber.tools.renderer import ToolRenderer, core_display_registry
 
 
 class TestSchemaDisplayMappings:
@@ -128,14 +126,11 @@ class TestSchemaDisplayMappings:
         schema_manager = SchemaManager(db_conn)
         schema_info = await schema_manager.get_schema_info()
 
-        # Test display manager
-        string_io = StringIO()
-        console = create_console(file=string_io, width=120, legacy_windows=False)
-        display_manager = DisplayManager(console)
-
-        # This should not raise an error and should populate type information
-        display_manager.show_tool_result("introspect_schema", schema_info)
-        output = string_io.getvalue()
+        output = md_of(
+            ToolRenderer(core_display_registry()).result(
+                "introspect_schema", schema_info
+            )
+        )
 
         # Verify types are displayed (not empty)
         assert "TEXT" in output  # name column type
@@ -170,12 +165,11 @@ class TestSchemaDisplayMappings:
         schema_manager = SchemaManager(db_conn)
         schema_info = await schema_manager.get_schema_info()
 
-        string_io = StringIO()
-        console = create_console(file=string_io, width=120, legacy_windows=False)
-        display_manager = DisplayManager(console)
-
-        display_manager.show_tool_result("introspect_schema", schema_info)
-        output = string_io.getvalue()
+        output = md_of(
+            ToolRenderer(core_display_registry()).result(
+                "introspect_schema", schema_info
+            )
+        )
 
         assert "Unique product identifier" in output
         assert "Product name" in output
@@ -200,14 +194,9 @@ class TestSchemaDisplayMappings:
         schema_manager = SchemaManager(db_conn)
         tables = await schema_manager.list_tables()
 
-        # Test display manager
-        string_io = StringIO()
-        console = create_console(file=string_io, width=120, legacy_windows=False)
-        display_manager = DisplayManager(console)
-
-        # This should not raise an error and should populate type information
-        display_manager.show_tool_result("list_tables", tables)
-        output = string_io.getvalue()
+        output = md_of(
+            ToolRenderer(core_display_registry()).result("list_tables", tables)
+        )
 
         # Verify types are displayed in the Type column (not empty)
         lines = output.split("\n")

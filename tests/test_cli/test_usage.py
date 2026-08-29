@@ -1,17 +1,14 @@
-from io import StringIO
-
 import pytest
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.usage import RequestUsage, RunUsage
-from saber_tui.utils import strip_ansi
 
-from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.usage import (
     SessionUsage,
     format_cost_usd,
     request_usages_from_messages,
+    session_summary_blocks,
 )
-from sqlsaber.theme.manager import create_console
+from sqlsaber.render.markdown_text import md_of
 
 
 def test_session_usage_tracks_cumulative_usage_context_and_cache_aware_cost() -> None:
@@ -118,8 +115,6 @@ def test_format_cost_usd_handles_known_zero_tiny_and_unknown_costs() -> None:
 
 
 def test_session_summary_labels_total_usage_and_current_context() -> None:
-    buffer = StringIO()
-    console = create_console(file=buffer, force_terminal=True, width=100)
     session_usage = SessionUsage()
     session_usage.add_run(
         RunUsage(input_tokens=4200, output_tokens=820, requests=1, tool_calls=7),
@@ -127,9 +122,7 @@ def test_session_summary_labels_total_usage_and_current_context() -> None:
         model_name="anthropic:claude-opus-4-6",
     )
 
-    DisplayManager(console).show_session_summary(session_usage)
-
-    output = strip_ansi(buffer.getvalue())
+    output = md_of(session_summary_blocks(session_usage))
     assert "Session Summary" in output
     assert "Usage:" in output
     assert "4.2k in / 820 out" in output

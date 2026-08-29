@@ -1,7 +1,7 @@
 import asyncio
 import time
 from collections.abc import Callable
-from io import BytesIO, StringIO
+from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
@@ -22,7 +22,6 @@ from pydantic_ai.messages import (
     ToolReturnPart,
 )
 from pydantic_ai.usage import RequestUsage, RunUsage
-from rich.table import Table
 from saber_tui import PosixProcessTerminal, TerminalCapabilities, WindowsProcessTerminal
 from saber_tui.components import Box
 from saber_tui.components import Image as TUIImage
@@ -32,11 +31,13 @@ from saber_tui.utils import strip_ansi, visible_width
 
 import sqlsaber.cli.interactive as interactive
 from sqlsaber.cli import tui_chat
+from sqlsaber.cli.chat_surface import ChatSurface
 from sqlsaber.cli.interactive import InteractiveSession
 from sqlsaber.cli.tui_chat import ChatApp, build_chat_app
 from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
 from sqlsaber.config.settings import ThinkingLevel
-from sqlsaber.theme.manager import create_console, get_theme_manager
+from sqlsaber.render import blocks as b
+from sqlsaber.theme.manager import get_theme_manager
 
 
 class FakeTerminal:
@@ -628,16 +629,17 @@ async def test_execute_query_refreshes_footer_usage_cost_and_context() -> None:
     assert "Cost: $0.9000" in viewport
 
 
-def test_chat_app_renders_rich_output_as_ansi_inside_tui() -> None:
+def test_chat_app_renders_table_blocks_inside_tui() -> None:
     terminal = FakeTerminal(columns=100, rows=12)
     app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
     app.tui.start()
 
-    table = Table(title="Results")
-    table.add_column("name")
-    table.add_column("total")
-    table.add_row("Alice", "42")
-    app.append_rich(lambda console: console.print(table))
+    ChatSurface(app).emit(
+        b.table(
+            [{"name": "Alice", "total": "42"}],
+            caption="Results",
+        )
+    )
     app.tui.flush_render()
 
     viewport = "\n".join(app.render_plain_viewport())
@@ -743,7 +745,7 @@ def test_user_message_render_reuses_cached_theme_styles(monkeypatch) -> None:
     def fail_theme_lookup(*args, **kwargs):
         raise AssertionError("theme lookup should be cached")
 
-    monkeypatch.setattr(tui_chat, "_theme_fg", fail_theme_lookup)
+    monkeypatch.setattr("sqlsaber.theme.styles.get_styles", fail_theme_lookup)
 
     assert component.render(80) == first
 
@@ -756,7 +758,6 @@ def test_streaming_handler_resolves_current_display_registry() -> None:
     current = {"registry": first_registry}
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
         display_registry_provider=lambda: current["registry"],
     )
 
@@ -772,7 +773,6 @@ async def test_streaming_handler_keeps_native_markdown_on_part_end() -> None:
     app.tui.start()
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
 
     await handler.on_event(PartStartEvent(index=0, part=TextPart("**hello**")))
@@ -795,7 +795,6 @@ async def test_streaming_handler_writes_first_markdown_chunk_immediately() -> No
     terminal.writes.clear()
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
 
     await handler.on_event(PartStartEvent(index=0, part=TextPart("first chunk")))
@@ -808,7 +807,6 @@ async def test_streaming_handler_replaces_restarted_text_part() -> None:
     app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
 
     await handler.on_event(PartStartEvent(index=2, part=TextPart("obsolete")))
@@ -848,7 +846,6 @@ async def test_streaming_handler_replaces_parts_across_text_sql_and_thinking() -
     app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
     index = 4
 
@@ -902,7 +899,6 @@ async def test_streaming_handler_routes_interleaved_text_and_thinking_by_index()
     app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
 
     await handler.on_event(PartStartEvent(index=0, part=TextPart("answer")))
@@ -935,7 +931,6 @@ async def test_streaming_handler_renders_sql_and_results_as_native_markdown() ->
     app.tui.start()
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
 
     await handler.on_event(
@@ -973,7 +968,6 @@ async def test_streaming_handler_streams_partial_sql_tool_arguments_without_dupl
     app.tui.start()
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=100, legacy_windows=False),
     )
     tool_call_id = "sql-stream"
 
@@ -1035,7 +1029,6 @@ async def test_streaming_handler_streams_args_after_fragmented_tool_name() -> No
     app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
 
     await handler.on_event(
@@ -1068,7 +1061,6 @@ async def test_streaming_handler_reconciles_interleaved_sql_calls_by_final_id() 
     )
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=100, legacy_windows=False),
     )
 
     await handler.on_event(
@@ -1138,7 +1130,6 @@ async def test_streaming_handler_removes_sql_preview_rejected_by_final_call() ->
     app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
     tool_call_id = "invalid-sql"
 
@@ -1176,7 +1167,6 @@ async def test_cancelled_run_removes_partial_sql_preview_and_state() -> None:
     terminal.writes.clear()
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
 
     async def run_query(*args, event_stream_handler, **kwargs):
@@ -1214,7 +1204,6 @@ async def test_successful_run_preserves_reconciled_sql_after_state_cleanup() -> 
     app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
     run_result = object()
     tool_call_id = "successful-sql"
@@ -1282,7 +1271,6 @@ async def test_streaming_handler_prefers_native_tool_result_tui() -> None:
     )
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
         display_registry={"analyze_data": NativeRenderer()},
     )
 
@@ -1324,7 +1312,6 @@ async def test_sql_result_replaces_loader_without_idle_render(monkeypatch) -> No
     )
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
     app.set_loading("Executing SQL...")
 
@@ -1354,7 +1341,6 @@ async def test_streaming_handler_uses_safe_fence_and_escapes_terminal_controls()
     app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
 
     await handler.on_event(
@@ -1376,7 +1362,6 @@ async def test_cancel_current_task_uses_token_without_task_cancellation() -> Non
     terminal = FakeTerminal(columns=80, rows=12)
     app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
     app.tui.start()
-    chat_console = tui_chat.ChatConsole(app)
     session = InteractiveSession.__new__(InteractiveSession)
     session.cancellation_token = asyncio.Event()
 
@@ -1402,7 +1387,7 @@ async def test_cancel_current_task_uses_token_without_task_cancellation() -> Non
     task = FakeTask()
     session.current_task = task
 
-    await session._cancel_current_task(app, chat_console)
+    await session._cancel_current_task(app)
 
     assert session.cancellation_token.is_set()
     assert task.done()
@@ -1414,7 +1399,6 @@ async def test_cancel_current_task_hard_cancels_when_token_does_not_finish() -> 
     terminal = FakeTerminal(columns=80, rows=12)
     app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
     app.tui.start()
-    chat_console = tui_chat.ChatConsole(app)
     session = InteractiveSession.__new__(InteractiveSession)
     session.cancellation_token = asyncio.Event()
     started = asyncio.Event()
@@ -1427,7 +1411,7 @@ async def test_cancel_current_task_hard_cancels_when_token_does_not_finish() -> 
     await started.wait()
     session.current_task = task
 
-    cancel_task = asyncio.create_task(session._cancel_current_task(app, chat_console))
+    cancel_task = asyncio.create_task(session._cancel_current_task(app))
     done, _ = await asyncio.wait({cancel_task}, timeout=0.5)
 
     try:
@@ -1455,14 +1439,13 @@ async def test_cancel_current_task_cancels_handoff_editing() -> None:
     terminal = FakeTerminal(columns=80, rows=12)
     app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
     app.tui.start()
-    chat_console = tui_chat.ChatConsole(app)
     session = InteractiveSession.__new__(InteractiveSession)
     session.current_task = None
     session._handoff_mode = True
     app.editor.set_text("draft handoff prompt")
     app.set_status("Edit the handoff draft and press Enter to start a new thread.")
 
-    await session._cancel_current_task(app, chat_console)
+    await session._cancel_current_task(app)
 
     assert session._handoff_mode is False
     assert app.editor.get_text() == ""
@@ -1477,7 +1460,6 @@ async def test_interactive_session_routes_empty_submit_only_during_handoff(
     session = InteractiveSession.__new__(InteractiveSession)
     session.log = type("FakeLog", (), {"info": lambda *args, **kwargs: None})()
     session.autocomplete_provider = None
-    session.console = create_console(file=StringIO(), width=80, legacy_windows=False)
     session.database_name = "test"
     session._handoff_mode = False
     session.current_task = None
@@ -1515,7 +1497,6 @@ async def test_interactive_session_rejects_running_query_submit_without_echo(
     session = InteractiveSession.__new__(InteractiveSession)
     session.log = type("FakeLog", (), {"info": lambda *args, **kwargs: None})()
     session.autocomplete_provider = None
-    session.console = create_console(file=StringIO(), width=80, legacy_windows=False)
     session.database_name = "test"
     session._handoff_mode = False
     session.current_task = None
@@ -1562,7 +1543,6 @@ async def test_streaming_handler_interrupts_with_regular_exception() -> None:
     app.tui.start()
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
     cancellation_token = asyncio.Event()
     saw_cancelled_error = False
@@ -1599,7 +1579,6 @@ async def test_streaming_handler_token_does_not_preempt_blocked_run_query() -> N
     app.tui.start()
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
     started = asyncio.Event()
     release = asyncio.Event()
@@ -1648,7 +1627,6 @@ async def test_streaming_handler_cancels_run_query_when_task_is_cancelled() -> N
     app.tui.start()
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
     started = asyncio.Event()
     run_cancelled = asyncio.Event()
@@ -1678,7 +1656,6 @@ async def test_streaming_handler_runs_query_in_current_task() -> None:
     app.tui.start()
     handler = TUIStreamingQueryHandler(
         app,
-        create_console(file=StringIO(), width=80, legacy_windows=False),
     )
     execute_task = asyncio.current_task()
     run_query_task: asyncio.Task | None = None

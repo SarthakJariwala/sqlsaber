@@ -436,11 +436,7 @@ def set_model_command(
             else:
                 config = Config()
                 config.model.set_subagent_model(target_agent, selected_model)
-                out(
-                    b.success(
-                        f"{target_agent.title()} model set to: {selected_model}"
-                    )
-                )
+                out(b.success(f"{target_agent.title()} model set to: {selected_model}"))
                 logger.info(
                     "models.set.subagent",
                     model=selected_model,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from io import StringIO
 from unittest.mock import patch
 
 import pytest
@@ -19,12 +18,11 @@ from sqlsaber.artifacts import (
     InMemoryArtifactStore,
 )
 from sqlsaber.cli.artifacts import cli_artifact_store
-from rich.console import Console
-
-from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.html_export import render_thread_html
 from sqlsaber.cli.threads import create_threads_app
+from sqlsaber.render.markdown_text import md_of
 from sqlsaber.threads.storage import Thread, ThreadStorage
+from sqlsaber.tools.renderer import ToolRenderContext, ToolRenderer
 
 
 def test_live_tool_result_lists_durable_artifact_uri() -> None:
@@ -37,16 +35,13 @@ def test_live_tool_result_lists_durable_artifact_uri() -> None:
             context=ArtifactContext(),
         )
     )
-    output = StringIO()
-    display = DisplayManager(Console(file=output, force_terminal=False, width=200))
-
-    display.show_tool_result(
-        "create_report",
-        "done",
-        metadata=publication.to_metadata(),
+    rendered = md_of(
+        ToolRenderer().result(
+            "create_report",
+            "done",
+            context=ToolRenderContext(metadata=publication.to_metadata()),
+        )
     )
-
-    rendered = output.getvalue()
     assert "report.csv" in rendered
     assert publication.artifacts[0].uri in rendered
 
