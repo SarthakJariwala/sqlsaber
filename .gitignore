@@ -10,3 +10,6 @@ wheels/
 .venv
 
 *.local.*
+
+# Project-local verification evidence and scratch state
+.pi/verification/

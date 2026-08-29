@@ -1,0 +1,542 @@
+#!/usr/bin/env python3
+"""Run SQLsaber verification commands in an isolated PTY."""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import fcntl
+import json
+import os
+import pty
+import re
+import select
+import shutil
+import signal
+import sqlite3
+import struct
+import subprocess
+import sys
+import termios
+import time
+import tomllib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[4]
+BASE = ROOT / ".pi" / "verification" / "sqlsaber"
+STATE_BASE = BASE / ".state"
+RUN_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}\Z")
+ANSI_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[@-_])")
+
+
+def validate_run_id(value: str) -> str:
+    if not RUN_ID_RE.fullmatch(value):
+        raise SystemExit(
+            "RUN_ID must start with an alphanumeric character and contain only "
+            "letters, numbers, dots, underscores, or hyphens"
+        )
+    return value
+
+
+def state_dir(run_id: str) -> Path:
+    return STATE_BASE / validate_run_id(run_id)
+
+
+def evidence_dir(run_id: str) -> Path:
+    return BASE / validate_run_id(run_id)
+
+
+def metadata_path(run_id: str) -> Path:
+    return state_dir(run_id) / "run.json"
+
+
+def load_metadata(run_id: str) -> dict[str, object]:
+    path = metadata_path(run_id)
+    if not path.exists():
+        raise SystemExit(f"Run {run_id!r} is not launched. Run launch first.")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def project_version() -> str:
+    with (ROOT / "pyproject.toml").open("rb") as file:
+        return str(tomllib.load(file)["project"]["version"])
+
+
+def git_revision() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def run_env(run_id: str) -> dict[str, str]:
+    state = state_dir(run_id)
+    home = state / "home"
+    env = os.environ.copy()
+    env.update(
+        {
+            "HOME": str(home),
+            "XDG_CONFIG_HOME": str(home / "config"),
+            "XDG_DATA_HOME": str(home / "data"),
+            "XDG_CACHE_HOME": str(home / "cache"),
+            "XDG_STATE_HOME": str(home / "state"),
+            "SQLSABER_LOG_FILE": str(state / "sqlsaber.log"),
+            "SQLSABER_SKIP_VERSION_CHECK": "1",
+            "SQLSABER_VERIFY_RUN_ID": run_id,
+            "NO_COLOR": "1",
+            "TERM": "xterm-256color",
+            "UV_NO_PROGRESS": "1",
+        }
+    )
+    env.pop("FORCE_COLOR", None)
+    return env
+
+
+def command_output(command: list[str], run_id: str) -> str:
+    result = subprocess.run(
+        command,
+        cwd=ROOT,
+        env=run_env(run_id),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def seed_fixture(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path) as db:
+        db.executescript(
+            """
+            CREATE TABLE departments (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE
+            );
+            CREATE TABLE employees (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                department_id INTEGER NOT NULL REFERENCES departments(id),
+                active INTEGER NOT NULL
+            );
+            CREATE TABLE orders (
+                id INTEGER PRIMARY KEY,
+                employee_id INTEGER NOT NULL REFERENCES employees(id),
+                amount_cents INTEGER NOT NULL,
+                status TEXT NOT NULL
+            );
+            INSERT INTO departments VALUES (1, 'Engineering'), (2, 'Finance');
+            INSERT INTO employees VALUES
+                (1, 'Ada', 1, 1),
+                (2, 'Grace', 1, 1),
+                (3, 'Linus', 2, 0);
+            INSERT INTO orders VALUES
+                (1, 1, 12500, 'paid'),
+                (2, 2, 7500, 'paid'),
+                (3, 3, 3000, 'pending');
+            """
+        )
+
+
+def launch(run_id: str) -> None:
+    run_id = validate_run_id(run_id)
+    state = state_dir(run_id)
+    evidence = evidence_dir(run_id)
+    if state.exists() or evidence.exists():
+        raise SystemExit(
+            f"Run {run_id!r} already exists. Use a new RUN_ID so proof cannot mix."
+        )
+
+    state.mkdir(parents=True)
+    evidence.mkdir(parents=True)
+    for name in ("config", "data", "cache", "state"):
+        (state / "home" / name).mkdir(parents=True)
+
+    fixture = state / "fixtures" / "verification.db"
+    seed_fixture(fixture)
+
+    try:
+        subprocess.run(["uv", "sync", "--locked"], cwd=ROOT, check=True)
+        expected = project_version()
+        actual = command_output(["uv", "run", "saber", "--version"], run_id)
+        if actual != expected:
+            raise RuntimeError(
+                f"CLI version {actual!r} does not match pyproject version {expected!r}"
+            )
+        metadata = {
+            "run_id": run_id,
+            "repo": str(ROOT),
+            "revision": git_revision(),
+            "version": expected,
+            "fixture": str(fixture),
+            "state": str(state),
+            "evidence": str(evidence),
+            "launched_at": dt.datetime.now(dt.UTC).isoformat(),
+        }
+        metadata_path(run_id).write_text(
+            json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+        )
+        launch_record = (
+            f"RUN_ID={run_id}\n"
+            f"version={expected}\n"
+            f"revision={metadata['revision']}\n"
+            f"fixture={fixture}\n"
+            f"state={state}\n"
+            f"evidence={evidence}\n"
+        )
+        (evidence / "launch.txt").write_text(launch_record, encoding="utf-8")
+        print(f"READY SQLsaber {expected}")
+        print(f"fixture: {fixture}")
+        print(f"evidence: {evidence}")
+    except BaseException:
+        shutil.rmtree(state, ignore_errors=True)
+        raise
+
+
+def doctor(run_id: str) -> None:
+    metadata = load_metadata(run_id)
+    state = state_dir(run_id).resolve()
+    expected = project_version()
+    actual = command_output(["uv", "run", "saber", "--version"], run_id)
+    current_revision = git_revision()
+
+    errors: list[str] = []
+    if actual != expected or metadata.get("version") != expected:
+        errors.append(
+            f"version mismatch: CLI={actual}, pyproject={expected}, "
+            f"launch={metadata.get('version')}"
+        )
+    if metadata.get("revision") != current_revision:
+        errors.append("checkout revision changed after launch")
+
+    fixture = Path(str(metadata["fixture"]))
+    try:
+        with sqlite3.connect(f"file:{fixture}?mode=ro", uri=True) as db:
+            employee_count = int(
+                db.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
+            )
+    except (OSError, sqlite3.Error) as exc:
+        errors.append(f"fixture is unreadable: {exc}")
+        employee_count = -1
+    if employee_count != 3:
+        errors.append(f"fixture employee count is {employee_count}, expected 3")
+
+    path_script = (
+        "import json, platformdirs; "
+        "print(json.dumps({'config': platformdirs.user_config_dir('sqlsaber', 'sqlsaber'), "
+        "'data': platformdirs.user_data_dir('sqlsaber'), "
+        "'log': platformdirs.user_log_dir('sqlsaber', 'sqlsaber')}))"
+    )
+    paths = json.loads(
+        command_output(["uv", "run", "python", "-c", path_script], run_id)
+    )
+    for kind in ("config", "data", "log"):
+        path = Path(paths[kind]).resolve()
+        if not path.is_relative_to(state):
+            errors.append(f"{kind} path escapes run state: {path}")
+
+    active_path = state / "active.json"
+    if active_path.exists():
+        active = json.loads(active_path.read_text(encoding="utf-8"))
+        pid = int(active["pid"])
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            active_path.unlink(missing_ok=True)
+        else:
+            errors.append(f"run is already being driven by PID {pid}")
+
+    credential_names = [
+        name
+        for name in (
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "GOOGLE_API_KEY",
+            "GROQ_API_KEY",
+            "MISTRAL_API_KEY",
+            "CO_API_KEY",
+            "HF_TOKEN",
+        )
+        if os.getenv(name)
+    ]
+    lines = [
+        f"run: {run_id}",
+        f"version: {actual}",
+        f"revision: {current_revision}",
+        f"fixture employees: {employee_count}",
+        f"config root: {paths['config']}",
+        f"data root: {paths['data']}",
+        f"log root: {paths['log']}",
+        "server: not applicable; each SQLsaber command is a short-lived process",
+        "model credentials present: "
+        + (", ".join(credential_names) if credential_names else "none"),
+    ]
+    if errors:
+        lines.extend(f"ERROR: {error}" for error in errors)
+        status = "NOT READY"
+    else:
+        status = "HEALTHY"
+    report = status + "\n" + "\n".join(lines) + "\n"
+    print(report, end="")
+    (evidence_dir(run_id) / "doctor.txt").write_text(report, encoding="utf-8")
+    if errors:
+        raise SystemExit(1)
+
+
+def clean_terminal(text: str) -> str:
+    text = ANSI_RE.sub("", text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    return text
+
+
+def terminate_process_group(pid: int) -> None:
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        try:
+            waited, _ = os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            return
+        if waited == pid:
+            return
+        time.sleep(0.05)
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def drive(
+    run_id: str,
+    evidence_name: str,
+    command: list[str],
+    timeout: float,
+    input_text: str | None,
+    input_delay: float,
+) -> None:
+    load_metadata(run_id)
+    if command and command[0] == "--":
+        command = command[1:]
+    if not command:
+        raise SystemExit("drive requires a command after --")
+
+    relative = Path(evidence_name)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise SystemExit("--evidence must be a relative path without '..'")
+    output_path = evidence_dir(run_id) / relative
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    state = state_dir(run_id)
+    active_path = state / "active.json"
+    if active_path.exists():
+        raise SystemExit(
+            "This RUN_ID already has an active drive. Run doctor or cleanup."
+        )
+
+    pid, master_fd = pty.fork()
+    if pid == 0:
+        os.chdir(ROOT)
+        os.execvpe(command[0], command, run_env(run_id))
+
+    winsize = struct.pack("HHHH", 40, 120, 0, 0)
+    fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+    active_path.write_text(
+        json.dumps({"pid": pid, "command": command}) + "\n", encoding="utf-8"
+    )
+
+    started = dt.datetime.now(dt.UTC).isoformat()
+    chunks: list[bytes] = []
+    deadline = time.monotonic() + timeout
+    send_at = time.monotonic() + input_delay if input_text is not None else None
+    sent = input_text is None
+    status: int | None = None
+    try:
+        while True:
+            now = time.monotonic()
+            if not sent and send_at is not None and now >= send_at:
+                os.write(master_fd, input_text.encode())
+                sent = True
+            if now >= deadline:
+                terminate_process_group(pid)
+                raise TimeoutError(f"command exceeded {timeout:g} seconds")
+
+            readable, _, _ = select.select([master_fd], [], [], 0.1)
+            if readable:
+                try:
+                    data = os.read(master_fd, 65536)
+                except OSError:
+                    data = b""
+                if data:
+                    chunks.append(data)
+                    os.write(sys.stdout.fileno(), data)
+
+            waited, candidate_status = os.waitpid(pid, os.WNOHANG)
+            if waited == pid:
+                status = candidate_status
+                while True:
+                    readable, _, _ = select.select([master_fd], [], [], 0)
+                    if not readable:
+                        break
+                    try:
+                        data = os.read(master_fd, 65536)
+                    except OSError:
+                        break
+                    if not data:
+                        break
+                    chunks.append(data)
+                    os.write(sys.stdout.fileno(), data)
+                break
+    except BaseException:
+        terminate_process_group(pid)
+        raise
+    finally:
+        active_path.unlink(missing_ok=True)
+        os.close(master_fd)
+
+    assert status is not None
+    exit_code = os.waitstatus_to_exitcode(status)
+    command_text = " ".join(subprocess.list2cmdline([part]) for part in command)
+    body = b"".join(chunks).decode("utf-8", errors="replace")
+    transcript = (
+        f"run_id: {run_id}\n"
+        f"started_at: {started}\n"
+        f"command: {command_text}\n"
+        "--- terminal output ---\n"
+        f"{clean_terminal(body)}"
+        "--- result ---\n"
+        f"exit_code: {exit_code}\n"
+    )
+    output_path.write_text(transcript, encoding="utf-8")
+    print(f"\nproof: {output_path}")
+    if exit_code != 0:
+        raise SystemExit(exit_code)
+
+
+def path_value(run_id: str, name: str) -> None:
+    metadata = load_metadata(run_id)
+    values = {
+        "state": state_dir(run_id),
+        "evidence": evidence_dir(run_id),
+        "fixture": Path(str(metadata["fixture"])),
+        "database-config": state_dir(run_id)
+        / "home"
+        / "config"
+        / "sqlsaber"
+        / "database_config.json",
+        "knowledge-db": state_dir(run_id)
+        / "home"
+        / "data"
+        / "sqlsaber"
+        / "knowledge.db",
+        "threads-db": state_dir(run_id) / "home" / "config" / "sqlsaber" / "threads.db",
+        "log": state_dir(run_id) / "sqlsaber.log",
+    }
+    print(values[name])
+
+
+def cleanup(run_id: str) -> None:
+    validate_run_id(run_id)
+    state = state_dir(run_id)
+    evidence = evidence_dir(run_id)
+    evidence.mkdir(parents=True, exist_ok=True)
+    active_path = state / "active.json"
+    if active_path.exists():
+        active = json.loads(active_path.read_text(encoding="utf-8"))
+        pid = int(active["pid"])
+        try:
+            process = subprocess.run(
+                ["ps", "eww", "-p", str(pid), "-o", "command="],
+                check=False,
+                capture_output=True,
+                text=True,
+            ).stdout
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            active_path.unlink(missing_ok=True)
+        else:
+            marker = f"SQLSABER_VERIFY_RUN_ID={run_id}"
+            if marker not in process:
+                raise SystemExit(
+                    f"Refusing to kill PID {pid}: it does not carry this run marker"
+                )
+            os.killpg(pid, signal.SIGTERM)
+            time.sleep(0.5)
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+    shutil.rmtree(state, ignore_errors=True)
+    record = (
+        f"cleaned_at={dt.datetime.now(dt.UTC).isoformat()}\n"
+        f"removed_state={state}\n"
+        f"preserved_evidence={evidence}\n"
+    )
+    (evidence / "cleanup.txt").write_text(record, encoding="utf-8")
+    print(f"CLEAN state removed: {state}")
+    print(f"PRESERVED evidence: {evidence}")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="action", required=True)
+
+    for action in ("launch", "doctor", "cleanup"):
+        child = subparsers.add_parser(action)
+        child.add_argument("run_id")
+
+    path_parser = subparsers.add_parser("path")
+    path_parser.add_argument("run_id")
+    path_parser.add_argument(
+        "name",
+        choices=(
+            "state",
+            "evidence",
+            "fixture",
+            "database-config",
+            "knowledge-db",
+            "threads-db",
+            "log",
+        ),
+    )
+
+    drive_parser = subparsers.add_parser("drive")
+    drive_parser.add_argument("run_id")
+    drive_parser.add_argument("--evidence", required=True)
+    drive_parser.add_argument("--timeout", type=float, default=60)
+    drive_parser.add_argument("--input")
+    drive_parser.add_argument("--input-delay", type=float, default=1.5)
+    drive_parser.add_argument("command", nargs="+")
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    if args.action == "launch":
+        launch(args.run_id)
+    elif args.action == "doctor":
+        doctor(args.run_id)
+    elif args.action == "drive":
+        drive(
+            args.run_id,
+            args.evidence,
+            args.command,
+            args.timeout,
+            args.input,
+            args.input_delay,
+        )
+    elif args.action == "path":
+        path_value(args.run_id, args.name)
+    elif args.action == "cleanup":
+        cleanup(args.run_id)
+
+
+if __name__ == "__main__":
+    main()
