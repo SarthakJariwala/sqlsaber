@@ -13,7 +13,7 @@ SEARCH_ROOTS = (
     ROOT / "plugins",
     ROOT / "tests",
 )
-SKIP_PARTS = {".venv", "node_modules", "__pycache__", ".audit"}
+SKIP_PARTS = {".venv", "node_modules", "__pycache__"}
 FORBIDDEN = re.compile(
     r"^\s*(?:from\s+rich(?:\.\S+)?\s+import|import\s+rich(?:\.\S+)?"
     r"|from\s+questionary(?:\.\S+)?\s+import|import\s+questionary(?:\.\S+)?)\b"
