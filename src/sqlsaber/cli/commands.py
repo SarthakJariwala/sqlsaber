@@ -20,7 +20,7 @@ from sqlsaber.cli.onboarding import needs_onboarding, run_onboarding
 from sqlsaber.cli.output import fail, fail_usage, out
 from sqlsaber.cli.theme import create_theme_app
 from sqlsaber.cli.threads import create_threads_app
-from sqlsaber.cli.update_check import schedule_update_check
+from sqlsaber.cli.update_check import bind_update_notice, schedule_update_check
 from sqlsaber.config.logging import get_logger
 from sqlsaber.render import blocks as b
 
@@ -199,6 +199,9 @@ def query(
             actual_query = sys.stdin.read().strip()
             if not actual_query:
                 actual_query = None
+
+        if actual_query:
+            bind_update_notice(out)
 
         storage = ThreadStorage()
         if thread is not None and actual_query is None:

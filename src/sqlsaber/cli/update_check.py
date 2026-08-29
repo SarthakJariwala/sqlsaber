@@ -5,14 +5,15 @@ This is best-effort and must never fail the CLI.
 
 import asyncio
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import metadata
 
 import httpx
 
-from sqlsaber.cli.output import out
 from sqlsaber.config.logging import get_logger
 from sqlsaber.render import blocks as b
+from sqlsaber.render.blocks import Block
 
 PACKAGE_NAME = "sqlsaber"
 ENV_SKIP_VERSION_CHECK = "SQLSABER_SKIP_VERSION_CHECK"
@@ -20,6 +21,8 @@ PYPI_URL = f"https://pypi.org/pypi/{PACKAGE_NAME}/json"
 
 _LOG = get_logger(__name__)
 _SCHEDULED = False
+_notice_emit: Callable[..., None] | None = None
+_pending_blocks: tuple[Block, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -101,11 +104,42 @@ def _is_newer(latest: str, current: str) -> bool:
         return _parse_version(latest) > _parse_version(current)
 
 
-def _print_update_notice() -> None:
-    out(
-        b.md("A new version is now available!"),
-        b.md(f"Run: `uv tool update {PACKAGE_NAME}`"),
+def _notice_blocks() -> tuple[Block, ...]:
+    return (
+        b.md("A new version is now available!", role="muted"),
+        b.md(f"Run: `uv tool update {PACKAGE_NAME}`", role="muted"),
     )
+
+
+def bind_update_notice(emit: Callable[..., None] | None) -> None:
+    """Set where an available-update notice goes.
+
+    Args:
+        emit: Block sink. ``None`` unbinds and holds a later notice.
+    """
+
+    global _notice_emit, _pending_blocks
+    _notice_emit = emit
+    if emit is not None and _pending_blocks is not None:
+        blocks = _pending_blocks
+        _pending_blocks = None
+        emit(*blocks)
+
+
+def reset_update_check() -> None:
+    global _SCHEDULED, _notice_emit, _pending_blocks
+    _SCHEDULED = False
+    _notice_emit = None
+    _pending_blocks = None
+
+
+def _emit_update_notice() -> None:
+    global _pending_blocks
+    blocks = _notice_blocks()
+    if _notice_emit is not None:
+        _notice_emit(*blocks)
+        return
+    _pending_blocks = blocks
 
 
 async def _check_and_notify() -> None:
@@ -119,7 +153,7 @@ async def _check_and_notify() -> None:
 
     if _is_newer(latest, current):
         _LOG.info("update_check.available", current=current, latest=latest)
-        _print_update_notice()
+        _emit_update_notice()
 
 
 async def _run_safely() -> None:
