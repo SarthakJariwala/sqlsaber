@@ -64,9 +64,7 @@ def _get_database_name(database: str | None = None) -> str:
     db_config = config_manager.get_default_database()
     if db_config is None:
         logger.error("knowledge.db.none_configured")
-        fail(
-            "no database connections configured.\n  Add one with: saber db add <name>"
-        )
+        fail("no database connections configured.\n  Add one with: saber db add <name>")
     return db_config.name
 
 
@@ -220,7 +218,7 @@ def show(
             f"  List entries with: saber knowledge list --database {database_name}"
         )
 
-    pairs: list[tuple[str, str]] = [
+    pairs = [
         ("ID", entry.id),
         ("Database", database_name),
         ("Name", entry.name),

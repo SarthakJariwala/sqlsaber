@@ -391,9 +391,7 @@ class InteractiveSession:
         try:
             if self.current_task and not self.current_task.done():
                 surface.emit(
-                    b.warn(
-                        "A query is already running. Press Ctrl+C to interrupt it."
-                    )
+                    b.warn("A query is already running. Press Ctrl+C to interrupt it.")
                 )
                 return
 
@@ -449,10 +447,12 @@ class InteractiveSession:
         self.log.info("interactive.start", database=self.database_name)
         await self.before_prompt_loop()
 
+        from sqlsaber.cli.chat_surface import ChatSurface
+
         exit_event = asyncio.Event()
         loop = asyncio.get_running_loop()
         app_ref: dict[str, ChatApp] = {}
-        surface_ref: dict[str, object] = {}
+        surface_ref: dict[str, ChatSurface] = {}
 
         def clear_history() -> None:
             self.message_history = []
@@ -465,9 +465,7 @@ class InteractiveSession:
                 self.current_task and not self.current_task.done()
             ):
                 surface.emit(
-                    b.warn(
-                        "A query is already running. Press Ctrl+C to interrupt it."
-                    )
+                    b.warn("A query is already running. Press Ctrl+C to interrupt it.")
                 )
                 app.tui.set_focus(app.editor)
                 return False
@@ -515,8 +513,6 @@ class InteractiveSession:
             footer_text=self._footer_text(),
             on_open_command_palette=open_command_palette,
         )
-        from sqlsaber.cli.chat_surface import ChatSurface
-
         surface = ChatSurface(app)
         app_ref["app"] = app
         surface_ref["surface"] = surface

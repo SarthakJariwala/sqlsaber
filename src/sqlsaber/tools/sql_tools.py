@@ -1,7 +1,7 @@
 """SQL-related tools for database operations."""
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -21,7 +21,7 @@ from sqlsaber.query_results import (
     new_query_result_id,
     query_result_columns,
 )
-from sqlsaber.render.blocks import Block, code, error, md, table
+from sqlsaber.render.blocks import Block, Cell, code, error, md, table
 from sqlsaber.utils.json_utils import json_dumps
 
 from .base import Tool
@@ -35,6 +35,12 @@ from .display import (
     ToolDisplaySpec,
 )
 from .sql_guard import add_limit, validate_sql
+
+
+def _as_cell(value: object) -> Cell:
+    if isinstance(value, str | int | float | bool) or value is None:
+        return value
+    return str(value)
 
 
 @dataclass
@@ -209,19 +215,19 @@ class IntrospectSchemaTool(SQLTool):
                     and col_mapping.get("comment")
                     for col_info in table_columns.values()
                 )
-                rows: list[dict[str, object]] = []
+                rows: list[dict[str, Cell]] = []
                 for col_name, col_info in table_columns.items():
                     col_mapping = self._coerce_mapping(col_info)
                     if col_mapping is None:
                         continue
-                    row: dict[str, object] = {
+                    row: dict[str, Cell] = {
                         "Column": col_name,
-                        "Type": col_mapping.get("type", ""),
-                        "Nullable": col_mapping.get("nullable"),
-                        "Default": col_mapping.get("default"),
+                        "Type": _as_cell(col_mapping.get("type", "")),
+                        "Nullable": _as_cell(col_mapping.get("nullable")),
+                        "Default": _as_cell(col_mapping.get("default")),
                     }
                     if include_comments:
-                        row["Comments"] = col_mapping.get("comment", "")
+                        row["Comments"] = _as_cell(col_mapping.get("comment", ""))
                     rows.append(row)
                 blocks.append(table(rows, max_rows=200, max_columns=8))
             primary_keys = table_mapping.get("primary_keys") or []
@@ -342,7 +348,7 @@ class ExecuteSQLTool(SQLTool):
         metadata=DisplayMetadata(display_name="Execute SQL"),
     )
 
-    def render_executing(self, args: dict) -> Sequence[Block] | None:
+    def render_executing(self, args: Mapping[str, Any]) -> Sequence[Block] | None:
         query = args.get("query") or args.get("sql") or ""
         if not isinstance(query, str) or not query.strip():
             return None
