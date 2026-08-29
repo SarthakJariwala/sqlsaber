@@ -196,40 +196,110 @@ def test_threads_prune_dry_run_does_not_delete(capsys):
     store.prune_threads.assert_not_awaited()
 
 
-def test_root_thread_option_continues_with_saved_history():
-    history = [object(), object()]
-    stored_thread = SimpleNamespace(
-        id="thread-1",
-        database_name="analytics",
-        extra_metadata=None,
-    )
+def test_root_thread_option_resumes_through_public_sdk():
     store = MagicMock()
-    store.get_thread = AsyncMock(return_value=stored_thread)
-    store.get_thread_messages = AsyncMock(return_value=history)
+    artifact_store = object()
+    query_result_store = object()
+    captured: dict[str, object] = {}
+    lifecycle_events: list[str] = []
+
+    class FakeSQLSaber:
+        def __init__(self, *, options):
+            captured["options"] = options
+            captured["saber"] = self
+            self.info = SimpleNamespace(
+                primary_database_name="analytics",
+                primary_database_type="SQLite",
+                model_name="openai:gpt-5",
+                model_id=None,
+                thread_id="thread-1",
+            )
+            self.display_registry = {}
+            self.query_result_store = query_result_store
+            self.query = AsyncMock()
+
+        @classmethod
+        async def resume(cls, thread_id, *, options, storage):
+            captured["resume"] = (thread_id, options, storage)
+            return cls(options=options)
+
+        async def close(self):
+            captured["closed"] = True
+            lifecycle_events.append("closed")
+
+    class FakeStreamingQueryHandler:
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+        async def execute_streaming_query(self, user_query, *, run_query):
+            captured["query"] = user_query
+            captured["run_query"] = run_query
+            return None
+
+    retention = AsyncMock(
+        side_effect=lambda *args: lifecycle_events.append("retention")
+    )
+    with (
+        patch("sqlsaber.threads.ThreadStorage", return_value=store),
+        patch("sqlsaber.SQLSaber", FakeSQLSaber),
+        patch(
+            "sqlsaber.cli.stream_presenter.AgentStreamPresenter",
+            FakeStreamingQueryHandler,
+        ),
+        patch(
+            "sqlsaber.cli.artifacts.cli_artifact_store",
+            return_value=artifact_store,
+        ),
+        patch(
+            "sqlsaber.cli.query_results.cli_query_result_store",
+            return_value=query_result_store,
+        ),
+        patch("sqlsaber.cli.retention.run_cli_retention", retention),
+        patch("sqlsaber.cli.commands.schedule_update_check"),
+    ):
+        query("Compare this year", thread="thread-1")
+
+    thread_id, options, storage = captured["resume"]
+    assert thread_id == "thread-1"
+    assert storage is store
+    assert options.database is None
+    assert options.thread_manager is None
+    assert captured["run_query"] is captured["saber"].query
+    assert captured["query"] == "Compare this year"
+    assert captured["closed"] is True
+    retention.assert_awaited_once_with(store, artifact_store, query_result_store)
+    assert lifecycle_events == ["closed", "retention"]
+
+
+@pytest.mark.parametrize(
+    ("query_text", "stdin_text", "expected_query"),
+    [
+        ("show revenue", "", "show revenue"),
+        (None, "show customers\n", "show customers"),
+    ],
+)
+def test_root_one_shot_modes_construct_public_sdk(
+    query_text, stdin_text, expected_query
+):
+    store = MagicMock()
+    artifact_store = object()
+    query_result_store = object()
     captured: dict[str, object] = {}
 
-    class FakeThreadManager:
-        def __init__(self, initial_thread_id=None, storage=None):
-            captured["initial_thread_id"] = initial_thread_id
-            captured["storage"] = storage
-            self.current_thread_id = initial_thread_id
-
-    class FakeDatabaseConfigManager:
-        def get_database(self, name):
-            return object() if name == "analytics" else None
-
-    class FakeSession:
-        def __init__(self, options):
+    class FakeSQLSaber:
+        def __init__(self, *, options):
             captured["options"] = options
-            self.db_name = "analytics"
-            self.connection = object()
-            self.query_result_store = object()
-            self.query = AsyncMock()
-            self.agent = SimpleNamespace(
-                display_registry={},
-                db_type="sqlite",
-                config=SimpleNamespace(model=SimpleNamespace(name="openai:gpt-5")),
+            captured["saber"] = self
+            self.info = SimpleNamespace(
+                primary_database_name="analytics",
+                primary_database_type="SQLite",
+                model_name="openai:gpt-5",
+                model_id=None,
+                thread_id=None,
             )
+            self.display_registry = {}
+            self.query_result_store = query_result_store
+            self.query = AsyncMock()
 
         async def close(self):
             captured["closed"] = True
@@ -238,40 +308,149 @@ def test_root_thread_option_continues_with_saved_history():
         def __init__(self, *args, **kwargs):
             del args, kwargs
 
-        async def execute_streaming_query(
-            self, user_query, *, run_query, message_history
-        ):
+        async def execute_streaming_query(self, user_query, *, run_query):
             captured["query"] = user_query
             captured["run_query"] = run_query
-            captured["history"] = message_history
             return None
 
+    retention = AsyncMock()
     with (
+        patch("sqlsaber.cli.commands.sys.stdin", StringIO(stdin_text)),
         patch("sqlsaber.threads.ThreadStorage", return_value=store),
-        patch("sqlsaber.threads.manager.ThreadManager", FakeThreadManager),
-        patch(
-            "sqlsaber.config.database.DatabaseConfigManager",
-            FakeDatabaseConfigManager,
-        ),
-        patch("sqlsaber.session.SQLSaberSession", FakeSession),
+        patch("sqlsaber.SQLSaber", FakeSQLSaber),
         patch(
             "sqlsaber.cli.stream_presenter.AgentStreamPresenter",
             FakeStreamingQueryHandler,
         ),
-        patch("sqlsaber.cli.artifacts.cli_artifact_store", return_value=object()),
         patch(
-            "sqlsaber.cli.query_results.cli_query_result_store", return_value=object()
+            "sqlsaber.cli.artifacts.cli_artifact_store",
+            return_value=artifact_store,
         ),
-        patch("sqlsaber.cli.commands.needs_onboarding", return_value=False),
+        patch(
+            "sqlsaber.cli.query_results.cli_query_result_store",
+            return_value=query_result_store,
+        ),
+        patch("sqlsaber.cli.retention.run_cli_retention", retention),
         patch("sqlsaber.cli.commands.schedule_update_check"),
     ):
-        query("Compare this year", thread="thread-1")
+        query(query_text, database=["analytics"])
 
     options = captured["options"]
-    assert options.database == "analytics"
-    assert options.thread_manager.current_thread_id == "thread-1"
-    assert captured["initial_thread_id"] == "thread-1"
-    assert captured["storage"] is store
-    assert captured["history"] is history
-    assert captured["query"] == "Compare this year"
+    assert options.thread_manager.storage is store
+    assert captured["query"] == expected_query
+    assert captured["run_query"] is captured["saber"].query
     assert captured["closed"] is True
+    retention.assert_awaited_once_with(store, artifact_store, query_result_store)
+
+
+def test_root_bare_mode_passes_public_sdk_to_tui():
+    store = MagicMock()
+    artifact_store = object()
+    query_result_store = object()
+    captured: dict[str, object] = {}
+    stdin = MagicMock()
+    stdin.isatty.return_value = True
+
+    class FakeSQLSaber:
+        def __init__(self, *, options):
+            captured["options"] = options
+            captured["saber"] = self
+            self.info = SimpleNamespace(
+                primary_database_name="analytics",
+                primary_database_type="SQLite",
+            )
+
+        async def close(self):
+            captured["closed"] = True
+
+    class FakeInteractiveSession:
+        def __init__(self, saber):
+            captured["interactive_saber"] = saber
+
+        async def run(self):
+            captured["ran"] = True
+
+    retention = AsyncMock()
+    with (
+        patch("sqlsaber.cli.commands.sys.stdin", stdin),
+        patch("sqlsaber.threads.ThreadStorage", return_value=store),
+        patch("sqlsaber.SQLSaber", FakeSQLSaber),
+        patch("sqlsaber.cli.interactive.InteractiveSession", FakeInteractiveSession),
+        patch(
+            "sqlsaber.cli.artifacts.cli_artifact_store",
+            return_value=artifact_store,
+        ),
+        patch(
+            "sqlsaber.cli.query_results.cli_query_result_store",
+            return_value=query_result_store,
+        ),
+        patch("sqlsaber.cli.retention.run_cli_retention", retention),
+        patch("sqlsaber.cli.commands.schedule_update_check"),
+    ):
+        query(database=["analytics"])
+
+    assert captured["options"].thread_manager.storage is store
+    assert captured["interactive_saber"] is captured["saber"]
+    assert captured["ran"] is True
+    assert captured["closed"] is True
+    retention.assert_awaited_once_with(store, artifact_store, query_result_store)
+
+
+def test_root_thread_option_maps_sdk_resume_errors(capsys):
+    from sqlsaber.sdk_errors import (
+        ThreadDatabaseRequiredError,
+        ThreadDatabaseUnavailableError,
+        ThreadNotFoundError,
+        ThreadResumeHistoryError,
+        ThreadResumeMetadataError,
+    )
+
+    cases = [
+        (
+            ThreadNotFoundError("thread-1"),
+            "Thread not found: thread-1. List threads with: saber threads list",
+        ),
+        (
+            ThreadDatabaseRequiredError(
+                "thread-1",
+                "No configured database selector is stored for this thread.",
+            ),
+            "No database is stored with this thread.",
+        ),
+        (
+            ThreadResumeHistoryError("thread-1", "corrupt snapshot"),
+            "Thread history cannot be resumed: corrupt snapshot",
+        ),
+        (
+            ThreadResumeMetadataError("thread-1", "broken metadata"),
+            "Invalid thread metadata: broken metadata.",
+        ),
+        (
+            ThreadDatabaseUnavailableError("thread-1", ("analytics",)),
+            "The thread database is not configured for automatic continuation.",
+        ),
+    ]
+
+    for error, expected in cases:
+
+        class FailingSQLSaber:
+            @classmethod
+            async def resume(cls, thread_id, *, options, storage):
+                del cls, thread_id, options, storage
+                raise error
+
+        with (
+            patch("sqlsaber.threads.ThreadStorage", return_value=MagicMock()),
+            patch("sqlsaber.SQLSaber", FailingSQLSaber),
+            patch("sqlsaber.cli.artifacts.cli_artifact_store", return_value=object()),
+            patch(
+                "sqlsaber.cli.query_results.cli_query_result_store",
+                return_value=object(),
+            ),
+            patch("sqlsaber.cli.commands.schedule_update_check"),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            query("continue", thread="thread-1")
+
+        assert exc_info.value.code == 1
+        assert expected in capsys.readouterr().err

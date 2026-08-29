@@ -118,7 +118,7 @@ See the [Knowledge Base guide](/guides/knowledge) for managing entries.
 
 ## Persisting conversation threads
 
-Inject a `ThreadManager` to persist each run's history, just like the CLI does
+Inject a `ThreadManager` to persist each completed query's history, as the CLI does
 between sessions:
 
 ```python
@@ -129,7 +129,45 @@ options = SQLSaberOptions(
     database="analytics",
     thread_manager=ThreadManager(),
 )
+
+async with SQLSaber(options=options) as saber:
+    result = await saber.query("How many orders shipped last week?")
 ```
 
-The session saves each run and ends the current thread when it closes. See the
-[Conversation Threads guide](/guides/threads) for how threads work.
+The session saves each completed query and ends the current thread when it closes.
+The default manager uses SQLsaber's local thread storage. Inject a manager with your
+own `ThreadStorage` when the application needs a different storage location or
+lifecycle.
+
+Resume a stored thread with `SQLSaber.resume()`. If the thread stores a configured
+database name, leave `options.database` as `None` and SQLsaber selects that name:
+
+```python
+import asyncio
+
+from sqlsaber import SQLSaber, SQLSaberOptions
+
+
+async def continue_thread() -> None:
+    options = SQLSaberOptions(database=None)
+    saber = await SQLSaber.resume("bb7b4d72", options=options)
+    try:
+        result = await saber.query("Now compare that with last quarter")
+        print(result.text)
+    finally:
+        await saber.close()
+
+
+asyncio.run(continue_thread())
+```
+
+Pass an explicit `options.database` to override the stored selector. SQLsaber does
+not persist raw connection strings or file paths for automatic resume.
+
+`SQLSaber.resume()` raises typed errors. Catch `ThreadNotFoundError` when the ID does
+not exist, `ThreadResumeHistoryError` when the stored Pydantic AI history is missing
+or corrupt, `ThreadDatabaseRequiredError` when a safe database selector is missing,
+and `ThreadDatabaseUnavailableError` when a stored configured database is no longer
+available. All resume errors inherit from `ThreadResumeError`.
+
+See the [Conversation Threads guide](/guides/threads) for CLI thread commands.

@@ -7,6 +7,8 @@
 
 Ask questions about databases, SQLite/DuckDB files, and CSVs in plain English from your terminal or Python code. SQLsaber reads your schema, writes SQL, executes read-only queries by default, and explains the results.
 
+`SQLSaber` is the canonical conversation lifecycle used by the CLI and TUI. Clients own input and presentation, while `SQLSaber` owns agent behavior, completed history, and thread lifecycle.
+
 ![SQLsaber demo showing a natural language database query in the terminal](./sqlsaber.gif)
 
 Featured in research: SQLsaber appears in an ACM Conference on AI and Agentic Systems '26 paper. [Read the paper](https://dl.acm.org/doi/10.1145/3786335.3813217).
@@ -120,7 +122,7 @@ uv tool install --with sqlsaber-viz,sqlsaber-notebook,sqlsaber-sandbox sqlsaber
 
 ## Python SDK
 
-Use the same SQLsaber agent from Python scripts, notebooks, web apps, or pipelines:
+Use the same SQLsaber conversation lifecycle from Python scripts, notebooks, web apps, or pipelines. A second `saber.query()` on the same instance uses the prior completed history automatically:
 
 ```python
 import asyncio
@@ -129,10 +131,15 @@ from sqlsaber import SQLSaber, SQLSaberOptions
 
 
 async def main() -> None:
-    async with SQLSaber(options=SQLSaberOptions(database="sqlite:///my.db")) as saber:
+    options = SQLSaberOptions(database="sqlite:///my.db")
+
+    async with SQLSaber(options=options) as saber:
         result = await saber.query("Top 5 customers by revenue")
-        print(result)
+        print(result.text)
         print(result.usage)
+
+        follow_up = await saber.query("Now show the same customers by country")
+        print(follow_up.text)
 
 
 asyncio.run(main())

@@ -64,6 +64,28 @@ async def test_execute_sql_part_start_shows_generating_status(
 
 
 @pytest.mark.asyncio
+async def test_execute_streaming_query_calls_sdk_without_message_history() -> None:
+    handler = AgentStreamPresenter(PlainSurface(StringIO()))
+    captured: dict[str, object] = {}
+
+    class FakeSQLSaberResult:
+        pass
+
+    expected = FakeSQLSaberResult()
+
+    async def query(prompt: str, **kwargs):
+        captured["prompt"] = prompt
+        captured["kwargs"] = kwargs
+        return expected
+
+    result = await handler.execute_streaming_query("show orders", query)
+
+    assert result is expected
+    assert captured["prompt"] == "show orders"
+    assert captured["kwargs"] == {"event_stream_handler": handler._event_stream_handler}
+
+
+@pytest.mark.asyncio
 async def test_execute_sql_delta_name_shows_generating_status(
     monkeypatch: pytest.MonkeyPatch,
 ):

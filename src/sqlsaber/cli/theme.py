@@ -11,7 +11,7 @@ import cyclopts
 from platformdirs import user_config_dir
 from pygments.styles import get_all_styles
 
-from sqlsaber.application.prompts import AsyncPrompter, Choice
+from sqlsaber.cli.prompts import AsyncPrompter, Choice
 from sqlsaber.cli.output import err, fail, fail_usage, out
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config.logging import get_logger

@@ -1,20 +1,21 @@
 ---
 title: Overview
-description: "Use SQLsaber from Python. Run natural-language to SQL queries programmatically with the async SQLSaber SDK instead of the CLI."
+description: "Use SQLsaber from Python. Run natural-language to SQL queries with the async SQLSaber conversation lifecycle."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-SQLsaber ships a small public Python API (the SDK) so you can run natural-language
-queries against your databases directly from Python code, instead of through the
-`saber` CLI. It is the same agent that powers the CLI, exposed as an `async`
-interface you can embed in scripts, notebooks, web backends, or data pipelines.
+SQLsaber ships a small public Python API (the SDK) for running natural-language
+queries from Python code. `SQLSaber` is the canonical conversation lifecycle used by
+the CLI and TUI. It is not a separate embedded wrapper. Clients own input and
+presentation, while `SQLSaber` owns agent behavior, completed history, thread
+lifecycle, and managed resources.
 
 The SDK exposes its primary agent and capability building blocks from the top-level `sqlsaber` package:
 
 | Export            | Purpose                                                       |
 | ----------------- | ------------------------------------------------------------- |
-| `SQLSaber`        | Main entry point — runs queries and owns the DB connection.   |
+| `SQLSaber`        | Canonical conversation lifecycle for the CLI, TUI, and SDK. |
 | `SQLSaberOptions` | Typed options bag used to configure a `SQLSaber` session.     |
 | `ModelOverides`   | Per-tool model/API-key overrides (see [Advanced](/sdk/advanced)). |
 | `SqlTools`        | SQL capability for composing with your own pydantic-ai agent. |
@@ -56,8 +57,11 @@ async def main() -> None:
 
     async with SQLSaber(options=options) as saber:
         result = await saber.query("Show me the top 5 users by order count")
-        print(result)        # the agent's text answer
-        print(result.usage)  # token usage for the run
+        print(result.text)        # the agent's text answer
+        print(result.usage)       # token usage for the run
+
+        follow_up = await saber.query("Now group those users by country")
+        print(follow_up.text)     # the same conversation continues
 
 
 if __name__ == "__main__":
@@ -70,6 +74,27 @@ if __name__ == "__main__":
   `options=...`.
 </Aside>
 
+## Use the conversation lifecycle
+
+A `SQLSaber` instance keeps the completed history for its conversation. A second
+`query()` on the same instance uses that history automatically.
+
+Use these methods for common lifecycle tasks:
+
+- `SQLSaber.info` returns immutable metadata such as database names, model details,
+  thinking state, dangerous mode, and the current thread ID. Access it as
+  `saber.info`.
+- `saber.set_thinking(enabled=..., level=...)` changes reasoning controls for later
+  queries and returns the new `ThinkingState`.
+- `await saber.list_tables()` returns `TableInfo` values for every managed database.
+- `await saber.draft_handoff(goal)` creates a handoff draft from the conversation's
+  history.
+- `await saber.end_thread()` marks the current persisted thread as ended.
+- `await saber.new_thread()` ends the current persisted thread, clears conversation
+  history, and returns the previous thread ID.
+- `await SQLSaber.resume(thread_id, options=options)` restores a persisted thread.
+  See [Advanced](/sdk/advanced) for resume errors and storage details.
+
 ## Managing the connection
 
 `SQLSaber` owns a live database connection. Use it as an async context manager
@@ -77,7 +102,8 @@ if __name__ == "__main__":
 saber.close()` yourself:
 
 ```python
-saber = SQLSaber(options=SQLSaberOptions(database="sqlite:///my.db"))
+options = SQLSaberOptions(database="sqlite:///my.db")
+saber = SQLSaber(options=options)
 try:
     result = await saber.query("How many orders shipped last week?")
 finally:

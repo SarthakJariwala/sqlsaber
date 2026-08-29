@@ -62,6 +62,63 @@ async def test_thread_create_and_roundtrip():
 
 
 @pytest.mark.asyncio
+async def test_strict_message_loader_rejects_missing_and_corrupt_snapshots():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = ThreadStorage()
+        store.db_path = Path(tmp) / "threads.db"
+
+        with pytest.raises(LookupError, match="missing"):
+            await store.get_thread_messages_strict("missing")
+
+        thread_id = await store.save_snapshot(
+            messages_json=_messages_bytes("Hello"),
+            database_name="db1",
+        )
+        async with aiosqlite.connect(store.db_path) as db:
+            await db.execute(
+                "UPDATE threads SET messages_json = ? WHERE id = ?",
+                (b"not-json", thread_id),
+            )
+            await db.commit()
+
+        with pytest.raises(ValueError, match="corrupt"):
+            await store.get_thread_messages_strict(thread_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("thread_id", [None, "existing"])
+async def test_save_snapshot_propagates_write_failures(monkeypatch, thread_id):
+    store = ThreadStorage()
+    store._initialized = True
+
+    def fail_connect(*args, **kwargs):
+        del args, kwargs
+        raise OSError("write failed")
+
+    monkeypatch.setattr(aiosqlite, "connect", fail_connect)
+
+    with pytest.raises(OSError, match="write failed"):
+        await store.save_snapshot(
+            messages_json=_messages_bytes("Hello"),
+            database_name="db1",
+            thread_id=thread_id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_save_snapshot_rejects_an_update_for_a_missing_thread(tmp_path):
+    store = ThreadStorage()
+    store.db_path = tmp_path / "threads.db"
+
+    with pytest.raises(LookupError, match="missing"):
+        await store.save_snapshot(
+            messages_json=_messages_bytes("Hello"),
+            database_name="db1",
+            thread_id="missing",
+        )
+
+
+@pytest.mark.asyncio
 async def test_thread_multi_database_resume_metadata_roundtrip():
     with tempfile.TemporaryDirectory() as tmp:
         store = ThreadStorage()

@@ -23,3 +23,15 @@ _Avoid_: Artifact publisher, blob store
 **Artifact Reference**:
 Durable metadata that identifies an artifact without containing its bytes.
 _Avoid_: Artifact, signed URL
+
+**SDK Conversation**:
+The `SQLSaber` instance that owns one conversation's completed history, agent
+lifecycle, optional thread persistence, and managed resources. It is the canonical
+conversation lifecycle used by the CLI and TUI.
+_Avoid_: Embedded wrapper, stateless query helper
+
+**Client**:
+An application such as the CLI, TUI, script, notebook, or web backend that owns
+user input and presentation. Clients must use `SQLSaber` for core agent behavior,
+conversation history, and thread lifecycle.
+_Avoid_: Alternate agent, conversation owner

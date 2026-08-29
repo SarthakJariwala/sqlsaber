@@ -1,13 +1,7 @@
 import pytest
-from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.usage import RequestUsage, RunUsage
 
-from sqlsaber.cli.usage import (
-    SessionUsage,
-    format_cost_usd,
-    request_usages_from_messages,
-    session_summary_blocks,
-)
+from sqlsaber.cli.usage import SessionUsage, format_cost_usd, session_summary_blocks
 from sqlsaber.render.markdown_text import md_of
 
 
@@ -86,25 +80,6 @@ def test_session_usage_prices_multi_request_usages_individually() -> None:
     assert usage.current_context_tokens == 150_000
     assert usage.total_cost_usd == pytest.approx(0.9)
     assert format_cost_usd(usage.total_cost_usd) == "$0.9000"
-
-
-def test_request_usages_from_messages_extracts_only_model_responses() -> None:
-    messages = [
-        ModelRequest(parts=[UserPromptPart(content="hello")]),
-        ModelResponse(
-            parts=[TextPart(content="hi")],
-            usage=RequestUsage(input_tokens=10, output_tokens=2),
-        ),
-        ModelResponse(
-            parts=[TextPart(content="again")],
-            usage=RequestUsage(input_tokens=15, output_tokens=3),
-        ),
-    ]
-
-    assert request_usages_from_messages(messages) == [
-        RequestUsage(input_tokens=10, output_tokens=2),
-        RequestUsage(input_tokens=15, output_tokens=3),
-    ]
 
 
 def test_format_cost_usd_handles_known_zero_tiny_and_unknown_costs() -> None:

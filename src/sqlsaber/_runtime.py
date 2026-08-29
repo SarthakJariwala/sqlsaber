@@ -1,4 +1,4 @@
-"""Session lifecycle owner for SQLSaber SDK usage."""
+"""Private runtime for managed agent, database, and persistence resources."""
 
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ from sqlsaber.utils.text_input import resolve_text_input
 logger = get_logger(__name__)
 
 
-class SQLSaberSession:
-    """Owns the lifecycle of a SQLSaber SDK session."""
+class _SQLSaberRuntime:
+    """Own managed resources and execute one SQLSaber conversation runtime."""
 
     def __init__(self, options: SQLSaberOptions):
         if options.artifact_failure_mode not in ("required", "best_effort"):
@@ -54,7 +54,6 @@ class SQLSaberSession:
         self.connections: dict[str, BaseDatabaseConnection] = {
             entry.name: entry.connection for entry in self.registry
         }
-        # Primary attrs preserved for back-compat with single-DB callers/tests.
         self.db_name = self.registry.primary()
         self.connection = self.connections[self.db_name]
 
@@ -130,15 +129,12 @@ class SQLSaberSession:
                 if not isinstance(resolved_model_name, str) or not resolved_model_name:
                     resolved_model_name = self.agent.config.model.name
 
-                # Keep database_name display-oriented while storing the original
-                # selector separately so multi-DB resumes never treat
-                # comma-joined names as one database spec.
                 if len(self.registry) > 1:
                     database_name = ",".join(self.db_names)
                 else:
                     database_name = self.db_name
 
-                database_selector = self._configured_database_selector()
+                database_selector = self._safe_configured_database_selector()
                 if database_selector is None:
                     extra_metadata = encode_thread_resume_disabled_metadata(
                         reason=(
@@ -158,40 +154,12 @@ class SQLSaberSession:
                     model_name=resolved_model_name,
                     extra_metadata=extra_metadata,
                 )
-                # CLI filesystem maintenance is best-effort and daily rate-limited.
-                from sqlsaber.query_results import FilesystemQueryResultStore
-
-                if isinstance(self.query_result_store, FilesystemQueryResultStore):
-                    from sqlsaber.cli.query_result_gc import (
-                        collect_cli_query_results,
-                    )
-
-                    await collect_cli_query_results(
-                        self.thread_manager.storage,
-                        self.query_result_store,
-                    )
-
-                from sqlsaber.cli.artifacts import is_cli_artifact_store
-
-                if is_cli_artifact_store(self.artifact_store):
-                    from sqlsaber.cli.artifact_gc import collect_cli_artifacts
-
-                    await collect_cli_artifacts(
-                        self.thread_manager.storage,
-                        self.artifact_store,
-                    )
             except Exception as exc:
                 logger.warning("sdk.thread.save_failed", error=str(exc))
 
         return run_result
 
-    def _configured_database_selector(self) -> str | list[str] | None:
-        """Return a safe, configured selector for resume metadata, if available.
-
-        Raw DSNs and paths are intentionally not persisted so credentials never
-        land in thread metadata. Those sessions require an explicit database
-        override when resuming.
-        """
+    def _safe_configured_database_selector(self) -> str | list[str] | None:
         if self._database_spec is None:
             return self.db_name
 
@@ -219,23 +187,23 @@ class SQLSaberSession:
         if self.thread_manager is not None:
             try:
                 await self.thread_manager.end_current_thread()
-            except Exception as exc:  # pragma: no cover - best effort cleanup
+            except Exception as exc:
                 logger.warning("sdk.thread.end_failed", error=str(exc))
 
         try:
             await self.agent.close()
-        except Exception as exc:  # pragma: no cover - best effort cleanup
+        except Exception as exc:
             errors.append(exc)
 
         if self._owns_knowledge_manager:
             try:
                 await self.knowledge_manager.close()
-            except Exception as exc:  # pragma: no cover - best effort cleanup
+            except Exception as exc:
                 errors.append(exc)
 
         try:
             await self.registry.close()
-        except Exception as exc:  # pragma: no cover - best effort cleanup
+        except Exception as exc:
             errors.append(exc)
 
         if errors:

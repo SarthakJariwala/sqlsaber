@@ -121,13 +121,13 @@ class ThreadStorage:
                     await db.commit()
                 logger.info("threads.create", thread_id=thread_id)
                 return thread_id
-            except Exception as e:  # pragma: no cover
+            except Exception as e:
                 logger.warning("threads.create_failed", error=str(e))
-                return thread_id
+                raise
         else:
             try:
                 async with self._lock, aiosqlite.connect(self.db_path) as db:
-                    await db.execute(
+                    cursor = await db.execute(
                         """
                         UPDATE threads
                         SET last_activity_at = ?,
@@ -142,14 +142,16 @@ class ThreadStorage:
                             thread_id,
                         ),
                     )
+                    if cursor.rowcount != 1:
+                        raise LookupError(f"Thread snapshot is missing: {thread_id}")
                     await db.commit()
                 logger.info("threads.update_snapshot", thread_id=thread_id)
                 return thread_id
-            except Exception as e:  # pragma: no cover
+            except Exception as e:
                 logger.warning(
                     "threads.update_snapshot_failed", thread_id=thread_id, error=str(e)
                 )
-                return thread_id
+                raise
 
     async def save_metadata(
         self,
@@ -243,6 +245,24 @@ class ThreadStorage:
                 "threads.get_messages_failed", thread_id=thread_id, error=str(e)
             )
             return []
+
+    async def get_thread_messages_strict(self, thread_id: str) -> list[ModelMessage]:
+        """Load one message snapshot, raising if it is missing or corrupt."""
+        await self._init_db()
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT messages_json FROM threads WHERE id = ?",
+                (thread_id,),
+            ) as cur:
+                row = await cur.fetchone()
+
+        if row is None:
+            raise LookupError(f"Thread snapshot is missing: {thread_id}")
+        try:
+            messages_blob = bytes(row[0])
+            return ModelMessagesTypeAdapter.validate_json(messages_blob)
+        except Exception as exc:
+            raise ValueError(f"Thread snapshot is corrupt: {exc}") from exc
 
     async def get_all_thread_messages_strict(self) -> list[list[ModelMessage]]:
         """Parse every retained snapshot from one read transaction or raise.

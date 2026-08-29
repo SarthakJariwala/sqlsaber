@@ -3,13 +3,13 @@ import time
 from collections.abc import Callable
 from io import BytesIO
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import saber_tui.utils as tui_utils
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
     FunctionToolResultEvent,
-    ModelResponse,
     PartDeltaEvent,
     PartEndEvent,
     PartStartEvent,
@@ -106,6 +106,36 @@ class FakeTerminal:
     def send_input(self, data: str) -> None:
         assert self._on_input is not None
         self._on_input(data)
+
+
+def _fake_saber(
+    *,
+    database_names: tuple[str, ...] = ("analytics",),
+    database_type: str = "DuckDB",
+    model_name: str = "gpt-test",
+    model_id: str | None = None,
+    dangerous_mode: bool = False,
+):
+    info = SimpleNamespace(
+        database_names=database_names,
+        primary_database_name=database_names[0],
+        primary_database_type=database_type,
+        model_name=model_name,
+        model_id=model_id,
+        dangerous_mode=dangerous_mode,
+        thinking=SimpleNamespace(enabled=False, level=ThinkingLevel.MEDIUM),
+        is_new_thread=True,
+        thread_id=None,
+    )
+    return SimpleNamespace(
+        info=info,
+        query=lambda *args, **kwargs: None,
+        display_registry={},
+        query_result_store=None,
+        set_thinking=lambda *, enabled, level=None: SimpleNamespace(
+            enabled=enabled, level=level or info.thinking.level
+        ),
+    )
 
 
 def test_chat_app_keeps_editor_mounted_and_focused_after_submit() -> None:
@@ -516,11 +546,7 @@ def test_chat_app_renders_footer_text() -> None:
 
 def test_interactive_footer_includes_usage_cost_and_context() -> None:
     session = InteractiveSession.__new__(InteractiveSession)
-    session.database_name = "analytics"
-    session._db_type_name = lambda: "DuckDB"
-    session.sqlsaber_agent = SimpleNamespace(
-        agent=SimpleNamespace(model=SimpleNamespace(model_name="gpt-test")),
-    )
+    session.saber = _fake_saber()
     session.session_usage = interactive.SessionUsage(
         total_input_tokens=4200,
         total_output_tokens=820,
@@ -539,12 +565,7 @@ def test_interactive_footer_includes_usage_cost_and_context() -> None:
 
 def test_interactive_footer_includes_dangerous_mode_when_enabled() -> None:
     session = InteractiveSession.__new__(InteractiveSession)
-    session.database_name = "analytics"
-    session._db_type_name = lambda: "DuckDB"
-    session.allow_dangerous = True
-    session.sqlsaber_agent = SimpleNamespace(
-        agent=SimpleNamespace(model=SimpleNamespace(model_name="gpt-test")),
-    )
+    session.saber = _fake_saber(dangerous_mode=True)
     session.session_usage = interactive.SessionUsage()
 
     footer = session._footer_text()
@@ -554,11 +575,9 @@ def test_interactive_footer_includes_dangerous_mode_when_enabled() -> None:
 
 def test_interactive_footer_shows_all_database_names() -> None:
     session = InteractiveSession.__new__(InteractiveSession)
-    session.database_name = "prod"
-    session.database_names = ["prod", "staging", "warehouse"]
-    session._db_type_name = lambda: "PostgreSQL"
-    session.sqlsaber_agent = SimpleNamespace(
-        agent=SimpleNamespace(model=SimpleNamespace(model_name="gpt-test")),
+    session.saber = _fake_saber(
+        database_names=("prod", "staging", "warehouse"),
+        database_type="PostgreSQL",
     )
     session.session_usage = interactive.SessionUsage()
 
@@ -581,48 +600,33 @@ async def test_execute_query_refreshes_footer_usage_cost_and_context() -> None:
 
     session = InteractiveSession.__new__(InteractiveSession)
     session.log = SimpleNamespace(info=lambda *args, **kwargs: None)
-    session.database_name = "analytics"
-    session._db_type_name = lambda: "DuckDB"
+    session.saber = _fake_saber(
+        model_name="claude-sonnet-4-5",
+        model_id="anthropic:claude-sonnet-4-5",
+    )
     session.session_usage = interactive.SessionUsage()
-    session.message_history = []
     session.current_task = None
     session.cancellation_token = None
-    session.sqlsaber_agent = SimpleNamespace(
-        agent=SimpleNamespace(
-            model=SimpleNamespace(
-                model_name="claude-sonnet-4-5",
-                model_id="anthropic:claude-sonnet-4-5",
-            )
-        ),
-    )
-    session.session = SimpleNamespace(query=lambda *args, **kwargs: None)
 
-    class FakeRunResult:
-        response = SimpleNamespace(usage=SimpleNamespace(input_tokens=150_000))
+    class FakeSQLSaberResult:
         usage = RunUsage(input_tokens=300_000, output_tokens=0, requests=2)
-
-        def all_messages(self) -> list[str]:
-            return ["message"]
-
-        def new_messages(self) -> list[ModelResponse]:
-            return [
-                ModelResponse(
-                    parts=[TextPart(content="first")],
-                    usage=RequestUsage(input_tokens=150_000, output_tokens=0),
-                ),
-                ModelResponse(
-                    parts=[TextPart(content="second")],
-                    usage=RequestUsage(input_tokens=150_000, output_tokens=0),
-                ),
-            ]
+        final_context_tokens = 150_000
+        request_usages = [
+            RequestUsage(input_tokens=150_000, output_tokens=0),
+            RequestUsage(input_tokens=150_000, output_tokens=0),
+        ]
 
     class FakeStreamingHandler:
         def __init__(self, target_app: ChatApp) -> None:
             self.app = target_app
 
-        async def execute_streaming_query(self, *args, **kwargs) -> FakeRunResult:
-            _ = args, kwargs
-            return FakeRunResult()
+        async def execute_streaming_query(
+            self, user_query, *, run_query, cancellation_token
+        ) -> FakeSQLSaberResult:
+            assert user_query == "show revenue"
+            assert run_query is session.saber.query
+            assert cancellation_token is session.cancellation_token
+            return FakeSQLSaberResult()
 
     session.streaming_handler = FakeStreamingHandler(app)
 
@@ -632,6 +636,57 @@ async def test_execute_query_refreshes_footer_usage_cost_and_context() -> None:
     assert "Usage: ↑300.0k ↓0" in viewport
     assert "Ctx: 150.0k" in viewport
     assert "Cost: $0.9000" in viewport
+
+
+@pytest.mark.asyncio
+async def test_tui_table_completion_delegates_to_public_sdk() -> None:
+    session = InteractiveSession.__new__(InteractiveSession)
+    session.saber = _fake_saber()
+    session.saber.list_tables = AsyncMock(
+        return_value=(SimpleNamespace(completion_name="main.orders"),)
+    )
+    session.autocomplete_provider = MagicMock()
+
+    await session._update_table_cache()
+
+    session.saber.list_tables.assert_awaited_once_with()
+    session.autocomplete_provider.update_table_cache.assert_called_once_with(
+        [("main.orders", "")]
+    )
+
+
+@pytest.mark.asyncio
+async def test_tui_handoff_delegates_to_public_sdk() -> None:
+    app = build_chat_app(terminal=FakeTerminal(), on_submit=lambda text: None)
+    session = InteractiveSession.__new__(InteractiveSession)
+    session.saber = _fake_saber()
+    session.saber.draft_handoff = AsyncMock(return_value="draft prompt")
+    session._handoff_mode = False
+
+    await session._start_handoff(app, "optimize the query")
+
+    session.saber.draft_handoff.assert_awaited_once_with("optimize the query")
+    assert app.editor.get_text() == "draft prompt"
+    assert session._handoff_mode is True
+
+
+@pytest.mark.asyncio
+async def test_tui_new_thread_and_exit_delegate_to_public_sdk() -> None:
+    app = build_chat_app(terminal=FakeTerminal(), on_submit=lambda text: None)
+    session = InteractiveSession.__new__(InteractiveSession)
+    session.saber = _fake_saber()
+    session.saber.new_thread = AsyncMock(return_value="thread-1")
+    session.saber.end_thread = AsyncMock(return_value=None)
+    session._execute_query_with_cancellation = AsyncMock()
+    session._handoff_mode = True
+    session._exit_finalized = False
+
+    await session._submit_handoff(app, "continue here")
+    await session._finalize_exit()
+
+    session.saber.new_thread.assert_awaited_once_with()
+    session.saber.end_thread.assert_awaited_once_with()
+    session._execute_query_with_cancellation.assert_awaited_once_with("continue here")
 
 
 def test_chat_app_renders_table_blocks_inside_tui() -> None:
@@ -1464,13 +1519,12 @@ async def test_interactive_session_routes_empty_submit_only_during_handoff(
     terminal = FakeTerminal(columns=80, rows=12)
     session = InteractiveSession.__new__(InteractiveSession)
     session.log = type("FakeLog", (), {"info": lambda *args, **kwargs: None})()
+    session.saber = _fake_saber(database_names=("test",))
     session.autocomplete_provider = None
-    session.database_name = "test"
     session._handoff_mode = False
     session.current_task = None
     session._submit_pending = False
     session._exit_finalized = False
-    session.message_history = []
     session.before_prompt_loop = lambda: asyncio.sleep(0)
     session._footer_text = lambda: None
     session._load_history = lambda: []
@@ -1501,13 +1555,12 @@ async def test_interactive_session_rejects_running_query_submit_without_echo(
     terminal = FakeTerminal(columns=80, rows=12)
     session = InteractiveSession.__new__(InteractiveSession)
     session.log = type("FakeLog", (), {"info": lambda *args, **kwargs: None})()
+    session.saber = _fake_saber(database_names=("test",))
     session.autocomplete_provider = None
-    session.database_name = "test"
     session._handoff_mode = False
     session.current_task = None
     session._submit_pending = False
     session._exit_finalized = False
-    session.message_history = []
     session.before_prompt_loop = lambda: asyncio.sleep(0)
     session._footer_text = lambda: None
     session._load_history = lambda: []

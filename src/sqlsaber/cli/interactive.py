@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
 from pathlib import Path
 from textwrap import dedent
 from typing import TYPE_CHECKING
@@ -18,26 +17,12 @@ from sqlsaber.cli.tui_chat import (
     build_chat_app,
 )
 from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
-from sqlsaber.cli.usage import (
-    SessionUsage,
-    format_cost_usd,
-    format_tokens,
-    request_usages_from_run_result,
-)
+from sqlsaber.cli.usage import SessionUsage, format_cost_usd, format_tokens
 from sqlsaber.config.logging import get_logger
-from sqlsaber.database import (
-    DuckDBConnection,
-    MySQLConnection,
-    PostgreSQLConnection,
-    SQLiteConnection,
-)
-from sqlsaber.database.csv import CSVConnection
-from sqlsaber.database.csvs import CSVsConnection
-from sqlsaber.database.schema import SchemaManager
 from sqlsaber.render import blocks as b
 
 if TYPE_CHECKING:
-    from sqlsaber.session import SQLSaberSession
+    from sqlsaber import SQLSaber, SQLSaberResult
 
 QUERY_CANCEL_GRACE_SECONDS = 0.1
 
@@ -45,41 +30,17 @@ QUERY_CANCEL_GRACE_SECONDS = 0.1
 class InteractiveSession:
     """Manages interactive CLI sessions."""
 
-    def __init__(
-        self,
-        session: "SQLSaberSession",
-        *,
-        initial_history: list | None = None,
-    ):
-        self.session = session
-        self.sqlsaber_agent = session.agent
-        self.allow_dangerous = bool(
-            getattr(
-                session.options,
-                "allow_dangerous",
-                getattr(self.sqlsaber_agent, "allow_dangerous", False),
-            )
-        )
-        self.db_conn = session.connection
-        self.database_name = session.db_name
-        self.database_names = list(getattr(session, "db_names", [session.db_name]))
+    def __init__(self, saber: "SQLSaber") -> None:
+        self.saber = saber
         self.streaming_handler: TUIStreamingQueryHandler | None = None
-        self.current_task: asyncio.Task | None = None
+        self.current_task: asyncio.Task[SQLSaberResult | None] | None = None
         self.cancellation_token: asyncio.Event | None = None
         self._submit_pending = False
         self.autocomplete_provider = SQLSaberAutocompleteProvider()
-        self.message_history: list | None = initial_history or []
         self._handoff_mode = False
         self._exit_finalized = False
-
-        if session.thread_manager is None:
-            raise ValueError(
-                "InteractiveSession requires SQLSaberSession with thread_manager set."
-            )
-        self.thread_manager = session.thread_manager
         self.command_processor = SlashCommandProcessor()
         self.session_usage = SessionUsage()
-
         self.log = get_logger(__name__)
 
     def _history_path(self) -> Path:
@@ -127,48 +88,20 @@ class InteractiveSession:
                     - Use `Ctrl+C` to interrupt and `Ctrl+D` to exit
                     """)
 
-    def _db_type_name(self) -> str:
-        """Get human-readable database type name."""
-        mapping = {
-            PostgreSQLConnection: "PostgreSQL",
-            MySQLConnection: "MySQL",
-            DuckDBConnection: "DuckDB",
-            CSVConnection: "DuckDB",
-            CSVsConnection: "DuckDB",
-            SQLiteConnection: "SQLite",
-        }
-        for cls, name in mapping.items():
-            if isinstance(self.db_conn, cls):
-                return name
-        return "database"
-
     def _model_name(self) -> str:
-        return getattr(self.sqlsaber_agent.agent.model, "model_name", "Unknown")
+        return self.saber.info.model_name
 
     def _model_id(self) -> str | None:
-        model = self.sqlsaber_agent.agent.model
-        model_id = getattr(model, "model_id", None)
-        if model_id:
-            return str(model_id)
-        configured_model = getattr(
-            getattr(self.sqlsaber_agent, "config", None), "model", None
-        )
-        configured_name = getattr(configured_model, "name", None)
-        if configured_name:
-            return str(configured_name)
-        model_name = self._model_name()
-        return None if model_name == "Unknown" else model_name
+        info = self.saber.info
+        return info.model_id or info.model_name
 
     def _database_footer_text(self) -> str:
-        database_names = getattr(self, "database_names", None)
-        if not database_names:
-            database_names = [self.database_name or "Unknown"]
+        info = self.saber.info
+        if len(info.database_names) > 1:
+            return f"DBs: {', '.join(info.database_names)}"
 
-        if len(database_names) > 1:
-            return f"DBs: {', '.join(database_names)}"
-
-        db_name = database_names[0] or "Unknown"
-        return f"DB: {db_name} ({self._db_type_name()})"
+        db_name = info.primary_database_name or "Unknown"
+        return f"DB: {db_name} ({info.primary_database_type})"
 
     def _footer_text(self) -> str:
         parts = [self._database_footer_text(), f"Model: {self._model_name()}"]
@@ -178,12 +111,7 @@ class InteractiveSession:
         return " | ".join(parts)
 
     def _dangerous_mode_footer_text(self) -> str | None:
-        agent = getattr(self, "sqlsaber_agent", None)
-        allow_dangerous = bool(
-            getattr(self, "allow_dangerous", False)
-            or getattr(agent, "allow_dangerous", False)
-        )
-        return DANGEROUS_MODE_FOOTER_LABEL if allow_dangerous else None
+        return DANGEROUS_MODE_FOOTER_LABEL if self.saber.info.dangerous_mode else None
 
     def _usage_footer_text(self) -> str:
         session_usage = getattr(self, "session_usage", SessionUsage())
@@ -203,44 +131,23 @@ class InteractiveSession:
         from sqlsaber.cli.chat_surface import ChatSurface
 
         surface = ChatSurface(app)
-        if self.thread_manager.first_message:
+        info = self.saber.info
+        if info.is_new_thread:
             surface.emit(
                 b.panel((b.md(f"```\n{self._banner()}\n```"),), role="primary"),
                 b.md(self._instructions()),
             )
 
-        if self.thread_manager.current_thread_id:
-            surface.emit(
-                b.md(
-                    f"Resuming thread: `{self.thread_manager.current_thread_id}`",
-                    role="muted",
-                )
-            )
+        if info.thread_id:
+            surface.emit(b.md(f"Resuming thread: `{info.thread_id}`", role="muted"))
 
     async def _update_table_cache(self) -> None:
         """Update the table completer cache with fresh data."""
         try:
-            tables_data = await SchemaManager(self.db_conn).list_tables()
-
-            table_list = []
-            if isinstance(tables_data, dict) and "tables" in tables_data:
-                for table in tables_data["tables"]:
-                    if isinstance(table, dict):
-                        name = table.get("name", "")
-                        schema = table.get("schema", "")
-                        full_name = table.get("full_name", "")
-
-                        if full_name:
-                            table_name = full_name
-                        elif schema and schema != "main":
-                            table_name = f"{schema}.{name}"
-                        else:
-                            table_name = name
-
-                        table_list.append((table_name, ""))
-
-            self.autocomplete_provider.update_table_cache(table_list)
-
+            tables = await self.saber.list_tables()
+            self.autocomplete_provider.update_table_cache(
+                [(table.completion_name, "") for table in tables]
+            )
         except Exception:
             self.autocomplete_provider.update_table_cache([])
 
@@ -250,15 +157,9 @@ class InteractiveSession:
 
     async def _start_handoff(self, app: ChatApp, goal: str) -> None:
         """Generate a handoff draft and put it in the focused editor."""
-        from sqlsaber.agents.handoff_agent import HandoffAgent
-
         app.set_loading("Generating handoff prompt...")
         try:
-            handoff_agent = HandoffAgent()
-            draft = await handoff_agent.generate_draft(
-                message_history=self.message_history or [],
-                goal=goal,
-            )
+            draft = await self.saber.draft_handoff(goal)
         except Exception as exc:
             error_message = str(exc)
             from sqlsaber.cli.chat_surface import ChatSurface
@@ -274,9 +175,7 @@ class InteractiveSession:
         app.editor.set_text(draft)
         app.set_status("Edit the handoff draft and press Enter to start a new thread.")
 
-    async def _submit_handoff(
-        self, app: ChatApp, edited: str, clear_history: Callable[[], None]
-    ) -> None:
+    async def _submit_handoff(self, app: ChatApp, edited: str) -> None:
         self._handoff_mode = False
         app.clear_status()
         edited = edited.strip()
@@ -286,7 +185,7 @@ class InteractiveSession:
             ChatSurface(app).emit(b.warn("Empty handoff prompt; cancelled."))
             return
 
-        old_id = await self.thread_manager.end_current_thread()
+        old_id = await self.saber.new_thread()
         if old_id:
             from sqlsaber.cli.chat_surface import ChatSurface
 
@@ -297,9 +196,6 @@ class InteractiveSession:
                     role="muted",
                 )
             )
-
-        clear_history()
-        await self.thread_manager.clear_current_thread()
         from sqlsaber.cli.chat_surface import ChatSurface
 
         ChatSurface(app).emit(b.md("**Starting new thread...**", role="primary"))
@@ -310,28 +206,28 @@ class InteractiveSession:
         if self.streaming_handler is None:
             raise RuntimeError("Streaming handler has not been initialized.")
 
-        self.log.info("interactive.query.start", database=self.database_name)
+        self.log.info(
+            "interactive.query.start",
+            database=self.saber.info.primary_database_name,
+        )
         self.cancellation_token = asyncio.Event()
         query_task = asyncio.create_task(
             self.streaming_handler.execute_streaming_query(
                 user_query,
-                run_query=self.session.query,
+                run_query=self.saber.query,
                 cancellation_token=self.cancellation_token,
-                message_history=self.message_history,
             )
         )
         self.current_task = query_task
 
         try:
-            run_result = await query_task
-            if run_result is not None:
-                self.message_history = run_result.all_messages()
-                final_context = run_result.response.usage.input_tokens
+            result = await query_task
+            if result is not None and result.usage is not None:
                 self.session_usage.add_run(
-                    run_result.usage,
-                    final_context,
+                    result.usage,
+                    result.final_context_tokens,
                     model_name=self._model_id(),
-                    request_usages=request_usages_from_run_result(run_result),
+                    request_usages=result.request_usages,
                 )
                 self._refresh_footer()
         finally:
@@ -385,7 +281,6 @@ class InteractiveSession:
         self,
         app: ChatApp,
         surface,
-        clear_history: Callable[[], None],
         user_query: str,
     ) -> None:
         try:
@@ -398,16 +293,14 @@ class InteractiveSession:
             if self._handoff_mode:
                 if user_query.strip():
                     self._append_history(user_query)
-                await self._submit_handoff(app, user_query, clear_history)
+                await self._submit_handoff(app, user_query)
                 return
 
             self._append_history(user_query)
 
             context = CommandContext(
                 surface=surface,
-                agent=self.sqlsaber_agent,
-                thread_manager=self.thread_manager,
-                on_clear_history=clear_history,
+                saber=self.saber,
                 session_usage=self.session_usage,
             )
 
@@ -434,7 +327,7 @@ class InteractiveSession:
     async def _finalize_exit(self) -> None:
         if self._exit_finalized:
             return
-        ended_thread_id = await self.thread_manager.end_current_thread()
+        ended_thread_id = await self.saber.end_thread()
         if ended_thread_id:
             hint = f"saber threads resume {ended_thread_id}"
             from sqlsaber.cli.output import out
@@ -444,7 +337,9 @@ class InteractiveSession:
 
     async def run(self) -> None:
         """Run the interactive session loop."""
-        self.log.info("interactive.start", database=self.database_name)
+        self.log.info(
+            "interactive.start", database=self.saber.info.primary_database_name
+        )
         await self.before_prompt_loop()
 
         from sqlsaber.cli.chat_surface import ChatSurface
@@ -453,9 +348,6 @@ class InteractiveSession:
         loop = asyncio.get_running_loop()
         app_ref: dict[str, ChatApp] = {}
         surface_ref: dict[str, ChatSurface] = {}
-
-        def clear_history() -> None:
-            self.message_history = []
 
         def on_submit(user_query: str) -> bool:
             app = app_ref["app"]
@@ -474,12 +366,7 @@ class InteractiveSession:
 
             async def submit_query() -> None:
                 try:
-                    await self._handle_submit(
-                        app,
-                        surface,
-                        clear_history,
-                        user_query,
-                    )
+                    await self._handle_submit(app, surface, user_query)
                 finally:
                     self._submit_pending = False
 
@@ -487,12 +374,15 @@ class InteractiveSession:
             return True
 
         def open_command_palette(app: ChatApp) -> None:
+            info = self.saber.info
             app.show_command_palette(
-                thinking_enabled=self.sqlsaber_agent.thinking_enabled,
-                thinking_level=self.sqlsaber_agent.thinking_level,
-                on_thinking_change=self.sqlsaber_agent.set_thinking,
-                model_name=self._model_name(),
-                database_name=self.database_name,
+                thinking_enabled=info.thinking.enabled,
+                thinking_level=info.thinking.level,
+                on_thinking_change=lambda enabled, level: self.saber.set_thinking(
+                    enabled=enabled, level=level
+                ),
+                model_name=info.model_name,
+                database_name=info.primary_database_name,
             )
 
         def on_cancel() -> None:
@@ -519,12 +409,8 @@ class InteractiveSession:
         app.editor.history = self._load_history()
         self.streaming_handler = TUIStreamingQueryHandler(
             app,
-            display_registry_provider=lambda: getattr(
-                getattr(self, "sqlsaber_agent", None), "display_registry", None
-            ),
-            query_result_store=getattr(
-                getattr(self, "session", None), "query_result_store", None
-            ),
+            display_registry_provider=lambda: self.saber.display_registry,
+            query_result_store=self.saber.query_result_store,
         )
         self.show_welcome_message(app)
 

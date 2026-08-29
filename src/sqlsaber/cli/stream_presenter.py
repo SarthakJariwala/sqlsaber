@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
-from typing import Any, AsyncIterable
+from typing import TYPE_CHECKING, Any, AsyncIterable
 
 from pydantic_ai import RunContext
 from pydantic_ai.messages import (
@@ -41,6 +41,9 @@ from sqlsaber.tools.renderer import (
     core_display_registry,
 )
 from sqlsaber.utils.text_input import sanitize_terminal_text
+
+if TYPE_CHECKING:
+    from sqlsaber import SQLSaberResult
 
 
 class _QueryInterrupted(Exception):
@@ -444,34 +447,22 @@ class AgentStreamPresenter:
     async def execute_streaming_query(
         self,
         user_query: str,
-        run_query: Callable[..., Awaitable[Any]],
+        run_query: Callable[..., Awaitable[SQLSaberResult]],
         cancellation_token: asyncio.Event | None = None,
-        message_history: list | None = None,
-    ):
-        """Run a query and present its stream.
-
-        Args:
-            user_query: User text.
-            run_query: Agent entry that accepts ``event_stream_handler``.
-            cancellation_token: Optional cooperative cancel event.
-            message_history: Optional prior messages.
-
-        Returns:
-            The agent run, or None when interrupted.
-        """
+    ) -> SQLSaberResult | None:
+        """Run an SDK query and present its stream."""
         self._reset_tool_call_state(remove_previews=True)
         self._finish_all_stream_segments()
         self._cancellation_token = cancellation_token
         try:
             self.log.info("streaming.execute.start")
             self.surface.status("Crunching data...")
-            run = await run_query(
+            result = await run_query(
                 user_query,
-                message_history=message_history,
                 event_stream_handler=self._event_stream_handler,
             )
             self.log.info("streaming.execute.end")
-            return run
+            return result
         except _QueryInterrupted:
             self._announce_interrupted()
             self.log.info("streaming.execute.interrupted")

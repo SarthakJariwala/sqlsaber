@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .api import SQLSaber
+    from .api import SQLSaber, SQLSaberResult
     from .artifacts import (
         Artifact,
         ArtifactBundle,
@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         StoredArtifact,
     )
     from .capabilities import Knowledge, SqlTools
+    from .config.settings import ThinkingLevel
     from .options import SQLSaberOptions
     from .overrides import ModelOverides
     from .query_results import (
@@ -32,6 +33,18 @@ if TYPE_CHECKING:
         QueryResultUnavailable,
         StoredQueryResult,
     )
+    from .sdk_errors import (
+        RunInProgressError,
+        SQLSaberClosedError,
+        SQLSaberError,
+        ThreadDatabaseRequiredError,
+        ThreadDatabaseUnavailableError,
+        ThreadNotFoundError,
+        ThreadResumeError,
+        ThreadResumeHistoryError,
+        ThreadResumeMetadataError,
+    )
+    from .sdk_types import SQLSaberInfo, TableInfo, ThinkingState
     from .workspace_inputs import WorkspaceInputResolver, WorkspaceResolutionContext
 
 __all__ = [
@@ -56,9 +69,23 @@ __all__ = [
     "QueryResultId",
     "QueryResultStore",
     "QueryResultUnavailable",
+    "RunInProgressError",
     "SQLSaber",
+    "SQLSaberClosedError",
+    "SQLSaberError",
+    "SQLSaberInfo",
     "SQLSaberOptions",
+    "SQLSaberResult",
     "SqlTools",
+    "TableInfo",
+    "ThinkingLevel",
+    "ThinkingState",
+    "ThreadDatabaseRequiredError",
+    "ThreadDatabaseUnavailableError",
+    "ThreadNotFoundError",
+    "ThreadResumeError",
+    "ThreadResumeHistoryError",
+    "ThreadResumeMetadataError",
     "StoredArtifact",
     "StoredQueryResult",
     "WorkspaceInputResolver",
@@ -68,10 +95,10 @@ __all__ = [
 
 def __getattr__(name: str):
     """Lazy import for SQLSaber to avoid heavy startup imports."""
-    if name == "SQLSaber":
-        from .api import SQLSaber
+    if name in {"SQLSaber", "SQLSaberResult"}:
+        from . import api
 
-        return SQLSaber
+        return getattr(api, name)
     if name == "SQLSaberOptions":
         from .options import SQLSaberOptions
 
@@ -119,6 +146,28 @@ def __getattr__(name: str):
         from .capabilities import Knowledge
 
         return Knowledge
+    if name == "ThinkingLevel":
+        from .config.settings import ThinkingLevel
+
+        return ThinkingLevel
+    if name in {"SQLSaberInfo", "TableInfo", "ThinkingState"}:
+        from . import sdk_types
+
+        return getattr(sdk_types, name)
+    if name in {
+        "RunInProgressError",
+        "SQLSaberClosedError",
+        "SQLSaberError",
+        "ThreadDatabaseRequiredError",
+        "ThreadDatabaseUnavailableError",
+        "ThreadNotFoundError",
+        "ThreadResumeError",
+        "ThreadResumeHistoryError",
+        "ThreadResumeMetadataError",
+    }:
+        from . import sdk_errors
+
+        return getattr(sdk_errors, name)
     if name in {"WorkspaceInputResolver", "WorkspaceResolutionContext"}:
         from . import workspace_inputs
 

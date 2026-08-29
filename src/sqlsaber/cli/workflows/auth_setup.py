@@ -2,7 +2,7 @@
 
 import os
 
-from sqlsaber.application.prompts import Prompter
+from sqlsaber.cli.prompts import Prompter
 from sqlsaber.cli.output import err, out
 from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
