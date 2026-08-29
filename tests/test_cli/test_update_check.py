@@ -8,7 +8,7 @@ from sqlsaber.cli.chat_surface import ChatSurface
 from sqlsaber.cli.interactive import InteractiveSession
 from sqlsaber.cli.tui_chat import build_chat_app
 from sqlsaber.cli.update_check import (
-    _print_update_notice,
+    _emit_update_notice,
     bind_update_notice,
 )
 from sqlsaber.render import reset_io
@@ -45,7 +45,7 @@ def test_bound_update_notice_joins_chat_above_editor_and_leaves_footer() -> None
     reset_io(stdout=buf, tty=False)
     bind_update_notice(ChatSurface(app).emit)
 
-    _print_update_notice()
+    _emit_update_notice()
     app.tui.flush_render()
 
     viewport = _viewport(app)
@@ -70,7 +70,7 @@ def test_notice_before_bind_flushes_into_chat_not_stdout() -> None:
     app, buf = _started_chat_app()
     reset_io(stdout=buf, tty=False)
 
-    _print_update_notice()
+    _emit_update_notice()
     assert "A new version is now available!" not in buf.getvalue()
     assert "A new version is now available!" not in _viewport(app)
 
@@ -90,7 +90,7 @@ def test_one_shot_bind_still_prints_to_stdout() -> None:
     buf = StringIO()
     reset_io(stdout=buf, tty=False)
     bind_update_notice(out)
-    _print_update_notice()
+    _emit_update_notice()
     text = buf.getvalue()
     assert "A new version is now available!" in text
     assert "uv tool update sqlsaber" in text

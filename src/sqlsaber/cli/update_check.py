@@ -112,14 +112,10 @@ def _notice_blocks() -> tuple[Block, ...]:
 
 
 def bind_update_notice(emit: Callable[..., None] | None) -> None:
-    """Route the PyPI notice through ``emit``.
-
-    ``None`` holds a later notice until another bind. Interactive chat
-    binds ``ChatSurface.emit`` so the notice cannot write to stdout after
-    saber-tui owns the terminal.
+    """Set where an available-update notice goes.
 
     Args:
-        emit: Block sink, or None to unbind.
+        emit: Block sink. ``None`` unbinds and holds a later notice.
     """
 
     global _notice_emit, _pending_blocks
@@ -131,15 +127,13 @@ def bind_update_notice(emit: Callable[..., None] | None) -> None:
 
 
 def reset_update_check() -> None:
-    """Clear process-global schedule, sink, and pending notice."""
-
     global _SCHEDULED, _notice_emit, _pending_blocks
     _SCHEDULED = False
     _notice_emit = None
     _pending_blocks = None
 
 
-def _print_update_notice() -> None:
+def _emit_update_notice() -> None:
     global _pending_blocks
     blocks = _notice_blocks()
     if _notice_emit is not None:
@@ -159,7 +153,7 @@ async def _check_and_notify() -> None:
 
     if _is_newer(latest, current):
         _LOG.info("update_check.available", current=current, latest=latest)
-        _print_update_notice()
+        _emit_update_notice()
 
 
 async def _run_safely() -> None:
