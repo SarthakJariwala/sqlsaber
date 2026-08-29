@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import logging
 import re
 from collections import OrderedDict
@@ -11,17 +10,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, cast
 
-from PIL import Image, UnidentifiedImageError
 from pydantic_ai import RunContext, ToolReturn
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.usage import UsageLimits
-from rich.color import Color
-from rich.console import Console
-from rich.markdown import Markdown
-from rich.rule import Rule
-from rich.style import Style
-from rich.text import Text
 
 from sqlsaber.artifact_resolution import (
     ResolvedArtifactPublication,
@@ -41,8 +33,11 @@ from sqlsaber.query_results import (
     QueryResultStore,
     QueryResultUnavailable,
 )
+from sqlsaber.render import blocks as b
 from sqlsaber.run_usage import current_usage_limits
-from sqlsaber.tools.base import Tool, ToolResultTUI
+from sqlsaber.utils.text_input import sanitize_terminal_text
+from sqlsaber.tools.base import Tool
+from sqlsaber.tools.renderer import ToolRenderContext
 from sqlsaber.utils.json_utils import json_dumps
 from sqlsaber.workspace_inputs import (
     WorkspaceInputFile,
@@ -98,8 +93,6 @@ def _nested_usage_limits() -> UsageLimits:
         return UsageLimits(request_limit=None)
     if parent_limits.tool_calls_limit is None:
         return parent_limits
-    # The successful parent analyze_data call is counted after execute returns.
-    # Reserve room for it in the child's derived limit without mutating the parent.
     return replace(
         parent_limits,
         tool_calls_limit=max(0, parent_limits.tool_calls_limit - 1),
@@ -254,101 +247,64 @@ class AnalyzeDataTool(Tool):
         except (TimeoutError, ValueError) as exc:
             return _error_result(str(exc))
 
-    def render_executing(self, console: Console, args: dict) -> bool:
-        goal = args.get("goal")
-        if isinstance(goal, str) and goal.strip():
-            console.print(f"[muted bold]Analyzing data:[/muted bold] {goal.strip()}")
-        else:
-            console.print("[muted bold]Analyzing data in notebook[/muted bold]")
-        return True
-
-    def render_executing_tui(self, tui: ToolResultTUI, args: dict) -> bool:
-        """Render the notebook request in a theme-matched panel."""
-        panel = tui.append_panel()
+    def render_executing(self, args: dict):
         goal = args.get("goal")
         if isinstance(goal, str) and goal.strip():
             request = limit_output(goal.strip(), 4_000)
-            panel.append_markdown(f"**Analyzing data**\n\n{request}")
+            inner = (b.md(f"**Analyzing data**\n\n{request}"),)
         else:
-            panel.append_markdown("**Analyzing data in notebook**")
-        return True
+            inner = (b.md("**Analyzing data in notebook**"),)
+        return (b.panel(inner),)
 
-    def render_result_tui(
-        self,
-        tui: ToolResultTUI,
-        result: object,
-        *,
-        tool_call_id: str | None = None,
-        metadata: object = None,
-    ) -> bool:
-        """Render the notebook with native saber-tui Markdown and Image components."""
-        display, reconstruction_failed = self._display_for(tool_call_id, metadata)
+    def render_result(
+        self, result: object, *, context: ToolRenderContext | None = None
+    ):
+        ctx = context or ToolRenderContext()
+        display, reconstruction_failed = self._display_for(
+            ctx.tool_call_id, ctx.metadata
+        )
         if display is None:
             if reconstruction_failed:
-                panel = tui.append_panel()
-                panel.append_markdown(
-                    "*Persisted notebook could not be reconstructed; "
-                    "showing its generic artifact references.*"
-                )
-            return False
+                answer = sanitize_terminal_text(limit_output(str(result)).strip())
+                blocks = [
+                    b.md(
+                        "*Persisted notebook could not be reconstructed; "
+                        "showing its generic artifact references.*"
+                    )
+                ]
+                if answer:
+                    blocks.append(b.md(f"## Analysis result\n\n{answer}"))
+                return tuple(blocks)
+            return None
 
-        panel = tui.append_panel()
-        notebook = display.markdown.strip() or "*No notebook cells were executed.*"
-        panel.append_markdown(f"## Analysis notebook\n\n{notebook}")
-        for index, image in enumerate(display.images, start=1):
-            panel.append_markdown(f"**Plot {index}**")
-            panel.append_image(
-                image,
-                "image/png",
-                filename=f"plot_{index}.png",
-                max_width_cells=None,
+        notebook_md = sanitize_terminal_text(display.markdown.strip())
+        children: list = [
+            b.md(
+                "## Analysis notebook\n\n"
+                + (notebook_md or "*No notebook cells were executed.*")
             )
-
-        answer = limit_output(str(result)).strip()
+        ]
+        for index, image in enumerate(display.images, start=1):
+            children.append(b.md(f"**Plot {index}**"))
+            children.append(
+                b.image(
+                    image,
+                    "image/png",
+                    filename=f"plot_{index}.png",
+                    max_width_cells=None,
+                )
+            )
+        answer = sanitize_terminal_text(limit_output(str(result)).strip())
         if answer:
-            panel.append_markdown(f"## Analysis result\n\n{answer}")
-        publication = artifact_publication_from_metadata(metadata)
+            children.append(b.md(f"## Analysis result\n\n{answer}"))
+        publication = artifact_publication_from_metadata(ctx.metadata)
         if publication is not None:
             artifact_lines = "\n".join(
                 f"- `{artifact.name}`: `{artifact.uri}`"
                 for artifact in publication.artifacts
             )
-            panel.append_markdown(f"## Artifacts\n\n{artifact_lines}")
-        return True
-
-    def render_result_event(
-        self,
-        console: Console,
-        result: object,
-        *,
-        tool_call_id: str | None = None,
-        metadata: object = None,
-    ) -> bool:
-        display, reconstruction_failed = self._display_for(tool_call_id, metadata)
-        if display is None:
-            if reconstruction_failed:
-                console.print(
-                    "[warning]Persisted notebook could not be reconstructed; "
-                    "showing generic artifact references.[/warning]"
-                )
-            return False
-
-        console.print(Rule("Analysis notebook"))
-        if display.markdown.strip():
-            console.print(Markdown(display.markdown))
-        else:
-            console.print("[muted]No notebook cells were executed.[/muted]")
-
-        for index, image in enumerate(display.images, start=1):
-            _render_plot(console, image, index=index)
-
-        answer = limit_output(str(result)).strip()
-        if answer:
-            console.print()
-            console.print("[bold]Analysis result[/bold]")
-            console.print(Markdown(answer))
-        console.print(Rule())
-        return True
+            children.append(b.md(f"## Artifacts\n\n{artifact_lines}"))
+        return (b.panel(children),)
 
     def set_resolved_artifact_publications(
         self,
@@ -410,8 +366,6 @@ class Notebook(SqlSaberCapability):
             execute,
             name=self.tool.name,
             takes_ctx=True,
-            # Notebook delegation must run as a barrier so sibling parent tools
-            # are fully accounted before the nested agent checks shared limits.
             sequential=True,
         )
 
@@ -743,41 +697,3 @@ def _dedupe_images(images: list[bytes]) -> list[bytes]:
         hashes.add(digest)
         selected.append(image)
     return selected
-
-
-def _render_plot(console: Console, image_data: bytes, *, index: int) -> None:
-    if console.color_system is None:
-        console.print(f"[Plot {index} omitted: terminal color is unavailable]")
-        return
-    try:
-        with Image.open(io.BytesIO(image_data)) as source:
-            source.load()
-            image = source.convert("RGBA")
-    except (UnidentifiedImageError, OSError):
-        console.print(f"[Plot {index} omitted: invalid PNG]")
-        return
-
-    width = min(max(1, console.width - 4), image.width)
-    pixel_height = max(2, round(image.height * width / max(1, image.width)))
-    if pixel_height % 2:
-        pixel_height += 1
-    image.thumbnail((width, pixel_height), Image.Resampling.LANCZOS)
-    canvas = Image.new("RGBA", image.size, (255, 255, 255, 255))
-    canvas.alpha_composite(image)
-    rgb = canvas.convert("RGB")
-
-    console.print(f"[bold]Plot {index}[/bold]")
-    for y in range(0, rgb.height, 2):
-        line = Text()
-        bottom_y = min(y + 1, rgb.height - 1)
-        for x in range(rgb.width):
-            top = cast(tuple[int, int, int], rgb.getpixel((x, y)))
-            bottom = cast(tuple[int, int, int], rgb.getpixel((x, bottom_y)))
-            line.append(
-                "▀",
-                style=Style(
-                    color=Color.from_rgb(*top),
-                    bgcolor=Color.from_rgb(*bottom),
-                ),
-            )
-        console.print(line)

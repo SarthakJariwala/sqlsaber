@@ -1,12 +1,9 @@
 """Shared model selection logic for onboarding and CLI."""
 
-from questionary import Choice
-
-from sqlsaber.application.prompts import Prompter
+from sqlsaber.application.prompts import Choice, Prompter
 from sqlsaber.cli.models import FetchedModel, ModelManager
-from sqlsaber.theme.manager import create_console
-
-console = create_console()
+from sqlsaber.cli.output import out
+from sqlsaber.render import blocks as b
 
 
 async def fetch_models(
@@ -34,24 +31,19 @@ async def choose_model(
         Selected model ID (provider:model_id) or None if cancelled
     """
     if not models:
-        console.print("[warning]No models available[/warning]")
+        out(b.warn("No models available"))
         return None
 
-    # Filter by provider if restricted
     if restrict_provider:
         models = [m for m in models if m.get("provider") == restrict_provider]
         if not models:
-            console.print(
-                f"[warning]No models available for {restrict_provider}[/warning]"
-            )
+            out(b.warn(f"No models available for {restrict_provider}"))
             return None
 
-    # Get recommended model for the provider
     recommended_id = None
     if restrict_provider and restrict_provider in ModelManager.RECOMMENDED_MODELS:
         recommended_id = ModelManager.RECOMMENDED_MODELS[restrict_provider]
 
-    # Build choices
     choices = []
     recommended_index = 0
 
@@ -73,11 +65,9 @@ async def choose_model(
 
         choices.append(Choice(choice_text, value=model["id"]))
 
-    # Move recommended model to top if it exists
     if recommended_index > 0:
         choices.insert(0, choices.pop(recommended_index))
 
-    # Prompt user
     selected_model = await prompter.select(
         "Select a model:",
         choices=choices,
@@ -87,7 +77,6 @@ async def choose_model(
     if selected_model:
         return selected_model
 
-    # User cancelled, return recommended or first available
     if recommended_id and restrict_provider:
         return f"{restrict_provider}:{recommended_id}"
     return models[0]["id"] if models else None

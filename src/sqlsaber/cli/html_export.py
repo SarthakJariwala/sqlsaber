@@ -6,8 +6,6 @@ from html import escape
 from pydantic_ai.messages import ModelMessage
 
 from sqlsaber.artifacts import artifact_publication_from_metadata
-from sqlsaber.cli.display import DisplayManager
-from sqlsaber.theme.manager import create_console
 from sqlsaber.threads.storage import Thread
 
 
@@ -52,10 +50,12 @@ def _html_escape_multimodal(content: object) -> str:
 
 
 def _render_tool_result_html(
-    display: DisplayManager,
+    renderer,
     tool_name: str,
     content: object,
     args: dict | None = None,
+    *,
+    replay_messages: list[ModelMessage] | None = None,
 ) -> str:
     content_payload = content
     if isinstance(content, (dict, list)):
@@ -63,7 +63,18 @@ def _render_tool_result_html(
     elif not isinstance(content, str):
         content_payload = json.dumps({"return_value": str(content)}, ensure_ascii=False)
 
-    html = display.render_tool_result_html(tool_name, content_payload, args=args)
+    from sqlsaber.render.html import html_of
+    from sqlsaber.tools.renderer import ToolRenderContext
+
+    html = html_of(
+        tuple(
+            renderer.result(
+                tool_name,
+                content_payload,
+                context=ToolRenderContext(replay_messages=replay_messages),
+            )
+        )
+    )
     if tool_name == "execute_sql" and args:
         query = args.get("sql") or args.get("query")
         if isinstance(query, str) and query.strip():
@@ -578,8 +589,9 @@ def render_thread_html(
 
     body_parts: list[str] = []
     slices = build_turn_slices(all_msgs)
-    display = DisplayManager(create_console())
-    display.set_replay_messages(all_msgs)
+    from sqlsaber.tools.renderer import ToolRenderer, core_display_registry
+
+    renderer = ToolRenderer(core_display_registry())
 
     for start_idx, end_idx in slices:
         if not (0 <= start_idx < len(all_msgs)):
@@ -669,7 +681,11 @@ def render_thread_html(
 
                     tool_args = {"sql": sql_query} if sql_query else None
                     result_html = _render_tool_result_html(
-                        display, tool_name, content_str, args=tool_args
+                        renderer,
+                        tool_name,
+                        content_str,
+                        args=tool_args,
+                        replay_messages=all_msgs,
                     )
                     result_html += _render_artifact_links(
                         getattr(part, "metadata", None)

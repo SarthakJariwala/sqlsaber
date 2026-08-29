@@ -9,10 +9,10 @@ from dataclasses import dataclass
 from importlib import metadata
 
 import httpx
-from rich.console import Console
 
+from sqlsaber.cli.output import out
 from sqlsaber.config.logging import get_logger
-from sqlsaber.theme.manager import create_console
+from sqlsaber.render import blocks as b
 
 PACKAGE_NAME = "sqlsaber"
 ENV_SKIP_VERSION_CHECK = "SQLSABER_SKIP_VERSION_CHECK"
@@ -101,12 +101,14 @@ def _is_newer(latest: str, current: str) -> bool:
         return _parse_version(latest) > _parse_version(current)
 
 
-def _print_update_notice(console: Console) -> None:
-    console.print("A new version is now available!\n")
-    console.print(f"Run: uv tool update {PACKAGE_NAME}\n")
+def _print_update_notice() -> None:
+    out(
+        b.md("A new version is now available!"),
+        b.md(f"Run: `uv tool update {PACKAGE_NAME}`"),
+    )
 
 
-async def _check_and_notify(console: Console) -> None:
+async def _check_and_notify() -> None:
     current = _get_current_version()
     if not current:
         return
@@ -117,17 +119,17 @@ async def _check_and_notify(console: Console) -> None:
 
     if _is_newer(latest, current):
         _LOG.info("update_check.available", current=current, latest=latest)
-        _print_update_notice(console)
+        _print_update_notice()
 
 
-async def _run_safely(console: Console) -> None:
+async def _run_safely() -> None:
     try:
-        await _check_and_notify(console)
+        await _check_and_notify()
     except Exception:
         return
 
 
-def schedule_update_check(console: Console | None = None) -> None:
+def schedule_update_check() -> None:
     """Schedule a non-blocking update check.
 
     Safe to call multiple times; only schedules once per process.
@@ -146,4 +148,4 @@ def schedule_update_check(console: Console | None = None) -> None:
         return
 
     _SCHEDULED = True
-    asyncio.create_task(_run_safely(console or create_console()))
+    asyncio.create_task(_run_safely())

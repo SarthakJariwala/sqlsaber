@@ -2,21 +2,11 @@
 
 from __future__ import annotations
 
-import io
 import platform
-import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal, cast
 
 import saber_tui.utils as tui_utils
-from pygments import highlight
-from pygments.formatters.terminal256 import TerminalTrueColorFormatter
-from pygments.lexers import get_lexer_by_name
-from pygments.lexers.special import TextLexer
-from pygments.styles import get_style_by_name
-from pygments.util import ClassNotFound
-from rich.console import Console
 from saber_tui import (
     PosixProcessTerminal,
     TUI,
@@ -49,64 +39,16 @@ from saber_tui.utils import (
 )
 
 from sqlsaber.config.settings import ThinkingLevel
-from sqlsaber.theme.manager import get_theme_manager
 
-type ColorSystem = Literal["auto", "standard", "256", "truecolor", "windows"]
 type SubmitHandler = Callable[[str], bool | None]
 type ThinkingChangeHandler = Callable[[bool, ThinkingLevel | None], None]
-
-
-def _fg(r: int, g: int, b: int) -> Callable[[str], str]:
-    code = f"\x1b[38;2;{r};{g};{b}m"
-    return lambda text: f"{code}{text}\x1b[39m"
-
-
-_SGR_RE = re.compile(r"\x1b\[([0-9;]*)m")
-# saber-tui clamps this ceiling to the component width on every render. A large
-# sentinel therefore means "use available width" and remains responsive to resize.
-_RESPONSIVE_IMAGE_MAX_CELLS = 2**31 - 1
-
-
-def _bg(r: int, g: int, b: int) -> Callable[[str], str]:
-    code = f"\x1b[48;2;{r};{g};{b}m"
-
-    def apply(text: str) -> str:
-        # Syntax highlighters may emit a full SGR reset (for example ``39;00``),
-        # which also clears an enclosing panel background. Restore it after any
-        # full/background reset so highlighted code stays visually continuous.
-        def restore(match: re.Match[str]) -> str:
-            parameters = match.group(1).split(";")
-            clears_background = not match.group(1) or any(
-                parameter in {"0", "00", "49"} for parameter in parameters
-            )
-            return match.group(0) + code if clears_background else match.group(0)
-
-        return f"{code}{_SGR_RE.sub(restore, text)}\x1b[49m"
-
-    return apply
 
 
 def _bold(text: str) -> str:
     return f"\x1b[1m{text}\x1b[22m"
 
 
-def _italic(text: str) -> str:
-    return f"\x1b[3m{text}\x1b[23m"
-
-
-def _strikethrough(text: str) -> str:
-    return f"\x1b[9m{text}\x1b[29m"
-
-
-def _underline(text: str) -> str:
-    return f"\x1b[4m{text}\x1b[24m"
-
-
-INFO_FALLBACK = (125, 211, 252)
-SUCCESS_FALLBACK = (134, 239, 172)
-WARNING_FALLBACK = (251, 191, 36)
-MUTED_FALLBACK = (148, 163, 184)
-USER_BG_FALLBACK = (30, 41, 59)
+_RESPONSIVE_IMAGE_MAX_CELLS = 2**31 - 1
 MIN_TUI_WIDTH_CACHE_SIZE = 65_536
 SHIFT_ENTER_SEQUENCE = "\x1b[13;2u"
 SHIFT_ENTER_FALLBACK_SEQUENCES = {"\n", "\x1b\r"}
@@ -129,87 +71,6 @@ def _ensure_tui_width_cache_capacity() -> None:
         setattr(tui_utils, "_WIDTH_CACHE_SIZE", MIN_TUI_WIDTH_CACHE_SIZE)
 
 
-def _hex_to_rgb(color: str | None) -> tuple[int, int, int] | None:
-    if not color:
-        return None
-    normalized = color.strip()
-    if normalized.startswith("#"):
-        normalized = normalized[1:]
-    if len(normalized) == 3:
-        normalized = "".join(ch * 2 for ch in normalized)
-    if len(normalized) != 6:
-        return None
-    try:
-        return (
-            int(normalized[0:2], 16),
-            int(normalized[2:4], 16),
-            int(normalized[4:6], 16),
-        )
-    except ValueError:
-        return None
-
-
-def _blend(
-    base: tuple[int, int, int], accent: tuple[int, int, int], ratio: float
-) -> tuple[int, int, int]:
-    return (
-        round(base[0] * (1 - ratio) + accent[0] * ratio),
-        round(base[1] * (1 - ratio) + accent[1] * ratio),
-        round(base[2] * (1 - ratio) + accent[2] * ratio),
-    )
-
-
-def _theme_fg_rgb(role: str, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
-    tm = get_theme_manager()
-    console = Console(theme=tm.rich_theme, color_system="truecolor")
-    try:
-        style = console.get_style(role)
-    except Exception:
-        style = None
-    if style is not None and style.color is not None:
-        color = style.color.get_truecolor()
-        return color.red, color.green, color.blue
-    return fallback
-
-
-def _theme_fg(role: str, fallback: tuple[int, int, int]) -> Callable[[str], str]:
-    return _fg(*_theme_fg_rgb(role, fallback))
-
-
-def _theme_user_bg() -> Callable[[str], str]:
-    tm = get_theme_manager()
-    try:
-        style = get_style_by_name(tm.pygments_style_name)
-    except ClassNotFound:
-        return _bg(*USER_BG_FALLBACK)
-
-    highlight = _hex_to_rgb(getattr(style, "highlight_color", None))
-    if highlight is not None:
-        return _bg(*highlight)
-
-    background = _hex_to_rgb(getattr(style, "background_color", None))
-    if background is None:
-        return _bg(*USER_BG_FALLBACK)
-
-    accent = _theme_fg_rgb("panel.border.user", INFO_FALLBACK)
-    return _bg(*_blend(background, accent, 0.16))
-
-
-def _theme_tool_bg() -> Callable[[str], str]:
-    """Derive a subtle tool panel background from the selected theme."""
-    tm = get_theme_manager()
-    try:
-        style = get_style_by_name(tm.pygments_style_name)
-    except ClassNotFound:
-        return _bg(*USER_BG_FALLBACK)
-
-    background = _hex_to_rgb(getattr(style, "background_color", None))
-    if background is None:
-        background = USER_BG_FALLBACK
-    accent = _theme_fg_rgb("panel.border.assistant", SUCCESS_FALLBACK)
-    return _bg(*_blend(background, accent, 0.10))
-
-
 @dataclass(frozen=True)
 class _TUITheme:
     user_fg: Callable[[str], str]
@@ -224,47 +85,19 @@ class _TUITheme:
 
 
 def _build_tui_theme() -> _TUITheme:
-    primary = _theme_fg("primary", INFO_FALLBACK)
-    accent = _theme_fg("accent", SUCCESS_FALLBACK)
-    info = _theme_fg("info", INFO_FALLBACK)
-    warning = _theme_fg("warning", WARNING_FALLBACK)
-    muted = _theme_fg("muted", MUTED_FALLBACK)
-    tm = get_theme_manager()
-    formatter = TerminalTrueColorFormatter(style=tm.pygments_style_name)
+    from sqlsaber.theme.styles import get_styles
 
-    def highlight_code(code: str, language: str | None) -> list[str]:
-        try:
-            lexer = get_lexer_by_name(language) if language else TextLexer()
-        except ClassNotFound:
-            lexer = TextLexer()
-        rendered = highlight(code, lexer, formatter).rstrip("\n")
-        return rendered.split("\n") if rendered else []
-
+    styles = get_styles()
     return _TUITheme(
-        user_fg=_theme_fg("panel.border.user", INFO_FALLBACK),
-        assistant_fg=_theme_fg("panel.border.assistant", SUCCESS_FALLBACK),
-        system_fg=_theme_fg("warning", WARNING_FALLBACK),
-        muted_fg=muted,
-        spinner_fg=_theme_fg("spinner", WARNING_FALLBACK),
-        status_fg=_theme_fg("status", WARNING_FALLBACK),
-        user_bg=_theme_user_bg(),
-        tool_bg=_theme_tool_bg(),
-        markdown=MarkdownTheme(
-            heading=primary,
-            link=info,
-            link_url=muted,
-            code=warning,
-            code_block_border=muted,
-            quote=muted,
-            quote_border=muted,
-            hr=muted,
-            list_bullet=accent,
-            bold=_bold,
-            italic=_italic,
-            strikethrough=_strikethrough,
-            underline=_underline,
-            highlight_code=highlight_code,
-        ),
+        user_fg=styles.user_fg,
+        assistant_fg=styles.assistant_fg,
+        system_fg=styles.system_fg,
+        muted_fg=styles.muted_fg,
+        spinner_fg=styles.spinner_fg,
+        status_fg=styles.status_fg,
+        user_bg=styles.user_bg,
+        tool_bg=styles.panel_bg,
+        markdown=styles.markdown,
     )
 
 
@@ -495,54 +328,6 @@ def _build_settings_list_theme(theme: _TUITheme) -> SettingsListTheme:
     )
 
 
-class RichCapture:
-    """Render Rich output to ANSI text for inclusion in saber-tui components."""
-
-    def __init__(self, base_console: Console | None = None) -> None:
-        self._base_console = base_console
-
-    def capture(self, render: Callable[[Console], None], width: int) -> str:
-        buffer = io.StringIO()
-        tm = get_theme_manager()
-        console = Console(
-            file=buffer,
-            force_terminal=True,
-            color_system=self._color_system(),
-            width=max(20, width),
-            theme=tm.rich_theme,
-            legacy_windows=False,
-        )
-        render(console)
-        return buffer.getvalue()
-
-    def _color_system(self) -> ColorSystem | None:
-        if self._base_console is None:
-            return "truecolor"
-        color_system = self._base_console.color_system
-        if color_system in {"auto", "standard", "256", "truecolor", "windows"}:
-            return cast(ColorSystem, color_system)
-        return "truecolor"
-
-
-class ChatConsole(Console):
-    """Rich Console facade that appends printed output to the chat app."""
-
-    def __init__(self, app: ChatApp) -> None:
-        self._app = app
-        super().__init__(
-            file=io.StringIO(),
-            force_terminal=True,
-            color_system="truecolor",
-            theme=get_theme_manager().rich_theme,
-        )
-
-    def print(self, *objects: Any, **kwargs: Any) -> None:
-        self._app.append_rich(lambda console: console.print(*objects, **kwargs))
-
-    def print_json(self, *args: Any, **kwargs: Any) -> None:
-        self._app.append_rich(lambda console: console.print_json(*args, **kwargs))
-
-
 class _PanelTUIView:
     """Tool renderer surface backed by one themed saber-tui box."""
 
@@ -593,7 +378,6 @@ class ChatApp:
         status: _StatusComponent,
         footer: _FooterComponent,
         theme: _TUITheme,
-        rich_capture: RichCapture,
         on_submit: SubmitHandler,
         on_exit: Callable[[], None] | None = None,
         on_cancel: Callable[[], None] | None = None,
@@ -606,7 +390,6 @@ class ChatApp:
         self.status = status
         self.footer = footer
         self.theme = theme
-        self.rich_capture = rich_capture
         self.on_submit = on_submit
         self.on_exit = on_exit
         self.on_cancel = on_cancel
@@ -647,10 +430,6 @@ class ChatApp:
 
     def append_system_message(self, text: str) -> None:
         self._append_message("system", text)
-
-    def append_rich(self, render: Callable[[Console], None]) -> None:
-        ansi = self.rich_capture.capture(render, self.tui.terminal.columns)
-        self._append_component(_AnsiBlock(ansi))
 
     def append_markdown(self, text: str = "", *, muted: bool = False) -> Markdown:
         component = self._create_markdown(text, muted=muted)
@@ -949,7 +728,6 @@ def build_chat_app(
     on_cancel: Callable[[], None] | None = None,
     should_submit_empty: Callable[[], bool] | None = None,
     autocomplete_provider=None,
-    console: Console | None = None,
     footer_text: str | None = None,
     on_open_command_palette: Callable[[ChatApp], None] | None = None,
 ) -> ChatApp:
@@ -984,7 +762,6 @@ def build_chat_app(
         status=status,
         footer=footer,
         theme=theme,
-        rich_capture=RichCapture(console),
         on_submit=on_submit,
         on_exit=on_exit,
         on_cancel=on_cancel,

@@ -1,9 +1,7 @@
 """Tests for tool display specifications and rendering."""
 
-from io import StringIO
-
-from sqlsaber.cli.display import DisplayManager
-from sqlsaber.theme.manager import create_console
+from sqlsaber.render.html import html_of
+from sqlsaber.render.markdown_text import md_of
 from sqlsaber.tools import Tool
 from sqlsaber.tools.display import (
     ColumnDef,
@@ -15,16 +13,11 @@ from sqlsaber.tools.display import (
     TableConfig,
     ToolDisplaySpec,
 )
+from sqlsaber.tools.renderer import ToolRenderer
 
 
 class TestSpecRenderer:
-    def _make_console(self):
-        buffer = StringIO()
-        console = create_console(file=buffer, width=120, legacy_windows=False)
-        return console, buffer
-
     def test_render_executing_interpolation_and_args(self):
-        console, buffer = self._make_console()
         renderer = SpecRenderer()
         spec = ToolDisplaySpec(
             executing=ExecutingConfig(
@@ -35,19 +28,16 @@ class TestSpecRenderer:
             metadata=DisplayMetadata(display_name="Test"),
         )
 
-        renderer.render_executing(
-            console,
+        output = renderer.render_executing(
             "test_tool",
             {"action": "scan", "table": "users", "limit": 10},
             spec,
         )
 
-        output = buffer.getvalue()
         assert "**✅ Running scan on users**" in output
         assert "**limit**: 10" in output
 
     def test_render_result_table_markdown(self):
-        console, buffer = self._make_console()
         renderer = SpecRenderer()
         spec = ToolDisplaySpec(
             result=ResultConfig(
@@ -63,21 +53,18 @@ class TestSpecRenderer:
             )
         )
 
-        renderer.render_result(
-            console,
+        output = renderer.render_result(
             "list_tables",
             {"total": 1, "tables": [{"schema": "public", "name": "users"}]},
             spec,
         )
 
-        output = buffer.getvalue()
         assert "Tables (1 total)" in output
         assert "Schema" in output
         assert "public" in output
         assert "users" in output
 
     def test_render_result_code_block(self):
-        console, buffer = self._make_console()
         renderer = SpecRenderer()
         spec = ToolDisplaySpec(
             result=ResultConfig(
@@ -87,34 +74,25 @@ class TestSpecRenderer:
             )
         )
 
-        renderer.render_result(
-            console,
+        output = renderer.render_result(
             "run_python",
             {"stdout": "print('hi')"},
             spec,
         )
 
-        output = buffer.getvalue()
         assert "```python" in output
         assert "print('hi')" in output
 
     def test_render_result_error(self):
-        console, buffer = self._make_console()
         renderer = SpecRenderer()
         spec = ToolDisplaySpec(result=ResultConfig(format="json"))
 
-        renderer.render_result(console, "tool", {"error": "boom"}, spec)
+        output = renderer.render_result("tool", {"error": "boom"}, spec)
 
-        output = buffer.getvalue()
         assert "**Error:** boom" in output
 
 
-class TestDisplayManagerResolution:
-    def _make_console(self):
-        buffer = StringIO()
-        console = create_console(file=buffer, width=120, legacy_windows=False)
-        return console, buffer
-
+class TestToolRendererResolution:
     def test_render_result_override_takes_precedence(self):
         class OverrideTool(Tool):
             @property
@@ -124,15 +102,17 @@ class TestDisplayManagerResolution:
             async def execute(self, **kwargs) -> str:
                 return "{}"
 
-            def render_result(self, console, result: object) -> bool:
-                console.print("override handled")
-                return True
+            def render_result(self, result: object, *, context=None):
+                del context
+                from sqlsaber.render.blocks import md
+
+                return (md("override handled"),)
 
         tool = OverrideTool()
-        console, buffer = self._make_console()
-        display = DisplayManager(console, {tool.name: tool})
-        display.show_tool_result("override_tool", {"result": 1})
-        assert "override handled" in buffer.getvalue()
+        output = md_of(
+            ToolRenderer({tool.name: tool}).result("override_tool", {"result": 1})
+        )
+        assert "override handled" in output
 
     def test_render_result_spec_used_when_no_override(self):
         class SpecTool(Tool):
@@ -148,18 +128,14 @@ class TestDisplayManagerResolution:
                 return "{}"
 
         tool = SpecTool()
-        console, buffer = self._make_console()
-        display = DisplayManager(console, {tool.name: tool})
-        display.show_tool_result("spec_tool", {"output": "hello"})
-        output = buffer.getvalue()
+        output = md_of(
+            ToolRenderer({tool.name: tool}).result("spec_tool", {"output": "hello"})
+        )
         assert "Spec Output" in output
         assert "hello" in output
 
     def test_render_result_fallback_for_unknown_tool(self):
-        console, buffer = self._make_console()
-        display = DisplayManager(console)
-        display.show_tool_result("missing_tool", {"value": 42})
-        output = buffer.getvalue()
+        output = md_of(ToolRenderer().result("missing_tool", {"value": 42}))
         assert "```json" in output
         assert "value" in output
 
@@ -181,10 +157,10 @@ class TestDisplayManagerResolution:
                 return "{}"
 
         tool = HtmlTool()
-        console, _ = self._make_console()
-        display = DisplayManager(console, {tool.name: tool})
-        html = display.render_tool_result_html(
-            "html_tool", {"rows": [{"name": "alpha"}]}
+        html = html_of(
+            ToolRenderer({tool.name: tool}).result(
+                "html_tool", {"rows": [{"name": "alpha"}]}
+            )
         )
         assert "<table" in html
         assert "alpha" in html

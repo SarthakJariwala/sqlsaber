@@ -8,7 +8,7 @@ from sqlsaber.cli import knowledge as knowledge_cli
 
 
 def _extract_entry_id(output: str) -> str:
-    match = re.search(r"ID:\s*([0-9a-fA-F-]{36})", output)
+    match = re.search(r"\*\*ID\*\*:\s*([0-9a-fA-F-]{36})", output)
     assert match is not None
     return match.group(1)
 

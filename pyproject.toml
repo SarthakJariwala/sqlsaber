@@ -1,4 +1,3 @@
-# SQLsaber project configuration
 [project]
 name = "sqlsaber"
 version = "0.72.0"
@@ -7,12 +6,10 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "asyncpg>=0.30.0",
-    "rich>=13.7.0",
     "pydantic-ai[cohere,groq,huggingface,mistral]>=2.9,<3",
     "keyring>=25.6.0",
     "keyrings.cryptfile; sys_platform == 'linux'",
     "platformdirs>=4.0.0",
-    "questionary>=2.1.0",
     "httpx>=0.28.1",
     "aiomysql>=0.2.0",
     "aiosqlite>=0.21.0",
@@ -51,3 +48,19 @@ packages = ["src/sqlsaber"]
 [project.scripts]
 sqlsaber = "sqlsaber.cli.commands:main"
 saber = "sqlsaber.cli.commands:main"
+
+[tool.ruff.lint]
+extend-select = ["TID251"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"rich".msg = "Use sqlsaber.render instead of Rich"
+"rich.console".msg = "Use sqlsaber.render instead of Rich"
+"rich.live".msg = "Use sqlsaber.render instead of Rich"
+"rich.markdown".msg = "Use sqlsaber.render instead of Rich"
+"rich.markup".msg = "Use sqlsaber.render instead of Rich"
+"rich.panel".msg = "Use sqlsaber.render instead of Rich"
+"rich.syntax".msg = "Use sqlsaber.render instead of Rich"
+"rich.table".msg = "Use sqlsaber.render instead of Rich"
+"rich.text".msg = "Use sqlsaber.render instead of Rich"
+"rich.theme".msg = "Use sqlsaber.render instead of Rich"
+"questionary".msg = "Use sqlsaber.render.prompts instead of questionary"

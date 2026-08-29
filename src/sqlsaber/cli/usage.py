@@ -1,9 +1,4 @@
-"""Session usage tracking for the CLI.
-
-Token accounting in multi-turn conversations has two useful views:
-- cumulative input/output usage: total model traffic for cost/session accounting
-- current context tokens: latest request size, useful for context-window awareness
-"""
+"""Session usage tracking for the CLI."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -20,18 +15,14 @@ class SessionUsage:
     requests: int = 0
     tool_calls: int = 0
 
-    # Cumulative input/output tokens across model requests.
     total_input_tokens: int = 0
     total_output_tokens: int = 0
 
-    # Current context window size (latest request's input tokens).
     current_context_tokens: int = 0
 
-    # Cache tokens (cumulative for reporting and cache-aware pricing).
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
 
-    # Estimated cumulative USD cost. None means pricing was unavailable.
     total_cost_usd: float | None = 0.0
 
     def add_run(
@@ -156,3 +147,36 @@ def format_tokens(count: int) -> str:
     elif count >= 1_000:
         return f"{count / 1_000:.1f}k"
     return str(count)
+
+
+def session_summary_blocks(session_usage: SessionUsage):
+    """Blocks for the TTY session summary. Empty when there were no requests.
+
+    Args:
+        session_usage: Accumulated usage for the session.
+
+    Returns:
+        Summary blocks, or an empty tuple.
+    """
+    from sqlsaber.render import blocks as b
+
+    if session_usage.requests == 0:
+        return ()
+    return (
+        b.md("**Session Summary**", role="muted"),
+        b.md(
+            f"Usage: {format_tokens(session_usage.total_input_tokens)} in / "
+            f"{format_tokens(session_usage.total_output_tokens)} out │ "
+            f"Cost: {format_cost_usd(session_usage.total_cost_usd)}",
+            role="muted",
+        ),
+        b.md(
+            f"Current context: {session_usage.current_context_tokens:,} tokens",
+            role="muted",
+        ),
+        b.md(
+            f"Requests: {session_usage.requests} │ "
+            f"Tool calls: {session_usage.tool_calls}",
+            role="muted",
+        ),
+    )

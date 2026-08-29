@@ -5,10 +5,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlsaber.application.prompts import Prompter
+from sqlsaber.cli.output import err
 from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
-from sqlsaber.theme.manager import create_console
-
-console = create_console()
+from sqlsaber.render import blocks as b
 
 
 def _normalize_schemas(schemas: list[str]) -> list[str]:
@@ -61,7 +60,6 @@ async def collect_db_input(
     Returns:
         DatabaseInput with collected values or None if cancelled
     """
-    # Ask for database type
     db_type = await prompter.select(
         "Database type:",
         choices=["postgresql", "mysql", "sqlite", "duckdb"],
@@ -71,7 +69,6 @@ async def collect_db_input(
     if db_type is None:
         return None
 
-    # Handle file-based databases
     if db_type in {"sqlite", "duckdb"}:
         database_path = await prompter.path(
             f"{db_type.upper()} file path:", only_directories=False
@@ -100,7 +97,6 @@ async def collect_db_input(
             exclude_schemas = _normalize_schemas(exclude_prompt.split(","))
 
     else:
-        # PostgreSQL/MySQL need connection details
         host = await prompter.text("Host:", default="localhost")
         if host is None:
             return None
@@ -113,7 +109,7 @@ async def collect_db_input(
         try:
             port = int(port_str)
         except ValueError:
-            console.print("[error]Invalid port number. Using default.[/error]")
+            err(b.error("Invalid port number. Using default."))
             port = default_port
 
         database = await prompter.text("Database name:")
@@ -131,7 +127,6 @@ async def collect_db_input(
         ssl_cert = None
         ssl_key = None
 
-        # Ask for SSL configuration if enabled
         if include_ssl:
             configure_ssl = await prompter.confirm(
                 "Configure SSL/TLS settings?", default=False
@@ -241,7 +236,7 @@ async def test_connection(config: DatabaseConfig, password: str | None) -> bool:
         await db_conn.close()
         return True
     except Exception as e:
-        console.print(f"[bold error]Connection failed:[/bold error] {e}", style="error")
+        err(b.error(f"Connection failed: {e}"))
         return False
 
 

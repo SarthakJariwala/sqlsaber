@@ -7,9 +7,8 @@ import keyring
 import keyring.errors
 
 from sqlsaber.config import providers
-from sqlsaber.theme.manager import create_console
-
-console = create_console()
+from sqlsaber.render import blocks as b
+from sqlsaber.render import cli_err, cli_out
 
 
 class APIKeyManager:
@@ -23,21 +22,17 @@ class APIKeyManager:
         env_var_name = self.get_env_var_name(provider)
         service_name = self._get_service_name(provider)
 
-        # 1. Check environment variable first
         api_key = os.getenv(env_var_name)
         if api_key:
             return api_key
 
-        # 2. Check keyring storage
         try:
             api_key = keyring.get_password(service_name, provider)
             if api_key:
                 return api_key
         except Exception as e:
-            # Keyring access failed, continue to prompt
-            console.print(f"Keyring access failed: {e}", style="warning")
+            cli_err().emit(b.warn(f"Keyring access failed: {e}"))
 
-        # 3. Prompt user for API key
         return self._prompt_and_store_key(provider, env_var_name, service_name)
 
     def has_stored_api_key(self, provider: str) -> bool:
@@ -57,15 +52,11 @@ class APIKeyManager:
         except keyring.errors.PasswordDeleteError:
             return True
         except Exception as e:
-            console.print(
-                f"Warning: Could not remove API key: {e}",
-                style="warning",
-            )
+            cli_err().emit(b.warn(f"Could not remove API key: {e}"))
             return False
 
     def get_env_var_name(self, provider: str) -> str:
         """Get the expected environment variable name for a provider."""
-        # Normalize aliases to canonical provider keys
         key = providers.canonical(provider) or provider
         return providers.env_var_name(key)
 
@@ -78,13 +69,13 @@ class APIKeyManager:
     ) -> str | None:
         """Prompt user for API key and store it in keyring."""
         try:
-            console.print(
-                f"\n{provider.title()} API key not found in environment or your OS's credentials store."
-            )
-            console.print("You can either:")
-            console.print(f"  1. Set the {env_var_name} environment variable")
-            console.print(
-                "  2. Enter it now to securely store using your operating system's credentials store"
+            cli_out().emit(
+                b.md(
+                    f"{provider.title()} API key not found in environment or your OS's credentials store.\n\n"
+                    "You can either:\n"
+                    f"  1. Set the `{env_var_name}` environment variable\n"
+                    "  2. Enter it now to securely store using your operating system's credentials store"
+                )
             )
 
             api_key = getpass.getpass(
@@ -92,30 +83,27 @@ class APIKeyManager:
             )
 
             if not api_key.strip():
-                console.print(
-                    "No API key provided. Some functionality may not work.",
-                    style="warning",
+                cli_out().emit(
+                    b.warn("No API key provided. Some functionality may not work.")
                 )
                 return None
 
-            # Store in keyring for future use
             try:
                 keyring.set_password(service_name, provider, api_key.strip())
-                console.print("API key stored securely for future use", style="green")
+                cli_out().emit(b.success("API key stored securely for future use"))
             except Exception as e:
-                console.print(
-                    f"Warning: Could not store API key in your operating system's credentials store: {e}",
-                    style="warning",
-                )
-                console.print(
-                    "You may need to enter it again next time", style="warning"
+                cli_out().emit(
+                    b.warn(
+                        f"Could not store API key in your operating system's credentials store: {e}"
+                    ),
+                    b.warn("You may need to enter it again next time"),
                 )
 
             return api_key.strip()
 
         except KeyboardInterrupt:
-            console.print("\nOperation cancelled", style="warning")
+            cli_out().emit(b.warn("Operation cancelled"))
             return None
         except Exception as e:
-            console.print(f"Error prompting for API key: {e}", style="red")
+            cli_err().emit(b.error(f"Error prompting for API key: {e}"))
             return None

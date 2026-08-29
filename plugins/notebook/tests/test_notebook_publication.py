@@ -21,8 +21,6 @@ from pydantic_ai.messages import (
     ToolReturnPart,
     UserPromptPart,
 )
-from rich.console import Console
-
 from sqlsaber import ArtifactContext, FilesystemArtifactStore, InMemoryArtifactStore
 from sqlsaber.artifact_resolution import (
     ArtifactReference,
@@ -30,9 +28,11 @@ from sqlsaber.artifact_resolution import (
 )
 from sqlsaber.artifacts import ArtifactBundle, ArtifactUnavailable
 from sqlsaber.cli.artifacts import resolve_cli_artifact_publications
-from sqlsaber.cli.display import DisplayManager
 from sqlsaber.cli.threads import _render_transcript
+from sqlsaber.render.markdown_text import md_of
+from sqlsaber.render.terminal import PlainSurface
 from sqlsaber.threads import ThreadStorage
+from sqlsaber.tools.renderer import ToolRenderContext, ToolRenderer
 from sqlsaber_notebook import AnalysisResult, ArtifactRef, publish_analysis
 from sqlsaber_notebook.capability import AnalyzeDataTool
 from sqlsaber_notebook.publication import display_from_publication
@@ -323,19 +323,17 @@ async def test_fresh_notebook_renderer_uses_resolved_publication(tmp_path) -> No
         context=ArtifactContext(),
     )
     renderer = AnalyzeDataTool(object())
-    console = Console(record=True, force_terminal=False, width=80)
-    display_manager = DisplayManager(console, {"analyze_data": renderer})
-    display_manager.set_resolved_artifact_publications({publication.id: resolved})
-
-    handled = renderer.render_result_event(
-        console,
-        "Persisted answer.",
-        tool_call_id="tool-1",
-        metadata=publication.to_metadata(),
+    renderer.set_resolved_artifact_publications({publication.id: resolved})
+    rendered = md_of(
+        ToolRenderer({"analyze_data": renderer}).result(
+            "analyze_data",
+            "Persisted answer.",
+            context=ToolRenderContext(
+                tool_call_id="tool-1",
+                metadata=publication.to_metadata(),
+            ),
+        )
     )
-
-    assert handled is True
-    rendered = console.export_text()
     assert "replayed notebook" in rendered
     assert "Persisted answer" in rendered
 
@@ -361,18 +359,17 @@ async def test_invalid_persisted_notebook_falls_back_to_generic_artifacts(
         context=ArtifactContext(),
     )
     renderer = AnalyzeDataTool(object())
-    console = Console(record=True, force_terminal=False, width=80)
-    display = DisplayManager(console, {"analyze_data": renderer})
-    display.set_resolved_artifact_publications({publication.id: resolved})
-
-    display.show_tool_result(
-        "analyze_data",
-        "Answer survives.",
-        tool_call_id="tool-1",
-        metadata=publication.to_metadata(),
+    renderer.set_resolved_artifact_publications({publication.id: resolved})
+    rendered = md_of(
+        ToolRenderer({"analyze_data": renderer}).result(
+            "analyze_data",
+            "Answer survives.",
+            context=ToolRenderContext(
+                tool_call_id="tool-1",
+                metadata=publication.to_metadata(),
+            ),
+        )
     )
-
-    rendered = console.export_text()
     assert "Answer survives" in rendered
     assert "could not be reconstructed" in rendered
     assert "analysis.ipynb" in rendered
@@ -402,21 +399,19 @@ async def test_missing_persisted_notebook_is_reported_unavailable(tmp_path) -> N
     with pytest.raises(ArtifactUnavailable):
         display_from_publication(resolved)
 
-    console = Console(record=True, force_terminal=False, width=100)
-    display = DisplayManager(
-        console,
-        {"analyze_data": AnalyzeDataTool(object())},
+    tool = AnalyzeDataTool(object())
+    tool.set_resolved_artifact_publications({publication.id: resolved})
+    rendered = md_of(
+        ToolRenderer({"analyze_data": tool}).result(
+            "analyze_data",
+            "Answer.",
+            context=ToolRenderContext(
+                tool_call_id="tool-1",
+                metadata=publication.to_metadata(),
+                unavailable_artifacts=frozenset({notebook_descriptor.id}),
+            ),
+        )
     )
-    display.set_resolved_artifact_publications({publication.id: resolved})
-    display.set_unavailable_artifacts({notebook_descriptor.id})
-    display.show_tool_result(
-        "analyze_data",
-        "Answer.",
-        tool_call_id="tool-1",
-        metadata=publication.to_metadata(),
-    )
-
-    rendered = console.export_text()
     assert "could not be reconstructed" in rendered
     assert "analysis.ipynb" in rendered
     assert "unavailable" in rendered
@@ -470,14 +465,14 @@ async def test_retained_thread_replays_notebook_and_artifact_locations(
         retained,
         store=FilesystemArtifactStore(tmp_path / "artifacts"),
     )
-    console = Console(record=True, force_terminal=False, width=120)
+    buffer = io.StringIO()
     _render_transcript(
-        console,
+        PlainSurface(buffer),
         retained,
         resolved_artifacts=resolved,
     )
 
-    rendered = console.export_text()
+    rendered = buffer.getvalue()
     assert "thread replay" in rendered
     assert "Persisted answer" in rendered
     assert "analysis.ipynb" in rendered

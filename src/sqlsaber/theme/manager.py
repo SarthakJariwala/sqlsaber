@@ -1,4 +1,4 @@
-"""Theme management for SQLsaber Rich output."""
+"""Theme management for SQLsaber output."""
 
 import json
 import os
@@ -10,20 +10,16 @@ from platformdirs import user_config_dir
 from pygments.styles import get_all_styles, get_style_by_name
 from pygments.token import Token
 from pygments.util import ClassNotFound
-from rich.console import Console
-from rich.theme import Theme
 
 DEFAULT_THEME_NAME = "nord"
 
 DEFAULT_ROLE_PALETTE = {
-    # components
     "table.header": "bold $primary",
     "panel.border.user": "$info",
     "panel.border.assistant": "$success",
     "panel.border.thread": "$primary",
     "spinner": "$warning",
     "status": "$warning",
-    # domain-specific
     "key.primary": "bold $warning",
     "key.foreign": "bold $accent",
     "key.index": "bold $primary",
@@ -162,12 +158,6 @@ class ThemeManager:
     def __init__(self, cfg: ThemeConfig):
         self._cfg = cfg
         self._roles = _resolve_refs({**DEFAULT_ROLE_PALETTE, **cfg.roles})
-        self._rich_theme = Theme(self._roles)
-
-    @property
-    def rich_theme(self) -> Theme:
-        """Get Rich theme with semantic role mappings."""
-        return self._rich_theme
 
     @property
     def pygments_style_name(self) -> str:
@@ -205,11 +195,3 @@ def get_theme_manager() -> ThemeManager:
 
     cfg = ThemeConfig(name=name, pygments_style=pygments_style, roles=roles)
     return ThemeManager(cfg)
-
-
-def create_console(**kwargs):
-    """Create a Rich Console with theme applied."""
-    # from rich.console import Console
-
-    tm = get_theme_manager()
-    return Console(theme=tm.rich_theme, **kwargs)

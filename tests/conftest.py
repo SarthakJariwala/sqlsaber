@@ -8,6 +8,16 @@ import pytest
 from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
 
 
+@pytest.fixture(autouse=True)
+def reset_render_io(capsys):
+    """Rebind stdout/stderr surfaces after capsys so CLI emit is captured."""
+    del capsys
+    from sqlsaber.render import reset_io
+
+    reset_io()
+    yield
+
+
 @pytest.fixture
 def temp_dir():
     """Provide a temporary directory that's cleaned up after the test."""
@@ -32,7 +42,6 @@ def mock_database_config():
 @pytest.fixture
 def mock_config_manager(temp_dir, monkeypatch):
     """Provide a mock database config manager with temp directory."""
-    # Monkey patch the config directory to use temp directory
     config_dir = temp_dir / "config"
     monkeypatch.setattr(
         "platformdirs.user_config_dir", lambda *args, **kwargs: str(config_dir)

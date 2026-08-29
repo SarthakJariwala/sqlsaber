@@ -18,7 +18,6 @@ from pydantic_ai.messages import (
     ToolReturnPart,
 )
 from pydantic_ai.usage import RunUsage, UsageLimits
-from rich.console import Console
 from sqlsaber_notebook import capability as capability_module
 from sqlsaber_notebook.capability import (
     AnalyzeDataTool,
@@ -32,11 +31,13 @@ from sqlsaber_notebook.execution import (
     NotebookBackendUnavailable,
     NotebookExecutionError,
 )
-from sqlsaber_notebook.result import AnalysisResult, ArtifactRef, WorkspaceFile
-
 from sqlsaber.artifacts import InMemoryArtifactStore
 from sqlsaber.query_results import InMemoryQueryResultStore
+from sqlsaber.render.blocks import Image as ImageBlock
+from sqlsaber.render.blocks import Md, Panel
 from sqlsaber.run_usage import bind_usage_limits
+from sqlsaber.tools.renderer import ToolRenderContext
+from sqlsaber_notebook.result import AnalysisResult, ArtifactRef, WorkspaceFile
 
 
 def _ctx(messages: list[Any], *, tool_call_id: str = "analysis-call") -> Any:
@@ -732,65 +733,67 @@ async def test_analyze_tool_renders_notebook_and_child_answer(
     assert captured["usage_limits"].request_limit is None
     assert captured["parent_usage"] is run_ctx.usage
 
-    request_tui = _RecordingTUI()
-    assert tool.render_executing_tui(request_tui, {"goal": "Calculate the total"})
-    assert request_tui.panels == 1
-    assert request_tui.markdown == ["**Analyzing data**\n\nCalculate the total"]
-
-    tui = _RecordingTUI()
-    assert tool.render_result_tui(
-        tui,
-        returned.return_value,
-        tool_call_id="analysis-call",
-        metadata=returned.metadata,
+    executing = tool.render_executing({"goal": "Calculate the total"})
+    assert executing is not None
+    assert isinstance(executing[0], Panel)
+    assert any(
+        isinstance(child, Md) and "Calculate the total" in child.text
+        for child in executing[0].blocks
     )
-    assert tui.panels == 1
-    assert "Analysis notebook" in tui.markdown[0]
-    assert "print('evidence')" in tui.markdown[0]
-    assert tui.markdown[1] == "**Plot 1**"
-    assert tui.images == [
-        (
-            _png_bytes(),
-            "image/png",
-            {
-                "filename": "plot_1.png",
-                "max_width_cells": None,
-                "max_height_cells": None,
-            },
-        )
-    ]
-    assert "Analysis result" in tui.markdown[-1]
-    assert "The calculated answer is 10" in tui.markdown[-1]
-    assert not tool.render_result_tui(
-        tui,
+
+    result_blocks = tool.render_result(
         returned.return_value,
-        tool_call_id="analysis-call",
+        context=ToolRenderContext(
+            tool_call_id="analysis-call",
+            metadata=returned.metadata,
+        ),
+    )
+    assert result_blocks is not None
+    panel = result_blocks[0]
+    assert isinstance(panel, Panel)
+    texts = [child.text for child in panel.blocks if isinstance(child, Md)]
+    assert any("Analysis notebook" in text for text in texts)
+    assert any("print('evidence')" in text for text in texts)
+    assert any(text == "**Plot 1**" for text in texts)
+    images = [child for child in panel.blocks if isinstance(child, ImageBlock)]
+    assert images[0].data == _png_bytes()
+    assert images[0].filename == "plot_1.png"
+    assert any("Analysis result" in text for text in texts)
+    assert any("The calculated answer is 10" in text for text in texts)
+    assert (
+        tool.render_result(
+            returned.return_value,
+            context=ToolRenderContext(tool_call_id="analysis-call"),
+        )
+        is None
     )
 
     rich_returned = await tool.execute(
         _ctx(messages, tool_call_id="rich-analysis-call"), "Calculate the total"
     )
     assert isinstance(rich_returned, ToolReturn)
-    console = Console(
-        record=True, force_terminal=True, color_system="truecolor", width=60
-    )
-    assert tool.render_result_event(
-        console,
+    replay = tool.render_result(
         rich_returned.return_value,
-        tool_call_id="rich-analysis-call",
-        metadata=rich_returned.metadata,
+        context=ToolRenderContext(
+            tool_call_id="rich-analysis-call",
+            metadata=rich_returned.metadata,
+        ),
     )
-    rendered = console.export_text()
-    assert "Analysis notebook" in rendered
-    assert "print('evidence')" in rendered
-    assert "evidence" in rendered
-    assert "Plot 1" in rendered
-    assert "Analysis result" in rendered
-    assert "The calculated answer is 10" in rendered
-    assert not tool.render_result_event(
-        console,
-        rich_returned.return_value,
-        tool_call_id="rich-analysis-call",
+    assert replay is not None
+    replay_text = "\n".join(
+        child.text for child in replay[0].blocks if isinstance(child, Md)
+    )
+    assert "Analysis notebook" in replay_text
+    assert "print('evidence')" in replay_text
+    assert "Plot 1" in replay_text
+    assert "Analysis result" in replay_text
+    assert "The calculated answer is 10" in replay_text
+    assert (
+        tool.render_result(
+            rich_returned.return_value,
+            context=ToolRenderContext(tool_call_id="rich-analysis-call"),
+        )
+        is None
     )
 
 

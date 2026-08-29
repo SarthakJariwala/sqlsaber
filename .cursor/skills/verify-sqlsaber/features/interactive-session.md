@@ -23,7 +23,7 @@ Preconditions:
 - `control-sqlsaber doctor` is clean.
 - `tmux` is on `PATH`.
 - No tmux session named `sqlsaber-verify` exists (`doctor` reports `tui  stopped`).
-- Opening the TUI does not require a provider key. Submitting a natural-language question does. This recipe does not submit a question.
+- Opening the TUI builds the agent for the configured model. If that provider's key is missing, `getpass` runs before ChatApp. Set the model to a provider whose env key is present (`saber models set openai:gpt-5` when `OPENAI_API_KEY` is set). Submitting a question still needs a real key. This recipe does not submit a question.
 
 - **Start session.** Run `control-sqlsaber tui start`. It returns `tui ready` when the pane contains `slash commands`.
 - **Capture identity.** Run `control-sqlsaber tui capture --path artifacts/interactive-session/ready.txt`. The pane contains `slash commands`, `table name completions`, and `DB: verify-sqlite`.
@@ -39,6 +39,7 @@ Preconditions:
 - `tui start` already passes `-d verify-sqlite`. Starting a second session against the same HOME is refused.
 - `/` only opens the palette when the editor is empty. If text is present, `/` is a character.
 - `control-sqlsaber tui send` without `--literal` lets tmux interpret key names (`Enter`, `Escape`, `C-d`). Use `--literal` for the slash-command text.
-- Submitting a question without a provider key hangs on auth. Stop the session and skip; do not keep sending keys.
+- Submitting a question without a provider key hangs on auth. Stop the session and skip. Do not keep sending keys.
+- A default Anthropic model with only `OPENAI_API_KEY` set still prompts for an Anthropic key at TUI start. Switch the model first.
 - `control-sqlsaber cleanup` kills session `sqlsaber-verify` if you forget `tui stop`.
 - The ASCII banner uses box-drawing characters. Assert on `slash commands` and `DB: verify-sqlite`, which survive `tmux capture-pane`.

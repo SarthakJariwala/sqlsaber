@@ -40,10 +40,10 @@ Preconditions:
 
 ## Gotchas
 
-- `saber db add` without `--no-interactive` opens questionary prompts. That path is not this recipe.
+- `saber db add` without `--no-interactive` opens saber-tui prompts. That path is not this recipe.
 - SQLite `--database` must be an absolute path. A relative path is stored as given and later `db test` depends on cwd.
 - The first saved connection is auto-defaulted. `verify-sqlite` already is, so `verify-alt` must not print the default line.
-- Rich table cells truncate when `COLUMNS` is narrow. Assert on the connection name strings, not on every wrapped cell. The helper exports `COLUMNS=200`.
+- Piped `db list` emits a GitHub pipe table. Assert on the connection name strings. The helper exports `COLUMNS=200`.
 - `db remove` without `--yes` exits non-zero when stdin is not a TTY. Use `--yes`.
 - Do not `db remove verify-sqlite` in this recipe. Later features need the baseline connection.
 - Passwords for PostgreSQL/MySQL go to the OS keyring. This run uses a null keyring; do not treat a skipped server-password save as a SQLite bug.

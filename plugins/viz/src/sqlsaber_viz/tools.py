@@ -5,13 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from html import escape
 from typing import cast
 
 from pydantic import ValidationError
 from pydantic_ai import RunContext
-from rich.console import Console
-from rich.text import Text
 
 from sqlsaber.overrides import ModelOverides
 from sqlsaber.query_result_resolution import (
@@ -24,6 +21,7 @@ from sqlsaber.query_results import (
     QueryResultStore,
     QueryResultUnavailable,
 )
+from sqlsaber.render import blocks as b
 from sqlsaber.tools.base import Tool
 from sqlsaber.utils.json_utils import json_dumps
 
@@ -66,9 +64,10 @@ class VizTool(Tool):
     def name(self) -> str:
         return "viz"
 
-    def render_executing(self, console: Console, args: dict) -> bool:
+    def render_executing(self, args: dict):
         """Suppress default JSON rendering during execution."""
-        return True
+        del args
+        return ()
 
     async def execute(
         self,
@@ -95,8 +94,6 @@ class VizTool(Tool):
         try:
             reference = find_query_result_reference(ctx.messages, file)
             if reference is None:
-                # Compatibility for early ad-hoc histories that omitted execute_sql
-                # tool metadata but still embedded complete rows.
                 tool_call_id = file.removeprefix("result_").removesuffix(".json")
                 payload = find_tool_output_payload(ctx, tool_call_id)
                 if payload is None or not isinstance(payload.get("results"), list):
@@ -152,46 +149,24 @@ class VizTool(Tool):
                 }
             )
 
-    def render_result(self, console: Console, result: object) -> bool:
+    def render_result(self, result: object, *, context=None):
         """Render the spec as a terminal chart using plotext."""
-        spec = self._parse_spec(result)
-        if spec is None:
-            return False
-
-        rows = self._resolve_rows(spec)
-        if rows is None:
-            if console.is_terminal:
-                console.print("[warning]No data available for visualization.[/warning]")
-            else:
-                console.print("*No data available for visualization.*\n")
-            return True
-
-        rows = apply_transforms(rows, spec.transform)
-
-        renderer = PlotextRenderer()
-        chart = renderer.render(spec, rows)
-        if console.is_terminal:
-            console.print(Text.from_ansi(chart))
-        else:
-            console.print(f"```\n{self._strip_ansi(chart)}\n```\n", markup=False)
-        return True
-
-    def render_result_html(self, result: object) -> str | None:
-        """Render the spec as an HTML chart."""
+        del context
         spec = self._parse_spec(result)
         if spec is None:
             return None
 
         rows = self._resolve_rows(spec)
         if rows is None:
-            return '<div class="viz-error">No data available for visualization.</div>'
+            return (b.md("*No data available for visualization.*"),)
 
         rows = apply_transforms(rows, spec.transform)
-        from .renderers.plotext_renderer import PlotextRenderer
 
         renderer = PlotextRenderer()
         chart = renderer.render(spec, rows)
-        return f'<pre class="viz-chart">{escape(self._strip_ansi(chart))}</pre>'
+        stripped = self._strip_ansi(chart).rstrip("\n")
+        fallback = f"```\n{stripped}\n```" if stripped else "*[ANSI chart]*"
+        return (b.ansi(chart, fallback_markdown=fallback),)
 
     def _parse_spec(self, result: object) -> VizSpec | None:
         data = self._parse_result(result)

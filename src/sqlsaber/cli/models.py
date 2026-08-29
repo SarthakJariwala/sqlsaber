@@ -1,27 +1,22 @@
 """Model management CLI commands."""
 
 import asyncio
-import sys
 from collections.abc import Sequence
 from typing import Annotated, Any, TypedDict
 
 import cyclopts
 import httpx
-from questionary import Choice
-from rich.table import Table
 
+from sqlsaber.application.prompts import Choice
+from sqlsaber.cli.output import err, fail, fail_usage, out
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config import providers
 from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import SUBAGENT_KEYS, Config, ThinkingLevel
-from sqlsaber.theme.manager import create_console
+from sqlsaber.render import blocks as b
 
-# Global instances for CLI commands
-console = create_console()
-error_console = create_console(stderr=True)
 logger = get_logger(__name__)
 
-# Create the model management CLI app
 models_app = cyclopts.App(
     name="models",
     help="Select and manage models",
@@ -89,7 +84,6 @@ class ModelManager:
 
                     for model_id, model_info in models_obj.items():
                         formatted_id = f"{provider}:{model_id}"
-                        # cost
                         cost_info = (
                             model_info.get("cost", {})
                             if isinstance(model_info, dict)
@@ -101,7 +95,6 @@ class ModelManager:
                             output_cost = cost_info.get("output", 0)
                             cost_display = f"${input_cost}/{output_cost} per 1M tokens"
 
-                        # context
                         limit_info = (
                             model_info.get("limit", {})
                             if isinstance(model_info, dict)
@@ -139,7 +132,7 @@ class ModelManager:
                 logger.info("models.fetch.success", count=len(results))
                 return results
         except Exception as e:
-            error_console.print(f"[error]Error fetching models: {e}[/error]")
+            err(b.error(f"Error fetching models: {e}"))
             logger.warning("models.fetch.error", error=str(e))
             return []
 
@@ -156,7 +149,7 @@ class ModelManager:
             logger.info("models.set.success", model=model_id)
             return True
         except Exception as e:
-            error_console.print(f"[error]Error setting model: {e}[/error]")
+            err(b.error(f"Error setting model: {e}"))
             logger.error("models.set.error", model=model_id, error=str(e))
             return False
 
@@ -186,50 +179,55 @@ def list_models() -> None:
     logger.info("models.list.start")
 
     async def fetch_and_display() -> None:
-        console.print("[blue]Fetching available models...[/blue]")
+        out(b.md("Fetching available models..."))
         models = await model_manager.fetch_available_models()
 
         if not models:
-            error_console.print(
-                "[error]Error: no models were returned.[/error]\n"
+            logger.info("models.list.empty")
+            fail(
+                "no models were returned.\n"
                 "  Check your network connection, then retry: saber models list"
             )
-            logger.info("models.list.empty")
-            raise SystemExit(1)
-
-        table = Table(title="Available Models")
-        table.add_column("Provider", style="magenta")
-        table.add_column("ID", style="info")
-        table.add_column("Name", style="success")
-        table.add_column("Description", style="info")
-        table.add_column("Context", style="warning", justify="right")
-        table.add_column("Current", style="accent", justify="center")
 
         current_model = model_manager.get_current_model()
-
+        rows = []
         for model in models:
-            is_current = "✓" if model["id"] == current_model else ""
-            context_str = (
-                f"{model['context_length']:,}" if model["context_length"] else "N/A"
-            )
-
             description = (
                 model["description"][:50] + "..."
                 if len(model["description"]) > 50
                 else model["description"]
             )
-
-            table.add_row(
-                model.get("provider", "-"),
-                model["id"],
-                model["name"],
-                description,
-                context_str,
-                is_current,
+            rows.append(
+                {
+                    "provider": model.get("provider", "-"),
+                    "id": model["id"],
+                    "name": model["name"],
+                    "description": description,
+                    "context": (
+                        f"{model['context_length']:,}"
+                        if model["context_length"]
+                        else "N/A"
+                    ),
+                    "current": "✓" if model["id"] == current_model else "",
+                }
             )
 
-        console.print(table)
-        console.print(f"\n[dim]Current model: {current_model}[/dim]")
+        out(
+            b.table(
+                rows,
+                columns=(
+                    b.Column("provider", "Provider", role="accent"),
+                    b.Column("id", "ID", role="info"),
+                    b.Column("name", "Name", role="success"),
+                    b.Column("description", "Description", role="info"),
+                    b.Column("context", "Context", role="warning"),
+                    b.Column("current", "Current", role="accent"),
+                ),
+                caption="Available Models",
+                max_rows=1000,
+            ),
+            b.md(f"Current model: {current_model}", role="muted"),
+        )
         logger.info("models.list.complete", current=current_model, count=len(models))
 
     asyncio.run(fetch_and_display())
@@ -337,29 +335,23 @@ def set_model_command(
     try:
         target_agent = _normalize_agent(agent)
     except ValueError as exc:
-        error_console.print(
-            f"[error]Error: {exc}[/error]\n"
-            "  Example: saber models set openai:gpt-5 --agent handoff"
-        )
-        raise SystemExit(2)
+        fail_usage(f"{exc}\n  Example: saber models set openai:gpt-5 --agent handoff")
 
     if thinking_level is not None and target_agent != "main":
-        error_console.print(
-            "[error]Error: --thinking-level applies only to the main model.[/error]\n"
+        fail_usage(
+            "--thinking-level applies only to the main model.\n"
             "  Example: saber models set openai:gpt-5 --agent handoff"
         )
-        raise SystemExit(2)
 
     resolved_thinking: tuple[bool, ThinkingLevel] | None = None
     if thinking_level is not None:
         try:
             resolved_thinking = _resolve_thinking_level(thinking_level)
         except ValueError as exc:
-            error_console.print(
-                f"[error]Error: {exc}[/error]\n"
+            fail_usage(
+                f"{exc}\n"
                 "  Example: saber models set openai:gpt-5 --thinking-level medium"
             )
-            raise SystemExit(2) from None
 
     if model is not None:
         model = model.strip()
@@ -370,26 +362,23 @@ def set_model_command(
             or providers.canonical(provider_name) is None
         ):
             provider_choices = ", ".join(providers.all_keys())
-            error_console.print(
-                "[error]Error: MODEL must use a supported PROVIDER:MODEL ID.[/error]\n"
+            fail_usage(
+                "MODEL must use a supported PROVIDER:MODEL ID.\n"
                 f"  Providers: {provider_choices}\n"
                 "  Example: saber models set openai:gpt-5 --thinking-level medium"
             )
-            raise SystemExit(2)
         if target_agent == "main":
             if not model_manager.set_model(model):
                 raise SystemExit(1)
-            console.print(f"[success]✓ Model set to: {model}[/success]")
+            out(b.success(f"Model set to: {model}"))
             if resolved_thinking is not None:
                 thinking_enabled, level = resolved_thinking
                 Config().model.set_thinking(thinking_enabled, level)
                 thinking_status = level.value if thinking_enabled else "disabled"
-                console.print(f"[success]✓ Thinking: {thinking_status}[/success]")
+                out(b.success(f"Thinking: {thinking_status}"))
         else:
             Config().model.set_subagent_model(target_agent, model)
-            console.print(
-                f"[success]✓ {target_agent.title()} model set to: {model}[/success]"
-            )
+            out(b.success(f"{target_agent.title()} model set to: {model}"))
         logger.info("models.set.done", model=model, agent=target_agent)
         return
 
@@ -397,16 +386,15 @@ def set_model_command(
         from sqlsaber.application.model_selection import choose_model, fetch_models
         from sqlsaber.application.prompts import AsyncPrompter
 
-        console.print("[blue]Fetching available models...[/blue]")
+        out(b.md("Fetching available models..."))
         models = await fetch_models(model_manager)
 
         if not models:
-            error_console.print(
-                "[error]Error: failed to fetch models; cannot set a model.[/error]\n"
+            logger.error("models.set.no_models")
+            fail(
+                "failed to fetch models; cannot set a model.\n"
                 "  Set one directly with: saber models set PROVIDER:MODEL"
             )
-            logger.error("models.set.no_models")
-            sys.exit(1)
 
         prompter = AsyncPrompter()
         selected_model: str | None = await choose_model(
@@ -416,14 +404,11 @@ def set_model_command(
         if selected_model:
             if target_agent == "main":
                 if model_manager.set_model(selected_model):
-                    console.print(
-                        f"[success]✓ Model set to: {selected_model}[/success]"
-                    )
+                    out(b.success(f"Model set to: {selected_model}"))
                     logger.info(
                         "models.set.done", model=selected_model, agent=target_agent
                     )
 
-                    # Prompt for thinking level configuration
                     if resolved_thinking is None:
                         thinking_enabled, selected_level = await _prompt_thinking_level(
                             prompter
@@ -434,11 +419,9 @@ def set_model_command(
                     config.model.set_thinking(thinking_enabled, selected_level)
 
                     if thinking_enabled:
-                        console.print(
-                            f"[success]✓ Thinking: {selected_level.value}[/success]"
-                        )
+                        out(b.success(f"Thinking: {selected_level.value}"))
                     else:
-                        console.print("[success]✓ Thinking: disabled[/success]")
+                        out(b.success("Thinking: disabled"))
                     logger.info(
                         "models.set.thinking",
                         enabled=thinking_enabled,
@@ -446,24 +429,21 @@ def set_model_command(
                         agent=target_agent,
                     )
                 else:
-                    error_console.print("[error]Error: failed to set model.[/error]")
                     logger.error(
                         "models.set.failed", model=selected_model, agent=target_agent
                     )
-                    sys.exit(1)
+                    fail("failed to set model.")
             else:
                 config = Config()
                 config.model.set_subagent_model(target_agent, selected_model)
-                console.print(
-                    f"[success]✓ {target_agent.title()} model set to: {selected_model}[/success]"
-                )
+                out(b.success(f"{target_agent.title()} model set to: {selected_model}"))
                 logger.info(
                     "models.set.subagent",
                     model=selected_model,
                     agent=target_agent,
                 )
         else:
-            console.print("[warning]Operation cancelled[/warning]")
+            out(b.warn("Operation cancelled"))
             logger.info("models.set.cancelled", agent=target_agent)
 
     asyncio.run(interactive_set())
@@ -499,32 +479,25 @@ def current_model(
         try:
             target_agent = _normalize_agent(agent)
         except ValueError as exc:
-            error_console.print(
-                f"[error]Error: {exc}[/error]\n"
-                "  Example: saber models current --agent handoff"
-            )
-            raise SystemExit(2)
+            fail_usage(f"{exc}\n  Example: saber models current --agent handoff")
 
         if target_agent == "main":
-            console.print(f"Current model: [info]{current}[/info]")
+            pairs: list[tuple[str, str]] = [("Current model", current)]
             if thinking_enabled:
-                console.print(
-                    "Thinking: [success]enabled[/success] "
-                    f"([info]{thinking_level.value}[/info])"
-                )
+                pairs.append(("Thinking", f"enabled ({thinking_level.value})"))
             else:
-                console.print("Thinking: [dim]disabled[/dim]")
+                pairs.append(("Thinking", "disabled"))
+            out(b.key_values(pairs))
         else:
             override = config.model.get_subagent_model(target_agent)
             effective_model = override or current
-            console.print(
-                f"{target_agent.title()} model: [info]{effective_model}[/info]"
-            )
+            pairs = [(f"{target_agent.title()} model", effective_model)]
             if override:
-                console.print(f"Override: [info]{override}[/info]")
+                pairs.append(("Override", override))
             else:
-                console.print("Override: [dim]not set (uses main)[/dim]")
-            console.print(f"Main model: [dim]{current}[/dim]")
+                pairs.append(("Override", "not set (uses main)"))
+            pairs.append(("Main model", current))
+            out(b.key_values(pairs))
 
         logger.info(
             "models.current",
@@ -535,22 +508,32 @@ def current_model(
         )
         return
 
-    console.print(f"Current model: [info]{current}[/info]")
+    pairs = [("Current model", current)]
     if thinking_enabled:
-        console.print(
-            f"Thinking: [success]enabled[/success] ([info]{thinking_level.value}[/info])"
-        )
+        pairs.append(("Thinking", f"enabled ({thinking_level.value})"))
     else:
-        console.print("Thinking: [dim]disabled[/dim]")
-
+        pairs.append(("Thinking", "disabled"))
+    out(b.key_values(pairs, caption="Subagent overrides"))
+    override_rows = []
     subagents = config.model.get_subagent_models()
-    console.print("\nSubagent overrides:")
     for subagent in SUBAGENT_KEYS:
         override = subagents.get(subagent)
-        if override:
-            console.print(f"- {subagent}: {override}")
-        else:
-            console.print(f"- {subagent}: (uses main)")
+        override_rows.append(
+            {
+                "subagent": subagent,
+                "model": override if override else "(uses main)",
+            }
+        )
+    out(
+        b.table(
+            override_rows,
+            columns=(
+                b.Column("subagent", "Subagent"),
+                b.Column("model", "Model"),
+            ),
+            max_rows=1000,
+        )
+    )
 
     logger.info(
         "models.current",
@@ -591,11 +574,7 @@ def reset_model_command(
     try:
         target_agent = _normalize_agent(agent)
     except ValueError as exc:
-        error_console.print(
-            f"[error]Error: {exc}[/error]\n"
-            "  Example: saber models reset --agent handoff --yes"
-        )
-        raise SystemExit(2)
+        fail_usage(f"{exc}\n  Example: saber models reset --agent handoff --yes")
 
     prompt = (
         f"Reset to default model ({ModelManager.DEFAULT_MODEL})?"
@@ -607,20 +586,16 @@ def reset_model_command(
         yes=yes,
         prompt=prompt,
         non_interactive_command=command,
-        error_console=error_console,
     ):
-        console.print("[warning]Operation cancelled[/warning]")
+        out(b.warn("Operation cancelled"))
         logger.info("models.reset.cancelled", agent=target_agent)
         return
 
     if target_agent == "main":
         if not model_manager.reset_model():
-            error_console.print("[error]Error: failed to reset model.[/error]")
             logger.error("models.reset.failed", agent=target_agent)
-            raise SystemExit(1)
-        console.print(
-            f"[success]✓ Model reset to default: {ModelManager.DEFAULT_MODEL}[/success]"
-        )
+            fail("failed to reset model.")
+        out(b.success(f"Model reset to default: {ModelManager.DEFAULT_MODEL}"))
         logger.info(
             "models.reset.done",
             model=ModelManager.DEFAULT_MODEL,
@@ -629,7 +604,7 @@ def reset_model_command(
         return
 
     Config().model.set_subagent_model(target_agent, None)
-    console.print(f"[success]✓ {target_agent.title()} model override cleared[/success]")
+    out(b.success(f"{target_agent.title()} model override cleared"))
     logger.info("models.reset.subagent", agent=target_agent)
 
 
