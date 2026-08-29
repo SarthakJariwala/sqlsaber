@@ -12,10 +12,13 @@ from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
 def reset_render_io(capsys):
     """Rebind stdout/stderr surfaces after capsys so CLI emit is captured."""
     del capsys
+    from sqlsaber.cli.update_check import reset_update_check
     from sqlsaber.render import reset_io
 
     reset_io()
+    reset_update_check()
     yield
+    reset_update_check()
 
 
 @pytest.fixture

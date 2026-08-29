@@ -5,6 +5,7 @@ This is best-effort and must never fail the CLI.
 
 import asyncio
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import metadata
 
@@ -13,6 +14,7 @@ import httpx
 from sqlsaber.cli.output import out
 from sqlsaber.config.logging import get_logger
 from sqlsaber.render import blocks as b
+from sqlsaber.render.blocks import Block
 
 PACKAGE_NAME = "sqlsaber"
 ENV_SKIP_VERSION_CHECK = "SQLSABER_SKIP_VERSION_CHECK"
@@ -20,6 +22,8 @@ PYPI_URL = f"https://pypi.org/pypi/{PACKAGE_NAME}/json"
 
 _LOG = get_logger(__name__)
 _SCHEDULED = False
+_notice_emit: Callable[..., None] | None = None
+_pending_blocks: tuple[Block, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -101,11 +105,39 @@ def _is_newer(latest: str, current: str) -> bool:
         return _parse_version(latest) > _parse_version(current)
 
 
-def _print_update_notice() -> None:
-    out(
-        b.md("A new version is now available!"),
-        b.md(f"Run: `uv tool update {PACKAGE_NAME}`"),
+def _notice_blocks() -> tuple[Block, ...]:
+    return (
+        b.md("A new version is now available!", role="muted"),
+        b.md(f"Run: `uv tool update {PACKAGE_NAME}`", role="muted"),
     )
+
+
+def bind_update_notice(emit: Callable[..., None] | None) -> None:
+    """Route the PyPI notice through ``emit``.
+
+    ``None`` holds a later notice until another bind. Interactive chat
+    binds ``ChatSurface.emit`` so the notice cannot write to stdout after
+    saber-tui owns the terminal.
+
+    Args:
+        emit: Block sink, or None to unbind.
+    """
+
+    global _notice_emit
+    _notice_emit = emit
+
+
+def reset_update_check() -> None:
+    """Clear process-global schedule, sink, and pending notice."""
+
+    global _SCHEDULED, _notice_emit, _pending_blocks
+    _SCHEDULED = False
+    _notice_emit = None
+    _pending_blocks = None
+
+
+def _print_update_notice() -> None:
+    out(*_notice_blocks())
 
 
 async def _check_and_notify() -> None:
