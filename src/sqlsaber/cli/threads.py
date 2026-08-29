@@ -435,6 +435,7 @@ def resume(
     async def _run() -> None:
         from sqlsaber import (
             SQLSaber,
+            SQLSaberOptions,
             ThreadDatabaseRequiredError,
             ThreadDatabaseUnavailableError,
             ThreadNotFoundError,
@@ -446,7 +447,6 @@ def resume(
         from sqlsaber.cli.query_results import cli_query_result_store
         from sqlsaber.cli.retention import run_cli_retention
         from sqlsaber.database.resolver import DatabaseResolutionError
-        from sqlsaber.options import SQLSaberOptions
 
         artifact_store = cli_artifact_store()
         query_result_store = cli_query_result_store()

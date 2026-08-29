@@ -397,7 +397,7 @@ def test_root_bare_mode_passes_public_sdk_to_tui():
 
 
 def test_root_thread_option_maps_sdk_resume_errors(capsys):
-    from sqlsaber.sdk_errors import (
+    from sqlsaber import (
         ThreadDatabaseRequiredError,
         ThreadDatabaseUnavailableError,
         ThreadNotFoundError,

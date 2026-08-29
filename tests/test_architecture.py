@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import ast
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).parents[1] / "src" / "sqlsaber"
+LEGACY_SDK_MODULES = ("api", "_runtime", "options", "sdk_types", "sdk_errors")
+LEGACY_SDK_TARGETS = {f"sqlsaber.{module}" for module in LEGACY_SDK_MODULES}
 
 
 @dataclass(frozen=True, order=True)
@@ -62,7 +66,7 @@ def _import_from_targets(
         if alias.name == "*":
             continue
         member = f"{target}.{alias.name}" if target else alias.name
-        if member in modules:
+        if member in modules or member in LEGACY_SDK_TARGETS:
             targets.add(member)
     return targets
 
@@ -126,14 +130,17 @@ def _cli_coordination_debt(
 def test_package_init_relative_imports_resolve_from_the_package(tmp_path: Path) -> None:
     package_root = tmp_path / "sqlsaber"
     cli_package = package_root / "cli"
+    sdk_package = package_root / "sdk"
     cli_package.mkdir(parents=True)
+    sdk_package.mkdir()
     (package_root / "__init__.py").write_text("", encoding="utf-8")
-    (package_root / "_runtime.py").write_text("", encoding="utf-8")
+    (sdk_package / "__init__.py").write_text("", encoding="utf-8")
+    (sdk_package / "_runtime.py").write_text("", encoding="utf-8")
     (cli_package / "__init__.py").write_text(
-        "from .. import _runtime\n", encoding="utf-8"
+        "from ..sdk import _runtime\n", encoding="utf-8"
     )
 
-    assert ImportEdge("sqlsaber.cli", "sqlsaber._runtime") in _import_edges(
+    assert ImportEdge("sqlsaber.cli", "sqlsaber.sdk._runtime") in _import_edges(
         package_root
     )
 
@@ -141,17 +148,34 @@ def test_package_init_relative_imports_resolve_from_the_package(tmp_path: Path) 
 def test_imported_member_names_can_identify_modules(tmp_path: Path) -> None:
     package_root = tmp_path / "sqlsaber"
     cli_package = package_root / "cli"
+    sdk_package = package_root / "sdk"
     cli_package.mkdir(parents=True)
+    sdk_package.mkdir()
     (package_root / "__init__.py").write_text("", encoding="utf-8")
-    (package_root / "_runtime.py").write_text("", encoding="utf-8")
+    (sdk_package / "__init__.py").write_text("", encoding="utf-8")
+    (sdk_package / "_runtime.py").write_text("", encoding="utf-8")
     (cli_package / "__init__.py").write_text("", encoding="utf-8")
     (cli_package / "client.py").write_text(
-        "from sqlsaber import _runtime\n", encoding="utf-8"
+        "from sqlsaber.sdk import _runtime\n", encoding="utf-8"
     )
 
-    assert ImportEdge("sqlsaber.cli.client", "sqlsaber._runtime") in _import_edges(
+    assert ImportEdge("sqlsaber.cli.client", "sqlsaber.sdk._runtime") in _import_edges(
         package_root
     )
+
+
+def test_imported_member_names_identify_removed_modules(tmp_path: Path) -> None:
+    package_root = tmp_path / "sqlsaber"
+    package_root.mkdir()
+    (package_root / "__init__.py").write_text("", encoding="utf-8")
+    (package_root / "consumer.py").write_text(
+        "from sqlsaber import options\nfrom . import api\n", encoding="utf-8"
+    )
+
+    edges = _import_edges(package_root)
+
+    assert ImportEdge("sqlsaber.consumer", "sqlsaber.options") in edges
+    assert ImportEdge("sqlsaber.consumer", "sqlsaber.api") in edges
 
 
 def test_cli_uses_only_the_public_sdk_lifecycle() -> None:
@@ -164,11 +188,45 @@ def test_cli_uses_only_the_public_sdk_lifecycle() -> None:
             for private_module in (
                 "sqlsaber.agents",
                 "sqlsaber.session",
-                "sqlsaber._runtime",
+                "sqlsaber.sdk",
             )
         )
     }
     assert bypasses == set()
+
+
+def test_legacy_sdk_module_paths_are_absent() -> None:
+    existing_modules = {
+        module
+        for module in LEGACY_SDK_MODULES
+        if (PACKAGE_ROOT / f"{module}.py").exists()
+    }
+    legacy_imports = {
+        edge for edge in _import_edges() if edge.target in LEGACY_SDK_TARGETS
+    }
+
+    assert existing_modules == set()
+    assert legacy_imports == set()
+
+
+def test_sdk_options_import_stays_lightweight() -> None:
+    code = """
+import sys
+import sqlsaber
+import sqlsaber.sdk
+from sqlsaber import SQLSaberOptions
+
+heavy_modules = (
+    name
+    for name in sys.modules
+    if name == "pydantic_ai" or name.startswith(("openai", "google.genai"))
+)
+raise SystemExit(1 if any(heavy_modules) else 0)
+"""
+
+    result = subprocess.run([sys.executable, "-c", code], check=False)
+
+    assert result.returncode == 0
 
 
 def test_core_does_not_import_cli_clients() -> None:
