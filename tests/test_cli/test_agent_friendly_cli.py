@@ -100,11 +100,6 @@ def test_theme_set_directly_without_prompting():
         patch.object(
             theme_cli.theme_manager, "set_theme", return_value=True
         ) as set_theme,
-        patch.object(
-            theme_cli.questionary,
-            "select",
-            side_effect=AssertionError("direct theme selection must not prompt"),
-        ),
     ):
         theme_cli.set("dracula")
 

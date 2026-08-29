@@ -7,9 +7,9 @@ from typing import Annotated, Any, TypedDict
 
 import cyclopts
 import httpx
-from questionary import Choice
 from rich.table import Table
 
+from sqlsaber.application.prompts import Choice
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config import providers
 from sqlsaber.config.logging import get_logger
@@ -607,7 +607,6 @@ def reset_model_command(
         yes=yes,
         prompt=prompt,
         non_interactive_command=command,
-        error_console=error_console,
     ):
         console.print("[warning]Operation cancelled[/warning]")
         logger.info("models.reset.cancelled", agent=target_agent)

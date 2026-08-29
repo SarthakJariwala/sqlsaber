@@ -167,7 +167,6 @@ def reset(
         yes=yes,
         prompt=f"Remove the stored {provider.title()} API key from your keyring?",
         non_interactive_command=f"saber auth reset {provider} --yes",
-        error_console=error_console,
     )
 
     if not confirmed:

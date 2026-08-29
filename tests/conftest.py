@@ -8,6 +8,16 @@ import pytest
 from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
 
 
+@pytest.fixture(autouse=True)
+def reset_render_io(capsys):
+    """Rebind stdout/stderr surfaces after capsys so CLI emit is captured."""
+    del capsys
+    from sqlsaber.render import reset_io
+
+    reset_io()
+    yield
+
+
 @pytest.fixture
 def temp_dir():
     """Provide a temporary directory that's cleaned up after the test."""

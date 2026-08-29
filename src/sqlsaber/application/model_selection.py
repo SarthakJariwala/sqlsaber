@@ -1,12 +1,9 @@
 """Shared model selection logic for onboarding and CLI."""
 
-from questionary import Choice
-
-from sqlsaber.application.prompts import Prompter
+from sqlsaber.application.prompts import Choice, Prompter
 from sqlsaber.cli.models import FetchedModel, ModelManager
-from sqlsaber.theme.manager import create_console
-
-console = create_console()
+from sqlsaber.cli.output import out
+from sqlsaber.render import blocks as b
 
 
 async def fetch_models(
@@ -34,16 +31,14 @@ async def choose_model(
         Selected model ID (provider:model_id) or None if cancelled
     """
     if not models:
-        console.print("[warning]No models available[/warning]")
+        out(b.warn("No models available"))
         return None
 
     # Filter by provider if restricted
     if restrict_provider:
         models = [m for m in models if m.get("provider") == restrict_provider]
         if not models:
-            console.print(
-                f"[warning]No models available for {restrict_provider}[/warning]"
-            )
+            out(b.warn(f"No models available for {restrict_provider}"))
             return None
 
     # Get recommended model for the provider

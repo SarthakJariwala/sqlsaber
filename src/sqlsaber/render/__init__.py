@@ -108,6 +108,11 @@ _out: Surface | None = None
 _err: Surface | None = None
 
 
+def _stream_closed(surface: Surface | None) -> bool:
+    stream = getattr(surface, "_stream", None)
+    return bool(getattr(stream, "closed", False))
+
+
 def cli_out() -> Surface:
     """Cached stdout surface. TTY gets TerminalSurface, else PlainSurface.
 
@@ -115,7 +120,7 @@ def cli_out() -> Surface:
         The stdout ``Surface``.
     """
     global _out
-    if _out is None:
+    if _out is None or _stream_closed(_out):
         _out = _make_surface(sys.stdout, stderr=False)
     return _out
 
@@ -127,7 +132,7 @@ def cli_err() -> Surface:
         The stderr ``Surface``.
     """
     global _err
-    if _err is None:
+    if _err is None or _stream_closed(_err):
         _err = _make_surface(sys.stderr, stderr=True)
     return _err
 

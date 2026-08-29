@@ -3,12 +3,11 @@
 import os
 
 from sqlsaber.application.prompts import Prompter
+from sqlsaber.cli.output import err, out
 from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
 from sqlsaber.config.auth import AuthConfigManager, AuthMethod
-from sqlsaber.theme.manager import create_console
-
-console = create_console()
+from sqlsaber.render import blocks as b
 
 
 async def select_provider(prompter: Prompter, default: str = "anthropic") -> str | None:
@@ -83,9 +82,7 @@ async def setup_auth(
         if api_key_in_env:
             parts.append(f"{env_var} environment variable")
         summary = ", ".join(parts)
-        console.print(
-            f"[info]Existing authentication found for {provider}: {summary}[/info]"
-        )
+        out(b.md(f"Existing authentication found for {provider}: {summary}"))
 
     # API key flow
     if api_key_in_keyring:
@@ -94,40 +91,36 @@ async def setup_auth(
             default=False,
         )
         if not reset_api_key:
-            console.print(
-                "[warning]No changes made to stored API key credentials.[/warning]"
-            )
+            out(b.warn("No changes made to stored API key credentials."))
             return True, None
         if not api_key_manager.delete_api_key(provider):
-            console.print(
-                "[error]Failed to remove existing API key credentials.[/error]"
-            )
+            err(b.error("Failed to remove existing API key credentials."))
             return False, None
-        console.print(
-            f"[muted]{provider.title()} API key removed from keyring.[/muted]"
-        )
+        out(b.md(f"{provider.title()} API key removed from keyring."))
         api_key_in_keyring = False
 
     if api_key_in_env:
-        console.print(
-            f"[muted]{env_var} is set in your environment. Update it there if you need a new value.[/muted]"
+        out(
+            b.md(
+                f"{env_var} is set in your environment. Update it there if you need a new value."
+            )
         )
 
-    console.print()
-    console.print(f"[dim]To use {provider.title()}, you need an API key.[/dim]")
-    console.print(f"[dim]You can set the {env_var} environment variable,[/dim]")
-    console.print("[dim]or enter it now to store securely in your OS keychain.[/dim]")
-    console.print()
+    out(
+        b.md(
+            f"To use {provider.title()}, you need an API key.\n"
+            f"You can set the {env_var} environment variable,\n"
+            "or enter it now to store securely in your OS keychain."
+        )
+    )
 
     api_key_configured = await configure_api_key(
         provider, api_key_manager, auth_manager
     )
 
     if api_key_configured:
-        console.print(
-            f"[success]✓ {provider.title()} API key configured successfully![/success]"
-        )
+        out(b.success(f"{provider.title()} API key configured successfully!"))
         return True, provider
 
-    console.print("[warning]No API key provided.[/warning]")
+    out(b.warn("No API key provided."))
     return False, None

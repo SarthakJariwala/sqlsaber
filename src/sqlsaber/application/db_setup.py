@@ -5,10 +5,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlsaber.application.prompts import Prompter
+from sqlsaber.cli.output import err
 from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
-from sqlsaber.theme.manager import create_console
-
-console = create_console()
+from sqlsaber.render import blocks as b
 
 
 def _normalize_schemas(schemas: list[str]) -> list[str]:
@@ -113,7 +112,7 @@ async def collect_db_input(
         try:
             port = int(port_str)
         except ValueError:
-            console.print("[error]Invalid port number. Using default.[/error]")
+            err(b.error("Invalid port number. Using default."))
             port = default_port
 
         database = await prompter.text("Database name:")
@@ -241,7 +240,7 @@ async def test_connection(config: DatabaseConfig, password: str | None) -> bool:
         await db_conn.close()
         return True
     except Exception as e:
-        console.print(f"[bold error]Connection failed:[/bold error] {e}", style="error")
+        err(b.error(f"Connection failed: {e}"))
         return False
 
 

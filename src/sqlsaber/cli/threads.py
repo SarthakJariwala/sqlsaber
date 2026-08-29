@@ -651,7 +651,6 @@ def prune(
         yes=yes,
         prompt=f"Prune {prunable} thread(s) older than {days} day(s)?",
         non_interactive_command=f"saber threads prune --days {days} --yes",
-        error_console=error_console,
     ):
         console.print("[warning]Operation cancelled[/warning]")
         logger.info("threads.cli.prune.cancelled", days=days)

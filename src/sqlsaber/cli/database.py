@@ -6,19 +6,16 @@ from pathlib import Path
 from typing import Annotated
 
 import cyclopts
-import questionary
-from rich.table import Table
 
+from sqlsaber.cli.output import fail, fail_usage, out
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
 from sqlsaber.config.logging import get_logger
-from sqlsaber.theme.manager import create_console
+from sqlsaber.render import blocks as b
+from sqlsaber.render import cli_out, form_session
 
 type SchemaList = list[str]
 
-# Global instances for CLI commands
-console = create_console()
-error_console = create_console(stderr=True)
 config_manager = DatabaseConfigManager()
 logger = get_logger(__name__)
 
@@ -158,38 +155,36 @@ def add(
 
     supported_types = {"postgresql", "mysql", "sqlite", "duckdb"}
     if type not in supported_types:
-        error_console.print(
-            f"[error]Error: unsupported database type '{type}'.[/error]\n"
+        fail_usage(
+            f"unsupported database type '{type}'.\n"
             "  Choose from: postgresql, mysql, sqlite, duckdb\n"
             "  Example: saber db add analytics --type postgresql"
         )
-        raise SystemExit(2)
     if interactive and password_stdin:
-        error_console.print(
-            "[error]Error: --password-stdin requires --no-interactive.[/error]\n"
+        fail_usage(
+            "--password-stdin requires --no-interactive.\n"
             "  Example: printf '%s' \"$DB_PASSWORD\" | saber db add analytics "
             "--no-interactive --host HOST --database DB --username USER "
             "--password-stdin"
         )
-        raise SystemExit(2)
 
     if interactive:
-        # Interactive mode - prompt for all required fields
         from sqlsaber.application.db_setup import collect_db_input
         from sqlsaber.application.prompts import AsyncPrompter
 
-        console.print(f"[bold]Adding database connection: {name}[/bold]")
+        out(b.md(f"**Adding database connection: {name}**"))
 
         async def collect_input():
             prompter = AsyncPrompter()
-            return await collect_db_input(
-                prompter=prompter, name=name, db_type=type, include_ssl=True
-            )
+            with form_session(cli_out()):
+                return await collect_db_input(
+                    prompter=prompter, name=name, db_type=type, include_ssl=True
+                )
 
         db_input = asyncio.run(collect_input())
 
         if db_input is None:
-            console.print("[warning]Operation cancelled[/warning]")
+            out(b.warn("Operation cancelled"))
             logger.info("db.add.cancelled")
             return
 
@@ -209,26 +204,24 @@ def add(
         # Non-interactive mode - use provided values or defaults
         if type == "sqlite":
             if not database:
-                error_console.print(
-                    "[error]Error: database file path is required for SQLite.[/error]\n"
+                logger.error("db.add.missing_path", db_type="sqlite")
+                fail_usage(
+                    "database file path is required for SQLite.\n"
                     "  Example: saber db add local --no-interactive --type sqlite "
                     "--database ./local.db"
                 )
-                logger.error("db.add.missing_path", db_type="sqlite")
-                raise SystemExit(2)
             host = "localhost"
             port = 0
             username = "sqlite"
             password = ""
         elif type == "duckdb":
             if database is None:
-                error_console.print(
-                    "[error]Error: database file path is required for DuckDB.[/error]\n"
+                logger.error("db.add.missing_path", db_type="duckdb")
+                fail_usage(
+                    "database file path is required for DuckDB.\n"
                     "  Example: saber db add warehouse --no-interactive --type duckdb "
                     "--database ./warehouse.duckdb"
                 )
-                logger.error("db.add.missing_path", db_type="duckdb")
-                raise SystemExit(2)
             database = str(Path(database).expanduser().resolve())
             host = "localhost"
             port = 0
@@ -236,33 +229,28 @@ def add(
             password = ""
         else:
             if not all([host, database, username]):
-                error_console.print(
-                    "[error]Error: --host, --database, and --username are required "
-                    "in non-interactive mode.[/error]\n"
+                logger.error("db.add.missing_fields")
+                fail_usage(
+                    "--host, --database, and --username are required "
+                    "in non-interactive mode.\n"
                     "  Example: saber db add analytics --no-interactive "
                     "--host HOST --database DB --username USER"
                 )
-                logger.error("db.add.missing_fields")
-                raise SystemExit(2)
 
             if port is None:
                 port = 5432 if type == "postgresql" else 3306
 
             if password_stdin:
                 if sys.stdin.isatty():
-                    error_console.print(
-                        "[error]Error: --password-stdin requires piped stdin.[/error]\n"
+                    fail_usage(
+                        "--password-stdin requires piped stdin.\n"
                         "  Example: printf '%s' \"$DB_PASSWORD\" | saber db add "
                         "analytics --no-interactive --host HOST --database DB "
                         "--username USER --password-stdin"
                     )
-                    raise SystemExit(2)
                 password = sys.stdin.read().rstrip("\r\n")
                 if not password:
-                    error_console.print(
-                        "[error]Error: --password-stdin received an empty password.[/error]"
-                    )
-                    raise SystemExit(2)
+                    fail_usage("--password-stdin received an empty password.")
             else:
                 password = ""
         exclude_schema_list = _parse_schema_list(exclude_schemas)
@@ -291,22 +279,17 @@ def add(
     )
 
     try:
-        # Add the configuration
         config_manager.add_database(db_config, password if password else None)
-        console.print(
-            f"[success]Successfully added database connection '{name}'[/success]"
-        )
+        out(b.success(f"Successfully added database connection '{name}'"))
         logger.info("db.add.success", name=name, type=type)
 
-        # Set as default if it's the first one
         if len(config_manager.list_databases()) == 1:
-            console.print(f"[blue]Set '{name}' as default database[/blue]")
+            out(b.md(f"Set '{name}' as default database"))
             logger.info("db.default.set", name=name)
 
     except Exception as e:
         logger.exception("db.add.error", name=name, error=str(e))
-        error_console.print(f"[error]Error adding database:[/error] {e}")
-        sys.exit(1)
+        fail(f"Error adding database: {e}")
 
 
 @db_app.command(name="list", help_epilogue="Example:\n\nsaber db list")
@@ -321,47 +304,54 @@ def list_databases() -> None:
     default_name = config_manager.get_default_name()
 
     if not databases:
-        console.print("[warning]No database connections configured[/warning]")
-        console.print("Use 'sqlsaber db add <name>' to add a database connection")
+        out(
+            b.warn("No database connections configured"),
+            b.md("Use 'sqlsaber db add <name>' to add a database connection"),
+        )
         logger.info("db.list.empty")
         return
 
-    table = Table(title="Database Connections")
-    table.add_column("Name", style="info")
-    table.add_column("Type", style="accent")
-    table.add_column("Host", style="success")
-    table.add_column("Port", style="warning")
-    table.add_column("Database", style="info")
-    table.add_column("Username", style="info")
-    table.add_column("Excluded Schemas", style="muted")
-    table.add_column("SSL", style="success")
-    table.add_column("Default", style="error")
-
+    rows: list[dict[str, str]] = []
     for db in databases:
         is_default = "✓" if db.name == default_name else ""
-
-        # Format SSL status
-        ssl_status = ""
         if db.ssl_mode:
             ssl_status = db.ssl_mode
             if db.ssl_ca or db.ssl_cert:
                 ssl_status += " (certs)"
         else:
             ssl_status = "disabled" if db.type not in {"sqlite", "duckdb"} else "N/A"
-
-        table.add_row(
-            db.name,
-            db.type,
-            db.host,
-            str(db.port) if db.port else "",
-            db.database,
-            db.username,
-            ", ".join(db.exclude_schemas) if db.exclude_schemas else "",
-            ssl_status,
-            is_default,
+        rows.append(
+            {
+                "name": db.name,
+                "type": db.type,
+                "host": db.host or "",
+                "port": str(db.port) if db.port else "",
+                "database": db.database or "",
+                "username": db.username or "",
+                "excluded": ", ".join(db.exclude_schemas) if db.exclude_schemas else "",
+                "ssl": ssl_status,
+                "default": is_default,
+            }
         )
 
-    console.print(table)
+    out(
+        b.table(
+            rows,
+            columns=(
+                b.Column("name", "Name", role="info"),
+                b.Column("type", "Type", role="accent"),
+                b.Column("host", "Host", role="success"),
+                b.Column("port", "Port", role="warning"),
+                b.Column("database", "Database", role="info"),
+                b.Column("username", "Username", role="info"),
+                b.Column("excluded", "Excluded Schemas", role="muted"),
+                b.Column("ssl", "SSL", role="success"),
+                b.Column("default", "Default", role="error"),
+            ),
+            caption="Database Connections",
+            max_rows=1000,
+        )
+    )
     logger.info("db.list.complete", count=len(databases))
 
 
@@ -422,12 +412,11 @@ def exclude(
     )
     db_config = config_manager.get_database(name)
     if db_config is None:
-        error_console.print(
-            f"[error]Error: database connection '{name}' not found.[/error]\n"
+        logger.error("db.exclude.not_found", name=name)
+        fail(
+            f"database connection '{name}' not found.\n"
             "  List connections with: saber db list"
         )
-        logger.error("db.exclude.not_found", name=name)
-        raise SystemExit(1)
 
     actions_selected = sum(
         bool(flag)
@@ -439,12 +428,11 @@ def exclude(
         ]
     )
     if actions_selected > 1:
-        error_console.print(
-            "[error]Error: specify only one of --set, --add, --remove, or --clear.[/error]\n"
+        logger.error("db.exclude.multiple_actions", name=name)
+        fail(
+            "specify only one of --set, --add, --remove, or --clear.\n"
             "  Example: saber db exclude analytics --add audit,temp"
         )
-        logger.error("db.exclude.multiple_actions", name=name)
-        sys.exit(1)
 
     current = [*(db_config.exclude_schemas or [])]
 
@@ -464,16 +452,17 @@ def exclude(
         removals = set(_parse_schema_list(remove_schemas))
         updated = [schema for schema in current if schema not in removals]
     else:
-        console.print(
-            "[info]Update excluded schemas for "
-            f"[primary]{name}[/primary] (leave blank to clear)[/info]"
-        )
+        from sqlsaber.application.prompts import AsyncPrompter
+
+        out(b.md(f"Update excluded schemas for **{name}** (leave blank to clear)"))
         default_value = ", ".join(current)
-        response = questionary.text(
-            "Schemas to exclude (comma separated):", default=default_value
-        ).ask()
+        response = asyncio.run(
+            AsyncPrompter().text(
+                "Schemas to exclude (comma separated):", default=default_value
+            )
+        )
         if response is None:
-            console.print("[warning]Operation cancelled[/warning]")
+            out(b.warn("Operation cancelled"))
             logger.info("db.exclude.cancelled", name=name)
             return
         updated = _parse_schema_list(response)
@@ -481,10 +470,10 @@ def exclude(
     db_config.exclude_schemas = _normalize_schema_list(updated)
     config_manager.update_database(db_config)
 
-    console.print(
-        f"[success]Updated excluded schemas for '{name}':[/success] "
-        f"{', '.join(db_config.exclude_schemas) if db_config.exclude_schemas else '(none)'}"
+    schemas = (
+        ", ".join(db_config.exclude_schemas) if db_config.exclude_schemas else "(none)"
     )
+    out(b.success(f"Updated excluded schemas for '{name}': {schemas}"))
     logger.info("db.exclude.success", name=name, count=len(db_config.exclude_schemas))
 
 
@@ -510,32 +499,25 @@ def remove(
     """
     logger.info("db.remove.start", name=name)
     if not config_manager.get_database(name):
-        error_console.print(
-            f"[error]Error: database connection '{name}' not found.[/error]\n"
+        logger.error("db.remove.not_found", name=name)
+        fail(
+            f"database connection '{name}' not found.\n"
             "  List connections with: saber db list"
         )
-        logger.error("db.remove.not_found", name=name)
-        sys.exit(1)
 
     if confirm_action(
         yes=yes,
         prompt=f"Remove database connection '{name}'?",
         non_interactive_command=f"saber db remove {name} --yes",
-        error_console=error_console,
     ):
         if config_manager.remove_database(name):
-            console.print(
-                f"[success]Successfully removed database connection '{name}'[/success]"
-            )
+            out(b.success(f"Successfully removed database connection '{name}'"))
             logger.info("db.remove.success", name=name)
         else:
-            error_console.print(
-                f"[error]Error: failed to remove database connection '{name}'.[/error]"
-            )
             logger.error("db.remove.failed", name=name)
-            sys.exit(1)
+            fail(f"failed to remove database connection '{name}'.")
     else:
-        console.print("[warning]Operation cancelled[/warning]")
+        out(b.warn("Operation cancelled"))
         logger.info("db.remove.cancelled", name=name)
 
 
@@ -553,22 +535,18 @@ def set_default(
     """
     logger.info("db.default.start", name=name)
     if not config_manager.get_database(name):
-        error_console.print(
-            f"[error]Error: database connection '{name}' not found.[/error]\n"
+        logger.error("db.default.not_found", name=name)
+        fail(
+            f"database connection '{name}' not found.\n"
             "  List connections with: saber db list"
         )
-        logger.error("db.default.not_found", name=name)
-        sys.exit(1)
 
     if config_manager.set_default_database(name):
-        console.print(
-            f"[success]Successfully set '{name}' as default database[/success]"
-        )
+        out(b.success(f"Successfully set '{name}' as default database"))
         logger.info("db.default.success", name=name)
     else:
-        error_console.print(f"[error]Error: failed to set '{name}' as default.[/error]")
         logger.error("db.default.failed", name=name)
-        sys.exit(1)
+        fail(f"failed to set '{name}' as default.")
 
 
 @db_app.command(help_epilogue=("Examples:\n\nsaber db test\n\nsaber db test analytics"))
@@ -595,23 +573,21 @@ def test(
         if name:
             db_config = config_manager.get_database(name)
             if db_config is None:
-                error_console.print(
-                    f"[error]Error: database connection '{name}' not found.[/error]\n"
+                logger.error("db.test.not_found", name=name)
+                fail(
+                    f"database connection '{name}' not found.\n"
                     "  List connections with: saber db list"
                 )
-                logger.error("db.test.not_found", name=name)
-                raise SystemExit(1)
         else:
             db_config = config_manager.get_default_database()
             if db_config is None:
-                error_console.print(
-                    "[error]Error: no default database configured.[/error]\n"
+                logger.error("db.test.no_default")
+                fail(
+                    "no default database configured.\n"
                     "  Add one with: saber db add <name>"
                 )
-                logger.error("db.test.no_default")
-                raise SystemExit(1)
 
-        console.print(f"[blue]Testing connection to '{db_config.name}'...[/blue]")
+        out(b.md(f"Testing connection to '{db_config.name}'..."))
 
         try:
             connection_string = db_config.to_connection_string()
@@ -619,13 +595,10 @@ def test(
                 connection_string, excluded_schemas=db_config.exclude_schemas
             )
 
-            # Try to connect and run a simple query
             await db_conn.execute_query("SELECT 1 as test")
             await db_conn.close()
 
-            console.print(
-                f"[success]✓ Connection to '{db_config.name}' successful[/success]"
-            )
+            out(b.success(f"Connection to '{db_config.name}' successful"))
             logger.info("db.test.success", name=db_config.name)
 
         except Exception as e:
@@ -636,8 +609,7 @@ def test(
                 ),
                 error=str(e),
             )
-            error_console.print(f"[error]Connection failed: {e}[/error]")
-            sys.exit(1)
+            fail(f"Connection failed: {e}")
 
     asyncio.run(test_connection())
 

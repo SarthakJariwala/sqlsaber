@@ -342,7 +342,6 @@ def remove(
         non_interactive_command=(
             f"saber knowledge remove {entry_id} --database {database_name} --yes"
         ),
-        error_console=error_console,
     ):
         console.print("Operation cancelled")
         logger.info("knowledge.remove.cancelled", database=database_name, id=entry_id)
@@ -414,7 +413,6 @@ def clear(
         non_interactive_command=(
             f"saber knowledge clear --database {database_name} --yes"
         ),
-        error_console=error_console,
     ):
         console.print("Operation cancelled")
         logger.info("knowledge.clear.cancelled", database=database_name)

@@ -8,19 +8,18 @@ from pathlib import Path
 from typing import Annotated
 
 import cyclopts
-import questionary
 from platformdirs import user_config_dir
 from pygments.styles import get_all_styles
 
+from sqlsaber.application.prompts import AsyncPrompter, Choice
+from sqlsaber.cli.output import err, fail, fail_usage, out
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config.logging import get_logger
-from sqlsaber.theme.manager import DEFAULT_THEME_NAME, create_console
+from sqlsaber.render import blocks as b
+from sqlsaber.theme.manager import DEFAULT_THEME_NAME
 
-console = create_console()
-error_console = create_console(stderr=True)
 logger = get_logger(__name__)
 
-# Create the theme management CLI app
 theme_app = cyclopts.App(
     name="theme",
     help="Manage theme settings",
@@ -76,8 +75,8 @@ class ThemeManager:
             self._save_config(config)
             return True
         except Exception as e:
-            error_console.print(f"[error]Error setting theme: {e}[/error]")
             logger.error("theme.set.error", theme=theme_name, error=str(e))
+            err(b.error(f"Error setting theme: {e}"))
             return False
 
     def reset_theme(self) -> bool:
@@ -87,8 +86,8 @@ class ThemeManager:
                 self.config_file.unlink()
             return True
         except Exception as e:
-            error_console.print(f"[error]Error resetting theme: {e}[/error]")
             logger.error("theme.reset.error", error=str(e))
+            err(b.error(f"Error resetting theme: {e}"))
             return False
 
     def get_available_themes(self) -> list[str]:
@@ -120,54 +119,47 @@ def set(
     if theme_name is not None:
         theme_name = theme_name.strip().lower()
         if theme_name not in themes:
-            error_console.print(
-                f"[error]Error: unknown theme '{theme_name}'.[/error]\n"
+            fail_usage(
+                f"unknown theme '{theme_name}'.\n"
                 "  Run 'saber theme set' in a terminal to browse available themes.\n"
                 "  Example: saber theme set dracula"
             )
-            raise SystemExit(2)
         if not theme_manager.set_theme(theme_name):
             raise SystemExit(1)
-        console.print(f"[success]✓ Theme set to: {theme_name}[/success]")
+        out(b.success(f"Theme set to: {theme_name}"))
         logger.info("theme.set.done", theme=theme_name)
         return
 
     if not sys.stdin.isatty():
-        error_console.print(
-            "[error]Error: THEME is required when stdin is not a terminal.[/error]\n"
+        fail_usage(
+            "THEME is required when stdin is not a terminal.\n"
             "  Example: saber theme set dracula"
         )
-        raise SystemExit(2)
 
     async def interactive_set():
         current_theme = theme_manager.get_current_theme()
-
-        # Create choices with current theme highlighted
         choices = [
-            questionary.Choice(
+            Choice(
                 title=f"{theme} (current)" if theme == current_theme else theme,
                 value=theme,
             )
             for theme in themes
         ]
-
-        selected_theme = await questionary.select(
+        selected_theme = await AsyncPrompter().select(
             "Select a theme:",
             choices=choices,
             default=current_theme,
             use_search_filter=True,
-            use_jk_keys=False,
-        ).ask_async()
+        )
 
         if selected_theme:
             if theme_manager.set_theme(selected_theme):
-                console.print(f"[success]✓ Theme set to: {selected_theme}[/success]")
+                out(b.success(f"Theme set to: {selected_theme}"))
                 logger.info("theme.set.done", theme=selected_theme)
             else:
-                error_console.print("[error]Error: failed to set theme.[/error]")
-                sys.exit(1)
+                fail("failed to set theme.")
         else:
-            console.print("[warning]Operation cancelled[/warning]")
+            out(b.warn("Operation cancelled"))
             logger.info("theme.set.cancelled")
 
     asyncio.run(interactive_set())
@@ -193,20 +185,16 @@ def reset(
         yes=yes,
         prompt=f"Reset theme to {DEFAULT_THEME_NAME}?",
         non_interactive_command="saber theme reset --yes",
-        error_console=error_console,
     ):
-        console.print("[warning]Operation cancelled[/warning]")
+        out(b.warn("Operation cancelled"))
         logger.info("theme.reset.cancelled")
         return
 
     if theme_manager.reset_theme():
-        console.print(
-            f"[success]✓ Theme reset to default: {DEFAULT_THEME_NAME}[/success]"
-        )
+        out(b.success(f"Theme reset to default: {DEFAULT_THEME_NAME}"))
         logger.info("theme.reset.done", theme=DEFAULT_THEME_NAME)
     else:
-        error_console.print("[error]Error: failed to reset theme.[/error]")
-        sys.exit(1)
+        fail("failed to reset theme.")
 
 
 def create_theme_app() -> cyclopts.App:
