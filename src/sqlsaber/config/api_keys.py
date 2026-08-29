@@ -6,9 +6,9 @@ import os
 import keyring
 import keyring.errors
 
-from sqlsaber.cli.output import err, out
 from sqlsaber.config import providers
 from sqlsaber.render import blocks as b
+from sqlsaber.render import cli_err, cli_out
 
 
 class APIKeyManager:
@@ -31,7 +31,7 @@ class APIKeyManager:
             if api_key:
                 return api_key
         except Exception as e:
-            err(b.warn(f"Keyring access failed: {e}"))
+            cli_err().emit(b.warn(f"Keyring access failed: {e}"))
 
         return self._prompt_and_store_key(provider, env_var_name, service_name)
 
@@ -52,7 +52,7 @@ class APIKeyManager:
         except keyring.errors.PasswordDeleteError:
             return True
         except Exception as e:
-            err(b.warn(f"Could not remove API key: {e}"))
+            cli_err().emit(b.warn(f"Could not remove API key: {e}"))
             return False
 
     def get_env_var_name(self, provider: str) -> str:
@@ -69,7 +69,7 @@ class APIKeyManager:
     ) -> str | None:
         """Prompt user for API key and store it in keyring."""
         try:
-            out(
+            cli_out().emit(
                 b.md(
                     f"{provider.title()} API key not found in environment or your OS's credentials store.\n\n"
                     "You can either:\n"
@@ -83,14 +83,16 @@ class APIKeyManager:
             )
 
             if not api_key.strip():
-                out(b.warn("No API key provided. Some functionality may not work."))
+                cli_out().emit(
+                    b.warn("No API key provided. Some functionality may not work.")
+                )
                 return None
 
             try:
                 keyring.set_password(service_name, provider, api_key.strip())
-                out(b.success("API key stored securely for future use"))
+                cli_out().emit(b.success("API key stored securely for future use"))
             except Exception as e:
-                out(
+                cli_out().emit(
                     b.warn(
                         f"Could not store API key in your operating system's credentials store: {e}"
                     ),
@@ -100,8 +102,8 @@ class APIKeyManager:
             return api_key.strip()
 
         except KeyboardInterrupt:
-            out(b.warn("Operation cancelled"))
+            cli_out().emit(b.warn("Operation cancelled"))
             return None
         except Exception as e:
-            err(b.error(f"Error prompting for API key: {e}"))
+            cli_err().emit(b.error(f"Error prompting for API key: {e}"))
             return None
