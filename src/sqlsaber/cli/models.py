@@ -7,7 +7,7 @@ from typing import Annotated, Any, TypedDict
 import cyclopts
 import httpx
 
-from sqlsaber.application.prompts import Choice
+from sqlsaber.cli.prompts import Choice
 from sqlsaber.cli.output import err, fail, fail_usage, out
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config import providers
@@ -383,8 +383,8 @@ def set_model_command(
         return
 
     async def interactive_set() -> None:
-        from sqlsaber.application.model_selection import choose_model, fetch_models
-        from sqlsaber.application.prompts import AsyncPrompter
+        from sqlsaber.cli.prompts import AsyncPrompter
+        from sqlsaber.cli.workflows.model_selection import choose_model, fetch_models
 
         out(b.md("Fetching available models..."))
         models = await fetch_models(model_manager)

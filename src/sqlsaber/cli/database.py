@@ -168,8 +168,8 @@ def add(
         )
 
     if interactive:
-        from sqlsaber.application.db_setup import collect_db_input
-        from sqlsaber.application.prompts import AsyncPrompter
+        from sqlsaber.cli.prompts import AsyncPrompter
+        from sqlsaber.cli.workflows.db_setup import collect_db_input
 
         out(b.md(f"**Adding database connection: {name}**"))
 
@@ -447,7 +447,7 @@ def exclude(
         removals = set(_parse_schema_list(remove_schemas))
         updated = [schema for schema in current if schema not in removals]
     else:
-        from sqlsaber.application.prompts import AsyncPrompter
+        from sqlsaber.cli.prompts import AsyncPrompter
 
         out(b.md(f"Update excluded schemas for **{name}** (leave blank to clear)"))
         default_value = ", ".join(current)

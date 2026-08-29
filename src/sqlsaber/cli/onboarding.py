@@ -57,13 +57,13 @@ async def setup_database_guided() -> str | None:
 
     Returns the name of the configured database or None if cancelled.
     """
-    from sqlsaber.application.db_setup import (
+    from sqlsaber.cli.prompts import AsyncPrompter
+    from sqlsaber.cli.workflows.db_setup import (
         build_config,
         collect_db_input,
         save_database,
         test_connection,
     )
-    from sqlsaber.application.prompts import AsyncPrompter
 
     out(b.md("**Step 1 of 2: Database Connection**", role="primary"))
 
@@ -127,8 +127,8 @@ async def select_model_for_provider(provider: str) -> str | None:
 
     Returns the selected model ID or None if cancelled/failed.
     """
-    from sqlsaber.application.model_selection import choose_model, fetch_models
-    from sqlsaber.application.prompts import AsyncPrompter
+    from sqlsaber.cli.prompts import AsyncPrompter
+    from sqlsaber.cli.workflows.model_selection import choose_model, fetch_models
 
     try:
         out(b.md(f"Fetching available {provider.title()} models...", role="muted"))
@@ -167,8 +167,8 @@ async def setup_auth_guided() -> tuple[bool, str | None]:
 
     Returns tuple of (success: bool, selected_model: str | None).
     """
-    from sqlsaber.application.auth_setup import setup_auth
-    from sqlsaber.application.prompts import AsyncPrompter
+    from sqlsaber.cli.prompts import AsyncPrompter
+    from sqlsaber.cli.workflows.auth_setup import setup_auth
 
     out(b.md("**Step 2 of 2: Authentication**", role="primary"))
 
@@ -225,9 +225,7 @@ def success_screen(
             b.success(f"Database '{database_name}' connected and ready to use")
         )
         notes.append(
-            b.warn(
-                "AI authentication not configured - you'll be prompted when needed"
-            )
+            b.warn("AI authentication not configured - you'll be prompted when needed")
         )
     elif auth_configured:
         notes.append(b.success("AI authentication configured"))

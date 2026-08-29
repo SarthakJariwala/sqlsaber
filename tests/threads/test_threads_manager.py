@@ -1,6 +1,6 @@
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic_ai.messages import (
@@ -140,6 +140,29 @@ async def test_save_run_new_thread(thread_manager, temp_storage):
     # Verify messages can be read back
     msgs = await temp_storage.get_thread_messages(thread_id)
     assert len(msgs) == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_first_snapshot_does_not_claim_a_thread(
+    thread_manager, temp_storage, monkeypatch
+):
+    run_result = MagicMock()
+    run_result.all_messages_json.return_value = _messages_bytes("hello")
+    run_result.all_messages.return_value = ["msg1"]
+    save_snapshot = AsyncMock(side_effect=OSError("write failed"))
+    monkeypatch.setattr(temp_storage, "save_snapshot", save_snapshot)
+
+    result = await thread_manager.save_run(
+        run_result=run_result,
+        database_name="db1",
+        user_query="hello",
+        model_name="gpt-4",
+    )
+
+    assert result == ["msg1"]
+    assert thread_manager.current_thread_id is None
+    assert thread_manager.first_message is True
+    save_snapshot.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -14,12 +15,16 @@ def _emitted_markdown(surface: MagicMock) -> str:
 
 @pytest.fixture
 def mock_context():
-    return CommandContext(
-        surface=MagicMock(),
-        agent=MagicMock(),
-        thread_manager=AsyncMock(),
-        on_clear_history=MagicMock(),
+    saber = MagicMock()
+    saber.end_thread = AsyncMock()
+    saber.new_thread = AsyncMock()
+    saber.info = SimpleNamespace(
+        thinking=SimpleNamespace(enabled=False, level=ThinkingLevel.MEDIUM)
     )
+    saber.set_thinking.return_value = SimpleNamespace(
+        enabled=True, level=ThinkingLevel.MEDIUM
+    )
+    return CommandContext(surface=MagicMock(), saber=saber)
 
 
 @pytest.fixture
@@ -36,7 +41,7 @@ async def test_process_unknown_command(processor, mock_context):
 
 @pytest.mark.asyncio
 async def test_process_exit_command(processor, mock_context):
-    mock_context.thread_manager.end_current_thread.return_value = "thread-123"
+    mock_context.saber.end_thread.return_value = "thread-123"
 
     for cmd in ["/exit", "/quit", "exit", "quit", "QUIT", "EXIT", "/EXIT", "/QUIT"]:
         mock_context.surface.reset_mock()
@@ -44,7 +49,7 @@ async def test_process_exit_command(processor, mock_context):
 
         assert result.handled is True
         assert result.should_exit is True
-        mock_context.thread_manager.end_current_thread.assert_called()
+        mock_context.saber.end_thread.assert_awaited()
         assert "saber threads resume thread-123" in _emitted_markdown(
             mock_context.surface
         )
@@ -57,8 +62,7 @@ async def test_process_clear_command(processor, mock_context):
     assert result.handled is True
     assert result.should_exit is False
 
-    mock_context.on_clear_history.assert_called_once()
-    mock_context.thread_manager.clear_current_thread.assert_called_once()
+    mock_context.saber.new_thread.assert_awaited_once()
     assert "Conversation history cleared." in _emitted_markdown(mock_context.surface)
 
 
@@ -76,7 +80,7 @@ async def test_process_thinking_on(processor, mock_context):
     assert result.handled is True
     assert result.should_exit is False
 
-    mock_context.agent.set_thinking.assert_called_once_with(enabled=True)
+    mock_context.saber.set_thinking.assert_called_once_with(enabled=True)
     mock_context.surface.emit.assert_called()
 
 
@@ -87,14 +91,15 @@ async def test_process_thinking_off(processor, mock_context):
     assert result.handled is True
     assert result.should_exit is False
 
-    mock_context.agent.set_thinking.assert_called_once_with(enabled=False)
+    mock_context.saber.set_thinking.assert_called_once_with(enabled=False)
     mock_context.surface.emit.assert_called()
 
 
 @pytest.mark.asyncio
 async def test_process_thinking_no_args_shows_status(processor, mock_context):
-    mock_context.agent.thinking_enabled = True
-    mock_context.agent.thinking_level = ThinkingLevel.HIGH
+    mock_context.saber.info.thinking = SimpleNamespace(
+        enabled=True, level=ThinkingLevel.HIGH
+    )
 
     result = await processor.process("/thinking", mock_context)
 
@@ -110,7 +115,7 @@ async def test_process_thinking_level_argument(processor, mock_context):
     result = await processor.process("/thinking high", mock_context)
 
     assert result.handled is True
-    mock_context.agent.set_thinking.assert_called_once_with(
+    mock_context.saber.set_thinking.assert_called_once_with(
         enabled=True, level=ThinkingLevel.HIGH
     )
 
@@ -132,7 +137,7 @@ async def test_process_thinking_all_levels(
     result = await processor.process(f"/thinking {level_str}", mock_context)
 
     assert result.handled is True
-    mock_context.agent.set_thinking.assert_called_once_with(
+    mock_context.saber.set_thinking.assert_called_once_with(
         enabled=True, level=expected_level
     )
 
@@ -142,14 +147,15 @@ async def test_process_thinking_invalid_argument(processor, mock_context):
     result = await processor.process("/thinking invalid", mock_context)
 
     assert result.handled is True
-    mock_context.agent.set_thinking.assert_not_called()
+    mock_context.saber.set_thinking.assert_not_called()
     assert "Invalid" in _emitted_markdown(mock_context.surface)
 
 
 @pytest.mark.asyncio
 async def test_process_thinking_disabled_status(processor, mock_context):
-    mock_context.agent.thinking_enabled = False
-    mock_context.agent.thinking_level = ThinkingLevel.MEDIUM
+    mock_context.saber.info.thinking = SimpleNamespace(
+        enabled=False, level=ThinkingLevel.MEDIUM
+    )
 
     result = await processor.process("/thinking", mock_context)
 

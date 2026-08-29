@@ -4,7 +4,7 @@ import getpass
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlsaber.application.prompts import Prompter
+from sqlsaber.cli.prompts import Prompter
 from sqlsaber.cli.output import err
 from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
 from sqlsaber.render import blocks as b

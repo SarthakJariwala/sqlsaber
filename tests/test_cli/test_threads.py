@@ -23,7 +23,6 @@ from sqlsaber.cli.threads import (
 )
 from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.render.markdown_text import md_of
-from sqlsaber.threads.metadata import encode_thread_extra_metadata
 from sqlsaber.threads.storage import Thread, ThreadStorage
 
 
@@ -329,102 +328,97 @@ class TestThreadsCLI:
 
         await mock_resume_run()
 
-    def test_resume_uses_structured_multi_database_metadata(self, sample_messages):
-        """Resume passes saved repeated database selectors, not a comma string."""
+    def test_resume_uses_public_sdk_and_passes_saber_to_tui(self, sample_messages):
         from sqlsaber.cli.threads import resume
 
-        thread = Thread(
-            id="thread-multi",
-            database_name="prod,staging",
-            title="Multi DB",
-            created_at=1672531200.0,
-            ended_at=None,
-            last_activity_at=1672531200.0,
-            model_name="gpt-4",
-            extra_metadata=encode_thread_extra_metadata(
-                database_selector=["prod", "staging"]
-            ),
-        )
         store = MagicMock()
-        store.get_thread = AsyncMock(return_value=thread)
         store.get_thread_messages = AsyncMock(return_value=sample_messages)
+        artifact_store = object()
+        query_result_store = object()
         captured: dict[str, object] = {}
+        lifecycle_events: list[str] = []
 
-        class FakeSQLSaberSession:
-            def __init__(self, options):
-                captured["database"] = options.database
+        class FakeSQLSaber:
+            @classmethod
+            async def resume(cls, thread_id, *, options, storage):
+                captured["resume"] = (thread_id, options, storage)
+                saber = cls()
+                saber.query_result_store = query_result_store
+                captured["saber"] = saber
+                return saber
 
             async def close(self) -> None:
                 captured["closed"] = True
+                lifecycle_events.append("closed")
 
         class FakeInteractiveSession:
-            def __init__(self, **kwargs):
-                captured["history"] = kwargs["initial_history"]
+            def __init__(self, saber):
+                captured["interactive_saber"] = saber
 
             async def run(self) -> None:
                 captured["ran"] = True
 
-        class FakeDatabaseConfigManager:
-            def get_database(self, name: str):
-                if name in {"prod", "staging"}:
-                    return object()
-                return None
-
+        retention = AsyncMock(
+            side_effect=lambda *args: lifecycle_events.append("retention")
+        )
         with (
             patch("sqlsaber.threads.ThreadStorage", return_value=store),
-            patch(
-                "sqlsaber.config.database.DatabaseConfigManager",
-                FakeDatabaseConfigManager,
-            ),
-            patch("sqlsaber.session.SQLSaberSession", FakeSQLSaberSession),
+            patch("sqlsaber.SQLSaber", FakeSQLSaber),
             patch(
                 "sqlsaber.cli.interactive.InteractiveSession", FakeInteractiveSession
             ),
+            patch(
+                "sqlsaber.cli.artifacts.cli_artifact_store", return_value=artifact_store
+            ),
+            patch(
+                "sqlsaber.cli.artifacts.resolve_cli_artifact_publications",
+                AsyncMock(return_value={}),
+            ),
+            patch(
+                "sqlsaber.cli.query_results.cli_query_result_store",
+                return_value=query_result_store,
+            ),
+            patch("sqlsaber.cli.retention.run_cli_retention", retention),
             patch("sqlsaber.cli.threads._render_transcript"),
         ):
             resume("thread-multi")
 
-        assert captured["database"] == ["prod", "staging"]
-        assert captured["history"] == sample_messages
+        thread_id, options, storage = captured["resume"]
+        assert thread_id == "thread-multi"
+        assert options.database is None
+        assert storage is store
+        assert captured["interactive_saber"] is captured["saber"]
         assert captured["ran"] is True
         assert captured["closed"] is True
+        retention.assert_awaited_once_with(store, artifact_store, query_result_store)
+        assert lifecycle_events == ["closed", "retention"]
 
-    def test_resume_requires_configured_database_for_automatic_resume(self, capsys):
-        """Automatic resume stops before constructing a session for unknown DBs."""
+    def test_resume_maps_unavailable_database_sdk_error(self, capsys):
+        from sqlsaber import ThreadDatabaseUnavailableError
         from sqlsaber.cli.threads import resume
 
-        thread = Thread(
-            id="thread-missing-db",
-            database_name="external",
-            title="External DB",
-            created_at=1672531200.0,
-            ended_at=None,
-            last_activity_at=1672531200.0,
-            model_name="gpt-4",
-            extra_metadata=encode_thread_extra_metadata(database_selector="external"),
-        )
         store = MagicMock()
-        store.get_thread = AsyncMock(return_value=thread)
         store.get_thread_messages = AsyncMock(return_value=[])
 
-        class FakeDatabaseConfigManager:
-            def get_database(self, name: str):
-                _ = name
-                return None
+        class FakeSQLSaber:
+            @classmethod
+            async def resume(cls, thread_id, *, options, storage):
+                del cls, options, storage
+                raise ThreadDatabaseUnavailableError(thread_id, ("external",))
 
         with (
             patch("sqlsaber.threads.ThreadStorage", return_value=store),
+            patch("sqlsaber.SQLSaber", FakeSQLSaber),
+            patch("sqlsaber.cli.artifacts.cli_artifact_store", return_value=object()),
             patch(
-                "sqlsaber.config.database.DatabaseConfigManager",
-                FakeDatabaseConfigManager,
+                "sqlsaber.cli.query_results.cli_query_result_store",
+                return_value=object(),
             ),
-            patch("sqlsaber.session.SQLSaberSession") as mock_session,
+            pytest.raises(SystemExit) as exc_info,
         ):
-            with pytest.raises(SystemExit) as exc_info:
-                resume("thread-missing-db")
+            resume("thread-missing-db")
 
         assert exc_info.value.code == 1
-        mock_session.assert_not_called()
         store.get_thread_messages.assert_not_awaited()
         err = capsys.readouterr().err
         assert (

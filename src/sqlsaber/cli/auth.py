@@ -8,7 +8,7 @@ from typing import Annotated
 import cyclopts
 import keyring
 
-from sqlsaber.application.prompts import AsyncPrompter
+from sqlsaber.cli.prompts import AsyncPrompter
 from sqlsaber.cli.output import fail, fail_usage, out
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config import providers
@@ -34,7 +34,7 @@ def setup():
     Example:
         saber auth setup
     """
-    from sqlsaber.application.auth_setup import setup_auth
+    from sqlsaber.cli.workflows.auth_setup import setup_auth
 
     out(b.md("**SQLsaber Authentication Setup**"))
 
@@ -50,9 +50,7 @@ def setup():
 
     logger.info("auth.setup.start")
     configured, provider = asyncio.run(run_setup())
-    logger.info(
-        "auth.setup.complete", success=bool(configured), provider=str(provider)
-    )
+    logger.info("auth.setup.complete", success=bool(configured), provider=str(provider))
 
     if not configured:
         fail("no authentication was configured.")
@@ -96,7 +94,12 @@ def status():
         else:
             state = "not configured"
         rows.append({"provider": provider, "status": state})
-    out(b.table(rows, columns=(b.Column("provider", "Provider"), b.Column("status", "Status"))))
+    out(
+        b.table(
+            rows,
+            columns=(b.Column("provider", "Provider"), b.Column("status", "Status")),
+        )
+    )
     logger.info("auth.status.complete", method=str(auth_method))
 
 
@@ -155,11 +158,7 @@ def reset(
     api_key_present = bool(keyring.get_password(service, provider))
 
     if not api_key_present:
-        out(
-            b.warn(
-                f"No stored credentials found for {provider}. Nothing to reset."
-            )
-        )
+        out(b.warn(f"No stored credentials found for {provider}. Nothing to reset."))
         logger.info("auth.reset.nothing_to_reset", provider=provider)
         return
 

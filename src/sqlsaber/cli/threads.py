@@ -433,95 +433,103 @@ def resume(
     store = ThreadStorage()
 
     async def _run() -> None:
+        from sqlsaber import (
+            SQLSaber,
+            ThreadDatabaseRequiredError,
+            ThreadDatabaseUnavailableError,
+            ThreadNotFoundError,
+            ThreadResumeHistoryError,
+            ThreadResumeMetadataError,
+        )
         from sqlsaber.cli.artifacts import cli_artifact_store
         from sqlsaber.cli.interactive import InteractiveSession
         from sqlsaber.cli.query_results import cli_query_result_store
-        from sqlsaber.config.database import DatabaseConfigManager
+        from sqlsaber.cli.retention import run_cli_retention
         from sqlsaber.database.resolver import DatabaseResolutionError
         from sqlsaber.options import SQLSaberOptions
-        from sqlsaber.session import SQLSaberSession
-        from sqlsaber.threads.manager import ThreadManager
-        from sqlsaber.threads.metadata import resolve_thread_database_selector
 
-        thread = await store.get_thread(thread_id)
-        if not thread:
+        artifact_store = cli_artifact_store()
+        query_result_store = cli_query_result_store()
+        try:
+            saber = await SQLSaber.resume(
+                thread_id,
+                options=SQLSaberOptions(
+                    database=database,
+                    artifact_store=artifact_store,
+                    query_result_store=query_result_store,
+                ),
+                storage=store,
+            )
+        except ThreadNotFoundError:
             logger.error("threads.cli.resume.not_found", thread_id=thread_id)
             fail(
                 f"thread not found: {thread_id}\n  List threads with: saber threads list"
             )
-        if database is not None:
-            db_selector = database
-        else:
-            try:
-                db_selector = resolve_thread_database_selector(
-                    database_name=thread.database_name,
-                    extra_metadata=thread.extra_metadata,
-                )
-            except ValueError as e:
-                logger.error(
-                    "threads.cli.resume.metadata_invalid",
-                    thread_id=thread_id,
-                    error=str(e),
-                )
-                fail(
-                    f"invalid thread metadata: {e}\n"
-                    f"  Retry with: saber threads resume {thread_id} --database DATABASE"
-                )
-        if not db_selector:
-            logger.error("threads.cli.resume.no_database", thread_id=thread_id)
-            fail(
-                "no database is specified or stored with this thread.\n"
-                f"  Retry with: saber threads resume {thread_id} --database DATABASE"
-            )
-        if database is None:
-            config_mgr = DatabaseConfigManager()
-            selectors = [db_selector] if isinstance(db_selector, str) else db_selector
-            missing = [
-                selector
-                for selector in selectors
-                if config_mgr.get_database(selector) is None
-            ]
-            if missing:
-                logger.error(
-                    "threads.cli.resume.database_not_configured",
-                    thread_id=thread_id,
-                    missing=missing,
-                )
-                fail(
-                    "the thread database is not configured for automatic resume.\n"
-                    f"  Retry with: saber threads resume {thread_id} --database DATABASE"
-                )
-        history = await store.get_thread_messages(thread_id)
-        session_thread_manager = ThreadManager(
-            initial_thread_id=thread_id, storage=store
-        )
-
-        sqlsaber_session: SQLSaberSession | None = None
-        try:
-            sqlsaber_session = SQLSaberSession(
-                SQLSaberOptions(
-                    database=db_selector,
-                    thread_manager=session_thread_manager,
-                    artifact_store=cli_artifact_store(),
-                    query_result_store=cli_query_result_store(),
-                )
-            )
-        except DatabaseResolutionError as e:
+        except ThreadResumeHistoryError as exc:
             logger.error(
-                "threads.cli.resume.resolve_failed", thread_id=thread_id, error=str(e)
+                "threads.cli.resume.history_invalid",
+                thread_id=thread_id,
+                error=exc.reason,
+            )
+            fail(f"thread history cannot be resumed: {exc.reason}")
+        except ThreadDatabaseUnavailableError as exc:
+            logger.error(
+                "threads.cli.resume.database_not_configured",
+                thread_id=thread_id,
+                missing=exc.database_names,
             )
             fail(
-                f"Error resolving database: {e}\n"
+                "the thread database is not configured for automatic resume.\n"
+                f"  Retry with: saber threads resume {thread_id} --database DATABASE"
+            )
+        except ThreadDatabaseRequiredError as exc:
+            if (
+                exc.reason
+                == "No configured database selector is stored for this thread."
+            ):
+                logger.error("threads.cli.resume.no_database", thread_id=thread_id)
+                fail(
+                    "no database is specified or stored with this thread.\n"
+                    f"  Retry with: saber threads resume {thread_id} --database DATABASE"
+                )
+            logger.error(
+                "threads.cli.resume.metadata_invalid",
+                thread_id=thread_id,
+                error=exc.reason,
+            )
+            fail(
+                f"invalid thread metadata: {exc.reason}\n"
+                f"  Retry with: saber threads resume {thread_id} --database DATABASE"
+            )
+        except ThreadResumeMetadataError as exc:
+            logger.error(
+                "threads.cli.resume.metadata_invalid",
+                thread_id=thread_id,
+                error=exc.reason,
+            )
+            fail(
+                f"invalid thread metadata: {exc.reason}\n"
+                f"  Retry with: saber threads resume {thread_id} --database DATABASE"
+            )
+        except DatabaseResolutionError as exc:
+            logger.error(
+                "threads.cli.resume.resolve_failed",
+                thread_id=thread_id,
+                error=str(exc),
+            )
+            fail(
+                f"Error resolving database: {exc}\n"
                 f"  Retry with: saber threads resume {thread_id} --database DATABASE"
             )
 
         try:
+            history = await store.get_thread_messages(thread_id)
             from sqlsaber.render.terminal import TerminalSurface
 
             if isinstance(cli_out(), TerminalSurface):
-                out(b.panel((b.md(f"Thread: {thread.id}"),), role="primary"))
+                out(b.panel((b.md(f"Thread: {thread_id}"),), role="primary"))
             else:
-                out(b.md(f"# Thread: {thread.id}"))
+                out(b.md(f"# Thread: {thread_id}"))
             from sqlsaber.cli.query_results import hydrate_query_result_contents
 
             from sqlsaber.query_result_resolution import (
@@ -532,26 +540,16 @@ def resume(
                 reference.descriptor is not None
                 for reference in query_result_references_from_messages(history)
             ):
-                result_store = getattr(
-                    sqlsaber_session,
-                    "query_result_store",
-                    cli_query_result_store(),
-                )
                 hydrated, unavailable = await hydrate_query_result_contents(
-                    history, store=result_store
+                    history, store=saber.query_result_store
                 )
             else:
                 hydrated, unavailable = {}, set()
             from sqlsaber.cli.artifacts import resolve_cli_artifact_publications
 
-            artifact_store = getattr(sqlsaber_session, "artifact_store", None)
-            resolved_artifacts = (
-                await resolve_cli_artifact_publications(
-                    history,
-                    store=artifact_store,
-                )
-                if artifact_store is not None
-                else {}
+            resolved_artifacts = await resolve_cli_artifact_publications(
+                history,
+                store=artifact_store,
             )
             artifact_unavailable = {
                 artifact.id
@@ -567,13 +565,13 @@ def resume(
                 unavailable_artifacts=artifact_unavailable,
                 resolved_artifacts=resolved_artifacts,
             )
-            interactive_session = InteractiveSession(
-                session=sqlsaber_session,
-                initial_history=history,
-            )
+            interactive_session = InteractiveSession(saber)
             await interactive_session.run()
         finally:
-            await sqlsaber_session.close()
+            try:
+                await saber.close()
+            finally:
+                await run_cli_retention(store, artifact_store, query_result_store)
             out(b.success("Goodbye!"))
             logger.info("threads.cli.resume.closed")
 

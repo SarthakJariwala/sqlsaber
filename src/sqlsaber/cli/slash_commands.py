@@ -1,14 +1,13 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from sqlsaber.config.settings import ThinkingLevel
 from sqlsaber.render import blocks as b
 from sqlsaber.render.surface import Surface
 
 if TYPE_CHECKING:
-    from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
+    from sqlsaber import SQLSaber
     from sqlsaber.cli.usage import SessionUsage
-    from sqlsaber.threads.manager import ThreadManager
 
 THINKING_LEVELS = {"minimal", "low", "medium", "high", "maximum"}
 
@@ -18,9 +17,7 @@ class CommandContext:
     """Context passed to slash command handlers."""
 
     surface: Surface
-    agent: "SQLSaberAgent"
-    thread_manager: "ThreadManager"
-    on_clear_history: Callable[[], None]
+    saber: "SQLSaber"
     session_usage: "SessionUsage | None" = None
 
 
@@ -63,7 +60,7 @@ class SlashCommandProcessor:
 
     async def _handle_exit(self, context: CommandContext) -> CommandResult:
         """Handle exit commands."""
-        ended_thread_id = await context.thread_manager.end_current_thread()
+        ended_thread_id = await context.saber.end_thread()
         if ended_thread_id:
             hint = f"saber threads resume {ended_thread_id}"
             context.surface.emit(
@@ -73,8 +70,7 @@ class SlashCommandProcessor:
 
     async def _handle_clear(self, context: CommandContext) -> CommandResult:
         """Handle /clear command."""
-        context.on_clear_history()
-        await context.thread_manager.clear_current_thread()
+        await context.saber.new_thread()
         context.surface.emit(b.success("Conversation history cleared."))
         return CommandResult(handled=True)
 
@@ -96,39 +92,33 @@ class SlashCommandProcessor:
             return await self._show_thinking_status(context)
 
         if arg == "on":
-            context.agent.set_thinking(enabled=True)
-            level = context.agent.thinking_level
-            context.surface.emit(
-                b.success(f"Thinking: enabled ({level.value})")
-            )
+            state = context.saber.set_thinking(enabled=True)
+            context.surface.emit(b.success(f"Thinking: enabled ({state.level.value})"))
             return CommandResult(handled=True)
 
         if arg == "off":
-            context.agent.set_thinking(enabled=False)
+            context.saber.set_thinking(enabled=False)
             context.surface.emit(b.success("Thinking: disabled"))
             return CommandResult(handled=True)
 
         if arg in THINKING_LEVELS:
             level = ThinkingLevel(arg)
-            context.agent.set_thinking(enabled=True, level=level)
-            context.surface.emit(
-                b.success(f"Thinking: enabled ({level.value})")
-            )
+            context.saber.set_thinking(enabled=True, level=level)
+            context.surface.emit(b.success(f"Thinking: enabled ({level.value})"))
             return CommandResult(handled=True)
 
         valid_args = ", ".join(sorted(THINKING_LEVELS | {"on", "off"}))
-        context.surface.emit(
-            b.warn(f"Invalid argument. Use: /thinking [{valid_args}]")
-        )
+        context.surface.emit(b.warn(f"Invalid argument. Use: /thinking [{valid_args}]"))
         return CommandResult(handled=True)
 
     async def _show_thinking_status(self, context: CommandContext) -> CommandResult:
         """Show current thinking status and level."""
-        enabled = context.agent.thinking_enabled
-        level = context.agent.thinking_level
+        thinking = context.saber.info.thinking
 
-        if enabled:
-            context.surface.emit(b.md(f"Thinking: enabled ({level.value})", role="info"))
+        if thinking.enabled:
+            context.surface.emit(
+                b.md(f"Thinking: enabled ({thinking.level.value})", role="info")
+            )
         else:
             context.surface.emit(b.md("Thinking: disabled", role="info"))
 
@@ -148,7 +138,10 @@ class SlashCommandProcessor:
         if not goal:
             context.surface.emit(
                 b.warn("Usage: /handoff <goal>"),
-                b.md("Example: `/handoff now optimize this query for performance`", role="muted"),
+                b.md(
+                    "Example: `/handoff now optimize this query for performance`",
+                    role="muted",
+                ),
             )
             return CommandResult(handled=True)
 

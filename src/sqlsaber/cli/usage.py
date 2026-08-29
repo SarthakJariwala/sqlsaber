@@ -2,9 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
 
-from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.usage import RequestUsage, RunUsage
 
 
@@ -114,21 +112,6 @@ def calculate_run_cost_usd(
         return float(result.total_price)
     except Exception:
         return None
-
-
-def request_usages_from_messages(
-    messages: Sequence[ModelMessage],
-) -> list[RequestUsage]:
-    """Extract per-request usage entries from model response messages."""
-    return [message.usage for message in messages if isinstance(message, ModelResponse)]
-
-
-def request_usages_from_run_result(run_result: Any) -> list[RequestUsage]:
-    """Extract per-request usage entries from a Pydantic AI run result."""
-    new_messages = getattr(run_result, "new_messages", None)
-    if not callable(new_messages):
-        return []
-    return request_usages_from_messages(new_messages())
 
 
 def format_cost_usd(cost_usd: float | None) -> str:

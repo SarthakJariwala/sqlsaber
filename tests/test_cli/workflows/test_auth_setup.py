@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from sqlsaber.application.auth_setup import setup_auth
+from sqlsaber.cli.workflows.auth_setup import setup_auth
 
 
 class DummyPrompter:
@@ -60,7 +60,9 @@ async def test_setup_auth_resets_existing_api_key(monkeypatch: pytest.MonkeyPatc
 
     configure_api_key = AsyncMock(return_value=True)
 
-    with patch("sqlsaber.application.auth_setup.configure_api_key", configure_api_key):
+    with patch(
+        "sqlsaber.cli.workflows.auth_setup.configure_api_key", configure_api_key
+    ):
         success, provider = await setup_auth(
             prompter=prompter,
             auth_manager=auth_manager,

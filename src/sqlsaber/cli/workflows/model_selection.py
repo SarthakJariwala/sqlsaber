@@ -1,6 +1,6 @@
 """Shared model selection logic for onboarding and CLI."""
 
-from sqlsaber.application.prompts import Choice, Prompter
+from sqlsaber.cli.prompts import Choice, Prompter
 from sqlsaber.cli.models import FetchedModel, ModelManager
 from sqlsaber.cli.output import out
 from sqlsaber.render import blocks as b
