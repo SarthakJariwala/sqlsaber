@@ -1628,6 +1628,49 @@ class TestDangerousModeTautologyHardening:
         assert result.allowed
         assert result.query_type == "dml"
 
+    def test_analysis_cache_object_id_collisions_do_not_change_result(
+        self, monkeypatch
+    ):
+        """Cache entries must verify AST identity when object IDs are recycled."""
+        monkeypatch.setattr(sql_guard_module, "id", lambda _value: 1, raising=False)
+
+        result = validate_sql(
+            "DELETE FROM users u WHERE u.id = 1 OR TRUE",
+            "postgres",
+            allow_dangerous=True,
+        )
+
+        assert not result.allowed
+        assert result.reason
+        assert "tautological WHERE" in result.reason
+
+    def test_analysis_cache_does_not_retain_simple_case_copies(self):
+        """Temporary CASE comparison trees should bypass identity caches."""
+        when_clauses = " ".join(f"WHEN {value} THEN FALSE" for value in range(50))
+        sql = f"DELETE FROM users WHERE CASE id {when_clauses} ELSE TRUE END"
+        statement = sqlglot.parse_one(sql, read="postgres")
+        where = statement.args.get("where")
+        assert isinstance(where, exp.Where)
+        original_expressions = tuple(where.this.walk())
+
+        with sql_guard_module._analysis_session():
+            sql_guard_module._predicate_truthiness_possibilities(
+                where.this,
+                "postgres",
+                sql,
+            )
+            context = sql_guard_module._ANALYSIS_CONTEXT.get()
+            assert context is not None
+            cached_expressions = tuple(
+                entry[0] for entry in context.predicate_truthiness_cache.values()
+            )
+
+        assert cached_expressions
+        assert all(
+            any(cached is original for original in original_expressions)
+            for cached in cached_expressions
+        )
+
     def test_delete_with_correlated_is_not_false_exists_predicate_allowed(self):
         """IS NOT FALSE wrappers that can filter correlated rows should be allowed."""
         result = validate_sql(
