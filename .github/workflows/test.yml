@@ -33,5 +33,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --all-extras --dev
 
+      - name: Run type check
+        if: runner.os == 'Linux'
+        run: uvx ty check src/
+
       - name: Run tests
         run: uv run python -m pytest

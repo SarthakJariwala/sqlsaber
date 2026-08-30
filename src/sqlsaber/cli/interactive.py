@@ -24,6 +24,7 @@ from sqlsaber.render import blocks as b
 
 if TYPE_CHECKING:
     from sqlsaber import SQLSaber, SQLSaberResult
+    from sqlsaber.config.settings import ThinkingLevel
 
 QUERY_CANCEL_GRACE_SECONDS = 0.1
 
@@ -374,14 +375,15 @@ class InteractiveSession:
             loop.call_soon_threadsafe(lambda: asyncio.create_task(submit_query()))
             return True
 
+        def on_thinking_change(enabled: bool, level: ThinkingLevel | None) -> None:
+            self.saber.set_thinking(enabled=enabled, level=level)
+
         def open_command_palette(app: ChatApp) -> None:
             info = self.saber.info
             app.show_command_palette(
                 thinking_enabled=info.thinking.enabled,
                 thinking_level=info.thinking.level,
-                on_thinking_change=lambda enabled, level: self.saber.set_thinking(
-                    enabled=enabled, level=level
-                ),
+                on_thinking_change=on_thinking_change,
                 model_name=info.model_name,
                 database_name=info.primary_database_name,
             )

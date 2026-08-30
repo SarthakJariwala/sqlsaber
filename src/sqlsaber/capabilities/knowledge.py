@@ -77,7 +77,7 @@ class Knowledge(SqlSaberCapability):
                 function = wrap_add_db_name(tool, tuple(registry.names()))
             else:
                 function = wrap_strip_db_name(tool)
-        self._toolset.add_function(function, name=tool.name, takes_ctx=False)
+        self._toolset.tool_plain(name=tool.name)(function)
 
     @property
     def display_specs(self) -> Mapping[str, Tool]:
