@@ -441,8 +441,12 @@ class _AnalysisContext:
     """Per-validation mutable analysis state (budget + memoization caches)."""
 
     remaining_steps: int
-    predicate_truthiness_cache: dict[tuple[int, str, int], set[bool | None]]
-    simplify_gate_cache: dict[int, bool]
+    cache_enabled: bool
+    predicate_truthiness_cache: dict[
+        tuple[int, str, int],
+        tuple[exp.Expression, str | None, set[bool | None]],
+    ]
+    simplify_gate_cache: dict[int, tuple[exp.Expression, bool]]
 
 
 _ANALYSIS_CONTEXT: ContextVar[_AnalysisContext | None] = ContextVar(
@@ -606,6 +610,7 @@ def _analysis_session(max_steps: int | None = None):
     token = _ANALYSIS_CONTEXT.set(
         _AnalysisContext(
             remaining_steps=max_steps,
+            cache_enabled=True,
             predicate_truthiness_cache={},
             simplify_gate_cache={},
         )
@@ -614,6 +619,22 @@ def _analysis_session(max_steps: int | None = None):
         yield
     finally:
         _ANALYSIS_CONTEXT.reset(token)
+
+
+@contextmanager
+def _analysis_cache_disabled():
+    """Avoid retaining short-lived AST copies in per-validation caches."""
+    context = _ANALYSIS_CONTEXT.get()
+    if context is None:
+        yield
+        return
+
+    was_enabled = context.cache_enabled
+    context.cache_enabled = False
+    try:
+        yield
+    finally:
+        context.cache_enabled = was_enabled
 
 
 def _predicate_expression_complexity(
@@ -660,8 +681,10 @@ def _should_attempt_predicate_simplify(expression: exp.Expression) -> bool:
     context = _ANALYSIS_CONTEXT.get()
     cache_key = id(expression)
 
-    if context is not None and cache_key in context.simplify_gate_cache:
-        return context.simplify_gate_cache[cache_key]
+    if context is not None and context.cache_enabled:
+        cached = context.simplify_gate_cache.get(cache_key)
+        if cached is not None and cached[0] is expression:
+            return cached[1]
 
     node_count, max_depth, boolean_operator_count = _predicate_expression_complexity(
         expression
@@ -672,8 +695,10 @@ def _should_attempt_predicate_simplify(expression: exp.Expression) -> bool:
         and boolean_operator_count <= PREDICATE_SIMPLIFY_MAX_BOOLEAN_OPERATORS
     )
 
-    if context is not None:
-        context.simplify_gate_cache[cache_key] = should_simplify
+    if context is not None and context.cache_enabled:
+        # Keep the expression alive and verify identity so a recycled object ID
+        # cannot return a result cached for a different temporary AST node.
+        context.simplify_gate_cache[cache_key] = (expression, should_simplify)
 
     return should_simplify
 
@@ -2376,6 +2401,7 @@ def _case_predicate_truthiness_possibilities(
             break
 
         condition_expression = if_clause.this
+        temporary_condition = False
         if isinstance(case_operand, exp.Expression) and isinstance(
             condition_expression,
             exp.Expression,
@@ -2384,13 +2410,22 @@ def _case_predicate_truthiness_possibilities(
                 this=case_operand.copy(),
                 expression=condition_expression.copy(),
             )
+            temporary_condition = True
 
         if isinstance(condition_expression, exp.Expression):
-            condition_outcomes = _predicate_truthiness_possibilities(
-                condition_expression,
-                dialect,
-                source_sql,
-            )
+            if temporary_condition:
+                with _analysis_cache_disabled():
+                    condition_outcomes = _predicate_truthiness_possibilities(
+                        condition_expression,
+                        dialect,
+                        source_sql,
+                    )
+            else:
+                condition_outcomes = _predicate_truthiness_possibilities(
+                    condition_expression,
+                    dialect,
+                    source_sql,
+                )
         else:
             condition_outcomes = {True, False, None}
 
@@ -2607,15 +2642,21 @@ def _predicate_truthiness_possibilities(
     source_key = id(source_sql) if source_sql is not None else 0
     cache_key = (id(expr), dialect, source_key)
 
-    if context is not None:
+    if context is not None and context.cache_enabled:
         cached = context.predicate_truthiness_cache.get(cache_key)
-        if cached is not None:
-            return cached
+        if cached is not None and cached[0] is expr and cached[1] is source_sql:
+            return cached[2]
 
     outcomes = _predicate_truthiness_possibilities_uncached(expr, dialect, source_sql)
 
-    if context is not None:
-        context.predicate_truthiness_cache[cache_key] = outcomes
+    if context is not None and context.cache_enabled:
+        # Retain and check both objects while the entry is cached so recycled
+        # IDs cannot return truthiness from a different expression or SQL text.
+        context.predicate_truthiness_cache[cache_key] = (
+            expr,
+            source_sql,
+            outcomes,
+        )
 
     return outcomes
 
@@ -3126,14 +3167,15 @@ def _predicate_effectively_references_target_symbols(
     if normalized_expression is expression:
         return True
 
-    return _predicate_effectively_references_target_symbols_impl(
-        normalized_expression,
-        target_symbols,
-        local_symbols,
-        dialect,
-        source_sql,
-        allow_unqualified_outer,
-    )
+    with _analysis_cache_disabled():
+        return _predicate_effectively_references_target_symbols_impl(
+            normalized_expression,
+            target_symbols,
+            local_symbols,
+            dialect,
+            source_sql,
+            allow_unqualified_outer,
+        )
 
 
 def _is_exists_subquery_correlated_to_target(
@@ -3240,6 +3282,14 @@ def _case_when_condition_outcomes(
     condition_expression = _case_when_condition_expression(case_expression, if_clause)
     if not isinstance(condition_expression, exp.Expression):
         return {True, False, None}
+
+    if isinstance(case_expression.args.get("this"), exp.Expression):
+        with _analysis_cache_disabled():
+            return _predicate_truthiness_possibilities(
+                condition_expression,
+                dialect,
+                source_sql,
+            )
 
     return _predicate_truthiness_possibilities(
         condition_expression,
