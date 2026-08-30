@@ -335,6 +335,41 @@ def test_status_and_footer_render_within_narrow_terminal_width() -> None:
     assert all(visible_width(line) <= terminal.columns for line in lines)
 
 
+def test_chat_app_clears_terminal_on_layout_shrink() -> None:
+    terminal = FakeTerminal(columns=80, rows=18)
+
+    def open_palette(app: ChatApp) -> None:
+        app.show_command_palette(
+            thinking_enabled=False,
+            thinking_level=ThinkingLevel.MEDIUM,
+        )
+
+    app = build_chat_app(
+        terminal=terminal,
+        on_submit=lambda text: None,
+        on_open_command_palette=open_palette,
+    )
+    app.tui.start()
+    editor_height = len(app.tui.previous_lines)
+
+    terminal.send_input("/")
+    app.tui.flush_render()
+    palette_height = len(app.tui.previous_lines)
+
+    assert app.is_command_palette_open() is True
+    assert palette_height > editor_height
+    redraws_after_open = app.tui.full_redraws
+
+    terminal.send_input("\x1b")
+    app.tui.flush_render()
+    restored_editor_height = len(app.tui.previous_lines)
+
+    assert app.is_command_palette_open() is False
+    assert app.editor.focused is True
+    assert restored_editor_height == editor_height
+    assert app.tui.full_redraws == redraws_after_open + 1
+
+
 def test_bare_slash_opens_command_palette_without_editor_autocomplete() -> None:
     terminal = FakeTerminal(columns=80, rows=18)
     submitted: list[str] = []
