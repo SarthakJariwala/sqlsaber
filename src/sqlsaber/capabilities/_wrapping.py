@@ -27,7 +27,7 @@ def wrap_strip_db_name(tool: Tool) -> Callable[..., Awaitable[str]]:
         async def wrapper(*args, **kwargs) -> str:
             return await raw(*args, **kwargs)
 
-    wrapper.__signature__ = new_sig  # type: ignore[attr-defined]
+    setattr(wrapper, "__signature__", new_sig)
     wrapper.__name__ = getattr(raw, "__name__", tool.name)
     wrapper.__doc__ = raw.__doc__
     wrapper.__annotations__ = {
@@ -44,7 +44,7 @@ def wrap_add_db_name(
     """Wrap a tool so its public schema requires ``db_name: Literal[...]``."""
     raw = tool.execute
     raw_sig = inspect.signature(raw)
-    db_literal = Literal[names]  # type: ignore[valid-type]
+    db_literal = Literal.__getitem__(names)
 
     new_params = []
     for name, parameter in raw_sig.parameters.items():
@@ -78,7 +78,7 @@ def wrap_add_db_name(
         async def wrapper(*args, db_name, **kwargs) -> str:
             return await raw(*args, db_name=db_name, **kwargs)
 
-    wrapper.__signature__ = new_sig  # type: ignore[attr-defined]
+    setattr(wrapper, "__signature__", new_sig)
     wrapper.__name__ = getattr(raw, "__name__", tool.name)
     wrapper.__doc__ = docstring_with_db_name(raw.__doc__)
     wrapper.__annotations__ = {
