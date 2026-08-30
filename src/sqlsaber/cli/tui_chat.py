@@ -723,7 +723,7 @@ def build_chat_app(
     term = terminal if terminal is not None else _default_process_terminal()
     tui = TUI(term)
     tui.set_show_hardware_cursor(True)
-    tui.set_clear_on_shrink(False)
+    tui.set_clear_on_shrink(True)
 
     theme = _build_tui_theme()
     chat_container = Container()
