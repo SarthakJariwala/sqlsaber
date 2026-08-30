@@ -7,6 +7,7 @@ import argparse
 import datetime as dt
 import fcntl
 import json
+import math
 import os
 import pty
 import re
@@ -20,7 +21,9 @@ import sys
 import termios
 import time
 import tomllib
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 ROOT = Path(__file__).resolve().parents[4]
 BASE = ROOT / ".pi" / "verification" / "sqlsaber"
@@ -76,7 +79,11 @@ def git_revision() -> str:
 def run_env(run_id: str) -> dict[str, str]:
     state = state_dir(run_id)
     home = state / "home"
-    env = os.environ.copy()
+    env = {
+        name: value
+        for name, value in os.environ.items()
+        if not name.startswith("SQLSABER_")
+    }
     env.update(
         {
             "HOME": str(home),
@@ -87,6 +94,7 @@ def run_env(run_id: str) -> dict[str, str]:
             "SQLSABER_LOG_FILE": str(state / "sqlsaber.log"),
             "SQLSABER_SKIP_VERSION_CHECK": "1",
             "SQLSABER_VERIFY_RUN_ID": run_id,
+            "PYTHON_KEYRING_BACKEND": "keyring.backends.null.Keyring",
             "NO_COLOR": "1",
             "TERM": "xterm-256color",
             "UV_NO_PROGRESS": "1",
@@ -151,15 +159,14 @@ def launch(run_id: str) -> None:
             f"Run {run_id!r} already exists. Use a new RUN_ID so proof cannot mix."
         )
 
-    state.mkdir(parents=True)
-    evidence.mkdir(parents=True)
-    for name in ("config", "data", "cache", "state"):
-        (state / "home" / name).mkdir(parents=True)
-
-    fixture = state / "fixtures" / "verification.db"
-    seed_fixture(fixture)
-
     try:
+        state.mkdir(parents=True)
+        evidence.mkdir(parents=True)
+        for name in ("config", "data", "cache", "state"):
+            (state / "home" / name).mkdir(parents=True)
+
+        fixture = state / "fixtures" / "verification.db"
+        seed_fixture(fixture)
         subprocess.run(["uv", "sync", "--locked"], cwd=ROOT, check=True)
         expected = project_version()
         actual = command_output(["uv", "run", "saber", "--version"], run_id)
@@ -194,6 +201,7 @@ def launch(run_id: str) -> None:
         print(f"evidence: {evidence}")
     except BaseException:
         shutil.rmtree(state, ignore_errors=True)
+        shutil.rmtree(evidence, ignore_errors=True)
         raise
 
 
@@ -240,15 +248,20 @@ def doctor(run_id: str) -> None:
             errors.append(f"{kind} path escapes run state: {path}")
 
     active_path = state / "active.json"
-    if active_path.exists():
-        active = json.loads(active_path.read_text(encoding="utf-8"))
-        pid = int(active["pid"])
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            active_path.unlink(missing_ok=True)
-        else:
-            errors.append(f"run is already being driven by PID {pid}")
+    with run_lock(state):
+        if active_lock_path(active_path).exists():
+            try:
+                active = json.loads(active_path.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                release_active(active_path)
+            else:
+                pid = int(active["pid"])
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    release_active(active_path)
+                else:
+                    errors.append(f"run is already being driven by PID {pid}")
 
     credential_names = [
         name
@@ -258,8 +271,8 @@ def doctor(run_id: str) -> None:
             "GOOGLE_API_KEY",
             "GROQ_API_KEY",
             "MISTRAL_API_KEY",
-            "CO_API_KEY",
-            "HF_TOKEN",
+            "COHERE_API_KEY",
+            "HUGGINGFACE_API_KEY",
         )
         if os.getenv(name)
     ]
@@ -272,6 +285,7 @@ def doctor(run_id: str) -> None:
         f"data root: {paths['data']}",
         f"log root: {paths['log']}",
         "server: not applicable; each SQLsaber command is a short-lived process",
+        "keyring backend: keyring.backends.null.Keyring",
         "model credentials present: "
         + (", ".join(credential_names) if credential_names else "none"),
     ]
@@ -313,13 +327,95 @@ def terminate_process_group(pid: int) -> None:
         pass
 
 
+def command_text(command: list[str]) -> str:
+    return " ".join(subprocess.list2cmdline([part]) for part in command)
+
+
+@contextmanager
+def run_lock(state: Path) -> Iterator[None]:
+    lock_path = state / "run.lock"
+    with lock_path.open("a", encoding="utf-8") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+def atomic_write(path: Path, text: str) -> None:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8") as file:
+            file.write(text)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def write_new(path: Path, text: str) -> None:
+    try:
+        with path.open("x", encoding="utf-8") as file:
+            file.write(text)
+    except FileExistsError:
+        raise SystemExit(
+            f"Evidence path already exists: {path}. Use a new evidence name."
+        ) from None
+
+
+def active_lock_path(active_path: Path) -> Path:
+    return active_path.with_name("active.lock")
+
+
+def reserve_active(active_path: Path, command: list[str]) -> None:
+    lock_path = active_lock_path(active_path)
+    try:
+        fd = os.open(lock_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise SystemExit(
+            "This RUN_ID already has an active command. Run doctor or cleanup."
+        ) from None
+    os.close(fd)
+    try:
+        write_active(active_path, os.getpid(), command, starting=True)
+    except BaseException:
+        lock_path.unlink(missing_ok=True)
+        raise
+
+
+def write_active(
+    active_path: Path, pid: int, command: list[str], *, starting: bool = False
+) -> None:
+    payload = {"pid": pid, "command": command}
+    if starting:
+        payload["starting"] = True
+    atomic_write(active_path, json.dumps(payload) + "\n")
+
+
+def release_active(active_path: Path) -> None:
+    active_path.unlink(missing_ok=True)
+    active_lock_path(active_path).unlink(missing_ok=True)
+
+
+def positive_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a finite number greater than zero")
+    return parsed
+
+
+def nonnegative_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed < 0:
+        raise argparse.ArgumentTypeError("must be a finite non-negative number")
+    return parsed
+
+
 def drive(
     run_id: str,
     evidence_name: str,
     command: list[str],
     timeout: float,
-    input_text: str | None,
-    input_delay: float,
+    input_events: list[tuple[float, str]],
 ) -> None:
     load_metadata(run_id)
     if command and command[0] == "--":
@@ -332,40 +428,58 @@ def drive(
         raise SystemExit("--evidence must be a relative path without '..'")
     output_path = evidence_dir(run_id) / relative
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.exists():
+        raise SystemExit(
+            f"Evidence path already exists: {output_path}. Use a new evidence name."
+        )
 
     state = state_dir(run_id)
     active_path = state / "active.json"
-    if active_path.exists():
-        raise SystemExit(
-            "This RUN_ID already has an active drive. Run doctor or cleanup."
-        )
+    with run_lock(state):
+        reserve_active(active_path, command)
+        try:
+            pid, master_fd = pty.fork()
+        except BaseException:
+            release_active(active_path)
+            raise
+        if pid == 0:
+            try:
+                os.chdir(ROOT)
+                os.execvpe(command[0], command, run_env(run_id))
+            except BaseException as exc:
+                os.write(
+                    sys.stderr.fileno(), f"failed to start command: {exc}\n".encode()
+                )
+                os._exit(127)
 
-    pid, master_fd = pty.fork()
-    if pid == 0:
-        os.chdir(ROOT)
-        os.execvpe(command[0], command, run_env(run_id))
-
-    winsize = struct.pack("HHHH", 40, 120, 0, 0)
-    fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
-    active_path.write_text(
-        json.dumps({"pid": pid, "command": command}) + "\n", encoding="utf-8"
-    )
+        try:
+            winsize = struct.pack("HHHH", 40, 120, 0, 0)
+            fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+            write_active(active_path, pid, command)
+        except BaseException:
+            terminate_process_group(pid)
+            release_active(active_path)
+            os.close(master_fd)
+            raise
 
     started = dt.datetime.now(dt.UTC).isoformat()
     chunks: list[bytes] = []
-    deadline = time.monotonic() + timeout
-    send_at = time.monotonic() + input_delay if input_text is not None else None
-    sent = input_text is None
+    started_at = time.monotonic()
+    deadline = started_at + timeout
+    pending_events = list(input_events)
     status: int | None = None
+    timed_out = False
+    interrupted: BaseException | None = None
     try:
         while True:
             now = time.monotonic()
-            if not sent and send_at is not None and now >= send_at:
-                os.write(master_fd, input_text.encode())
-                sent = True
+            while pending_events and now - started_at >= pending_events[0][0]:
+                _, text = pending_events.pop(0)
+                os.write(master_fd, text.encode())
             if now >= deadline:
+                timed_out = True
                 terminate_process_group(pid)
-                raise TimeoutError(f"command exceeded {timeout:g} seconds")
+                break
 
             readable, _, _ = select.select([master_fd], [], [], 0.1)
             if readable:
@@ -393,30 +507,160 @@ def drive(
                     chunks.append(data)
                     os.write(sys.stdout.fileno(), data)
                 break
-    except BaseException:
+    except BaseException as exc:
+        interrupted = exc
         terminate_process_group(pid)
-        raise
     finally:
-        active_path.unlink(missing_ok=True)
+        release_active(active_path)
         os.close(master_fd)
 
-    assert status is not None
-    exit_code = os.waitstatus_to_exitcode(status)
-    command_text = " ".join(subprocess.list2cmdline([part]) for part in command)
+    if timed_out:
+        exit_code = 124
+    elif interrupted is not None:
+        exit_code = 130 if isinstance(interrupted, KeyboardInterrupt) else 1
+    else:
+        assert status is not None
+        exit_code = os.waitstatus_to_exitcode(status)
     body = b"".join(chunks).decode("utf-8", errors="replace")
     transcript = (
         f"run_id: {run_id}\n"
         f"started_at: {started}\n"
-        f"command: {command_text}\n"
+        f"command: {command_text(command)}\n"
         "--- terminal output ---\n"
         f"{clean_terminal(body)}"
         "--- result ---\n"
         f"exit_code: {exit_code}\n"
+        f"timed_out: {str(timed_out).lower()}\n"
+        f"interrupted: {str(interrupted is not None).lower()}\n"
     )
-    output_path.write_text(transcript, encoding="utf-8")
+    write_new(output_path, transcript)
+    if interrupted is not None:
+        raise interrupted
     print(f"\nproof: {output_path}")
+    if timed_out:
+        raise TimeoutError(f"command exceeded {timeout:g} seconds")
     if exit_code != 0:
         raise SystemExit(exit_code)
+
+
+def stop_popen(process: subprocess.Popen[bytes]) -> tuple[bytes, bytes]:
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        return process.communicate(timeout=3)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        return process.communicate()
+
+
+def with_trailing_newline(text: str) -> str:
+    return text if not text or text.endswith("\n") else text + "\n"
+
+
+def run_non_tty(
+    run_id: str,
+    evidence_name: str,
+    command: list[str],
+    timeout: float,
+) -> None:
+    load_metadata(run_id)
+    if command and command[0] == "--":
+        command = command[1:]
+    if not command:
+        raise SystemExit("run requires a command after --")
+
+    relative = Path(evidence_name)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise SystemExit("--evidence must be a relative path without '..'")
+    output_path = evidence_dir(run_id) / relative
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.exists():
+        raise SystemExit(
+            f"Evidence path already exists: {output_path}. Use a new evidence name."
+        )
+
+    state = state_dir(run_id)
+    active_path = state / "active.json"
+    with run_lock(state):
+        reserve_active(active_path, command)
+        try:
+            process = subprocess.Popen(
+                command,
+                cwd=ROOT,
+                env=run_env(run_id),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+            )
+            write_active(active_path, process.pid, command)
+        except BaseException:
+            release_active(active_path)
+            raise
+    started = dt.datetime.now(dt.UTC).isoformat()
+    timed_out = False
+    interrupted: BaseException | None = None
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        stdout, stderr = stop_popen(process)
+    except BaseException as exc:
+        interrupted = exc
+        stdout, stderr = stop_popen(process)
+    finally:
+        release_active(active_path)
+
+    stdout_text = stdout.decode("utf-8", errors="replace")
+    stderr_text = stderr.decode("utf-8", errors="replace")
+    transcript = (
+        f"run_id: {run_id}\n"
+        f"started_at: {started}\n"
+        f"command: {command_text(command)}\n"
+        "--- stdout ---\n"
+        f"{with_trailing_newline(stdout_text)}"
+        "--- stderr ---\n"
+        f"{with_trailing_newline(stderr_text)}"
+        "--- result ---\n"
+        f"exit_code: {process.returncode}\n"
+        f"timed_out: {str(timed_out).lower()}\n"
+        f"interrupted: {str(interrupted is not None).lower()}\n"
+    )
+    write_new(output_path, transcript)
+    if stdout:
+        os.write(sys.stdout.fileno(), stdout)
+    if stderr:
+        os.write(sys.stderr.fileno(), stderr)
+    print(f"\nproof: {output_path}")
+    if timed_out:
+        raise TimeoutError(f"command exceeded {timeout:g} seconds")
+    if interrupted is not None:
+        raise interrupted
+    if process.returncode != 0:
+        raise SystemExit(process.returncode)
+
+
+def parse_input_events(args: argparse.Namespace) -> list[tuple[float, str]]:
+    if args.input is not None and args.input_sequence is not None:
+        raise SystemExit("use only one of --input or --input-sequence")
+    if args.input_sequence is None:
+        return [] if args.input is None else [(args.input_delay, args.input)]
+    try:
+        raw_events = json.loads(args.input_sequence)
+        events = [(float(delay), str(text)) for delay, text in raw_events]
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise SystemExit(
+            "--input-sequence must be JSON pairs such as "
+            '\'[[2, "/clear\\r"], [4, "/exit\\r"]]\''
+        ) from exc
+    if any(not math.isfinite(delay) or delay < 0 for delay, _ in events):
+        raise SystemExit("--input-sequence delays must be finite and non-negative")
+    return sorted(events, key=lambda event: event[0])
 
 
 def path_value(run_id: str, name: str) -> None:
@@ -430,6 +674,21 @@ def path_value(run_id: str, name: str) -> None:
         / "config"
         / "sqlsaber"
         / "database_config.json",
+        "auth-config": state_dir(run_id)
+        / "home"
+        / "config"
+        / "sqlsaber"
+        / "auth_config.json",
+        "model-config": state_dir(run_id)
+        / "home"
+        / "config"
+        / "sqlsaber"
+        / "model_config.json",
+        "theme-config": state_dir(run_id)
+        / "home"
+        / "config"
+        / "sqlsaber"
+        / "theme.json",
         "knowledge-db": state_dir(run_id)
         / "home"
         / "data"
@@ -445,35 +704,45 @@ def cleanup(run_id: str) -> None:
     validate_run_id(run_id)
     state = state_dir(run_id)
     evidence = evidence_dir(run_id)
-    evidence.mkdir(parents=True, exist_ok=True)
-    active_path = state / "active.json"
-    if active_path.exists():
-        active = json.loads(active_path.read_text(encoding="utf-8"))
-        pid = int(active["pid"])
-        try:
-            process = subprocess.run(
-                ["ps", "eww", "-p", str(pid), "-o", "command="],
-                check=False,
-                capture_output=True,
-                text=True,
-            ).stdout
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            active_path.unlink(missing_ok=True)
-        else:
-            marker = f"SQLSABER_VERIFY_RUN_ID={run_id}"
-            if marker not in process:
-                raise SystemExit(
-                    f"Refusing to kill PID {pid}: it does not carry this run marker"
-                )
-            os.killpg(pid, signal.SIGTERM)
-            time.sleep(0.5)
-            try:
-                os.killpg(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+    if not state.exists() and not evidence.exists():
+        raise SystemExit(f"Run {run_id!r} does not exist; refusing cleanup.")
 
-    shutil.rmtree(state, ignore_errors=True)
+    if state.exists():
+        with run_lock(state):
+            active_path = state / "active.json"
+            if active_lock_path(active_path).exists():
+                try:
+                    active = json.loads(active_path.read_text(encoding="utf-8"))
+                except FileNotFoundError:
+                    release_active(active_path)
+                else:
+                    pid = int(active["pid"])
+                    try:
+                        process = subprocess.run(
+                            ["ps", "eww", "-p", str(pid), "-o", "command="],
+                            check=False,
+                            capture_output=True,
+                            text=True,
+                        ).stdout
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        release_active(active_path)
+                    else:
+                        marker = f"SQLSABER_VERIFY_RUN_ID={run_id}"
+                        if marker not in process:
+                            raise SystemExit(
+                                f"Refusing to kill PID {pid}: it does not carry this run marker"
+                            )
+                        os.killpg(pid, signal.SIGTERM)
+                        time.sleep(0.5)
+                        try:
+                            os.killpg(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        release_active(active_path)
+            shutil.rmtree(state, ignore_errors=True)
+
+    evidence.mkdir(parents=True, exist_ok=True)
     record = (
         f"cleaned_at={dt.datetime.now(dt.UTC).isoformat()}\n"
         f"removed_state={state}\n"
@@ -501,6 +770,9 @@ def build_parser() -> argparse.ArgumentParser:
             "evidence",
             "fixture",
             "database-config",
+            "auth-config",
+            "model-config",
+            "theme-config",
             "knowledge-db",
             "threads-db",
             "log",
@@ -510,10 +782,17 @@ def build_parser() -> argparse.ArgumentParser:
     drive_parser = subparsers.add_parser("drive")
     drive_parser.add_argument("run_id")
     drive_parser.add_argument("--evidence", required=True)
-    drive_parser.add_argument("--timeout", type=float, default=60)
+    drive_parser.add_argument("--timeout", type=positive_float, default=60)
     drive_parser.add_argument("--input")
-    drive_parser.add_argument("--input-delay", type=float, default=1.5)
+    drive_parser.add_argument("--input-delay", type=nonnegative_float, default=1.5)
+    drive_parser.add_argument("--input-sequence")
     drive_parser.add_argument("command", nargs="+")
+
+    run_parser = subparsers.add_parser("run")
+    run_parser.add_argument("run_id")
+    run_parser.add_argument("--evidence", required=True)
+    run_parser.add_argument("--timeout", type=positive_float, default=60)
+    run_parser.add_argument("command", nargs="+")
     return parser
 
 
@@ -529,9 +808,10 @@ def main() -> None:
             args.evidence,
             args.command,
             args.timeout,
-            args.input,
-            args.input_delay,
+            parse_input_events(args),
         )
+    elif args.action == "run":
+        run_non_tty(args.run_id, args.evidence, args.command, args.timeout)
     elif args.action == "path":
         path_value(args.run_id, args.name)
     elif args.action == "cleanup":

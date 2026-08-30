@@ -1,6 +1,6 @@
 # Knowledge base
 
-The knowledge base lets a user store database-scoped definitions and SQL patterns, find them later, inspect full entries, and remove stale context.
+The knowledge base lets a user store database-scoped definitions and SQL patterns, find and inspect them later, and make that context available to natural-language queries.
 
 ## Sub-features
 
@@ -9,12 +9,14 @@ The knowledge base lets a user store database-scoped definitions and SQL pattern
 - `knowledge-search` returns full-text matches ranked within one database.
 - `knowledge-remove` deletes one confirmed entry.
 - `knowledge-clear` deletes all entries for the selected database.
+- `knowledge-query-use` lets the query agent search knowledge for its current database.
 
 ## How to get to it (user POV)
 
 - Run `saber knowledge add NAME DESCRIPTION` with optional `--sql`, `--source`, and `--database`.
 - Run `saber knowledge list`, `show ID`, or `search QUERY` to read entries.
 - Run `saber knowledge remove ID` or `clear` to delete entries, with `--yes` for deliberate automation.
+- Ask a natural-language question whose answer depends on a saved definition or SQL pattern.
 
 ## Driving it with verify-sqlsaber
 
@@ -24,18 +26,18 @@ Preconditions:
 - A saved SQLite connection named `verification` exists and is the default.
 - No knowledge entry is named `Paid order definition` in this isolated run.
 
-- **Add entry.** Run `"$VERIFY_SQLSABER" drive "$RUN_ID" --evidence knowledge/add.txt -- uv run saber knowledge add "Paid order definition" "Orders count as paid when status equals paid" --sql "SELECT COUNT(*) FROM orders WHERE status = 'paid'" --source "verification-fixture"`. Output prints a full entry ID, the exact name, and exit code `0`.
-- **List read-back.** Run `"$VERIFY_SQLSABER" drive "$RUN_ID" --evidence knowledge/list.txt -- uv run saber knowledge list`. The table title names database `verification`, contains the new ID and name, and reports `Total entries: 1`.
-- **Show entry.** Run `EVIDENCE=$("$VERIFY_SQLSABER" path "$RUN_ID" evidence)` and `ENTRY_ID=$(awk '/^ID:/{print $2; exit}' "$EVIDENCE/knowledge/add.txt")`. Require a 36-character ID, then run `"$VERIFY_SQLSABER" drive "$RUN_ID" --evidence knowledge/show.txt -- uv run saber knowledge show "$ENTRY_ID"`. The output includes the full description, SQL, source, and database.
-- **Search match.** Run `"$VERIFY_SQLSABER" drive "$RUN_ID" --evidence knowledge/search-match.txt -- uv run saber knowledge search "paid orders" --limit 5`. Results contain `Paid order definition`. Run a second search for `volcano`; output says no entries matched and still exits `0`.
-- **Remove one.** Run `"$VERIFY_SQLSABER" drive "$RUN_ID" --evidence knowledge/remove.txt -- uv run saber knowledge remove "$ENTRY_ID" --yes`. A list read-back reports no knowledge entries.
-- **Clear all.** Add two new entries, run `"$VERIFY_SQLSABER" drive "$RUN_ID" --evidence knowledge/clear.txt -- uv run saber knowledge clear --database verification --yes`, then list again. Output reports two cleared entries and the final list is empty.
-- **Persisted proof.** Run `KNOWLEDGE_DB=$("$VERIFY_SQLSABER" path "$RUN_ID" knowledge-db)`, copy it into the feature evidence directory, and query the copy with Python's `sqlite3` in read-only mode. The `knowledge` rows for `verification` must match the final CLI list. Record row IDs, names, and database names, not only a count.
+- **Add and identify.** Add `Paid order definition` with description `Orders count as paid when status equals paid`, SQL `SELECT COUNT(*) FROM orders WHERE status = 'paid'`, and source `verification-fixture`. Output prints the exact name and a full UUID. Extract the UUID with `grep -Eo '[0-9a-f]{8}-[0-9a-f-]{27}'`, not an anchored `ID:` line.
+- **Read paths.** Capture `knowledge list`, `show "$ENTRY_ID"`, a search for `paid orders`, and a search for `volcano`. The list and show match the added record. The first search finds it; the second reports no match and exits `0`.
+- **Persisted row proof.** Before deletion, copy the file from `path knowledge-db` to `knowledge/before-delete.db`. Query the copy read-only and require the UUID, name, database `verification`, SQL, and source.
+- **Remove and clear.** Remove the entry with `--yes` and confirm an empty list. Add two entries, clear database `verification --yes`, and confirm the final list is empty.
+- **Persisted empty proof.** Copy the final knowledge database to `knowledge/after-clear.db` and query it read-only. It has no rows for `verification`.
+- **Agent retrieval.** When a matching provider credential works, add a deliberately unique rule, ask a saved-selector query that needs it, and require the visible answer plus a `search_knowledge` tool result naming the entry. If no credential works, record that prerequisite and keep the CRUD proof.
 
 ## Gotchas
 
 - Knowledge commands require a saved database name. Passing an ad hoc file to a query does not create a knowledge scope.
-- Search uses FTS5 token matching. Use plain terms such as `paid orders`, not punctuation-heavy SQL fragments.
-- IDs are UUIDs. Capture the full value from `add` or `list`; do not use a shortened prefix.
-- `remove` and `clear` require confirmation in a terminal. Use `--yes` only against this run's isolated database.
-- A successful delete message is not enough. Confirm through `list` and the copied `knowledge.db`.
+- Search uses FTS5 token matching with OR semantics for plain terms. Assert the expected name is present, not a fixed result order.
+- Search indexes name, description, and SQL, not source.
+- IDs are UUIDs. Capture the full value from add or list.
+- `remove` and `clear` require confirmation in a terminal. Use `--yes` only against the isolated database.
+- Copy row-level proof before clear. The final database can prove emptiness, not the deleted row's fields.

@@ -10,11 +10,12 @@ This directory tracks SQLsaber behavior that a user can reach from the terminal.
 - Use the fixture returned by `verify-sqlsaber path "$RUN_ID" fixture`.
 - Keep app state under `.pi/verification/sqlsaber/.state/$RUN_ID/` and proof under `.pi/verification/sqlsaber/$RUN_ID/`.
 - Use a different `RUN_ID` for every concurrent agent. Never point the helper at the user's normal config or data directories.
-- A model-backed query also requires a provider credential in the environment and a matching model selected inside the isolated run.
+- The helper uses `keyring.backends.null.Keyring`, so verification cannot read or write the operator's OS keyring. Driven commands still inherit provider credentials from the coordinator environment.
+- A model-backed query requires one of those environment credentials and a matching model selected inside the isolated run.
 
 ## Driving conventions
 
-- Run every `saber` command through `verify-sqlsaber drive` so it gets an isolated PTY and transcript.
+- Run terminal commands through `verify-sqlsaber drive`. Use `verify-sqlsaber run` only when the recipe calls for redirected, non-TTY output.
 - Start a stateful recipe from a new run unless the recipe says otherwise.
 - Treat command names, option names, full IDs, headings, and prompt text as stable handles. Ignore colors and terminal coordinates.
 - Use `--yes` only after the recipe has identified the exact isolated object to delete.
@@ -38,7 +39,13 @@ Each feature file has an H1 title and one user-focused summary. It then uses fou
 ## Features
 
 - [Command discovery](./command-discovery.md) covers version output, root help, and command-specific help.
-- [Query databases](./query-databases.md) covers single-shot questions, stdin, file selectors, multiple databases, and the terminal UI.
+- [First-run onboarding](./first-run-onboarding.md) covers the guided setup route when no database is configured.
 - [Database connections](./database-connections.md) covers adding, listing, testing, editing, selecting, and removing saved connections.
-- [Knowledge base](./knowledge-base.md) covers database-scoped add, list, show, search, remove, and clear behavior.
-- [Conversation threads](./conversation-threads.md) covers thread listing, transcript display, artifacts, resume, export, and pruning.
+- [Authentication](./authentication.md) covers provider setup, status, and stored-key reset.
+- [Model configuration](./model-configuration.md) covers model selection, thinking levels, per-agent overrides, current state, and reset.
+- [Themes](./themes.md) covers named and interactive theme selection, persistence, and reset.
+- [Query databases](./query-databases.md) covers single-shot questions, stdin, file selectors, multiple databases, and write safety.
+- [Interactive session](./interactive-session.md) covers the terminal UI, palette, slash commands, and exits.
+- [Knowledge base](./knowledge-base.md) covers database-scoped add, list, show, search, remove, clear, and agent retrieval.
+- [Conversation threads](./conversation-threads.md) covers empty and populated listing, transcript display, artifacts, resume, export, and pruning.
+- [Terminal output](./terminal-output.md) covers redirected Markdown, stream separation, and ANSI-free output.

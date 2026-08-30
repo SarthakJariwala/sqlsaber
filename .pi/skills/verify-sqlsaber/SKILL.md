@@ -13,7 +13,7 @@ Read [`features/README.md`](features/README.md) before choosing a recipe.
 
 ## Launch
 
-There is no server to leave running. Launch installs the locked checkout once, creates an isolated run, seeds a three-employee SQLite database, and checks that the CLI version matches `pyproject.toml`.
+There is no server to leave running. Launch installs the locked checkout once, creates an isolated run, seeds a three-employee SQLite database, checks that the CLI version matches `pyproject.toml`, and selects keyring's null backend. The app cannot read or write the operator's keychain.
 
 From the repository root:
 
@@ -41,7 +41,7 @@ Run this read-only check whenever a command behaves unexpectedly:
 "$VERIFY_SQLSABER" doctor "$RUN_ID"
 ```
 
-Require `HEALTHY`. Doctor checks the checkout revision, CLI version, seeded fixture, config/data/log paths, and whether another process is driving this run. It reports which model credential environment variables are present without printing their values. SQLsaber has no port or long-lived process to inspect.
+Require `HEALTHY`. Doctor checks the checkout revision, CLI version, seeded fixture, config/data/log paths, and whether another process is driving this run. It reports the null keyring backend and which model credential environment variables are present without printing their values. SQLsaber has no port or long-lived process to inspect.
 
 `doctor.txt` is written to `.pi/verification/sqlsaber/$RUN_ID/`. A present credential is not proof that the remote provider accepts it. The first real query establishes that.
 
@@ -73,11 +73,28 @@ The transcript records the command, terminal output, and exit code. Use `--timeo
 ```bash
 "$VERIFY_SQLSABER" drive "$RUN_ID" \
   --evidence interactive/exit.txt \
-  --timeout 30 --input $'/exit\r' --input-delay 2 \
+  --timeout 30 --input $'\004' --input-delay 2 \
   -- uv run saber -d "$FIXTURE"
 ```
 
-Do not use fixed input delays for a model response. Use single-shot mode for model-backed proof. The helper's fixed input option is only for deterministic prompt or exit actions.
+For several deterministic TUI actions in one process, pass JSON delay and text pairs. Delays are seconds from process start:
+
+```bash
+"$VERIFY_SQLSABER" drive "$RUN_ID" \
+  --evidence interactive/palette-clear-exit.txt --timeout 30 \
+  --input-sequence '[[2, "/"], [4, "\u001b[B\u001b[B\r"], [6, "\u0004"]]' \
+  -- uv run saber -d "$FIXTURE"
+```
+
+Do not use fixed input delays for a model response. Use single-shot mode for model-backed proof. Fixed input is only for deterministic prompts, controls, and exits.
+
+Redirected output has a separate non-PTY path. It records stdout, stderr, and exit code in one transcript:
+
+```bash
+"$VERIFY_SQLSABER" run "$RUN_ID" \
+  --evidence terminal-output/root-help.txt \
+  -- uv run saber --help
+```
 
 Use the exact commands and expected text in the selected feature file. Stable handles here are command names, flags, printed headings such as `Database Connections`, full IDs, and prompt strings. Do not assert terminal coordinates or color codes.
 
@@ -87,7 +104,7 @@ Proof belongs under `.pi/verification/sqlsaber/$RUN_ID/`. The helper creates tha
 
 A valid proof:
 
-- drives `uv run saber` through the PTY helper, not a Python function or test fixture;
+- drives `uv run saber` through `drive` for a terminal or `run` for redirected output, not a Python function or test fixture;
 - captures the user command and its immediate output in one transcript;
 - captures a second user-facing read after a mutation, such as `saber db list`, `saber knowledge show`, or `saber threads show`;
 - copies or queries the isolated persisted file when the feature has a side effect;
@@ -118,19 +135,20 @@ test -f ".pi/verification/sqlsaber/$RUN_ID/launch.txt"
 test -f ".pi/verification/sqlsaber/$RUN_ID/cleanup.txt"
 ```
 
-The helper records the exact active PID while a PTY is running. Cleanup will only signal that PID when its environment carries this run's marker. It never kills by process name. It removes the isolated home, fixture, app logs, and PID record. It preserves all proof artifacts.
+The helper records the exact active process leader. Cleanup verifies that leader's environment carries this run's marker, then signals its process group so descendants stop too. It never kills by process name. It removes the isolated home, fixture, app logs, and PID record. It preserves all proof artifacts.
 
 Do not remove `.pi/verification/sqlsaber/$RUN_ID/` during cleanup. If you created exports as part of a feature, write them inside that evidence directory before teardown.
 
 ## Helpers
 
-`.pi/skills/verify-sqlsaber/bin/verify-sqlsaber` is executable and has five commands:
+`.pi/skills/verify-sqlsaber/bin/verify-sqlsaber` is executable and has six commands:
 
 ```text
 verify-sqlsaber launch RUN_ID
 verify-sqlsaber doctor RUN_ID
-verify-sqlsaber drive RUN_ID --evidence RELATIVE_PATH [--timeout SECONDS] [--input TEXT] -- COMMAND...
-verify-sqlsaber path RUN_ID {state,evidence,fixture,database-config,knowledge-db,threads-db,log}
+verify-sqlsaber drive RUN_ID --evidence RELATIVE_PATH [--timeout SECONDS] [--input TEXT [--input-delay SECONDS] | --input-sequence JSON] -- COMMAND...
+verify-sqlsaber run RUN_ID --evidence RELATIVE_PATH [--timeout SECONDS] -- COMMAND...
+verify-sqlsaber path RUN_ID {state,evidence,fixture,database-config,auth-config,model-config,theme-config,knowledge-db,threads-db,log}
 verify-sqlsaber cleanup RUN_ID
 ```
 
