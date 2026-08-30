@@ -330,7 +330,10 @@ def query(
                 if allow_dangerous:
                     out(b.warn(DANGEROUS_MODE_WARNING, label="DANGEROUS MODE ENABLED"))
                 interactive_session = InteractiveSession(saber)
-                await interactive_session.run()
+                try:
+                    await interactive_session.run()
+                finally:
+                    saber = getattr(interactive_session, "saber", saber)
 
         finally:
             try:

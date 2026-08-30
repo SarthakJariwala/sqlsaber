@@ -31,6 +31,18 @@ def _default_process_terminal() -> Any:
     return PosixProcessTerminal()
 
 
+class _MaskedInput(Input):
+    def render(self, width: int) -> list[str]:
+        value = self.value
+        cursor = self.cursor
+        self.value = "*" * len(value)
+        try:
+            return super().render(width)
+        finally:
+            self.value = value
+            self.cursor = cursor
+
+
 class PromptForm:
     """Message line plus Input or filtered SelectList plus a hint line.
 
@@ -113,10 +125,11 @@ class PromptForm:
 
     def _build(self) -> None:
         prompt = self._prompt
-        if isinstance(prompt, AskText | AskPath):
-            widget = Input()
+        if isinstance(prompt, AskText | AskPath | AskSecret):
+            widget = _MaskedInput() if isinstance(prompt, AskSecret) else Input()
             widget.focused = True
-            widget.set_value(prompt.default)
+            if isinstance(prompt, AskText | AskPath):
+                widget.set_value(prompt.default)
             widget.on_submit = self._submit_text
             widget.on_escape = self._on_cancel
             self._input = widget
@@ -205,8 +218,6 @@ async def ask_in_overlay[T](tui: TUI, prompt: Ask[T], styles: Styles) -> T | Non
     Returns:
         The typed value, or None when the user cancelled.
     """
-    if isinstance(prompt, AskSecret):
-        return cast(T | None, await asyncio.to_thread(_ask_secret, prompt))
     loop = asyncio.get_running_loop()
     future: asyncio.Future[T | None] = loop.create_future()
 

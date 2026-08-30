@@ -2,6 +2,8 @@
 
 from saber_tui import AutocompleteItem, AutocompleteSuggestions, CompletionResult
 
+from sqlsaber.cli.command_catalog import COMMAND_SPECS
+
 
 class SQLSaberAutocompleteProvider:
     """saber-tui autocomplete provider for table names."""
@@ -28,6 +30,10 @@ class SQLSaberAutocompleteProvider:
 
         current_line = lines[cursor_line] if 0 <= cursor_line < len(lines) else ""
         text_before_cursor = current_line[:cursor_col]
+
+        slash_suggestions = self._slash_suggestions(text_before_cursor)
+        if slash_suggestions is not None:
+            return slash_suggestions
 
         table_suggestions = self._table_suggestions(
             current_line, cursor_col, text_before_cursor
@@ -74,6 +80,100 @@ class SQLSaberAutocompleteProvider:
         text_before_cursor = current_line[:cursor_col]
         stripped = text_before_cursor.strip()
         return not (stripped.startswith("/") and " " not in stripped)
+
+    def _slash_suggestions(
+        self, text_before_cursor: str
+    ) -> AutocompleteSuggestions | None:
+        stripped = text_before_cursor.lstrip()
+        if not stripped.startswith("/"):
+            return None
+
+        command_candidates: dict[str, tuple[str, str]] = {}
+        for spec in COMMAND_SPECS:
+            canonical = spec.command
+            command_candidates[canonical] = (canonical, spec.summary)
+            for alias in spec.aliases:
+                value = f"/{' '.join(alias)}"
+                command_candidates[value] = (canonical, spec.summary)
+
+        folded = stripped.casefold()
+        if len(stripped.split()) <= 2 and not folded.endswith(" --"):
+            matches = [
+                (value, canonical, summary)
+                for value, (canonical, summary) in command_candidates.items()
+                if value.casefold().startswith(folded) and value.casefold() != folded
+            ]
+            if matches:
+                matches.sort(key=lambda item: (len(item[0]), item[0]))
+                return AutocompleteSuggestions(
+                    [
+                        AutocompleteItem(value, canonical, summary)
+                        for value, canonical, summary in matches
+                    ],
+                    stripped,
+                )
+
+        for spec in COMMAND_SPECS:
+            for path in (spec.path, *spec.aliases):
+                prefix = f"/{' '.join(path)}"
+                if folded != prefix.casefold() and not folded.startswith(
+                    f"{prefix.casefold()} "
+                ):
+                    continue
+                if not spec.options:
+                    return None
+                parts = stripped.split()
+                arguments = parts[len(path) :]
+                if not arguments and not stripped.endswith(" "):
+                    return None
+                current = "" if stripped.endswith(" ") else arguments[-1]
+                completed = arguments if not current else arguments[:-1]
+                used: set[int] = set()
+                pending_value = False
+                index = 0
+                while index < len(completed):
+                    token = completed[index]
+                    option_name, separator, _ = token.partition("=")
+                    match = next(
+                        (
+                            (option_index, option)
+                            for option_index, option in enumerate(spec.options)
+                            if option_name in option.names
+                        ),
+                        None,
+                    )
+                    if match is None:
+                        index += 1
+                        continue
+                    option_index, option = match
+                    used.add(option_index)
+                    if option.takes_value and not separator:
+                        if index + 1 >= len(completed):
+                            pending_value = True
+                            break
+                        index += 1
+                    index += 1
+                if pending_value or (current and not current.startswith("-")):
+                    return None
+                if any(current in option.names for option in spec.options):
+                    return None
+                options = [
+                    name
+                    for option_index, option in enumerate(spec.options)
+                    if option.repeatable or option_index not in used
+                    for name in option.names
+                    if name.startswith(current)
+                ]
+                if not options:
+                    return None
+                return AutocompleteSuggestions(
+                    [
+                        AutocompleteItem(option, option, spec.summary)
+                        for option in options
+                    ],
+                    current,
+                )
+        return None
 
     def _table_suggestions(
         self,

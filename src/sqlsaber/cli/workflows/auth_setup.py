@@ -27,7 +27,10 @@ async def select_provider(prompter: Prompter, default: str = "anthropic") -> str
 
 
 async def configure_api_key(
-    provider: str, api_key_manager: APIKeyManager, auth_manager: AuthConfigManager
+    provider: str,
+    prompter: Prompter,
+    api_key_manager: APIKeyManager,
+    auth_manager: AuthConfigManager,
 ) -> bool:
     """Configure API key for a provider.
 
@@ -39,13 +42,19 @@ async def configure_api_key(
     Returns:
         True if API key configured successfully, False otherwise
     """
-    api_key = api_key_manager.get_api_key(provider)
+    api_key = api_key_manager.get_configured_api_key(provider)
+    if not api_key:
+        api_key = await prompter.secret(
+            f"Enter your {provider.title()} API key (leave blank to skip):"
+        )
+        api_key = api_key.strip() if api_key else None
+        if api_key and not api_key_manager.store_api_key(provider, api_key):
+            return False
 
-    if api_key:
-        auth_manager.set_auth_method(AuthMethod.API_KEY)
-        return True
-
-    return False
+    if not api_key:
+        return False
+    auth_manager.set_auth_method(AuthMethod.API_KEY)
+    return True
 
 
 async def setup_auth(
@@ -113,7 +122,7 @@ async def setup_auth(
     )
 
     api_key_configured = await configure_api_key(
-        provider, api_key_manager, auth_manager
+        provider, prompter, api_key_manager, auth_manager
     )
 
     if api_key_configured:
