@@ -37,6 +37,7 @@ from sqlsaber.cli.tui_chat import ChatApp, build_chat_app
 from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
 from sqlsaber.config.settings import ThinkingLevel
 from sqlsaber.render import blocks as b
+from sqlsaber.render.surface import AskSecret, AskText
 from sqlsaber.theme.manager import get_theme_manager
 from sqlsaber.theme.styles import get_styles
 
@@ -336,18 +337,17 @@ def test_status_and_footer_render_within_narrow_terminal_width() -> None:
 
 def test_bare_slash_opens_command_palette_without_editor_autocomplete() -> None:
     terminal = FakeTerminal(columns=80, rows=18)
-    changes: list[tuple[bool, ThinkingLevel | None]] = []
+    submitted: list[str] = []
 
     def open_palette(app: ChatApp) -> None:
         app.show_command_palette(
             thinking_enabled=False,
             thinking_level=ThinkingLevel.MEDIUM,
-            on_thinking_change=lambda enabled, level: changes.append((enabled, level)),
         )
 
     app = build_chat_app(
         terminal=terminal,
-        on_submit=lambda text: None,
+        on_submit=lambda text: submitted.append(text),
         on_open_command_palette=open_palette,
         footer_text="DB: ocean-local (PostgreSQL) | Model: claude-opus-4-6",
     )
@@ -382,12 +382,48 @@ def test_bare_slash_opens_command_palette_without_editor_autocomplete() -> None:
 
     terminal.send_input("\r")
 
-    assert changes == [(True, ThinkingLevel.MINIMAL)]
+    assert submitted == ["/thinking minimal"]
 
     terminal.send_input("\x1b")
 
     assert app.tui.has_overlay() is False
     assert app.editor.focused is True
+
+
+@pytest.mark.asyncio
+async def test_secret_prompt_uses_masked_live_overlay() -> None:
+    terminal = FakeTerminal(columns=80, rows=18)
+    app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
+    app.tui.start()
+
+    prompt = asyncio.create_task(ChatSurface(app).ask(AskSecret("API key:")))
+    for _ in range(100):
+        if app.tui.has_overlay():
+            break
+        await asyncio.sleep(0.001)
+    assert app.tui.has_overlay() is True
+    terminal.send_input("secret-value")
+
+    assert "secret-value" not in "\n".join(app.render_plain_viewport())
+    terminal.send_input("\r")
+    assert await asyncio.wait_for(prompt, timeout=1) == "secret-value"
+    assert app.tui.has_overlay() is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel_key", ["\x03", "\x04"])
+async def test_prompt_cancel_keys_resolve_live_overlay(cancel_key: str) -> None:
+    terminal = FakeTerminal(columns=80, rows=18)
+    app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
+    app.tui.start()
+
+    prompt = asyncio.create_task(ChatSurface(app).ask(AskText("Name:")))
+    await asyncio.sleep(0)
+    terminal.send_input(cancel_key)
+
+    assert await asyncio.wait_for(prompt, timeout=1) is None
+    assert app.tui.has_overlay() is False
+    assert terminal.stopped is False
 
 
 def test_status_snapshots_loader_across_render_cancel_and_dispose() -> None:
@@ -425,7 +461,6 @@ def test_command_palette_ctrl_c_closes_without_running_cancel_handler() -> None:
         app.show_command_palette(
             thinking_enabled=False,
             thinking_level=ThinkingLevel.MEDIUM,
-            on_thinking_change=lambda _enabled, _level: None,
         )
 
     app = build_chat_app(

@@ -38,10 +38,10 @@ from saber_tui.utils import (
     wrap_text_with_ansi,
 )
 
+from sqlsaber.cli.command_catalog import PaletteCommand, PaletteMode, palette_commands
 from sqlsaber.config.settings import ThinkingLevel
 
 type SubmitHandler = Callable[[str], bool | None]
-type ThinkingChangeHandler = Callable[[bool, ThinkingLevel | None], None]
 
 
 def _bold(text: str) -> str:
@@ -52,7 +52,7 @@ _RESPONSIVE_IMAGE_MAX_CELLS = 2**31 - 1
 MIN_TUI_WIDTH_CACHE_SIZE = 65_536
 SHIFT_ENTER_SEQUENCE = "\x1b[13;2u"
 SHIFT_ENTER_FALLBACK_SEQUENCES = {"\n", "\x1b\r"}
-THINKING_MODE_SETTING_ID = "thinking_mode"
+THINKING_MODE_SETTING_ID = "/thinking"
 THINKING_MODE_VALUES = ["off", *(level.value for level in ThinkingLevel)]
 ACTION_VALUE = ""
 COMMAND_PALETTE_MAX_WIDTH = 60
@@ -396,6 +396,7 @@ class ChatApp:
         self.should_submit_empty = should_submit_empty
         self.on_open_command_palette = on_open_command_palette
         self._command_palette_component: _CommandPaletteComponent | None = None
+        self._palette_fill_hint = False
 
     def submit(self, text: str) -> None:
         text = text.strip()
@@ -410,6 +411,9 @@ class ChatApp:
             self.tui.set_focus(self.editor)
             self.tui.request_render()
             return
+        if self._palette_fill_hint:
+            self._palette_fill_hint = False
+            self.clear_status()
         if text and not text.startswith("/"):
             self.append_user_message(text)
             self.editor.add_to_history(text)
@@ -552,6 +556,10 @@ class ChatApp:
             del children[0]
         self.tui.request_render()
 
+    def clear_chat(self) -> None:
+        self.chat_container.children.clear()
+        self.tui.request_render()
+
     def set_status(self, text: str | None) -> None:
         self.status.set_text(text)
         self.tui.request_render()
@@ -581,59 +589,43 @@ class ChatApp:
         *,
         thinking_enabled: bool,
         thinking_level: ThinkingLevel,
-        on_thinking_change: ThinkingChangeHandler,
+        commands: tuple[PaletteCommand, ...] | None = None,
         model_name: str | None = None,
         database_name: str | None = None,
     ) -> None:
         """Open the command palette."""
+        del model_name, database_name
         self.close_command_palette()
-
+        command_rows = commands or palette_commands()
+        rows_by_command = {row.command: row for row in command_rows}
         current_mode = thinking_level.value if thinking_enabled else "off"
 
         def on_change(setting_id: str, value: str) -> None:
-            if setting_id == THINKING_MODE_SETTING_ID:
-                if value == "off":
-                    on_thinking_change(False, None)
-                    self.set_status("Thinking disabled")
-                    return
-
-                level = ThinkingLevel(value)
-                on_thinking_change(True, level)
-                self.set_status(f"Thinking enabled ({level.value})")
+            row = rows_by_command[setting_id]
+            if row.mode is PaletteMode.THINKING:
+                self.close_command_palette()
+                self.submit(f"{row.command} {value}")
                 return
 
-            self._run_command_palette_action(setting_id)
+            self._run_command_palette_action(row)
 
-        settings_items = [
-            SettingItem(
-                THINKING_MODE_SETTING_ID,
-                "Thinking mode",
-                current_mode,
-                values=list(THINKING_MODE_VALUES),
-                description="Controls provider reasoning for this interactive session.",
-            ),
-            SettingItem(
-                "handoff",
-                "Handoff thread",
-                ACTION_VALUE,
-                values=[ACTION_VALUE],
-                description="Draft a prompt for a new thread with current context.",
-            ),
-            SettingItem(
-                "clear",
-                "Clear conversation",
-                ACTION_VALUE,
-                values=[ACTION_VALUE],
-                description="Clear visible conversation and current thread history.",
-            ),
-            SettingItem(
-                "exit",
-                "Exit",
-                ACTION_VALUE,
-                values=[ACTION_VALUE],
-                description="End this interactive session.",
-            ),
-        ]
+        settings_items = []
+        for row in command_rows:
+            values = (
+                list(THINKING_MODE_VALUES)
+                if row.mode is PaletteMode.THINKING
+                else [ACTION_VALUE]
+            )
+            value = current_mode if row.mode is PaletteMode.THINKING else ACTION_VALUE
+            settings_items.append(
+                SettingItem(
+                    row.command,
+                    row.label,
+                    value,
+                    values=values,
+                    description=row.description,
+                )
+            )
         settings = SettingsList(
             settings_items,
             max_visible=8,
@@ -651,24 +643,16 @@ class ChatApp:
         self.tui.set_focus(component)
         self.tui.request_render()
 
-    def _run_command_palette_action(self, action_id: str) -> None:
-        if action_id == "handoff":
-            self.close_command_palette()
-            self.editor.set_text("/handoff ")
-            self.set_status("Type the handoff goal and press Enter.")
-            self.tui.set_focus(self.editor)
-            self.tui.request_render()
+    def _run_command_palette_action(self, command: PaletteCommand) -> None:
+        self.close_command_palette()
+        if command.mode is PaletteMode.SUBMIT:
+            self.submit(command.command)
             return
-
-        if action_id == "clear":
-            self.close_command_palette()
-            self.submit("/clear")
-            return
-
-        if action_id == "exit":
-            self.close_command_palette()
-            self.submit("/exit")
-            return
+        self.editor.set_text(f"{command.command} ")
+        self._palette_fill_hint = True
+        self.set_status("Complete the command and press Enter.")
+        self.tui.set_focus(self.editor)
+        self.tui.request_render()
 
     def close_command_palette(self) -> None:
         component = self._command_palette_component
@@ -785,6 +769,10 @@ def build_chat_app(
             return {"consume": True}
         if data in SHIFT_ENTER_FALLBACK_SEQUENCES:
             return {"data": SHIFT_ENTER_SEQUENCE}
+        if app.tui.has_overlay() and matches_key(data, "ctrl+d"):
+            return {"data": "\x1b"}
+        if app.tui.has_overlay() and matches_key(data, "ctrl+c"):
+            return None
         if matches_key(data, "ctrl+d") and not editor.get_text().strip():
             if app.status.cancel_loading():
                 app.tui.set_focus(app.editor)

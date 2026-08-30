@@ -67,10 +67,11 @@ async def test_process_clear_command(processor, mock_context):
 
 
 @pytest.mark.asyncio
-async def test_process_settings_is_not_a_slash_command(processor, mock_context):
+async def test_process_unknown_slash_is_handled(processor, mock_context):
     result = await processor.process("/settings", mock_context)
 
-    assert result.handled is False
+    assert result.handled is True
+    assert "Unknown slash command" in _emitted_markdown(mock_context.surface)
 
 
 @pytest.mark.asyncio

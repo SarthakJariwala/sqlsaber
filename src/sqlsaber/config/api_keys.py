@@ -19,21 +19,34 @@ class APIKeyManager:
 
     def get_api_key(self, provider: str) -> str | None:
         """Get API key for the specified provider using cascading logic."""
-        env_var_name = self.get_env_var_name(provider)
-        service_name = self._get_service_name(provider)
-
-        api_key = os.getenv(env_var_name)
+        api_key = self.get_configured_api_key(provider)
         if api_key:
             return api_key
+        return self._prompt_and_store_key(
+            provider,
+            self.get_env_var_name(provider),
+            self._get_service_name(provider),
+        )
 
+    def get_configured_api_key(self, provider: str) -> str | None:
+        """Read an API key without prompting."""
+        api_key = os.getenv(self.get_env_var_name(provider))
+        if api_key:
+            return api_key
         try:
-            api_key = keyring.get_password(service_name, provider)
-            if api_key:
-                return api_key
+            return keyring.get_password(self._get_service_name(provider), provider)
         except Exception as e:
             cli_err().emit(b.warn(f"Keyring access failed: {e}"))
+            return None
 
-        return self._prompt_and_store_key(provider, env_var_name, service_name)
+    def store_api_key(self, provider: str, api_key: str) -> bool:
+        """Store an API key in the operating system credentials store."""
+        try:
+            keyring.set_password(self._get_service_name(provider), provider, api_key)
+            return True
+        except Exception as e:
+            cli_err().emit(b.warn(f"Could not store API key: {e}"))
+            return False
 
     def has_stored_api_key(self, provider: str) -> bool:
         """Check if an API key is stored for the provider."""

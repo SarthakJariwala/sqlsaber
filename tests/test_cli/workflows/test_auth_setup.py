@@ -18,9 +18,11 @@ class DummyPrompter:
         self,
         selects: list[Any] | None = None,
         confirms: list[bool | None] | None = None,
+        secrets: list[str | None] | None = None,
     ):
         self._selects = deque(selects or [])
         self._confirms = deque(confirms or [])
+        self._secrets = deque(secrets or [])
 
     async def select(
         self,
@@ -46,6 +48,12 @@ class DummyPrompter:
 
     async def path(self, message: str, only_directories: bool = False) -> str | None:
         return None
+
+    async def secret(self, message: str) -> str | None:
+        try:
+            return self._secrets.popleft()
+        except IndexError:
+            return None
 
 
 @pytest.mark.asyncio
@@ -74,3 +82,27 @@ async def test_setup_auth_resets_existing_api_key(monkeypatch: pytest.MonkeyPatc
     assert provider == "openai"
     api_key_manager.delete_api_key.assert_called_once_with("openai")
     configure_api_key.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_setup_auth_uses_bound_secret_prompt_for_new_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    prompter = DummyPrompter(selects=["openai"], secrets=["  secret-key  "])
+    auth_manager = MagicMock()
+    api_key_manager = MagicMock()
+    api_key_manager.get_env_var_name.return_value = "OPENAI_API_KEY"
+    api_key_manager.has_stored_api_key.return_value = False
+    api_key_manager.get_configured_api_key.return_value = None
+    api_key_manager.store_api_key.return_value = True
+
+    success, provider = await setup_auth(
+        prompter=prompter,
+        auth_manager=auth_manager,
+        api_key_manager=api_key_manager,
+        default_provider="openai",
+    )
+
+    assert (success, provider) == (True, "openai")
+    api_key_manager.store_api_key.assert_called_once_with("openai", "secret-key")

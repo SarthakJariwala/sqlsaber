@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, TextIO
 
 from . import blocks
@@ -75,6 +76,7 @@ __all__ = [
     "TextBlock",
     "TextStream",
     "ansi",
+    "bind_cli_surfaces",
     "blocks",
     "cli_err",
     "cli_out",
@@ -96,6 +98,8 @@ __all__ = [
 
 _out: Surface | None = None
 _err: Surface | None = None
+_bound_out: ContextVar[Surface | None] = ContextVar("sqlsaber_cli_out", default=None)
+_bound_err: ContextVar[Surface | None] = ContextVar("sqlsaber_cli_err", default=None)
 
 
 def _stream_closed(surface: Surface | None) -> bool:
@@ -109,6 +113,8 @@ def cli_out() -> Surface:
     Returns:
         The stdout ``Surface``.
     """
+    if bound := _bound_out.get():
+        return bound
     global _out
     if _out is None or _stream_closed(_out):
         _out = _make_surface(sys.stdout, stderr=False)
@@ -121,10 +127,24 @@ def cli_err() -> Surface:
     Returns:
         The stderr ``Surface``.
     """
+    if bound := _bound_err.get():
+        return bound
     global _err
     if _err is None or _stream_closed(_err):
         _err = _make_surface(sys.stderr, stderr=True)
     return _err
+
+
+@contextmanager
+def bind_cli_surfaces(stdout: Surface, stderr: Surface | None = None) -> Iterator[None]:
+    """Bind CLI rendering to surfaces in the current async or thread context."""
+    out_token = _bound_out.set(stdout)
+    err_token = _bound_err.set(stderr or stdout)
+    try:
+        yield
+    finally:
+        _bound_err.reset(err_token)
+        _bound_out.reset(out_token)
 
 
 def reset_io(

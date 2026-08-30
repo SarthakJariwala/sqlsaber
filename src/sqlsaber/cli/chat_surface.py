@@ -125,9 +125,9 @@ class ChatSurface:
         """
         if isinstance(prompt, AskConfirm) and prompt.assume_yes:
             return cast(T, True)
-        from sqlsaber.render.prompts import ask_in_transient_tui
+        from sqlsaber.render.prompts import ask_in_overlay
 
-        return await ask_in_transient_tui(prompt, get_styles())
+        return await ask_in_overlay(self.app.tui, prompt, get_styles())
 
     def _paint(self) -> None:
         self.app.tui.request_render()

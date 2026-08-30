@@ -10,7 +10,11 @@ from typing import TYPE_CHECKING
 import platformdirs
 
 from sqlsaber.cli.completers import SQLSaberAutocompleteProvider
-from sqlsaber.cli.slash_commands import CommandContext, SlashCommandProcessor
+from sqlsaber.cli.slash_commands import (
+    CommandContext,
+    SlashCommandProcessor,
+    ThreadResumeRequest,
+)
 from sqlsaber.cli.tui_chat import (
     DANGEROUS_MODE_FOOTER_LABEL,
     ChatApp,
@@ -24,7 +28,6 @@ from sqlsaber.render import blocks as b
 
 if TYPE_CHECKING:
     from sqlsaber import SQLSaber, SQLSaberResult
-    from sqlsaber.config.settings import ThinkingLevel
 
 QUERY_CANCEL_GRACE_SECONDS = 0.1
 
@@ -156,6 +159,48 @@ class InteractiveSession:
     async def before_prompt_loop(self) -> None:
         """Hook to refresh context before prompt loop."""
         await self._update_table_cache()
+
+    async def _resume_thread(
+        self,
+        app: ChatApp,
+        surface,
+        request: ThreadResumeRequest,
+    ) -> None:
+        from sqlsaber.cli.threads import prepare_thread_resume, render_prepared_thread
+
+        if self.saber.info.thread_id == request.thread_id:
+            surface.emit(b.warn(f"Thread '{request.thread_id}' is already active."))
+            return
+
+        prepared = await prepare_thread_resume(
+            request.thread_id,
+            list(request.databases) or None,
+        )
+        prepared_saber = prepared.saber
+        previous = self.saber
+        try:
+            await previous.end_thread()
+        except BaseException:
+            await prepared_saber.close()
+            raise
+
+        self.saber = prepared_saber
+        try:
+            await previous.close()
+        except Exception as exc:
+            self.log.warning("interactive.resume.cleanup_failed", error=str(exc))
+            surface.emit(b.warn(f"Previous session cleanup failed: {exc}"))
+
+        self.streaming_handler = TUIStreamingQueryHandler(
+            app,
+            display_registry_provider=lambda: self.saber.display_registry,
+            query_result_store=self.saber.query_result_store,
+        )
+        self.session_usage = SessionUsage()
+        app.clear_chat()
+        render_prepared_thread(surface, prepared)
+        await self._update_table_cache()
+        self._refresh_footer()
 
     async def _start_handoff(self, app: ChatApp, goal: str) -> None:
         """Generate a handoff draft and put it in the focused editor."""
@@ -298,7 +343,8 @@ class InteractiveSession:
                 await self._submit_handoff(app, user_query)
                 return
 
-            self._append_history(user_query)
+            if not user_query.lstrip().startswith("/"):
+                self._append_history(user_query)
 
             context = CommandContext(
                 surface=surface,
@@ -314,6 +360,10 @@ class InteractiveSession:
 
             if cmd_result.handoff_goal:
                 await self._start_handoff(app, cmd_result.handoff_goal)
+                return
+
+            if cmd_result.resume_request is not None:
+                await self._resume_thread(app, surface, cmd_result.resume_request)
                 return
 
             if cmd_result.handled:
@@ -375,15 +425,12 @@ class InteractiveSession:
             loop.call_soon_threadsafe(lambda: asyncio.create_task(submit_query()))
             return True
 
-        def on_thinking_change(enabled: bool, level: ThinkingLevel | None) -> None:
-            self.saber.set_thinking(enabled=enabled, level=level)
-
         def open_command_palette(app: ChatApp) -> None:
             info = self.saber.info
             app.show_command_palette(
                 thinking_enabled=info.thinking.enabled,
                 thinking_level=info.thinking.level,
-                on_thinking_change=on_thinking_change,
+                commands=self.command_processor.palette_commands(),
                 model_name=info.model_name,
                 database_name=info.primary_database_name,
             )

@@ -1,6 +1,5 @@
 """Shared database setup logic for onboarding and CLI."""
 
-import getpass
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -120,7 +119,9 @@ async def collect_db_input(
         if username is None:
             return None
 
-        password = getpass.getpass("Password (stored in your OS keychain): ")
+        password = await prompter.secret("Password (stored in your OS keychain):")
+        if password is None:
+            return None
 
         ssl_mode = None
         ssl_ca = None
