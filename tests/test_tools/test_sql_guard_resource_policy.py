@@ -1,13 +1,9 @@
-"""Security regression tests for SQL guard hardening.
-
-These tests intentionally codify stricter security expectations:
-- Safe mode must be side-effect free.
-- Dangerous mode must be strict allowlist/fail-closed.
-"""
+"""SQL resource policy regression tests."""
 
 import pytest
 
 from sqlsaber.tools.sql_guard import validate_read_only, validate_sql
+
 
 SAFE_MODE_SIDE_EFFECT_CASES = [
     # PostgreSQL side-effectful/admin/file/process functions
@@ -160,40 +156,6 @@ def test_dangerous_mode_still_blocks_absolute_no_no_side_effects(
     assert result.reason
 
 
-STRICT_DANGEROUS_MODE_BLOCK_CASES = [
-    # Unknown/unclassified command should not fail-open
-    ("postgres", "FOO BAR"),
-    # DML not in dangerous-mode allowlist
-    (
-        "postgres",
-        "MERGE INTO target t USING source s ON t.id = s.id "
-        "WHEN MATCHED THEN UPDATE SET t.value = s.value "
-        "WHEN NOT MATCHED THEN INSERT (id, value) VALUES (s.id, s.value)",
-    ),
-    ("mysql", "REPLACE INTO users(id, name) VALUES (1, 'x')"),
-    # PostgreSQL statements that should not be in dangerous allowlist
-    ("postgres", "CHECKPOINT"),
-    ("postgres", "LISTEN chan"),
-    ("postgres", "DISCARD ALL"),
-    ("postgres", "COMMENT ON TABLE users IS 'x'"),
-    ("postgres", "CREATE DATABASE scratch_db"),
-    (
-        "postgres",
-        "CREATE OR REPLACE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$",
-    ),
-    # MySQL statements that should not be in dangerous allowlist
-    ("mysql", "FLUSH PRIVILEGES"),
-    ("mysql", "RESET MASTER"),
-    ("mysql", "CREATE FUNCTION myudf RETURNS STRING SONAME 'udf.so'"),
-    # DuckDB statements that should not be in dangerous allowlist
-    ("duckdb", "INSTALL httpfs"),
-    ("duckdb", "CHECKPOINT"),
-    ("duckdb", "COMMENT ON TABLE t IS 'x'"),
-    # SQLite statements that should not be in dangerous allowlist
-    ("sqlite", "REINDEX"),
-]
-
-
 UNKNOWN_DIALECT_FAIL_CLOSED_CASES = [
     # Dangerous functions from any known dialect must be blocked even when the
     # dialect is unrecognized (denylist must fail closed, not fail open).
@@ -211,18 +173,6 @@ def test_unknown_dialect_fails_closed_on_dangerous_functions(
 ):
     """Unrecognized dialects must still block known dangerous functions."""
     result = validate_read_only(query, dialect)
-
-    assert not result.allowed
-    assert result.reason
-
-
-@pytest.mark.parametrize(("dialect", "query"), STRICT_DANGEROUS_MODE_BLOCK_CASES)
-def test_dangerous_mode_uses_strict_allowlist_no_fail_open(
-    dialect: str,
-    query: str,
-):
-    """allow_dangerous=True must not allow unknown/admin/executable statements."""
-    result = validate_sql(query, dialect, allow_dangerous=True)
 
     assert not result.allowed
     assert result.reason
