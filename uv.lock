@@ -3114,9 +3114,8 @@ wheels = [
 ]
 
 [package.optional-dependencies]
-rs = [
+c = [
     { name = "sqlglotc" },
-    { name = "sqlglotrs" },
 ]
 
 [[package]]
@@ -3140,15 +3139,6 @@ wheels = [
 ]
 
 [[package]]
-name = "sqlglotrs"
-version = "0.13.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/1c/03/4c8133ff544788df8df3bb1f1a2395c8fe6a116f27ea2ae30eab4a3de54b/sqlglotrs-0.13.0.tar.gz", hash = "sha256:ad1ad158234af0f8ba5054ca51bd17a7c1e3f81b4798c7970ebf7953fe08ddcb", size = 1179, upload-time = "2026-02-23T19:10:11.495Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/66/51/df8564d8e78c6a0ebf81b752397f64bf94ab1c1f6ed50502bd5bf3da1c0d/sqlglotrs-0.13.0-py3-none-any.whl", hash = "sha256:6b934a244b16f26fca50974328a2ebc7689583c59f06203cebb46e2e6e8d93a7", size = 1416, upload-time = "2026-02-23T19:10:10.755Z" },
-]
-
-[[package]]
 name = "sqlsaber"
 version = "0.72.0"
 source = { editable = "." }
@@ -3165,7 +3155,7 @@ dependencies = [
     { name = "platformdirs" },
     { name = "pydantic-ai", extra = ["cohere", "groq", "huggingface", "mistral"] },
     { name = "saber-tui" },
-    { name = "sqlglot", extra = ["rs"] },
+    { name = "sqlglot", extra = ["c"] },
     { name = "structlog" },
     { name = "tabulate" },
 ]
@@ -3195,7 +3185,7 @@ requires-dist = [
     { name = "platformdirs", specifier = ">=4.0.0" },
     { name = "pydantic-ai", extras = ["cohere", "groq", "huggingface", "mistral"], specifier = ">=2.9,<3" },
     { name = "saber-tui", specifier = ">=0.6.0" },
-    { name = "sqlglot", extras = ["rs"], specifier = ">=27.20.0" },
+    { name = "sqlglot", extras = ["c"], specifier = ">=30.1.0" },
     { name = "structlog", specifier = ">=25.4.0" },
     { name = "tabulate", specifier = ">=0.9.0" },
 ]
