@@ -58,7 +58,6 @@ class TestCLICommands:
         return " ".join(ascii_only.split())
 
     def test_repeated_database_help_is_not_csv_only(self, capsys):
-        """Repeated -d help must describe mixed selectors, not CSV files only."""
         text = self._help_text(capsys, ["--help"])
         assert "one/more CSV files via repeated -d" not in text
         assert "multiple saved names" in text
