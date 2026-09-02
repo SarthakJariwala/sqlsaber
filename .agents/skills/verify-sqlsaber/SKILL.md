@@ -73,16 +73,16 @@ The transcript records the command, terminal output, and exit code. Use `--timeo
 ```bash
 "$VERIFY_SQLSABER" drive "$RUN_ID" \
   --evidence interactive/exit.txt \
-  --timeout 30 --input $'\004' --input-delay 2 \
+  --timeout 40 --input $'\004' --input-delay 8 \
   -- uv run saber -d "$FIXTURE"
 ```
 
-For several deterministic TUI actions in one process, pass JSON delay and text pairs. Delays are seconds from process start:
+`--input` and `--input-sequence` must appear before `--`. Delays are seconds from process start. `uv run saber` needs about 8 seconds before the chat editor is ready:
 
 ```bash
 "$VERIFY_SQLSABER" drive "$RUN_ID" \
-  --evidence interactive/palette-clear-exit.txt --timeout 30 \
-  --input-sequence '[[2, "/"], [4, "\u001b[B\u001b[B\r"], [6, "\u0004"]]' \
+  --evidence interactive/palette-clear-exit.txt --timeout 40 \
+  --input-sequence '[[8, "/"], [11, "\u001b[B\u001b[B\r"], [15, "\u0004"]]' \
   -- uv run saber -d "$FIXTURE"
 ```
 

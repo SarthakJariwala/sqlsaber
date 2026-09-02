@@ -26,11 +26,22 @@ from pathlib import Path
 from typing import Iterator
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
-ROOT = SKILL_DIR.parents[2]
-BASE = SKILL_DIR / "artifacts"
-STATE_BASE = BASE / ".state"
 RUN_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}\Z")
 ANSI_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[@-_])")
+PTY_ROWS = 40
+PTY_COLS = 120
+
+
+def checkout_root(skill_dir: Path) -> Path:
+    for candidate in (skill_dir, *skill_dir.parents):
+        if (candidate / "pyproject.toml").is_file():
+            return candidate
+    raise SystemExit(f"could not find pyproject.toml above {skill_dir}")
+
+
+ROOT = checkout_root(SKILL_DIR)
+BASE = SKILL_DIR / "artifacts"
+STATE_BASE = BASE / ".state"
 
 
 def validate_run_id(value: str) -> str:
@@ -377,18 +388,14 @@ def reserve_active(active_path: Path, command: list[str]) -> None:
         ) from None
     os.close(fd)
     try:
-        write_active(active_path, os.getpid(), command, starting=True)
+        write_active(active_path, os.getpid(), command)
     except BaseException:
         lock_path.unlink(missing_ok=True)
         raise
 
 
-def write_active(
-    active_path: Path, pid: int, command: list[str], *, starting: bool = False
-) -> None:
+def write_active(active_path: Path, pid: int, command: list[str]) -> None:
     payload = {"pid": pid, "command": command}
-    if starting:
-        payload["starting"] = True
     atomic_write(active_path, json.dumps(payload) + "\n")
 
 
@@ -454,7 +461,7 @@ def drive(
                 os._exit(127)
 
         try:
-            winsize = struct.pack("HHHH", 40, 120, 0, 0)
+            winsize = struct.pack("HHHH", PTY_ROWS, PTY_COLS, 0, 0)
             fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
             write_active(active_path, pid, command)
         except BaseException:

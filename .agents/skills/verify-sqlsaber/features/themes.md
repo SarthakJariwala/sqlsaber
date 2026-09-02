@@ -23,7 +23,7 @@ Preconditions:
 
 - **Named selection.** Capture `saber theme set dracula`. It exits `0` and prints `Theme set to: dracula`.
 - **Persisted proof.** Copy the file from `path theme-config`. It records `dracula` as both the selected name and Pygments style.
-- **Reset.** Capture `saber theme reset --yes`. It prints the default theme name. Confirm `theme.json` no longer exists, then run a help command to show the CLI still starts.
+- **Reset.** Capture `saber theme reset --yes`. It prints `Theme reset to default: nord`. Confirm `theme.json` no longer exists, then run a help command to show the CLI still starts.
 - **Interactive route.** In a fresh run, start `saber theme set` through `drive`, select or cancel one visible choice, and retain the transcript. Do not substitute the named path when claiming selector behavior.
 
 ## Gotchas

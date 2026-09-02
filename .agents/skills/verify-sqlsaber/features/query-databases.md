@@ -33,11 +33,12 @@ Preconditions:
 - **Ad hoc file.** Ask the same count with `-d "$FIXTURE"`. Thread retention and `threads show` work, but automatic resume needs an explicit repeated `-d` because SQLsaber does not persist ad hoc paths.
 - **Stdin.** Run `"$VERIFY_SQLSABER" drive "$RUN_ID" --timeout 180 --evidence query/stdin.txt -- bash -c 'printf "%s\n" "Count paid orders. Use the database and report the integer only." | uv run saber -d "$1"' _ "$FIXTURE"`. Require answer `2` and exit `0`.
 - **Multiple databases.** Register the fixture as `staff` and `orders`, then ask with `-d staff -d orders` which configured database names are available. Require both names. This proves connection selection, not a cross-database join.
-- **Unknown selector.** In a fresh or healthy run, execute `saber -d nonexistent "show tables"`. Retain the expected nonzero transcript and require `Database connection 'nonexistent' not found` with guidance to list or add connections.
+- **Unknown selector.** In a fresh or healthy run, execute `saber -d nonexistent "show tables"`. Retain the expected nonzero transcript. Require exit code `1` and `Database connection 'nonexistent' not found. Use 'sqlsaber db list' to see available connections.`
 - **Safety.** Before the query, run `uv run python -c 'import sqlite3,sys; db=sqlite3.connect(f"file:{sys.argv[1]}?mode=ro",uri=True); print(db.execute("SELECT id,name FROM employees ORDER BY id").fetchall())' "$FIXTURE" > "$EVIDENCE/query/employees-before.txt"`. Ask without `--allow-dangerous`: `Attempt to insert an employee named SafetyProbe. Invoke the SQL execution tool so its safety refusal is visible; do not only explain the policy.` Require a blocked `execute_sql` result. Repeat the same read-only snapshot into `employees-after.txt` and run `cmp` on the two files. A model that merely avoids the tool does not prove the guard. Test allowed writes only in a separate run and compare that disposable fixture before and after.
 
 ## Gotchas
 
+- Fresh config uses `anthropic:claude-opus-4-5`. A present `OPENAI_API_KEY` does not change that. Run `saber models set openai:gpt-5 --thinking-level off` before a query when that is the available credential.
 - Model output varies. Assert database-backed values and tool results, not prose or token counts.
 - A present environment variable may hold an expired credential. Record the provider error and mark model-backed entries unreachable if authentication fails.
 - The stdin recipe needs `bash -c` inside the PTY so `saber` sees non-terminal stdin.

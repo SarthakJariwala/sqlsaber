@@ -14,8 +14,8 @@ The interactive session is the full-screen chat started by `saber` with no quest
 ## How to get to it (user POV)
 
 - Run `saber -d FILE` or `saber -d SAVED_NAME` with no question.
-- Type `/` on an empty prompt to open the palette.
-- Type `/clear`, `/thinking`, `/handoff GOAL`, `/exit`, or `/quit`.
+- Type `/` on an empty prompt to open the palette. The first page lists session commands (`Thinking mode`, `Handoff thread`, `Clear conversation`, `Exit`, `Command help`) and then management commands such as `/auth setup`.
+- Type `/clear`, `/thinking`, `/handoff GOAL`, `/help`, `/exit`, or `/quit`. Management families from the CLI (`/auth`, `/db`, `/knowledge`, `/models`, `/theme`, `/threads`) work as slash commands too.
 - Press Ctrl+C during a query or Ctrl+D on an empty editor.
 
 ## Driving it with verify-sqlsaber
@@ -26,15 +26,17 @@ Preconditions:
 - `FIXTURE=$("$VERIFY_SQLSABER" path "$RUN_ID" fixture)` is available.
 - TUI startup needs a key matching the configured model. A harmless placeholder environment value is sufficient only for local controls that never call the provider.
 
-- **Open, palette, clear, and exit.** Start `env ANTHROPIC_API_KEY=verification-placeholder uv run saber -d "$FIXTURE"` through `drive`. Use `--input-sequence` to send `/`, two down arrows plus Enter to activate `Clear conversation`, then Ctrl+D. Require the slash-command hint, database footer, palette labels, `Conversation history cleared.`, and clean exit.
-- **Thinking.** In a fresh drive, open the palette and change `Thinking mode`, or submit `/thinking off` as one pasted line. Require the visible status before exit.
-- **Exit aliases.** In separate fresh drives where needed, submit bare `exit` or `quit`, or send Ctrl+D on an empty editor. Require clean exit.
-- **Handoff and interruption.** These paths call or interrupt a real model. Exercise them only with a working provider credential. Capture the original thread ID, handoff goal, new thread ID, and the visible cancellation state.
+- **Open, palette, clear, and exit.** Start `uv run saber -d "$FIXTURE"` through `drive` with a placeholder `ANTHROPIC_API_KEY` when the configured model is Anthropic. Use `--timeout 40 --input-sequence '[[8, "/"], [11, "\u001b[B\u001b[B\r"], [15, "\u0004"]]'`. Two down arrows select `Clear conversation` (the third palette row). Require `slash commands`, `table name completions`, `DB: verification (SQLite)`, palette labels including `Thinking mode` and `Command help`, `Conversation history cleared.`, and `Goodbye!`.
+- **Thinking.** In a fresh drive, open the palette and change `Thinking mode`. Do not paste `/thinking off` as one line; a leading `/` still opens the palette and leftover text can submit as a query.
+- **Exit aliases.** In separate fresh drives where needed, submit bare `exit` or `quit`, or send Ctrl+D on an empty editor after the editor is ready. Require `Goodbye!`.
+- **Handoff and interruption.** These paths call or interrupt a real model. Set `saber models set openai:gpt-5 --thinking-level off` first when only `OPENAI_API_KEY` is present. Capture the original thread ID, handoff goal, new thread ID, and the visible cancellation state.
 
 ## Gotchas
 
-- A credential for the wrong provider does not satisfy TUI startup. Match the current model.
-- `/` opens the palette only when the editor is empty. Bytewise automated typing that starts with `/` also opens it; use palette keys for deterministic harness proof.
+- A credential for the wrong provider does not satisfy TUI startup. The default model is `anthropic:claude-opus-4-5` even when `OPENAI_API_KEY` is set.
+- `/` opens the palette only when the editor is empty. Bytewise automated typing that starts with `/` also opens it. Use palette keys for deterministic harness proof.
+- Delays of 2/4/6 seconds fire before `uv run saber` shows the editor. Use 8/11/15 seconds from process start.
 - Fixed input delays are safe for local controls, not for model responses.
 - `/handoff` invokes the model. `/clear`, thinking changes, palette open, and exit do not.
+- An ad-hoc `-d "$FIXTURE"` footer uses the file stem (`DB: verification (SQLite)`). A saved name prints that name.
 - The helper strips ANSI. Assert visible labels and messages, not screen coordinates or colors.

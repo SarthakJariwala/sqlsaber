@@ -36,7 +36,7 @@ Preconditions:
 ## Gotchas
 
 - Knowledge commands require a saved database name. Passing an ad hoc file to a query does not create a knowledge scope.
-- Search uses FTS5 token matching with OR semantics for plain terms. Assert the expected name is present, not a fixed result order.
+- Search uses FTS5 token matching with OR semantics for plain terms. Assert the expected name is present, not a fixed result order. A TTY `drive` table can wrap `Paid order definition` across two rows; grep a unique token such as `Paid order`, or use `run` for a single-line name.
 - Search indexes name, description, and SQL, not source.
 - IDs are UUIDs. Capture the full value from add or list.
 - `remove` and `clear` require confirmation in a terminal. Use `--yes` only against the isolated database.

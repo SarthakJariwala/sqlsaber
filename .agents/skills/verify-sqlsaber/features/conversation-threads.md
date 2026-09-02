@@ -43,7 +43,7 @@ Preconditions:
 - Thread IDs must be complete UUIDs.
 - Automatic resume trusts saved database selectors. Ad hoc paths need an explicit repeated `-d` override.
 - `threads show` can mark expired query results or artifacts unavailable. Record that state.
-- `--days` must be at least 1.
+- `--days` must be at least 1. `saber threads prune --days 0` prints `--days must be at least 1.` and exits `2`. A thread created in this run is not eligible for `--days 1`.
 - `threads prune --yes` also cleans durable results and artifacts. Never test deletion against the user's store.
 - Export defaults to the current directory. Always pass an evidence path.
 - The HTML embeds transcript data and layout, but fonts, Markdown rendering, and syntax highlighting load from external CDNs. Do not claim the enhanced rendering is fully offline.

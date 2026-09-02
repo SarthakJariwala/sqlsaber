@@ -11,5 +11,4 @@ wheels/
 
 *.local.*
 
-# Project-local verification evidence and scratch state
 .agents/skills/verify-sqlsaber/artifacts/
