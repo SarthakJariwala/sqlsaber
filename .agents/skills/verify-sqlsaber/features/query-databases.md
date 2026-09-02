@@ -38,7 +38,7 @@ Preconditions:
 
 ## Gotchas
 
-- Fresh config uses `anthropic:claude-opus-4-5`. A present `OPENAI_API_KEY` does not change that. Run `saber models set openai:gpt-5 --thinking-level off` before a query when that is the available credential.
+- Fresh config uses `openai:gpt-5.6-sol`. A present `OPENAI_API_KEY` matches that default. Run `saber models set openai:gpt-5 --thinking-level off` only when you need that smaller model.
 - Model output varies. Assert database-backed values and tool results, not prose or token counts.
 - A present environment variable may hold an expired credential. Record the provider error and mark model-backed entries unreachable if authentication fails.
 - The stdin recipe needs `bash -c` inside the PTY so `saber` sees non-terminal stdin.

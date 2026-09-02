@@ -27,7 +27,7 @@ Preconditions:
 - **Initial state.** Capture `saber models current`. It prints the current model, thinking state, and rows for `handoff`, `viz`, and `notebook`.
 - **Main selection.** Set `openai:gpt-5 --thinking-level off`, capture `models current --agent main`, and require the model plus `Thinking: disabled`.
 - **Subagent override.** Set `openai:gpt-5-mini --agent handoff`, then capture `models current --agent handoff`. It shows the override and main model. Reset the override with `--yes` and confirm it uses main again.
-- **Main reset.** Run `models reset --yes`, then capture current state. It shows `anthropic:claude-sonnet-4-5-20250929`, the reset target printed by the command.
+- **Main reset.** Run `models reset --yes`, then capture current state. It shows `openai:gpt-5.6-sol`, the reset target printed by the command.
 - **Persisted proof.** Copy the file from `path model-config` before reset and after reset. The JSON matches each `models current` read-back.
 - **Remote catalog.** When network access is available, run `models list` with a short explicit timeout. Require `Available Models` and provider-prefixed IDs. Require a current marker only when the configured model appears in the returned catalog. A network failure makes only this entry unreachable.
 
@@ -37,4 +37,4 @@ Preconditions:
 - Model IDs must use a supported `PROVIDER:MODEL` prefix, but saving one does not prove the provider accepts it.
 - `models list` calls `https://models.dev/api.json`; current and set are local.
 - `main`, `handoff`, `viz`, and `notebook` are the accepted agent names.
-- A fresh config currently starts at `anthropic:claude-opus-4-5`, while `models reset` writes `anthropic:claude-sonnet-4-5-20250929`. Record both values rather than calling them the same default.
+- Fresh config and `models reset` both use `openai:gpt-5.6-sol`. Assert that identifier in `models current` and in the file from `path model-config`.
