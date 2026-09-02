@@ -577,7 +577,12 @@ def resume(
         list[str] | None,
         cyclopts.Parameter(
             ["--database", "-d"],
-            help="Database name, DSN override, or one/more CSV files via repeated -d",
+            help=(
+                "Database connection name, file path (CSV/SQLite/DuckDB), or "
+                "connection string (postgresql://, mysql://, duckdb://). Repeat "
+                "-d for multiple saved names, files, or DSNs. Repeated CSV "
+                "files merge into one session. Uses the default if omitted"
+            ),
         ),
     ] = None,
 ):

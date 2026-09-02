@@ -46,3 +46,20 @@ class TestCLICommands:
         assert "knowledge" in captured.out
         assert "models" in captured.out
         assert "auth" in captured.out
+
+    @staticmethod
+    def _help_text(capsys, args: list[str]) -> str:
+        with pytest.raises(SystemExit) as exc_info:
+            app(args)
+        assert exc_info.value.code == 0
+        ascii_only = "".join(
+            ch if ch.isascii() else " " for ch in capsys.readouterr().out
+        )
+        return " ".join(ascii_only.split())
+
+    def test_repeated_database_help_is_not_csv_only(self, capsys):
+        text = self._help_text(capsys, ["--help"])
+        assert "one/more CSV files via repeated -d" not in text
+        assert "multiple saved names" in text
+        assert "CSV files merge" in text
+        assert "-d sales -d analytics" in text
