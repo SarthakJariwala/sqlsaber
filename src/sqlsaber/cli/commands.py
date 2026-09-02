@@ -32,6 +32,12 @@ DANGEROUS_MODE_SCOPE = (
 
 DANGEROUS_MODE_WARNING = f"The assistant can execute {DANGEROUS_MODE_SCOPE}"
 DANGEROUS_MODE_HELP = f"Allow {DANGEROUS_MODE_SCOPE}"
+DATABASE_OPTION_HELP = (
+    "Database connection name, file path (CSV/SQLite/DuckDB), or connection "
+    "string (postgresql://, mysql://, duckdb://). Repeat -d for multiple saved "
+    "names, files, or DSNs. Repeated CSV files merge into one session. Uses "
+    "the default if omitted"
+)
 
 
 class CLIError(Exception):
@@ -49,6 +55,8 @@ app = cyclopts.App(
         "Examples:\n\n"
         'saber "show me all users"\n\n'
         'echo "top customers by revenue" | saber\n\n'
+        'saber -d sales -d analytics "compare revenue to sessions"\n\n'
+        'saber -d users.csv -d orders.csv "join users and orders"\n\n'
         'saber --thread THREAD_ID "now compare that with last quarter"'
     ),
 )
@@ -67,7 +75,7 @@ def meta_handler(
         list[str] | None,
         cyclopts.Parameter(
             ["--database", "-d"],
-            help="Database connection name, file path (CSV/SQLite/DuckDB), connection string (postgresql://, mysql://, duckdb://), or one/more CSV files via repeated -d (uses default if not specified)",
+            help=DATABASE_OPTION_HELP,
         ),
     ] = None,
 ):
@@ -78,6 +86,7 @@ def meta_handler(
         saber                                  # Start interactive mode
         saber "show me all users"              # Run a single query with default database
         saber -d mydb "show me users"          # Run a query with specific database
+        saber -d sales -d analytics "compare revenue"  # Multiple saved connections
         saber -d data.csv "show me users"      # Run a query with ad-hoc CSV file
         saber -d users.csv -d orders.csv "join users and orders"  # Multiple CSV files (one view per file)
         saber -d data.db "show me users"       # Run a query with ad-hoc SQLite file
@@ -103,7 +112,7 @@ def query(
         list[str] | None,
         cyclopts.Parameter(
             ["--database", "-d"],
-            help="Database connection name, file path (CSV/SQLite/DuckDB), connection string (postgresql://, mysql://, duckdb://), or one/more CSV files via repeated -d (uses default if not specified)",
+            help=DATABASE_OPTION_HELP,
         ),
     ] = None,
     thinking: Annotated[
@@ -146,6 +155,7 @@ def query(
     Examples:
         saber                             # Start interactive mode
         saber "show me all users"         # Run a single query
+        saber -d sales -d analytics "compare revenue"  # Multiple saved connections
         saber -d data.csv "show users"    # Run a query with ad-hoc CSV file
         saber -d users.csv -d orders.csv "join users and orders"  # Multiple CSV files (one view per file)
         saber -d data.db "show users"     # Run a query with ad-hoc SQLite file
