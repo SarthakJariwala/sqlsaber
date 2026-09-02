@@ -1,6 +1,7 @@
 """Shared auth setup logic for onboarding and CLI."""
 
 import os
+from typing import Final
 
 from sqlsaber.cli.prompts import Prompter
 from sqlsaber.cli.output import err, out
@@ -9,8 +10,12 @@ from sqlsaber.config.api_keys import APIKeyManager
 from sqlsaber.config.auth import AuthConfigManager, AuthMethod
 from sqlsaber.render import blocks as b
 
+DEFAULT_PROVIDER: Final[str] = "openai"
 
-async def select_provider(prompter: Prompter, default: str = "anthropic") -> str | None:
+
+async def select_provider(
+    prompter: Prompter, default: str = DEFAULT_PROVIDER
+) -> str | None:
     """Interactive provider selection.
 
     Args:
@@ -19,7 +24,9 @@ async def select_provider(prompter: Prompter, default: str = "anthropic") -> str
 
     Returns:
         Selected provider name or None if cancelled
+
     """
+
     provider = await prompter.select(
         "Select AI provider:", choices=providers.all_keys(), default=default
     )
@@ -41,7 +48,9 @@ async def configure_api_key(
 
     Returns:
         True if API key configured successfully, False otherwise
+
     """
+
     api_key = api_key_manager.get_configured_api_key(provider)
     if not api_key:
         api_key = await prompter.secret(
@@ -61,7 +70,7 @@ async def setup_auth(
     prompter: Prompter,
     auth_manager: AuthConfigManager,
     api_key_manager: APIKeyManager,
-    default_provider: str = "anthropic",
+    default_provider: str = DEFAULT_PROVIDER,
 ) -> tuple[bool, str | None]:
     """Interactive authentication setup.
 
@@ -73,7 +82,9 @@ async def setup_auth(
 
     Returns:
         Tuple of (success: bool, provider: str | None)
+
     """
+
     provider = await select_provider(prompter, default=default_provider)
 
     if provider is None:

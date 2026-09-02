@@ -45,7 +45,6 @@ def setup():
             prompter=prompter,
             auth_manager=config_manager,
             api_key_manager=api_key_manager,
-            default_provider="anthropic",
         )
 
     logger.info("auth.setup.start")
@@ -192,4 +191,5 @@ def reset(
 
 def create_auth_app() -> cyclopts.App:
     """Return the authentication management CLI app."""
+
     return auth_app

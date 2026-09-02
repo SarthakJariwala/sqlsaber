@@ -10,6 +10,7 @@ async def fetch_models(
     model_manager: ModelManager, providers: list[str] | None = None
 ) -> list[FetchedModel]:
     """Fetch available models from models.dev API."""
+
     return await model_manager.fetch_available_models(providers=providers)
 
 
@@ -28,8 +29,10 @@ async def choose_model(
         use_search_filter: Enable search filter for large lists
 
     Returns:
-        Selected model ID (provider:model_id) or None if cancelled
+        Selected model ID (provider:model_id). Dismiss with a non-empty list
+        returns the recommendation or models[0]["id"].
     """
+
     if not models:
         out(b.warn("No models available"))
         return None
@@ -40,16 +43,17 @@ async def choose_model(
             out(b.warn(f"No models available for {restrict_provider}"))
             return None
 
-    recommended_id = None
-    if restrict_provider and restrict_provider in ModelManager.RECOMMENDED_MODELS:
-        recommended_id = ModelManager.RECOMMENDED_MODELS[restrict_provider]
+    recommended_id = (
+        ModelManager.recommended_model_id(restrict_provider)
+        if restrict_provider
+        else None
+    )
 
     choices = []
     recommended_index = 0
 
     for i, model in enumerate(models):
-        model_id_without_provider = model["id"].split(":", 1)[1]
-        is_recommended = recommended_id == model_id_without_provider
+        is_recommended = recommended_id == model["id"]
 
         choice_text = model["name"]
         if is_recommended:
@@ -77,11 +81,12 @@ async def choose_model(
     if selected_model:
         return selected_model
 
-    if recommended_id and restrict_provider:
-        return f"{restrict_provider}:{recommended_id}"
+    if recommended_id:
+        return recommended_id
     return models[0]["id"] if models else None
 
 
 def set_model(model_manager: ModelManager, model_id: str) -> bool:
     """Set the current model."""
+
     return model_manager.set_model(model_id)

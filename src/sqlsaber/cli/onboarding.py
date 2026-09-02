@@ -24,7 +24,9 @@ def needs_onboarding(database_arg: str | list[str] | None = None) -> bool:
 
     Onboarding is needed if:
     - No database is configured AND no database connection string provided via CLI
+
     """
+
     if database_arg:
         return False
 
@@ -36,6 +38,7 @@ def needs_onboarding(database_arg: str | list[str] | None = None) -> bool:
 
 def welcome_screen() -> None:
     """Display welcome screen to new users."""
+
     out(
         b.panel((b.md(f"```\n{BANNER}\n```"),), role="primary"),
         b.panel(
@@ -56,7 +59,9 @@ async def setup_database_guided() -> str | None:
     """Guide user through database setup.
 
     Returns the name of the configured database or None if cancelled.
+
     """
+
     from sqlsaber.cli.prompts import AsyncPrompter
     from sqlsaber.cli.workflows.db_setup import (
         build_config,
@@ -126,7 +131,9 @@ async def select_model_for_provider(provider: str) -> str | None:
     """Fetch and let user select a model for the given provider.
 
     Returns the selected model ID or None if cancelled/failed.
+
     """
+
     from sqlsaber.cli.prompts import AsyncPrompter
     from sqlsaber.cli.workflows.model_selection import choose_model, fetch_models
 
@@ -138,12 +145,10 @@ async def select_model_for_provider(provider: str) -> str | None:
 
         if not models:
             out(b.warn(f"Could not fetch models for {provider}. Using default."))
-            default_model_id = ModelManager.RECOMMENDED_MODELS.get(
-                provider, ModelManager.DEFAULT_MODEL
+            return (
+                ModelManager.recommended_model_id(provider)
+                or ModelManager.DEFAULT_MODEL
             )
-            if provider in ModelManager.RECOMMENDED_MODELS:
-                return f"{provider}:{ModelManager.RECOMMENDED_MODELS[provider]}"
-            return default_model_id
 
         prompter = AsyncPrompter()
         selected_model = await choose_model(
@@ -157,16 +162,16 @@ async def select_model_for_provider(provider: str) -> str | None:
         return None
     except Exception as e:
         out(b.warn(f"Error selecting model: {e}. Using default."))
-        if provider in ModelManager.RECOMMENDED_MODELS:
-            return f"{provider}:{ModelManager.RECOMMENDED_MODELS[provider]}"
-        return ModelManager.DEFAULT_MODEL
+        return ModelManager.recommended_model_id(provider) or ModelManager.DEFAULT_MODEL
 
 
 async def setup_auth_guided() -> tuple[bool, str | None]:
     """Guide user through auth setup.
 
     Returns tuple of (success: bool, selected_model: str | None).
+
     """
+
     from sqlsaber.cli.prompts import AsyncPrompter
     from sqlsaber.cli.workflows.auth_setup import setup_auth
 
@@ -181,7 +186,6 @@ async def setup_auth_guided() -> tuple[bool, str | None]:
             prompter=prompter,
             auth_manager=auth_manager,
             api_key_manager=api_key_manager,
-            default_provider="anthropic",
         )
 
         if not configured:
@@ -244,7 +248,9 @@ async def run_onboarding() -> bool:
 
     Returns True if onboarding completed successfully (at least database configured),
     False if user cancelled or onboarding failed.
+
     """
+
     try:
         welcome_screen()
 

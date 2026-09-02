@@ -24,7 +24,7 @@ Preconditions:
 - Doctor reports `HEALTHY`.
 - Model configuration does not require a provider key. A later query does.
 
-- **Initial state.** Capture `saber models current`. It prints the current model, thinking state, and rows for `handoff`, `viz`, and `notebook`.
+- **Initial state.** Capture `saber models current`. A fresh home prints `openai:gpt-5.6-sol`, `Thinking: enabled (medium)`, and rows for `handoff`, `viz`, and `notebook`.
 - **Main selection.** Set `openai:gpt-5 --thinking-level off`, capture `models current --agent main`, and require the model plus `Thinking: disabled`.
 - **Subagent override.** Set `openai:gpt-5-mini --agent handoff`, then capture `models current --agent handoff`. It shows the override and main model. Reset the override with `--yes` and confirm it uses main again.
 - **Main reset.** Run `models reset --yes`, then capture current state. It shows `openai:gpt-5.6-sol`, the reset target printed by the command.
@@ -37,4 +37,4 @@ Preconditions:
 - Model IDs must use a supported `PROVIDER:MODEL` prefix, but saving one does not prove the provider accepts it.
 - `models list` calls `https://models.dev/api.json`; current and set are local.
 - `main`, `handoff`, `viz`, and `notebook` are the accepted agent names.
-- Fresh config and `models reset` both use `openai:gpt-5.6-sol`. Assert that identifier in `models current` and in the file from `path model-config`.
+- Fresh config uses `openai:gpt-5.6-sol` with thinking enabled at medium. `models reset` writes that same model id and leaves thinking as stored. Assert the model identifier in `models current` and in the file from `path model-config`.

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import inspect
 from collections import deque
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from sqlsaber.cli.workflows.auth_setup import setup_auth
+from sqlsaber.cli.workflows.auth_setup import select_provider, setup_auth
 
 
 class DummyPrompter:
@@ -59,6 +60,7 @@ class DummyPrompter:
 @pytest.mark.asyncio
 async def test_setup_auth_resets_existing_api_key(monkeypatch: pytest.MonkeyPatch):
     """Stored API key is cleared when the user opts into reset."""
+
     prompter = DummyPrompter(selects=["openai"], confirms=[True])
     auth_manager = MagicMock()
     api_key_manager = MagicMock()
@@ -106,3 +108,77 @@ async def test_setup_auth_uses_bound_secret_prompt_for_new_key(
 
     assert (success, provider) == (True, "openai")
     api_key_manager.store_api_key.assert_called_once_with("openai", "secret-key")
+
+
+def test_default_provider_is_openai():
+    from sqlsaber.cli.workflows.auth_setup import DEFAULT_PROVIDER
+    from sqlsaber.config.providers import provider_from_model
+    from sqlsaber.config.settings import ModelConfigManager
+
+    assert DEFAULT_PROVIDER == "openai"
+    assert DEFAULT_PROVIDER == provider_from_model(ModelConfigManager.DEFAULT_MODEL)
+
+
+def test_select_provider_and_setup_auth_signature_defaults_are_openai():
+    from sqlsaber.cli.workflows import auth_setup
+
+    select_default = (
+        inspect.signature(auth_setup.select_provider).parameters["default"].default
+    )
+    setup_default = (
+        inspect.signature(auth_setup.setup_auth).parameters["default_provider"].default
+    )
+    assert select_default == "openai"
+    assert setup_default == "openai"
+    assert select_default is auth_setup.DEFAULT_PROVIDER
+    assert setup_default is auth_setup.DEFAULT_PROVIDER
+
+
+def test_onboarding_and_auth_omit_default_provider_kwarg():
+    from sqlsaber.cli.auth import setup
+    from sqlsaber.cli.onboarding import setup_auth_guided
+
+    assert "default_provider=" not in inspect.getsource(setup_auth_guided)
+    assert "default_provider=" not in inspect.getsource(setup)
+
+
+@pytest.mark.asyncio
+async def test_select_provider_without_override_passes_openai_default():
+    captured: dict[str, Any] = {}
+
+    class CapturePrompter(DummyPrompter):
+        async def select(
+            self,
+            message: str,
+            choices: list[Any] | None = None,
+            default: Any = None,
+            use_search_filter: bool = False,
+            use_jk_keys: bool = True,
+        ) -> Any:
+            captured["default"] = default
+            return "openai"
+
+    result = await select_provider(CapturePrompter())
+    assert captured["default"] == "openai"
+    assert result == "openai"
+
+
+@pytest.mark.asyncio
+async def test_select_provider_explicit_override_is_honored():
+    captured: dict[str, Any] = {}
+
+    class CapturePrompter(DummyPrompter):
+        async def select(
+            self,
+            message: str,
+            choices: list[Any] | None = None,
+            default: Any = None,
+            use_search_filter: bool = False,
+            use_jk_keys: bool = True,
+        ) -> Any:
+            captured["default"] = default
+            return default
+
+    result = await select_provider(CapturePrompter(), default="google")
+    assert captured["default"] == "google"
+    assert result == "google"

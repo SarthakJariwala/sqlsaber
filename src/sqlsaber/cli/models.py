@@ -1,7 +1,9 @@
 """Model management CLI commands."""
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from enum import Enum, auto
+from types import MappingProxyType
 from typing import Annotated, Any, TypedDict
 
 import cyclopts
@@ -46,21 +48,77 @@ class FetchedModel(TypedDict):
     knowledge: str
 
 
+class _RecommendationSource(Enum):
+    PRODUCT_DEFAULT = auto()
+
+
+type _RecommendationSpec = str | _RecommendationSource
+
+_RECOMMENDATION_SPECS: Mapping[str, _RecommendationSpec] = {
+    "anthropic": "claude-opus-5",
+    "openai": _RecommendationSource.PRODUCT_DEFAULT,
+    "google": "gemini-2.5-pro",
+    "groq": "llama-3-3-70b-versatile",
+    "mistral": "mistral-large-latest",
+    "cohere": "command-r-plus",
+}
+
+
+def _build_recommendation_registry(
+    specs: Mapping[str, _RecommendationSpec],
+    *,
+    product_default: str,
+) -> Mapping[str, str]:
+    """Validate specs, qualify ids, and freeze the recommendation table."""
+    provider, separator, model = product_default.partition(":")
+    if not separator or not provider or not model:
+        raise ValueError(
+            "product_default must be a qualified provider:model identifier"
+        )
+    if provider != "openai":
+        raise ValueError("product_default provider must be openai")
+
+    built: dict[str, str] = {}
+    saw_product_default = False
+    for spec_provider, spec in specs.items():
+        if not spec_provider:
+            raise ValueError("recommendation provider must be non-empty")
+        if spec is _RecommendationSource.PRODUCT_DEFAULT:
+            if spec_provider != "openai":
+                raise ValueError("PRODUCT_DEFAULT is only valid for openai")
+            if saw_product_default:
+                raise ValueError("PRODUCT_DEFAULT may appear only once")
+            saw_product_default = True
+            built[spec_provider] = product_default
+            continue
+        if not isinstance(spec, str) or not spec:
+            raise ValueError("explicit recommendation must be a non-empty bare id")
+        if ":" in spec:
+            raise ValueError("explicit recommendation must be a bare catalog id")
+        if spec_provider == "openai":
+            raise ValueError("openai recommendation must use PRODUCT_DEFAULT")
+        built[spec_provider] = f"{spec_provider}:{spec}"
+
+    if not saw_product_default:
+        raise ValueError("openai recommendation must use PRODUCT_DEFAULT")
+    return MappingProxyType(built)
+
+
 class ModelManager:
     """Manages AI model configuration and fetching."""
 
     DEFAULT_MODEL: str = ModelConfigManager.DEFAULT_MODEL
     MODELS_API_URL: str = "https://models.dev/api.json"
     SUPPORTED_PROVIDERS: Sequence[str] = providers.all_keys()
+    _RECOMMENDED_MODEL_IDS: Mapping[str, str] = _build_recommendation_registry(
+        _RECOMMENDATION_SPECS,
+        product_default=ModelConfigManager.DEFAULT_MODEL,
+    )
 
-    RECOMMENDED_MODELS: dict[str, str] = {
-        "anthropic": "claude-sonnet-4-5-20250929",
-        "openai": "gpt-5",
-        "google": "gemini-2.5-pro",
-        "groq": "llama-3-3-70b-versatile",
-        "mistral": "mistral-large-latest",
-        "cohere": "command-r-plus",
-    }
+    @classmethod
+    def recommended_model_id(cls, provider: str) -> str | None:
+        """Return the qualified recommendation for a provider, if any."""
+        return cls._RECOMMENDED_MODEL_IDS.get(provider)
 
     async def fetch_available_models(
         self, providers: Sequence[str] | None = None
@@ -69,7 +127,9 @@ class ModelManager:
 
         Returns list of dicts with keys: id (provider:model_id), provider, name,
         description, context_length, knowledge.
+
         """
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(self.MODELS_API_URL)
@@ -143,11 +203,13 @@ class ModelManager:
 
     def get_current_model(self) -> str:
         """Get the currently configured model."""
+
         config = Config()
         return config.model_name
 
     def set_model(self, model_id: str) -> bool:
         """Set the current model."""
+
         try:
             config = Config()
             config.set_model(model_id)
@@ -160,6 +222,7 @@ class ModelManager:
 
     def reset_model(self) -> bool:
         """Reset to default model."""
+
         return self.set_model(self.DEFAULT_MODEL)
 
 
@@ -240,6 +303,7 @@ def list_models() -> None:
 
 def _get_thinking_level_choices() -> list[Choice]:
     """Build thinking level choices for interactive selection."""
+
     return [
         Choice(
             "medium (Recommended - balanced cost/quality)", value=ThinkingLevel.MEDIUM
@@ -254,6 +318,7 @@ def _get_thinking_level_choices() -> list[Choice]:
 
 def _resolve_thinking_level(value: str) -> tuple[bool, ThinkingLevel]:
     """Resolve a CLI thinking value into enabled state and level."""
+
     normalized = value.strip().lower()
     if normalized == "off":
         return False, Config().model.thinking_level
@@ -271,7 +336,9 @@ async def _prompt_thinking_level(prompter: Any) -> tuple[bool, ThinkingLevel]:
 
     Returns:
         Tuple of (thinking_enabled, thinking_level)
+
     """
+
     configure = await prompter.confirm(
         "Configure thinking mode?",
         default=True,
@@ -615,4 +682,5 @@ def reset_model_command(
 
 def create_models_app() -> cyclopts.App:
     """Return the model management CLI app."""
+
     return models_app
