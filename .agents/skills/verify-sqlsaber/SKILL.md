@@ -19,7 +19,7 @@ From the repository root:
 
 ```bash
 export RUN_ID="sqlsaber-$(date -u +%Y%m%dT%H%M%SZ)-$$"
-export VERIFY_SQLSABER=".pi/skills/verify-sqlsaber/bin/verify-sqlsaber"
+export VERIFY_SQLSABER=".agents/skills/verify-sqlsaber/bin/verify-sqlsaber"
 "$VERIFY_SQLSABER" launch "$RUN_ID"
 ```
 
@@ -43,7 +43,7 @@ Run this read-only check whenever a command behaves unexpectedly:
 
 Require `HEALTHY`. Doctor checks the checkout revision, CLI version, seeded fixture, config/data/log paths, and whether another process is driving this run. It reports the null keyring backend and which model credential environment variables are present without printing their values. SQLsaber has no port or long-lived process to inspect.
 
-`doctor.txt` is written to `.pi/verification/sqlsaber/$RUN_ID/`. A present credential is not proof that the remote provider accepts it. The first real query establishes that.
+`doctor.txt` is written to `.agents/skills/verify-sqlsaber/artifacts/$RUN_ID/`. A present credential is not proof that the remote provider accepts it. The first real query establishes that.
 
 ## Drive
 
@@ -73,16 +73,16 @@ The transcript records the command, terminal output, and exit code. Use `--timeo
 ```bash
 "$VERIFY_SQLSABER" drive "$RUN_ID" \
   --evidence interactive/exit.txt \
-  --timeout 30 --input $'\004' --input-delay 2 \
+  --timeout 40 --input $'\004' --input-delay 8 \
   -- uv run saber -d "$FIXTURE"
 ```
 
-For several deterministic TUI actions in one process, pass JSON delay and text pairs. Delays are seconds from process start:
+`--input` and `--input-sequence` must appear before `--`. Delays are seconds from process start. `uv run saber` needs about 8 seconds before the chat editor is ready:
 
 ```bash
 "$VERIFY_SQLSABER" drive "$RUN_ID" \
-  --evidence interactive/palette-clear-exit.txt --timeout 30 \
-  --input-sequence '[[2, "/"], [4, "\u001b[B\u001b[B\r"], [6, "\u0004"]]' \
+  --evidence interactive/palette-clear-exit.txt --timeout 40 \
+  --input-sequence '[[8, "/"], [11, "\u001b[B\u001b[B\r"], [15, "\u0004"]]' \
   -- uv run saber -d "$FIXTURE"
 ```
 
@@ -100,7 +100,7 @@ Use the exact commands and expected text in the selected feature file. Stable ha
 
 ## Evidence
 
-Proof belongs under `.pi/verification/sqlsaber/$RUN_ID/`. The helper creates that directory and never removes it. Put each feature in its own subdirectory.
+Proof belongs under `.agents/skills/verify-sqlsaber/artifacts/$RUN_ID/`. The helper creates that directory and never removes it. Put each feature in its own subdirectory.
 
 A valid proof:
 
@@ -130,18 +130,18 @@ Clean only the run you created:
 
 ```bash
 "$VERIFY_SQLSABER" cleanup "$RUN_ID"
-test ! -e ".pi/verification/sqlsaber/.state/$RUN_ID"
-test -f ".pi/verification/sqlsaber/$RUN_ID/launch.txt"
-test -f ".pi/verification/sqlsaber/$RUN_ID/cleanup.txt"
+test ! -e ".agents/skills/verify-sqlsaber/artifacts/.state/$RUN_ID"
+test -f ".agents/skills/verify-sqlsaber/artifacts/$RUN_ID/launch.txt"
+test -f ".agents/skills/verify-sqlsaber/artifacts/$RUN_ID/cleanup.txt"
 ```
 
 The helper records the exact active process leader. Cleanup verifies that leader's environment carries this run's marker, then signals its process group so descendants stop too. It never kills by process name. It removes the isolated home, fixture, app logs, and PID record. It preserves all proof artifacts.
 
-Do not remove `.pi/verification/sqlsaber/$RUN_ID/` during cleanup. If you created exports as part of a feature, write them inside that evidence directory before teardown.
+Do not remove `.agents/skills/verify-sqlsaber/artifacts/$RUN_ID/` during cleanup. If you created exports as part of a feature, write them inside that evidence directory before teardown.
 
 ## Helpers
 
-`.pi/skills/verify-sqlsaber/bin/verify-sqlsaber` is executable and has six commands:
+`.agents/skills/verify-sqlsaber/bin/verify-sqlsaber` is executable and has six commands:
 
 ```text
 verify-sqlsaber launch RUN_ID

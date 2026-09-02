@@ -16,7 +16,7 @@ Database connection commands let a user save named databases, inspect and test t
 - Run `saber db add NAME` for prompted setup.
 - Run `saber db add NAME --type sqlite --database FILE --description TEXT --no-interactive` for scripted local setup.
 - Run `saber db list` or `saber db test [NAME]` to inspect and test connections.
-- Run `saber db exclude NAME --set LIST`, `--add LIST`, `--remove LIST`, or `--clear`. With no action flag, SQLsaber opens an editor and saves the response.
+- Run `saber db exclude NAME --set LIST`, `--add LIST`, `--remove LIST`, or `--clear`. With no action flag, SQLsaber opens a comma-separated text prompt and saves the response.
 - Run `saber db set-default NAME` or `saber db remove NAME` to change saved state.
 
 ## Driving it with verify-sqlsaber
@@ -36,7 +36,7 @@ Preconditions:
 
 ## Gotchas
 
-- Non-interactive SQLite adds save the path as supplied. Interactive SQLite and DuckDB setup resolves it to an absolute path.
+- Non-interactive SQLite adds save the path as supplied. Interactive SQLite and DuckDB setup, and non-interactive DuckDB adds, resolve the path to an absolute path.
 - Database passwords use the operating-system keyring in normal use. Verification selects a null backend, so never use it to prove server-password persistence.
 - The first connection becomes default automatically. Removing the default promotes the first remaining connection.
 - `db test` opens the real database. Keep remote checks read-only.

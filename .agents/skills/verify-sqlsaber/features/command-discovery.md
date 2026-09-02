@@ -22,11 +22,11 @@ Preconditions:
 - The run is launched and doctor reports `HEALTHY`.
 - No SQLsaber feature command has run in this isolated home.
 
-- **Version entry.** Run `.pi/skills/verify-sqlsaber/bin/verify-sqlsaber drive "$RUN_ID" --evidence command-discovery/version.txt -- uv run saber --version`. Exit code `0` and terminal output are the version in `pyproject.toml`.
-- **Root help entry.** Run `.pi/skills/verify-sqlsaber/bin/verify-sqlsaber drive "$RUN_ID" --evidence command-discovery/root-help.txt -- uv run saber --help`. Exit code `0`, the heading contains `Commands`, and all six command families appear.
-- **Short help entry.** Run `.pi/skills/verify-sqlsaber/bin/verify-sqlsaber drive "$RUN_ID" --evidence command-discovery/short-help.txt -- uv run saber -h`. It reaches the same root help and exits `0`.
-- **Command help entry.** Run `.pi/skills/verify-sqlsaber/bin/verify-sqlsaber drive "$RUN_ID" --evidence command-discovery/db-add-help.txt -- uv run saber db add --help`. The output names `NAME`, `--type`, `--database`, `--no-interactive`, and the SQLite example.
-- **Read-only proof.** Run `STATE=$(.pi/skills/verify-sqlsaber/bin/verify-sqlsaber path "$RUN_ID" state)` and `find "$STATE/home/config" "$STATE/home/data" -type f -print | sort > ".pi/verification/sqlsaber/$RUN_ID/command-discovery/app-state-files.txt"`. The file is empty. The app log may exist at the separate path returned by `path log`, and `uv run` may populate `home/cache`; neither is user configuration.
+- **Version entry.** Run `.agents/skills/verify-sqlsaber/bin/verify-sqlsaber drive "$RUN_ID" --evidence command-discovery/version.txt -- uv run saber --version`. Exit code `0` and terminal output are the version in `pyproject.toml`.
+- **Root help entry.** Run `.agents/skills/verify-sqlsaber/bin/verify-sqlsaber drive "$RUN_ID" --evidence command-discovery/root-help.txt -- uv run saber --help`. Exit code `0`, the heading contains `Commands`, and all six command families appear.
+- **Short help entry.** Run `.agents/skills/verify-sqlsaber/bin/verify-sqlsaber drive "$RUN_ID" --evidence command-discovery/short-help.txt -- uv run saber -h`. It reaches the same root help and exits `0`.
+- **Command help entry.** Run `.agents/skills/verify-sqlsaber/bin/verify-sqlsaber drive "$RUN_ID" --evidence command-discovery/db-add-help.txt -- uv run saber db add --help`. The output names `NAME`, `--type`, `--database`, `--no-interactive`, and the SQLite example.
+- **Read-only proof.** Run `STATE=$(.agents/skills/verify-sqlsaber/bin/verify-sqlsaber path "$RUN_ID" state)` and `find "$STATE/home/config" "$STATE/home/data" -type f -print | sort > ".agents/skills/verify-sqlsaber/artifacts/$RUN_ID/command-discovery/app-state-files.txt"`. The file is empty. The app log may exist at the separate path returned by `path log`, and `uv run` may populate `home/cache`; neither is user configuration.
 
 ## Gotchas
 
