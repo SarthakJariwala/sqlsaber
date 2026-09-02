@@ -25,8 +25,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-ROOT = Path(__file__).resolve().parents[4]
-BASE = ROOT / ".pi" / "verification" / "sqlsaber"
+SKILL_DIR = Path(__file__).resolve().parents[1]
+ROOT = SKILL_DIR.parents[2]
+BASE = SKILL_DIR / "artifacts"
 STATE_BASE = BASE / ".state"
 RUN_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}\Z")
 ANSI_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[@-_])")

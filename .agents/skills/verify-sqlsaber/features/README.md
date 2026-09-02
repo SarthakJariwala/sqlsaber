@@ -8,7 +8,7 @@ This directory tracks SQLsaber behavior that a user can reach from the terminal.
 - Create a unique run with `verify-sqlsaber launch "$RUN_ID"`.
 - Require `HEALTHY` from `verify-sqlsaber doctor "$RUN_ID"`.
 - Use the fixture returned by `verify-sqlsaber path "$RUN_ID" fixture`.
-- Keep app state under `.pi/verification/sqlsaber/.state/$RUN_ID/` and proof under `.pi/verification/sqlsaber/$RUN_ID/`.
+- Keep app state under `.agents/skills/verify-sqlsaber/artifacts/.state/$RUN_ID/` and proof under `.agents/skills/verify-sqlsaber/artifacts/$RUN_ID/`.
 - Use a different `RUN_ID` for every concurrent agent. Never point the helper at the user's normal config or data directories.
 - The helper uses `keyring.backends.null.Keyring`, so verification cannot read or write the operator's OS keyring. Driven commands still inherit provider credentials from the coordinator environment.
 - A model-backed query requires one of those environment credentials and a matching model selected inside the isolated run.
