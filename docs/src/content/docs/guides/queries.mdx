@@ -97,7 +97,7 @@ Supports schema-aware completions:
 
 #### Extended Thinking Mode
 
-For complex queries requiring deeper reasoning, enable thinking mode to see step-by-step problem solving process. You can configure different thinking levels to balance cost vs quality.
+A fresh install has thinking on at medium. Change the level or turn thinking off when a query does not need it.
 
 **Thinking Levels:**
 
@@ -114,18 +114,15 @@ For complex queries requiring deeper reasoning, enable thinking mode to see step
 
 ```
 > /thinking
-Thinking: disabled
+Thinking: enabled (medium)
 
-> /thinking medium
-✓ Thinking: enabled (medium)
+> /thinking high
+✓ Thinking: enabled (high)
 
 > Analyze sales trends and forecast next quarter
 💭 Thinking...
 [reasoning process appears here]
 [followed by final answer]
-
-> /thinking high
-✓ Thinking: enabled (high)
 
 > /thinking off
 ✓ Thinking: disabled
