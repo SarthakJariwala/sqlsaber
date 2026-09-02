@@ -40,6 +40,13 @@ class TestModelConfigManager:
         """Test default model is returned when no config exists."""
         model = model_manager.get_model()
         assert model == ModelConfigManager.DEFAULT_MODEL
+        assert model == "openai:gpt-5.6-sol"
+
+    def test_cli_reset_target_is_the_config_default(self):
+        from sqlsaber.cli.models import ModelManager
+
+        assert ModelManager.DEFAULT_MODEL == ModelConfigManager.DEFAULT_MODEL
+        assert ModelManager.DEFAULT_MODEL == "openai:gpt-5.6-sol"
 
     def test_set_and_get_model(self, model_manager):
         """Test setting and retrieving a model."""

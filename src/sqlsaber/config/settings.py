@@ -50,7 +50,7 @@ class ModelConfigManager:
         {"version": 2, "model": "...", "thinking": {"enabled": bool, "level": "medium"}}
     """
 
-    DEFAULT_MODEL = "anthropic:claude-opus-4-5"
+    DEFAULT_MODEL = "openai:gpt-5.6-sol"
     DEFAULT_THINKING_LEVEL = ThinkingLevel.MEDIUM
     CONFIG_VERSION = 2
 

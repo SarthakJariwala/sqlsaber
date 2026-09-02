@@ -421,7 +421,7 @@ saber models current
 
 #### `saber models reset`
 
-Reset to the default model (Claude Sonnet 4).
+Reset to the default model (`openai:gpt-5.6-sol`).
 
 **Usage:**
 

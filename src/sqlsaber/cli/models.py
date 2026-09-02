@@ -12,7 +12,12 @@ from sqlsaber.cli.output import err, fail, fail_usage, out
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config import providers
 from sqlsaber.config.logging import get_logger
-from sqlsaber.config.settings import SUBAGENT_KEYS, Config, ThinkingLevel
+from sqlsaber.config.settings import (
+    SUBAGENT_KEYS,
+    Config,
+    ModelConfigManager,
+    ThinkingLevel,
+)
 from sqlsaber.render import blocks as b
 
 logger = get_logger(__name__)
@@ -44,7 +49,7 @@ class FetchedModel(TypedDict):
 class ModelManager:
     """Manages AI model configuration and fetching."""
 
-    DEFAULT_MODEL: str = "anthropic:claude-sonnet-4-5-20250929"
+    DEFAULT_MODEL: str = ModelConfigManager.DEFAULT_MODEL
     MODELS_API_URL: str = "https://models.dev/api.json"
     SUPPORTED_PROVIDERS: Sequence[str] = providers.all_keys()
 
