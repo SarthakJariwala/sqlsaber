@@ -25,7 +25,7 @@ Preconditions:
 - Model configuration does not require a provider key. A later query does.
 
 - **Initial state.** Capture `saber models current`. A fresh home prints `openai:gpt-5.6-sol`, `Thinking: enabled (medium)`, and rows for `handoff`, `viz`, and `notebook`.
-- **Main selection.** Set `openai:gpt-5 --thinking-level off`, capture `models current --agent main`, and require the model plus `Thinking: disabled`.
+- **Main selection.** Set `openai:gpt-5 --thinking-level off`, capture `models current --agent main`, and require the model plus `Thinking: disabled`. `saber models set xai:grok-4.6` is accepted (no catalog rejection). That is the recommended xAI id; it does not change the product default `openai:gpt-5.6-sol`.
 - **Subagent override.** Set `openai:gpt-5-mini --agent handoff`, then capture `models current --agent handoff`. It shows the override and main model. Reset the override with `--yes` and confirm it uses main again.
 - **Main reset.** Run `models reset --yes`, then capture current state. It shows `openai:gpt-5.6-sol`, the reset target printed by the command.
 - **Persisted proof.** Copy the file from `path model-config` before reset and after reset. The JSON matches each `models current` read-back.
@@ -34,7 +34,7 @@ Preconditions:
 ## Gotchas
 
 - `--thinking-level` applies only to the main model.
-- Model IDs must use a supported `PROVIDER:MODEL` prefix, but saving one does not prove the provider accepts it.
+- Model IDs must use a supported `PROVIDER:MODEL` prefix, but saving one does not prove the provider accepts it. `xai:grok-4.6` is valid; `grok:grok-4.6` is not (pydantic-ai's live prefix is `xai`, not the deprecated `grok:`). `groq:` remains Groq.
 - `models list` calls `https://models.dev/api.json`; current and set are local.
 - `main`, `handoff`, `viz`, and `notebook` are the accepted agent names.
 - Fresh config uses `openai:gpt-5.6-sol` with thinking enabled at medium. `models reset` writes that same model id and leaves thinking as stored. Assert the model identifier in `models current` and in the file from `path model-config`.

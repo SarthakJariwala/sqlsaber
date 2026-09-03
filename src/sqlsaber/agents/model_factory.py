@@ -54,4 +54,9 @@ def build_model(full_model_str: str, api_key: str | None) -> Model | str:
             model_name,
             provider=OpenAIProvider(api_key=api_key),
         )
+    if provider == "xai":
+        from pydantic_ai.models.xai import XaiModel
+        from pydantic_ai.providers.xai import XaiProvider
+
+        return XaiModel(model_name, provider=XaiProvider(api_key=api_key))
     return normalized_model_str

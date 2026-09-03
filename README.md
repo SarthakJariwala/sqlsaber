@@ -71,7 +71,7 @@ saber -d sales -d analytics "Compare last month's revenue to web sessions"
 - **Works with your stack** — PostgreSQL, MySQL, SQLite, DuckDB, and CSV files.
 - **Remembers your work** — Resume previous analysis with conversation threads.
 - **Learns your business context** — Store KPI definitions, SQL patterns, and domain notes in a searchable knowledge base.
-- **Flexible model support** — Use Anthropic, OpenAI, Google, Groq, Mistral, Cohere, Hugging Face, and other supported providers.
+- **Flexible model support** — Use Anthropic, OpenAI, Google, Groq, xAI, Mistral, Cohere, Hugging Face, and other supported providers.
 
 ## Common workflows
 

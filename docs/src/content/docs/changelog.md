@@ -7,6 +7,10 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
+### Features
+
+* add xAI Grok as a first-class provider (`xai:grok-4.6`)
+
 ---
 
 ## [0.72.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.71.0...sqlsaber-v0.72.0) (2026-08-18)

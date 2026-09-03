@@ -61,6 +61,7 @@ _RECOMMENDATION_SPECS: Mapping[str, _RecommendationSpec] = {
     "groq": "llama-3-3-70b-versatile",
     "mistral": "mistral-large-latest",
     "cohere": "command-r-plus",
+    "xai": "grok-4.6",
 }
 
 

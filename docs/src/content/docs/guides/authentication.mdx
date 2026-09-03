@@ -1,6 +1,6 @@
 ---
 title: Authentication
-description: "Set up API keys for Anthropic, OpenAI, Google, Groq, and other LLM providers in SQLsaber. Secure credential storage via OS keychain."
+description: "Set up API keys for Anthropic, OpenAI, Google, Groq, xAI, and other LLM providers in SQLsaber. Secure credential storage via OS keychain."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -18,6 +18,7 @@ SQLsaber supports the following LLM providers:
 - **Mistral** - API key
 - **Cohere** - API key
 - **Hugging Face** - API key
+- **xAI** - API key (`XAI_API_KEY`; recommended model `xai:grok-4.6`)
 
 <Aside type="note">
   SQLsaber stores API keys securely using your operating system's credentials
@@ -107,6 +108,9 @@ export OPENAI_API_KEY="your-api-key"
 
 # Google
 export GOOGLE_API_KEY="your-api-key"
+
+# xAI
+export XAI_API_KEY="your-api-key"
 ```
 
 Environment variables take precedence over stored credentials.

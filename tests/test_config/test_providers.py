@@ -16,6 +16,7 @@ def test_all_keys_contains_expected_providers():
         "mistral",
         "cohere",
         "huggingface",
+        "xai",
     ]:
         assert k in keys
 
@@ -23,6 +24,7 @@ def test_all_keys_contains_expected_providers():
 def test_env_var_name_mapping():
     assert providers.env_var_name("openai") == "OPENAI_API_KEY"
     assert providers.env_var_name("anthropic") == "ANTHROPIC_API_KEY"
+    assert providers.env_var_name("xai") == "XAI_API_KEY"
     assert providers.env_var_name("unknown") == "AI_API_KEY"
 
 
@@ -33,6 +35,8 @@ def test_env_var_name_mapping():
         ("pydantic_ai.models.mistral", "MistralModel"),
         ("pydantic_ai.models.cohere", "CohereModel"),
         ("pydantic_ai.models.huggingface", "HuggingFaceModel"),
+        ("pydantic_ai.models.xai", "XaiModel"),
+        ("pydantic_ai.providers.xai", "XaiProvider"),
     ],
 )
 def test_supported_provider_dependencies_are_installed(
@@ -50,9 +54,21 @@ def test_supported_provider_dependencies_are_installed(
         ("google:gemini-1.5-pro", "google"),
         ("google-gla:gemini-1.5-pro", "google"),
         ("mistral:large", "mistral"),
+        ("groq:llama-3-3-70b-versatile", "groq"),
+        ("xai:grok-4.6", "xai"),
+        ("grok:grok-4.6", None),
         ("unknown:model", None),
         ("", None),
     ],
 )
 def test_provider_from_model(model: str, expected: str | None):
     assert providers.provider_from_model(model) == expected
+
+
+def test_xai_is_distinct_from_groq():
+    assert providers.canonical("xai") == "xai"
+    assert providers.canonical("groq") == "groq"
+    assert providers.canonical("grok") is None
+    assert providers.env_var_name("xai") == "XAI_API_KEY"
+    assert providers.env_var_name("groq") == "GROQ_API_KEY"
+    assert "grok" not in providers.all_keys()
