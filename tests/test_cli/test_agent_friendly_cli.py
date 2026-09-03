@@ -82,6 +82,34 @@ def test_models_set_directly_without_fetching_or_prompting():
     config.model.set_thinking.assert_called_once_with(True, ThinkingLevel.HIGH)
 
 
+def test_models_set_accepts_xai_grok_4_6():
+    with patch.object(
+        models_cli.model_manager, "set_model", return_value=True
+    ) as set_model:
+        models_cli.set_model_command("xai:grok-4.6")
+
+    set_model.assert_called_once_with("xai:grok-4.6")
+
+
+def test_models_set_accepts_groq_without_confusing_xai():
+    with patch.object(
+        models_cli.model_manager, "set_model", return_value=True
+    ) as set_model:
+        models_cli.set_model_command("groq:llama-3-3-70b-versatile")
+
+    set_model.assert_called_once_with("groq:llama-3-3-70b-versatile")
+
+
+def test_models_set_rejects_deprecated_grok_prefix(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        models_cli.set_model_command("grok:grok-4.6")
+
+    assert exc_info.value.code == 2
+    err = capsys.readouterr().err
+    assert "supported PROVIDER:MODEL" in err
+    assert "xai" in err
+
+
 def test_models_set_rejects_unsupported_provider(capsys):
     with pytest.raises(SystemExit) as exc_info:
         models_cli.set_model_command("unknown:model")

@@ -52,3 +52,19 @@ async def test_choose_model_labels_qualified_recommendation_and_returns_it_on_ca
     assert prompter.choices[0].title == "GPT-5.6 Sol (Recommended)"
     assert prompter.choices[0].value == "openai:gpt-5.6-sol"
     assert all("GPT-5 (Recommended)" not in choice.title for choice in prompter.choices)
+
+
+@pytest.mark.asyncio
+async def test_choose_model_labels_xai_grok_4_6_recommendation():
+    prompter = CancelPrompter()
+    models = [
+        _model("xai:grok-4.5", "xai", "Grok 4.5"),
+        _model("xai:grok-4.6", "xai", "Grok 4.6"),
+        _model("xai:grok-4.3", "xai", "Grok 4.3"),
+    ]
+
+    selected = await choose_model(prompter, models, restrict_provider="xai")
+
+    assert selected == "xai:grok-4.6"
+    assert prompter.choices[0].title == "Grok 4.6 (Recommended)"
+    assert prompter.choices[0].value == "xai:grok-4.6"

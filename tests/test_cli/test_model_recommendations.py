@@ -12,6 +12,7 @@ CURRENT_QUALIFIED_RECS = {
     "groq": "groq:llama-3-3-70b-versatile",
     "mistral": "mistral:mistral-large-latest",
     "cohere": "cohere:command-r-plus",
+    "xai": "xai:grok-4.6",
 }
 
 
@@ -27,6 +28,10 @@ def test_anthropic_recommendation_is_opus_5():
 
 def test_huggingface_has_no_recommendation():
     assert ModelManager.recommended_model_id("huggingface") is None
+
+
+def test_xai_recommendation_is_grok_4_6():
+    assert ModelManager.recommended_model_id("xai") == "xai:grok-4.6"
 
 
 @pytest.mark.parametrize(
@@ -109,6 +114,7 @@ async def test_select_model_empty_fetch_uses_qualified_recommendation(monkeypatc
     assert await select_model_for_provider("openai") == ModelConfigManager.DEFAULT_MODEL
     assert await select_model_for_provider("anthropic") == "anthropic:claude-opus-5"
     assert await select_model_for_provider("huggingface") == ModelManager.DEFAULT_MODEL
+    assert await select_model_for_provider("xai") == "xai:grok-4.6"
 
 
 @pytest.mark.asyncio
@@ -125,3 +131,4 @@ async def test_select_model_fetch_exception_uses_qualified_recommendation(
     assert await select_model_for_provider("openai") == ModelConfigManager.DEFAULT_MODEL
     assert await select_model_for_provider("anthropic") == "anthropic:claude-opus-5"
     assert await select_model_for_provider("huggingface") == ModelManager.DEFAULT_MODEL
+    assert await select_model_for_provider("xai") == "xai:grok-4.6"

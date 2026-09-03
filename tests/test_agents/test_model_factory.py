@@ -8,6 +8,7 @@ from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.models.xai import XaiModel
 
 from sqlsaber.agents.model_factory import UNIFIED_EFFORT_MAP, build_model
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
@@ -22,6 +23,7 @@ from sqlsaber.database.sqlite import SQLiteConnection
         ("google:gemini-test", GoogleModel, "gemini-test"),
         ("google-gla:gemini-test", GoogleModel, "gemini-test"),
         ("openai:gpt-test", OpenAIResponsesModel, "gpt-test"),
+        ("xai:grok-4.6", XaiModel, "grok-4.6"),
     ],
 )
 def test_build_model_with_explicit_key(
@@ -35,6 +37,21 @@ def test_build_model_with_explicit_key(
 
 def test_build_model_without_key_returns_provider_string() -> None:
     assert build_model("anthropic:claude-test", None) == "anthropic:claude-test"
+    assert build_model("xai:grok-4.6", None) == "xai:grok-4.6"
+
+
+def test_build_model_groq_with_key_stays_discovery_string() -> None:
+    assert build_model("groq:llama-3-3-70b-versatile", "test-key") == (
+        "groq:llama-3-3-70b-versatile"
+    )
+
+
+def test_build_model_xai_explicit_key_injects_provider() -> None:
+    model = build_model("xai:grok-4.6", "test-key")
+
+    assert isinstance(model, XaiModel)
+    assert model.model_name == "grok-4.6"
+    assert model.system == "xai"
 
 
 def test_build_model_normalizes_google_alias() -> None:
