@@ -13,6 +13,29 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.73.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.72.0...sqlsaber-v0.73.0) (2026-09-03)
+
+
+### Features
+
+* **cli:** add management slash command parity ([#237](https://github.com/SarthakJariwala/sqlsaber/issues/237)) ([c15dec0](https://github.com/SarthakJariwala/sqlsaber/commit/c15dec0e702f4f62caa367855c30dc6329cd6e73))
+* **cli:** refresh the usage footer after each model message ([#246](https://github.com/SarthakJariwala/sqlsaber/issues/246)) ([cf83c95](https://github.com/SarthakJariwala/sqlsaber/commit/cf83c95098d138f1645843c8a80712f776ca15a6))
+* **config:** add xAI Grok provider ([#245](https://github.com/SarthakJariwala/sqlsaber/issues/245)) ([16f06ce](https://github.com/SarthakJariwala/sqlsaber/commit/16f06ce91c9adee41755b8f1e707fc4dba3211a9))
+* **config:** default model openai:gpt-5.6-sol ([#243](https://github.com/SarthakJariwala/sqlsaber/issues/243)) ([f120dac](https://github.com/SarthakJariwala/sqlsaber/commit/f120dac3cb0d86e5978ecbcf916b752a6fb36fba))
+* improve automation workflows ([#223](https://github.com/SarthakJariwala/sqlsaber/issues/223)) ([0844468](https://github.com/SarthakJariwala/sqlsaber/commit/084446822a7d7efce4b273c67f3fd07626318930))
+* **onboarding:** default OpenAI gpt-5.6-sol and thinking on ([#244](https://github.com/SarthakJariwala/sqlsaber/issues/244)) ([e5bd367](https://github.com/SarthakJariwala/sqlsaber/commit/e5bd367fdf54280a8d55ec3a1e3dd7634af1b152))
+* render only through saber-tui blocks and surfaces ([#228](https://github.com/SarthakJariwala/sqlsaber/issues/228)) ([89c9dd0](https://github.com/SarthakJariwala/sqlsaber/commit/89c9dd0ee15e31911d4cb456e206d255a7b33d2c))
+
+
+### Bug Fixes
+
+* **cli:** document mixed names for repeated -d ([#242](https://github.com/SarthakJariwala/sqlsaber/issues/242)) ([1c4a1f0](https://github.com/SarthakJariwala/sqlsaber/commit/1c4a1f06364077c229a5695645f73ff2f91c9d32))
+* replace deprecated sqlglot rs extra ([#240](https://github.com/SarthakJariwala/sqlsaber/issues/240)) ([42513c1](https://github.com/SarthakJariwala/sqlsaber/commit/42513c1875fe003334b64412f50b8c34004e6ec0))
+* restore static type checking ([#236](https://github.com/SarthakJariwala/sqlsaber/issues/236)) ([521b899](https://github.com/SarthakJariwala/sqlsaber/commit/521b8997a815dfcb291a8b491328c00810004a30))
+* route the PyPI notice through ChatSurface ([#233](https://github.com/SarthakJariwala/sqlsaber/issues/233)) ([a302e5d](https://github.com/SarthakJariwala/sqlsaber/commit/a302e5d689cb6056c5730c0da555dbd11d5a89a4))
+* stabilize SQL guard analysis caches ([#235](https://github.com/SarthakJariwala/sqlsaber/issues/235)) ([3c81533](https://github.com/SarthakJariwala/sqlsaber/commit/3c8153344baa776247c40148202f444c23fad6c7))
+* **tui:** clear stale editor after layout shrink ([#238](https://github.com/SarthakJariwala/sqlsaber/issues/238)) ([10f2a48](https://github.com/SarthakJariwala/sqlsaber/commit/10f2a48557444be588ca061f8bf48f019c829df6))
+
 ## [0.72.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.71.0...sqlsaber-v0.72.0) (2026-08-18)
 
 

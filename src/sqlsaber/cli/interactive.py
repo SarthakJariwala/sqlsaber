@@ -22,7 +22,12 @@ from sqlsaber.cli.tui_chat import (
 )
 from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
 from sqlsaber.cli.update_check import bind_update_notice
-from sqlsaber.cli.usage import SessionUsage, format_cost_usd, format_tokens
+from sqlsaber.cli.usage import (
+    SessionUsage,
+    UsageMeter,
+    format_cost_usd,
+    format_tokens,
+)
 from sqlsaber.config.logging import get_logger
 from sqlsaber.render import blocks as b
 
@@ -45,7 +50,7 @@ class InteractiveSession:
         self._handoff_mode = False
         self._exit_finalized = False
         self.command_processor = SlashCommandProcessor()
-        self.session_usage = SessionUsage()
+        self.usage = UsageMeter(model_id=self._model_id, on_change=self._refresh_footer)
         self.log = get_logger(__name__)
 
     def _history_path(self) -> Path:
@@ -119,7 +124,8 @@ class InteractiveSession:
         return DANGEROUS_MODE_FOOTER_LABEL if self.saber.info.dangerous_mode else None
 
     def _usage_footer_text(self) -> str:
-        session_usage = getattr(self, "session_usage", SessionUsage())
+        usage: UsageMeter | None = getattr(self, "usage", None)
+        session_usage = usage.session if usage is not None else SessionUsage()
         return (
             f"Usage: ↑{format_tokens(session_usage.total_input_tokens)} "
             f"↓{format_tokens(session_usage.total_output_tokens)} | "
@@ -196,7 +202,7 @@ class InteractiveSession:
             display_registry_provider=lambda: self.saber.display_registry,
             query_result_store=self.saber.query_result_store,
         )
-        self.session_usage = SessionUsage()
+        self.usage.reset()
         app.clear_chat()
         render_prepared_thread(surface, prepared)
         await self._update_table_cache()
@@ -261,22 +267,14 @@ class InteractiveSession:
         query_task = asyncio.create_task(
             self.streaming_handler.execute_streaming_query(
                 user_query,
-                run_query=self.saber.query,
+                run_query=self.usage.metered(self.saber.query),
                 cancellation_token=self.cancellation_token,
             )
         )
         self.current_task = query_task
 
         try:
-            result = await query_task
-            if result is not None and result.usage is not None:
-                self.session_usage.add_run(
-                    result.usage,
-                    result.final_context_tokens,
-                    model_name=self._model_id(),
-                    request_usages=result.request_usages,
-                )
-                self._refresh_footer()
+            await query_task
         finally:
             self.current_task = None
             self.cancellation_token = None
@@ -349,7 +347,7 @@ class InteractiveSession:
             context = CommandContext(
                 surface=surface,
                 saber=self.saber,
-                session_usage=self.session_usage,
+                session_usage=self.usage.session,
             )
 
             cmd_result = await self.command_processor.process(user_query, context)
