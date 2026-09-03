@@ -197,7 +197,7 @@ def query(
             ThreadResumeMetadataError,
         )
         from sqlsaber.cli.retention import run_cli_retention
-        from sqlsaber.cli.usage import SessionUsage, session_summary_blocks
+        from sqlsaber.cli.usage import UsageMeter, session_summary_blocks
         from sqlsaber.database.resolver import DatabaseResolutionError
         from sqlsaber.render import cli_out
         from sqlsaber.render.terminal import TerminalSurface
@@ -308,23 +308,15 @@ def query(
                 if allow_dangerous:
                     out(b.warn(DANGEROUS_MODE_WARNING, label="DANGEROUS MODE ENABLED"))
                 log.info("query.execute.start", db_name=db_name, db_type=db_type)
-                result = await streaming_handler.execute_streaming_query(
+                meter = UsageMeter(model_id=lambda: info.model_id or info.model_name)
+                await streaming_handler.execute_streaming_query(
                     actual_query,
-                    run_query=saber.query,
+                    run_query=meter.metered(saber.query),
                 )
 
-                if result is not None and result.usage is not None:
-                    session_usage = SessionUsage()
-                    session_usage.add_run(
-                        result.usage,
-                        result.final_context_tokens,
-                        model_name=info.model_id or info.model_name,
-                        request_usages=result.request_usages,
-                    )
-                    if isinstance(surface, TerminalSurface):
-                        summary = session_summary_blocks(session_usage)
-                        if summary:
-                            surface.emit(*summary)
+                if isinstance(surface, TerminalSurface):
+                    if summary := session_summary_blocks(meter.session):
+                        surface.emit(*summary)
 
                 thread_id = saber.info.thread_id
                 if thread_id:

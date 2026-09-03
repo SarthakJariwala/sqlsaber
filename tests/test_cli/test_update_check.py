@@ -116,7 +116,9 @@ async def test_interactive_session_binds_update_notice_before_tui_start(
     session.current_task = None
     session._submit_pending = False
     session._exit_finalized = False
-    session.session_usage = interactive_mod.SessionUsage()
+    session.usage = interactive_mod.UsageMeter(
+        model_id=session._model_id, on_change=session._refresh_footer
+    )
     session.before_prompt_loop = lambda: asyncio.sleep(0)
     session._load_history = lambda: []
     session.show_welcome_message = lambda app: None

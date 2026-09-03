@@ -24,7 +24,7 @@ from sqlsaber.cli.threads import (
     ThreadResumePreparationError,
 )
 from sqlsaber.cli.tui_chat import ChatApp
-from sqlsaber.cli.usage import SessionUsage
+from sqlsaber.cli.usage import SessionUsage, UsageMeter
 from sqlsaber.config.settings import ThinkingLevel
 from sqlsaber.render import bind_cli_surfaces, blocks as b
 from sqlsaber.render.markdown_text import md_of
@@ -267,7 +267,7 @@ async def test_slash_commands_are_not_written_to_disk_history() -> None:
         return_value=CommandResult(handled=True)
     )
     session.saber = MagicMock()
-    session.session_usage = SessionUsage()
+    session.usage = UsageMeter(model_id=session._model_id)
     session.log = MagicMock()
     app = MagicMock()
 
@@ -334,7 +334,10 @@ async def test_resume_swaps_after_preparation_and_refreshes_session() -> None:
     new.list_tables = AsyncMock(return_value=[])
     session = InteractiveSession.__new__(InteractiveSession)
     session.saber = old
-    session.session_usage = SessionUsage(total_input_tokens=10)
+    session.usage = UsageMeter(
+        model_id=session._model_id, on_change=session._refresh_footer
+    )
+    session.usage._session = SessionUsage(total_input_tokens=10)
     session.autocomplete_provider = MagicMock()
     session.streaming_handler = MagicMock()
     app = MagicMock()
@@ -355,7 +358,7 @@ async def test_resume_swaps_after_preparation_and_refreshes_session() -> None:
     app.clear_chat.assert_called_once_with()
     render.assert_called_once()
     new.list_tables.assert_awaited_once_with()
-    assert session.session_usage.total_input_tokens == 0
+    assert session.usage.session.total_input_tokens == 0
     await session.saber.close()
     new.close.assert_awaited_once_with()
 
@@ -380,7 +383,9 @@ async def test_resume_keeps_new_session_when_old_cleanup_fails() -> None:
     new.list_tables = AsyncMock(return_value=[])
     session = InteractiveSession.__new__(InteractiveSession)
     session.saber = old
-    session.session_usage = SessionUsage()
+    session.usage = UsageMeter(
+        model_id=session._model_id, on_change=session._refresh_footer
+    )
     session.autocomplete_provider = MagicMock()
     session.streaming_handler = MagicMock()
     session.log = MagicMock()

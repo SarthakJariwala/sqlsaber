@@ -10,6 +10,7 @@ import saber_tui.utils as tui_utils
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
     FunctionToolResultEvent,
+    ModelResponse,
     PartDeltaEvent,
     PartEndEvent,
     PartStartEvent,
@@ -617,11 +618,13 @@ def test_chat_app_renders_footer_text() -> None:
 def test_interactive_footer_includes_usage_cost_and_context() -> None:
     session = InteractiveSession.__new__(InteractiveSession)
     session.saber = _fake_saber()
-    session.session_usage = interactive.SessionUsage(
-        total_input_tokens=4200,
-        total_output_tokens=820,
-        current_context_tokens=999,
-        total_cost_usd=0.0123,
+    session.usage = SimpleNamespace(
+        session=interactive.SessionUsage(
+            total_input_tokens=4200,
+            total_output_tokens=820,
+            current_context_tokens=999,
+            total_cost_usd=0.0123,
+        )
     )
 
     footer = session._footer_text()
@@ -636,7 +639,7 @@ def test_interactive_footer_includes_usage_cost_and_context() -> None:
 def test_interactive_footer_includes_dangerous_mode_when_enabled() -> None:
     session = InteractiveSession.__new__(InteractiveSession)
     session.saber = _fake_saber(dangerous_mode=True)
-    session.session_usage = interactive.SessionUsage()
+    session.usage = SimpleNamespace(session=interactive.SessionUsage())
 
     footer = session._footer_text()
 
@@ -649,7 +652,7 @@ def test_interactive_footer_shows_all_database_names() -> None:
         database_names=("prod", "staging", "warehouse"),
         database_type="PostgreSQL",
     )
-    session.session_usage = interactive.SessionUsage()
+    session.usage = SimpleNamespace(session=interactive.SessionUsage())
 
     footer = session._footer_text()
 
@@ -674,7 +677,9 @@ async def test_execute_query_refreshes_footer_usage_cost_and_context() -> None:
         model_name="claude-sonnet-4-5",
         model_id="anthropic:claude-sonnet-4-5",
     )
-    session.session_usage = interactive.SessionUsage()
+    session.usage = interactive.UsageMeter(
+        model_id=session._model_id, on_change=session._refresh_footer
+    )
     session.current_task = None
     session.cancellation_token = None
 
@@ -686,6 +691,32 @@ async def test_execute_query_refreshes_footer_usage_cost_and_context() -> None:
             RequestUsage(input_tokens=150_000, output_tokens=0),
         ]
 
+    async def no_events():
+        return
+        yield
+
+    footers_during_run: list[str] = []
+
+    async def fake_query(prompt, *, event_stream_handler=None, **kwargs):
+        assert prompt == "show revenue"
+        messages = []
+        ctx = SimpleNamespace(run_id="run-1", messages=messages, usage=RunUsage())
+        for request_usage in FakeSQLSaberResult.request_usages:
+            messages.append(
+                ModelResponse(
+                    parts=[TextPart("...")], usage=request_usage, run_id="run-1"
+                )
+            )
+            await event_stream_handler(ctx, no_events())
+            footers_during_run.append("\n".join(app.render_plain_viewport()))
+        return FakeSQLSaberResult()
+
+    session.saber.query = fake_query
+
+    async def presenter_handler(ctx, event_stream):
+        async for _ in event_stream:
+            pass
+
     class FakeStreamingHandler:
         def __init__(self, target_app: ChatApp) -> None:
             self.app = target_app
@@ -694,14 +725,16 @@ async def test_execute_query_refreshes_footer_usage_cost_and_context() -> None:
             self, user_query, *, run_query, cancellation_token
         ) -> FakeSQLSaberResult:
             assert user_query == "show revenue"
-            assert run_query is session.saber.query
             assert cancellation_token is session.cancellation_token
-            return FakeSQLSaberResult()
+            return await run_query(user_query, event_stream_handler=presenter_handler)
 
     session.streaming_handler = FakeStreamingHandler(app)
 
     await session._execute_query_with_cancellation("show revenue")
 
+    assert "Usage: ↑150.0k ↓0" in footers_during_run[0]
+    assert "Ctx: 150.0k" in footers_during_run[0]
+    assert "Cost: $0.4500" in footers_during_run[0]
     viewport = "\n".join(app.render_plain_viewport())
     assert "Usage: ↑300.0k ↓0" in viewport
     assert "Ctx: 150.0k" in viewport
