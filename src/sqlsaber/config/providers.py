@@ -55,6 +55,11 @@ _PROVIDERS: List[ProviderSpec] = [
         env_var="HUGGINGFACE_API_KEY",
         aliases=(),
     ),
+    ProviderSpec(
+        key="xai",
+        env_var="XAI_API_KEY",
+        aliases=(),
+    ),
 ]
 
 
