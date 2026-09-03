@@ -285,6 +285,7 @@ def doctor(run_id: str) -> None:
             "MISTRAL_API_KEY",
             "COHERE_API_KEY",
             "HUGGINGFACE_API_KEY",
+            "XAI_API_KEY",
         )
         if os.getenv(name)
     ]
