@@ -2,7 +2,7 @@
 
 from io import StringIO
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -244,7 +244,9 @@ def test_root_thread_option_resumes_through_public_sdk():
             )
             self.display_registry = {}
             self.query_result_store = query_result_store
-            self.query = AsyncMock()
+            self.query = AsyncMock(
+                return_value=SimpleNamespace(usage=None, request_usages=[])
+            )
 
         @classmethod
         async def resume(cls, thread_id, *, options, storage):
@@ -261,8 +263,7 @@ def test_root_thread_option_resumes_through_public_sdk():
 
         async def execute_streaming_query(self, user_query, *, run_query):
             captured["query"] = user_query
-            captured["run_query"] = run_query
-            return None
+            return await run_query(user_query, event_stream_handler=None)
 
     retention = AsyncMock(
         side_effect=lambda *args: lifecycle_events.append("retention")
@@ -292,7 +293,9 @@ def test_root_thread_option_resumes_through_public_sdk():
     assert storage is store
     assert options.database is None
     assert options.thread_manager is None
-    assert captured["run_query"] is captured["saber"].query
+    captured["saber"].query.assert_awaited_once_with(
+        captured["query"], event_stream_handler=ANY
+    )
     assert captured["query"] == "Compare this year"
     assert captured["closed"] is True
     retention.assert_awaited_once_with(store, artifact_store, query_result_store)
@@ -327,7 +330,9 @@ def test_root_one_shot_modes_construct_public_sdk(
             )
             self.display_registry = {}
             self.query_result_store = query_result_store
-            self.query = AsyncMock()
+            self.query = AsyncMock(
+                return_value=SimpleNamespace(usage=None, request_usages=[])
+            )
 
         async def close(self):
             captured["closed"] = True
@@ -338,8 +343,7 @@ def test_root_one_shot_modes_construct_public_sdk(
 
         async def execute_streaming_query(self, user_query, *, run_query):
             captured["query"] = user_query
-            captured["run_query"] = run_query
-            return None
+            return await run_query(user_query, event_stream_handler=None)
 
     retention = AsyncMock()
     with (
@@ -366,7 +370,9 @@ def test_root_one_shot_modes_construct_public_sdk(
     options = captured["options"]
     assert options.thread_manager.storage is store
     assert captured["query"] == expected_query
-    assert captured["run_query"] is captured["saber"].query
+    captured["saber"].query.assert_awaited_once_with(
+        captured["query"], event_stream_handler=ANY
+    )
     assert captured["closed"] is True
     retention.assert_awaited_once_with(store, artifact_store, query_result_store)
 
