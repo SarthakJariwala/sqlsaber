@@ -53,8 +53,6 @@ async def _drain(ctx: Any, event_stream: AsyncIterator[Any]) -> None:
 
 
 class FakeResult:
-    """The ``SQLSaberResult`` fields the meter reads, built the way the SDK builds them."""
-
     def __init__(
         self, new_messages: Iterable[ModelMessage], usage: RunUsage | None
     ) -> None:
@@ -70,9 +68,7 @@ class FakeResult:
 
 
 class FakeRun:
-    """Drives an event-stream handler with live run state, like pydantic-ai's graph.
-
-    ``ctx.messages`` and ``ctx.usage`` are the objects the run mutates, so a
+    """``ctx.messages`` and ``ctx.usage`` are the objects the run mutates, so a
     handler that keeps the context sees later appends.
     """
 
@@ -111,9 +107,7 @@ def _two_step_query(
     *,
     history: Sequence[ModelMessage] = (),
 ) -> Callable[..., Awaitable[FakeResult]]:
-    """A run shaped like model message, tool call, model message.
-
-    The handler runs once per graph node: for a model request node before its
+    """The handler runs once per graph node: for a model request node before its
     response is appended, for a tool node after the response and its tool call
     have been applied. That is the cadence pydantic-ai 2.9 produces.
     """

@@ -25,8 +25,6 @@ type EventStreamHandler = Callable[
 
 
 class StreamingQuery(Protocol):
-    """The slice of ``SQLSaber.query`` that the stream presenter calls."""
-
     async def __call__(
         self,
         prompt: str,
@@ -38,10 +36,7 @@ class StreamingQuery(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class SessionUsage:
-    """Cumulative model usage and current context size for one session.
-
-    Frozen so that ``UsageMeter`` is the only thing able to produce a new one.
-    """
+    """Cumulative model usage and current context size for one session."""
 
     requests: int = 0
     tool_calls: int = 0
@@ -55,13 +50,10 @@ class SessionUsage:
     cache_write_tokens: int = 0
 
     total_cost_usd: float | None = 0.0
-    """``None`` means not priceable and is absorbing until :meth:`UsageMeter.reset`."""
 
 
 @dataclass(frozen=True, slots=True)
 class _PricedResponse:
-    """One complete model message: what it consumed and what it cost."""
-
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
@@ -81,14 +73,8 @@ class _PricedResponse:
 
 @dataclass(frozen=True, slots=True)
 class _TurnCursor:
-    """High-water mark for the agent run currently in flight.
-
-    ``responses`` is how many of this run's model messages have been folded and
-    ``tool_calls`` is the run's tool-call counter as of the last fold.
-    """
-
-    responses: int = 0
-    tool_calls: int = 0
+    folded_responses: int = 0
+    folded_tool_calls: int = 0
 
 
 def _add_cost(total: float | None, addition: float | None) -> float | None:
@@ -119,7 +105,6 @@ def _fold(
 
 
 def _price(usage: RequestUsage, model_id: str | None) -> float | None:
-    """Cache-aware USD estimate for one model request, or ``None`` if unknown."""
     if not model_id:
         return None
 
@@ -153,9 +138,7 @@ def _price(usage: RequestUsage, model_id: str | None) -> float | None:
 def _run_request_usages(
     messages: Sequence[ModelMessage], run_id: str
 ) -> list[RequestUsage]:
-    """Usage of every complete model message this run produced, in order.
-
-    ``ctx.messages`` is the whole conversation; pydantic-ai stamps ``run_id`` on
+    """``ctx.messages`` is the whole conversation; pydantic-ai stamps ``run_id`` on
     each response as it appends it, which isolates this run without index math.
     """
     return [
@@ -168,13 +151,7 @@ def _run_request_usages(
 
 
 class UsageMeter:
-    """Keeps one ``SessionUsage`` current across agent runs.
-
-    Wrap the query callable with :meth:`metered` and the meter folds usage into
-    the session after every graph node and once more from the run result. Each
-    observation is a cumulative snapshot of the run, so overlapping observations
-    cannot double-count.
-    """
+    """Keeps one ``SessionUsage`` current across agent runs."""
 
     def __init__(
         self,
@@ -182,12 +159,6 @@ class UsageMeter:
         model_id: Callable[[], str | None],
         on_change: Callable[[], None] | None = None,
     ) -> None:
-        """
-        Args:
-            model_id: Read on each fold, so swapping the underlying ``SQLSaber``
-                prices later responses with the new model.
-            on_change: Called after any fold that changed the session.
-        """
         self._model_id = model_id
         self._on_change = on_change
         self._session = SessionUsage()
@@ -197,21 +168,10 @@ class UsageMeter:
 
     @property
     def session(self) -> SessionUsage:
-        """Current totals; immutable and safe to hand to renderers and commands."""
         return self._session
 
     def metered(self, query: StreamingQuery) -> StreamingQuery:
-        """Wrap a query callable so its usage lands in this meter.
-
-        Args:
-            query: The SDK query to observe, typically ``SQLSaber.query``.
-
-        Returns:
-            A callable with the same signature. Each call is one turn: it opens a
-            fresh cursor, wraps the caller's event-stream handler, and folds the
-            run result on the way out. If the run raises, whatever pydantic-ai
-            had already applied to the last seen ``RunContext`` is folded first.
-        """
+        """Wrap a query callable so its usage lands in this meter."""
 
         async def metered_query(
             prompt: str,
@@ -243,7 +203,6 @@ class UsageMeter:
         return metered_query
 
     def reset(self) -> None:
-        """Start a new accounting epoch, notifying if the session was non-empty."""
         changed = self._session != SessionUsage()
         self._session = SessionUsage()
         self._turn = _TurnCursor()
@@ -279,18 +238,19 @@ class UsageMeter:
     ) -> None:
         usages = list(request_usages)
         cursor = self._turn
-        if len(usages) < cursor.responses:
+        if len(usages) < cursor.folded_responses:
             log.warning(
                 "usage.meter.cursor_reset",
                 observed=len(usages),
-                folded=cursor.responses,
+                folded=cursor.folded_responses,
             )
             self._session = self._turn_base
             cursor = _TurnCursor()
-        fresh = usages[cursor.responses :]
-        new_tool_calls = max(0, tool_calls - cursor.tool_calls)
+        fresh = usages[cursor.folded_responses :]
+        new_tool_calls = max(0, tool_calls - cursor.folded_tool_calls)
         self._turn = _TurnCursor(
-            responses=len(usages), tool_calls=max(cursor.tool_calls, tool_calls)
+            folded_responses=len(usages),
+            folded_tool_calls=max(cursor.folded_tool_calls, tool_calls),
         )
         if not fresh and not new_tool_calls:
             return
