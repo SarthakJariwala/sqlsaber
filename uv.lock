@@ -3309,7 +3309,7 @@ dev = [
 
 [[package]]
 name = "sqlsaber-viz"
-version = "0.6.0"
+version = "0.7.0"
 source = { editable = "plugins/viz" }
 dependencies = [
     { name = "plotext" },

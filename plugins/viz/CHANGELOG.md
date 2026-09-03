@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.6.0...sqlsaber-viz-v0.7.0) (2026-09-03)
+
+
+### Features
+
+* render only through saber-tui blocks and surfaces ([#228](https://github.com/SarthakJariwala/sqlsaber/issues/228)) ([89c9dd0](https://github.com/SarthakJariwala/sqlsaber/commit/89c9dd0ee15e31911d4cb456e206d255a7b33d2c))
+
 ## [0.6.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.5.0...sqlsaber-viz-v0.6.0) (2026-08-03)
 
 
