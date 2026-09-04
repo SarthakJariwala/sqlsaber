@@ -187,7 +187,7 @@ class InteractiveSession:
         app_ref["app"] = app
         surface_ref["surface"] = surface
         surface.emit(
-            b.panel((b.md(f"```\n{cls._banner()}\n```"),), role="primary"),
+            b.md("**Welcome to SQLsaber!**", role="primary"),
             b.md(cls._instructions()),
         )
         app.tui.start()
@@ -223,18 +223,6 @@ class InteractiveSession:
                 history_file.write(f"+{text.replace('\n', ' ')}\n")
         except OSError:
             return
-
-    @staticmethod
-    def _banner() -> str:
-        """Get the ASCII banner."""
-        return """
-███████  ██████  ██      ███████  █████  ██████  ███████ ██████
-██      ██    ██ ██      ██      ██   ██ ██   ██ ██      ██   ██
-███████ ██    ██ ██      ███████ ███████ ██████  █████   ██████
-     ██ ██ ▄▄ ██ ██           ██ ██   ██ ██   ██ ██      ██   ██
-███████  ██████  ███████ ███████ ██   ██ ██████  ███████ ██   ██
-            ▀▀
-""".strip()
 
     @staticmethod
     def _instructions() -> str:
@@ -303,7 +291,7 @@ class InteractiveSession:
         info = self.saber.info
         if info.is_new_thread:
             surface.emit(
-                b.panel((b.md(f"```\n{self._banner()}\n```"),), role="primary"),
+                b.md("**Welcome to SQLsaber!**", role="primary"),
                 b.md(self._instructions()),
             )
 

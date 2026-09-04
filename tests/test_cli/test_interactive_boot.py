@@ -133,10 +133,12 @@ async def test_start_unbound_shell_paints_slash_hint_and_db_footer() -> None:
         shell.app.tui.flush_render()
         text = "\n".join(shell.app.render_plain_viewport())
         folded = text.casefold()
+        assert "Welcome to SQLsaber!" in text
         assert "slash commands" in folded
         assert "table name completions" in folded
         assert "DB:" in text
         assert "verification" in folded
+        assert "█" not in text
         assert terminal.started is True
     finally:
         shell.stop()

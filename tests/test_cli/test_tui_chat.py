@@ -636,6 +636,45 @@ def test_interactive_footer_includes_usage_cost_and_context() -> None:
     assert "Cost: $0.0123" in footer
 
 
+def test_welcome_message_uses_compact_greeting() -> None:
+    terminal = FakeTerminal(columns=100, rows=24)
+    session = InteractiveSession(_fake_saber())
+    app = build_chat_app(
+        terminal=terminal,
+        on_submit=lambda text: None,
+        footer_text=session._footer_text(),
+    )
+    session.show_welcome_message(app)
+    app.tui.start()
+    app.tui.flush_render()
+
+    viewport = "\n".join(app.render_plain_viewport())
+    assert "Welcome to SQLsaber!" in viewport
+    assert "slash commands" in viewport
+    assert "█" not in viewport
+
+
+def test_welcome_message_skips_greeting_when_resuming_thread() -> None:
+    saber = _fake_saber()
+    saber.info.is_new_thread = False
+    saber.info.thread_id = "thread-123"
+    terminal = FakeTerminal(columns=100, rows=24)
+    session = InteractiveSession(saber)
+    app = build_chat_app(
+        terminal=terminal,
+        on_submit=lambda text: None,
+        footer_text=session._footer_text(),
+    )
+    session.show_welcome_message(app)
+    app.tui.start()
+    app.tui.flush_render()
+
+    viewport = "\n".join(app.render_plain_viewport())
+    assert "Welcome to SQLsaber!" not in viewport
+    assert "Resuming thread: thread-123" in viewport
+    assert "█" not in viewport
+
+
 def test_interactive_footer_includes_dangerous_mode_when_enabled() -> None:
     session = InteractiveSession.__new__(InteractiveSession)
     session.saber = _fake_saber(dangerous_mode=True)

@@ -5,15 +5,6 @@ import sys
 from sqlsaber.cli.output import err, out
 from sqlsaber.render import blocks as b
 
-BANNER = """
-███████  ██████  ██      ███████  █████  ██████  ███████ ██████
-██      ██    ██ ██      ██      ██   ██ ██   ██ ██      ██   ██
-███████ ██    ██ ██      ███████ ███████ ██████  █████   ██████
-     ██ ██ ▄▄ ██ ██           ██ ██   ██ ██   ██ ██      ██   ██
-███████  ██████  ███████ ███████ ██   ██ ██████  ███████ ██   ██
-           ▀▀
-""".strip()
-
 
 def needs_onboarding(database_arg: str | list[str] | None = None) -> bool:
     """Check if user needs onboarding.
@@ -38,7 +29,6 @@ def welcome_screen() -> None:
     """Display welcome screen to new users."""
 
     out(
-        b.panel((b.md(f"```\n{BANNER}\n```"),), role="primary"),
         b.panel(
             (
                 b.md(
