@@ -12,6 +12,36 @@ from sqlsaber.cli.interactive import InteractiveSession
 from tests.test_cli.test_tui_chat import FakeTerminal
 
 
+def test_commands_import_does_not_load_structlog_or_httpx() -> None:
+    code = """
+import sys
+import sqlsaber.cli.commands  # noqa: F401
+
+loaded = [
+    name
+    for name in (
+        "structlog",
+        "httpx",
+        "keyring",
+        "pydantic_ai",
+        "sqlsaber.cli.auth",
+        "sqlsaber.cli.models",
+        "sqlsaber.cli.update_check",
+        "sqlsaber.config.logging",
+    )
+    if name in sys.modules
+]
+assert not loaded, loaded
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_interactive_query_does_not_import_pydantic_ai_before_first_paint() -> None:
     """Retention pulls pydantic-ai; it must stay off the first-paint path."""
     code = """
@@ -31,6 +61,10 @@ class FakeSession:
                 "sqlsaber.cli.retention",
                 "sqlsaber.threads.storage",
                 "sqlsaber.sdk.client",
+                "structlog",
+                "httpx",
+                "sqlsaber.config.logging",
+                "sqlsaber.cli.update_check",
             )
             if name in sys.modules
         ]
