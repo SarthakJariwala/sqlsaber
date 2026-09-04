@@ -1,27 +1,16 @@
 """CLI command definitions and handlers."""
 
-from sqlsaber.config.logging import setup_logging
-
-setup_logging()
-
-# ruff: noqa: E402
+from __future__ import annotations
 
 import asyncio
 import sys
+from collections.abc import Callable
 from typing import Annotated
 
 import cyclopts
 
-from sqlsaber.cli.auth import create_auth_app
-from sqlsaber.cli.database import create_db_app
-from sqlsaber.cli.knowledge import create_knowledge_app
-from sqlsaber.cli.models import create_models_app
 from sqlsaber.cli.onboarding import needs_onboarding, run_onboarding
 from sqlsaber.cli.output import fail, fail_usage, out
-from sqlsaber.cli.theme import create_theme_app
-from sqlsaber.cli.threads import create_threads_app
-from sqlsaber.cli.update_check import bind_update_notice, schedule_update_check
-from sqlsaber.config.logging import get_logger
 from sqlsaber.render import blocks as b
 
 DANGEROUS_MODE_SCOPE = (
@@ -40,12 +29,116 @@ DATABASE_OPTION_HELP = (
 )
 
 
+def _ensure_logging():
+    """Configure file logging after the first TUI frame is on screen."""
+    from sqlsaber.config.logging import get_logger, setup_logging
+
+    setup_logging()
+    return get_logger(__name__)
+
+
+def schedule_update_check() -> None:
+    """Schedule a PyPI update check without importing httpx at module load."""
+    from sqlsaber.cli.update_check import schedule_update_check as schedule
+
+    schedule()
+
+
+def bind_update_notice(emit: Callable[..., None] | None) -> None:
+    """Bind the update-notice sink without importing httpx at module load."""
+    from sqlsaber.cli.update_check import bind_update_notice as bind
+
+    bind(emit)
+
+
 class CLIError(Exception):
     """Exception raised for CLI errors that should result in exit."""
 
     def __init__(self, message: str, exit_code: int = 1):
         super().__init__(message)
         self.exit_code = exit_code
+
+
+async def _create_cli_saber(
+    *,
+    selected_database: str | list[str] | None,
+    thinking: bool | None,
+    allow_dangerous: bool,
+    system_prompt: str | None,
+    thread: str | None,
+    log,
+):
+    """Construct SQLSaber and persistence handles for a CLI session."""
+    from sqlsaber.cli.artifacts import cli_artifact_store
+    from sqlsaber.cli.query_results import cli_query_result_store
+    from sqlsaber import (
+        SQLSaber,
+        SQLSaberOptions,
+        ThreadDatabaseRequiredError,
+        ThreadDatabaseUnavailableError,
+        ThreadNotFoundError,
+        ThreadResumeHistoryError,
+        ThreadResumeMetadataError,
+    )
+    from sqlsaber.database.resolver import DatabaseResolutionError
+    from sqlsaber.threads import ThreadStorage
+    from sqlsaber.threads.manager import ThreadManager
+
+    storage = ThreadStorage()
+    artifact_store = cli_artifact_store()
+    query_result_store = cli_query_result_store()
+    options = SQLSaberOptions(
+        database=selected_database,
+        thinking_enabled=thinking,
+        allow_dangerous=allow_dangerous,
+        system_prompt=system_prompt,
+        thread_manager=(ThreadManager(storage=storage) if thread is None else None),
+        artifact_store=artifact_store,
+        query_result_store=query_result_store,
+    )
+    try:
+        saber = (
+            await SQLSaber.resume(thread, options=options, storage=storage)
+            if thread is not None
+            else SQLSaber(options=options)
+        )
+        info = saber.info
+        log.info("db.resolve.success", name=info.primary_database_name)
+        log.info("db.connection.created", db_type=info.primary_database_type)
+    except ThreadNotFoundError:
+        raise CLIError(
+            f"Thread not found: {thread}. List threads with: saber threads list"
+        ) from None
+    except ThreadResumeHistoryError as exc:
+        raise CLIError(f"Thread history cannot be resumed: {exc.reason}") from None
+    except ThreadDatabaseUnavailableError:
+        raise CLIError(
+            "The thread database is not configured for automatic continuation. "
+            "Retry with: "
+            f'saber --thread {thread} --database DATABASE "follow-up question"'
+        ) from None
+    except ThreadDatabaseRequiredError as exc:
+        if exc.reason == "No configured database selector is stored for this thread.":
+            raise CLIError(
+                "No database is stored with this thread. Retry with: "
+                f'saber --thread {thread} --database DATABASE "follow-up question"'
+            ) from None
+        raise CLIError(
+            f"Invalid thread metadata: {exc.reason}. Retry with: "
+            f'saber --thread {thread} --database DATABASE "follow-up question"'
+        ) from None
+    except ThreadResumeMetadataError as exc:
+        raise CLIError(
+            f"Invalid thread metadata: {exc.reason}. Retry with: "
+            f'saber --thread {thread} --database DATABASE "follow-up question"'
+        ) from None
+    except DatabaseResolutionError as exc:
+        log.error("db.resolve.error", error=str(exc))
+        raise CLIError(str(exc)) from None
+    except (ValueError, OSError) as exc:
+        log.exception("db.connection.error", error=str(exc))
+        raise CLIError(f"Error creating database connection: {exc}") from None
+    return saber, storage, artifact_store, query_result_store
 
 
 app = cyclopts.App(
@@ -61,12 +154,36 @@ app = cyclopts.App(
     ),
 )
 
-app.command(create_auth_app(), name="auth")
-app.command(create_db_app(), name="db")
-app.command(create_knowledge_app(), name="knowledge")
-app.command(create_models_app(), name="models")
-app.command(create_theme_app(), name="theme")
-app.command(create_threads_app(), name="threads")
+app.command(
+    "sqlsaber.cli.auth:auth_app",
+    name="auth",
+    help="Manage authentication configuration",
+)
+app.command(
+    "sqlsaber.cli.database:db_app",
+    name="db",
+    help="Manage database connections",
+)
+app.command(
+    "sqlsaber.cli.knowledge:knowledge_app",
+    name="knowledge",
+    help="Manage database-specific knowledge entries",
+)
+app.command(
+    "sqlsaber.cli.models:models_app",
+    name="models",
+    help="Select and manage models",
+)
+app.command(
+    "sqlsaber.cli.theme:theme_app",
+    name="theme",
+    help="Manage theme settings",
+)
+app.command(
+    "sqlsaber.cli.threads:threads_app",
+    name="threads",
+    help="Manage SQLsaber threads",
+)
 
 
 @app.meta.default
@@ -168,41 +285,7 @@ def query(
     """
 
     async def run_session():
-        schedule_update_check()
-
         selected_database: str | list[str] | None = database
-
-        log = get_logger(__name__)
-        log.info(
-            "cli.session.start",
-            argv=sys.argv[1:],
-            database=selected_database,
-            has_query=query_text is not None,
-            thread_id=thread,
-            thinking=thinking,
-            allow_dangerous=allow_dangerous,
-            system_prompt_provided=system_prompt is not None,
-        )
-        from sqlsaber.cli.artifacts import cli_artifact_store
-        from sqlsaber.cli.interactive import InteractiveSession
-        from sqlsaber.cli.query_results import cli_query_result_store
-        from sqlsaber.cli.stream_presenter import AgentStreamPresenter
-        from sqlsaber import (
-            SQLSaber,
-            SQLSaberOptions,
-            ThreadDatabaseRequiredError,
-            ThreadDatabaseUnavailableError,
-            ThreadNotFoundError,
-            ThreadResumeHistoryError,
-            ThreadResumeMetadataError,
-        )
-        from sqlsaber.cli.retention import run_cli_retention
-        from sqlsaber.cli.usage import UsageMeter, session_summary_blocks
-        from sqlsaber.database.resolver import DatabaseResolutionError
-        from sqlsaber.render import cli_out
-        from sqlsaber.render.terminal import TerminalSurface
-        from sqlsaber.threads import ThreadStorage
-        from sqlsaber.threads.manager import ThreadManager
 
         actual_query = query_text
         if query_text is None and not sys.stdin.isatty():
@@ -210,10 +293,6 @@ def query(
             if not actual_query:
                 actual_query = None
 
-        if actual_query:
-            bind_update_notice(out)
-
-        storage = ThreadStorage()
         if thread is not None and actual_query is None:
             raise CLIError(
                 "A query is required with --thread. Example: "
@@ -222,6 +301,7 @@ def query(
             )
 
         if thread is None and needs_onboarding(selected_database):
+            log = _ensure_logging()
             log.debug("cli.onboarding.start")
             onboarding_success = await run_onboarding()
             if not onboarding_success:
@@ -229,66 +309,47 @@ def query(
                     "Setup incomplete. Please configure your database and try again."
                 )
             log.info("cli.onboarding.complete", success=True)
-        artifact_store = cli_artifact_store()
-        query_result_store = cli_query_result_store()
-        options = SQLSaberOptions(
-            database=selected_database,
-            thinking_enabled=thinking,
-            allow_dangerous=allow_dangerous,
-            system_prompt=system_prompt,
-            thread_manager=(ThreadManager(storage=storage) if thread is None else None),
-            artifact_store=artifact_store,
-            query_result_store=query_result_store,
-        )
-        try:
-            saber = (
-                await SQLSaber.resume(thread, options=options, storage=storage)
-                if thread is not None
-                else SQLSaber(options=options)
-            )
-            info = saber.info
-            log.info("db.resolve.success", name=info.primary_database_name)
-            log.info("db.connection.created", db_type=info.primary_database_type)
-        except ThreadNotFoundError:
-            raise CLIError(
-                f"Thread not found: {thread}. List threads with: saber threads list"
-            ) from None
-        except ThreadResumeHistoryError as exc:
-            raise CLIError(f"Thread history cannot be resumed: {exc.reason}") from None
-        except ThreadDatabaseUnavailableError:
-            raise CLIError(
-                "The thread database is not configured for automatic continuation. "
-                "Retry with: "
-                f'saber --thread {thread} --database DATABASE "follow-up question"'
-            ) from None
-        except ThreadDatabaseRequiredError as exc:
-            if (
-                exc.reason
-                == "No configured database selector is stored for this thread."
-            ):
-                raise CLIError(
-                    "No database is stored with this thread. Retry with: "
-                    f'saber --thread {thread} --database DATABASE "follow-up question"'
-                ) from None
-            raise CLIError(
-                f"Invalid thread metadata: {exc.reason}. Retry with: "
-                f'saber --thread {thread} --database DATABASE "follow-up question"'
-            ) from None
-        except ThreadResumeMetadataError as exc:
-            raise CLIError(
-                f"Invalid thread metadata: {exc.reason}. Retry with: "
-                f'saber --thread {thread} --database DATABASE "follow-up question"'
-            ) from None
-        except DatabaseResolutionError as exc:
-            log.error("db.resolve.error", error=str(exc))
-            raise CLIError(str(exc)) from None
-        except (ValueError, OSError) as exc:
-            log.exception("db.connection.error", error=str(exc))
-            raise CLIError(f"Error creating database connection: {exc}") from None
 
-        surface = cli_out()
+        from sqlsaber.render import cli_out
+
+        saber = None
+        storage = None
+        artifact_store = None
+        query_result_store = None
+        shell = None
         try:
             if actual_query:
+                log = _ensure_logging()
+                schedule_update_check()
+                log.info(
+                    "cli.session.start",
+                    argv=sys.argv[1:],
+                    database=selected_database,
+                    has_query=True,
+                    thread_id=thread,
+                    thinking=thinking,
+                    allow_dangerous=allow_dangerous,
+                    system_prompt_provided=system_prompt is not None,
+                )
+                bind_update_notice(out)
+                from sqlsaber.cli.stream_presenter import AgentStreamPresenter
+                from sqlsaber.cli.usage import UsageMeter, session_summary_blocks
+                from sqlsaber.render.terminal import TerminalSurface
+
+                (
+                    saber,
+                    storage,
+                    artifact_store,
+                    query_result_store,
+                ) = await _create_cli_saber(
+                    selected_database=selected_database,
+                    thinking=thinking,
+                    allow_dangerous=allow_dangerous,
+                    system_prompt=system_prompt,
+                    thread=thread,
+                    log=log,
+                )
+                surface = cli_out()
                 streaming_handler = AgentStreamPresenter(
                     surface,
                     display_registry=saber.display_registry,
@@ -329,26 +390,66 @@ def query(
                     )
                     log.info("thread.save.success", thread_id=thread_id)
             else:
+                from sqlsaber.cli.interactive import InteractiveSession
+
                 if allow_dangerous:
                     out(b.warn(DANGEROUS_MODE_WARNING, label="DANGEROUS MODE ENABLED"))
+                shell = InteractiveSession.start_unbound_shell(
+                    database=selected_database,
+                    allow_dangerous=allow_dangerous,
+                )
+                log = _ensure_logging()
+                schedule_update_check()
+                log.info(
+                    "cli.session.start",
+                    argv=sys.argv[1:],
+                    database=selected_database,
+                    has_query=False,
+                    thread_id=thread,
+                    thinking=thinking,
+                    allow_dangerous=allow_dangerous,
+                    system_prompt_provided=system_prompt is not None,
+                )
+                (
+                    saber,
+                    storage,
+                    artifact_store,
+                    query_result_store,
+                ) = await _create_cli_saber(
+                    selected_database=selected_database,
+                    thinking=thinking,
+                    allow_dangerous=allow_dangerous,
+                    system_prompt=system_prompt,
+                    thread=thread,
+                    log=log,
+                )
                 interactive_session = InteractiveSession(saber)
                 try:
-                    await interactive_session.run()
+                    await interactive_session.run(shell=shell)
                 finally:
                     saber = getattr(interactive_session, "saber", saber)
-
+        except BaseException:
+            if shell is not None:
+                shell.stop()
+            raise
         finally:
-            try:
-                await saber.close()
-            finally:
-                await run_cli_retention(storage, artifact_store, query_result_store)
-            log.info("db.connection.closed")
-            out(b.success("Goodbye!"))
+            if saber is not None:
+                try:
+                    await saber.close()
+                finally:
+                    if storage is not None:
+                        from sqlsaber.cli.retention import run_cli_retention
+
+                        await run_cli_retention(
+                            storage, artifact_store, query_result_store
+                        )
+                log.info("db.connection.closed")
+                out(b.success("Goodbye!"))
 
     try:
         asyncio.run(run_session())
     except CLIError as e:
-        get_logger(__name__).error("cli.error", error=str(e))
+        _ensure_logging().error("cli.error", error=str(e))
         if e.exit_code == 2:
             fail_usage(str(e))
         fail(str(e), code=e.exit_code)
@@ -356,5 +457,4 @@ def query(
 
 def main():
     """Entry point for the CLI application."""
-    get_logger(__name__).info("cli.start")
     app()

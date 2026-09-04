@@ -2,11 +2,7 @@
 
 import sys
 
-from sqlsaber.cli.models import ModelManager
 from sqlsaber.cli.output import err, out
-from sqlsaber.config.api_keys import APIKeyManager
-from sqlsaber.config.auth import AuthConfigManager
-from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.render import blocks as b
 
 
@@ -20,6 +16,8 @@ def needs_onboarding(database_arg: str | list[str] | None = None) -> bool:
 
     if database_arg:
         return False
+
+    from sqlsaber.config.database import DatabaseConfigManager
 
     db_manager = DatabaseConfigManager()
     has_db = db_manager.has_databases()
@@ -59,6 +57,7 @@ async def setup_database_guided() -> str | None:
         save_database,
         test_connection,
     )
+    from sqlsaber.config.database import DatabaseConfigManager
 
     out(b.md("**Step 1 of 2: Database Connection**", role="primary"))
 
@@ -124,6 +123,7 @@ async def select_model_for_provider(provider: str) -> str | None:
 
     """
 
+    from sqlsaber.cli.models import ModelManager
     from sqlsaber.cli.prompts import AsyncPrompter
     from sqlsaber.cli.workflows.model_selection import choose_model, fetch_models
 
@@ -162,8 +162,11 @@ async def setup_auth_guided() -> tuple[bool, str | None]:
 
     """
 
+    from sqlsaber.cli.models import ModelManager
     from sqlsaber.cli.prompts import AsyncPrompter
     from sqlsaber.cli.workflows.auth_setup import setup_auth
+    from sqlsaber.config.api_keys import APIKeyManager
+    from sqlsaber.config.auth import AuthConfigManager
 
     out(b.md("**Step 2 of 2: Authentication**", role="primary"))
 
