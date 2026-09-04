@@ -4,7 +4,7 @@ The interactive session is the full-screen chat started by `saber` with no quest
 
 ## Sub-features
 
-- `interactive-open` shows the chat editor, slash-command hint, and database footer.
+- `interactive-open` shows `Welcome to SQLsaber!`, the chat editor, slash-command hint, and database footer.
 - `interactive-palette` opens settings with `/` on an empty editor.
 - `interactive-clear-thinking` clears history and changes session-only thinking state.
 - `interactive-handoff` drafts a goal that can start a new thread with current context.
@@ -26,7 +26,7 @@ Preconditions:
 - `FIXTURE=$("$VERIFY_SQLSABER" path "$RUN_ID" fixture)` is available.
 - TUI startup needs a key matching the configured model. A harmless placeholder environment value is sufficient only for local controls that never call the provider.
 
-- **Open, palette, clear, and exit.** Start `uv run saber -d "$FIXTURE"` through `drive` with a placeholder `OPENAI_API_KEY` when the configured model is OpenAI (the fresh default is `openai:gpt-5.6-sol`). Use `--timeout 40 --input-sequence '[[8, "/"], [11, "\u001b[B\u001b[B\r"], [15, "\u0004"]]'`. Two down arrows select `Clear conversation` (the third palette row). Require `slash commands`, `table name completions`, `DB: verification (SQLite)`, palette labels including `Thinking mode` and `Command help`, `Conversation history cleared.`, and `Goodbye!`.
+- **Open, palette, clear, and exit.** Start `uv run saber -d "$FIXTURE"` through `drive` with a placeholder `OPENAI_API_KEY` when the configured model is OpenAI (the fresh default is `openai:gpt-5.6-sol`). Use `--timeout 40 --input-sequence '[[8, "/"], [11, "\u001b[B\u001b[B\r"], [15, "\u0004"]]'`. Two down arrows select `Clear conversation` (the third palette row). Require `Welcome to SQLsaber!`, `slash commands`, `table name completions`, `DB: verification (SQLite)`, palette labels including `Thinking mode` and `Command help`, `Conversation history cleared.`, and `Goodbye!`. Do not require the old ASCII `SQLSABER` banner.
 - **Thinking.** In a fresh drive, open the palette and change `Thinking mode`. Do not paste `/thinking off` as one line; a leading `/` still opens the palette and leftover text can submit as a query.
 - **Exit aliases.** In separate fresh drives where needed, submit bare `exit` or `quit`, or send Ctrl+D on an empty editor after the editor is ready. Require `Goodbye!`.
 - **Handoff and interruption.** These paths call or interrupt a real model. Set `saber models set openai:gpt-5 --thinking-level off` first when only `OPENAI_API_KEY` is present. Capture the original thread ID, handoff goal, new thread ID, and the visible cancellation state.

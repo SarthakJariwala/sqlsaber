@@ -79,17 +79,6 @@ class InteractiveSession:
         except OSError:
             return
 
-    def _banner(self) -> str:
-        """Get the ASCII banner."""
-        return """
-███████  ██████  ██      ███████  █████  ██████  ███████ ██████
-██      ██    ██ ██      ██      ██   ██ ██   ██ ██      ██   ██
-███████ ██    ██ ██      ███████ ███████ ██████  █████   ██████
-     ██ ██ ▄▄ ██ ██           ██ ██   ██ ██   ██ ██      ██   ██
-███████  ██████  ███████ ███████ ██   ██ ██████  ███████ ██   ██
-            ▀▀
-""".strip()
-
     def _instructions(self) -> str:
         """Get the instruction text."""
         return dedent("""
@@ -145,7 +134,7 @@ class InteractiveSession:
         info = self.saber.info
         if info.is_new_thread:
             surface.emit(
-                b.panel((b.md(f"```\n{self._banner()}\n```"),), role="primary"),
+                b.md("**Welcome to SQLsaber!**", role="primary"),
                 b.md(self._instructions()),
             )
 
