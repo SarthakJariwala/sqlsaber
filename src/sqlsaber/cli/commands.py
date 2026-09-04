@@ -288,7 +288,6 @@ def query(
                 )
             log.info("cli.onboarding.complete", success=True)
 
-        from sqlsaber.cli.retention import run_cli_retention
         from sqlsaber.render import cli_out
 
         saber = None
@@ -393,6 +392,8 @@ def query(
                     await saber.close()
                 finally:
                     if storage is not None:
+                        from sqlsaber.cli.retention import run_cli_retention
+
                         await run_cli_retention(
                             storage, artifact_store, query_result_store
                         )

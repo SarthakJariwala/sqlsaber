@@ -12,6 +12,52 @@ from sqlsaber.cli.interactive import InteractiveSession
 from tests.test_cli.test_tui_chat import FakeTerminal
 
 
+def test_interactive_query_does_not_import_pydantic_ai_before_first_paint() -> None:
+    """Retention pulls pydantic-ai; it must stay off the first-paint path."""
+    code = """
+import sys
+from unittest.mock import patch
+
+class Probe(Exception):
+    pass
+
+class FakeSession:
+    @classmethod
+    def start_unbound_shell(cls, **kwargs):
+        loaded = [
+            name
+            for name in (
+                "pydantic_ai",
+                "sqlsaber.cli.retention",
+                "sqlsaber.threads.storage",
+                "sqlsaber.sdk.client",
+            )
+            if name in sys.modules
+        ]
+        raise Probe(",".join(loaded) or "clean")
+
+from sqlsaber.cli.commands import query
+
+with (
+    patch("sqlsaber.cli.interactive.InteractiveSession", FakeSession),
+    patch("sqlsaber.cli.commands.schedule_update_check"),
+):
+    try:
+        query(database=["analytics"])
+    except Probe as exc:
+        assert str(exc) == "clean", str(exc)
+    else:
+        raise SystemExit("probe not raised")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_interactive_module_import_does_not_load_pydantic_ai() -> None:
     code = """
 import sys
