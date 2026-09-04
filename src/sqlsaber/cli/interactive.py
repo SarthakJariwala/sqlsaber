@@ -21,8 +21,6 @@ from sqlsaber.cli.tui_chat import (
     ChatApp,
     build_chat_app,
 )
-from sqlsaber.cli.update_check import bind_update_notice
-from sqlsaber.config.logging import get_logger
 from sqlsaber.render import blocks as b
 
 if TYPE_CHECKING:
@@ -32,6 +30,14 @@ if TYPE_CHECKING:
     from sqlsaber.cli.chat_surface import ChatSurface
     from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
     from sqlsaber.cli.usage import UsageMeter
+
+
+def bind_update_notice(emit: Callable[..., None] | None) -> None:
+    """Bind the update-notice sink without importing httpx at module load."""
+    from sqlsaber.cli.update_check import bind_update_notice as bind
+
+    bind(emit)
+
 
 QUERY_CANCEL_GRACE_SECONDS = 0.1
 
@@ -70,6 +76,7 @@ class InteractiveSession:
 
     def __init__(self, saber: SQLSaber) -> None:
         from sqlsaber.cli.usage import UsageMeter
+        from sqlsaber.config.logging import get_logger
 
         self.saber = saber
         self.streaming_handler: TUIStreamingQueryHandler | None = None

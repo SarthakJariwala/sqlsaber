@@ -1,27 +1,16 @@
 """CLI command definitions and handlers."""
 
-from sqlsaber.config.logging import setup_logging
-
-setup_logging()
-
-# ruff: noqa: E402
+from __future__ import annotations
 
 import asyncio
 import sys
+from collections.abc import Callable
 from typing import Annotated
 
 import cyclopts
 
-from sqlsaber.cli.auth import create_auth_app
-from sqlsaber.cli.database import create_db_app
-from sqlsaber.cli.knowledge import create_knowledge_app
-from sqlsaber.cli.models import create_models_app
 from sqlsaber.cli.onboarding import needs_onboarding, run_onboarding
 from sqlsaber.cli.output import fail, fail_usage, out
-from sqlsaber.cli.theme import create_theme_app
-from sqlsaber.cli.threads import create_threads_app
-from sqlsaber.cli.update_check import bind_update_notice, schedule_update_check
-from sqlsaber.config.logging import get_logger
 from sqlsaber.render import blocks as b
 
 DANGEROUS_MODE_SCOPE = (
@@ -38,6 +27,28 @@ DATABASE_OPTION_HELP = (
     "names, files, or DSNs. Repeated CSV files merge into one session. Uses "
     "the default if omitted"
 )
+
+
+def _ensure_logging():
+    """Configure file logging after the first TUI frame is on screen."""
+    from sqlsaber.config.logging import get_logger, setup_logging
+
+    setup_logging()
+    return get_logger(__name__)
+
+
+def schedule_update_check() -> None:
+    """Schedule a PyPI update check without importing httpx at module load."""
+    from sqlsaber.cli.update_check import schedule_update_check as schedule
+
+    schedule()
+
+
+def bind_update_notice(emit: Callable[..., None] | None) -> None:
+    """Bind the update-notice sink without importing httpx at module load."""
+    from sqlsaber.cli.update_check import bind_update_notice as bind
+
+    bind(emit)
 
 
 class CLIError(Exception):
@@ -143,12 +154,36 @@ app = cyclopts.App(
     ),
 )
 
-app.command(create_auth_app(), name="auth")
-app.command(create_db_app(), name="db")
-app.command(create_knowledge_app(), name="knowledge")
-app.command(create_models_app(), name="models")
-app.command(create_theme_app(), name="theme")
-app.command(create_threads_app(), name="threads")
+app.command(
+    "sqlsaber.cli.auth:auth_app",
+    name="auth",
+    help="Manage authentication configuration",
+)
+app.command(
+    "sqlsaber.cli.database:db_app",
+    name="db",
+    help="Manage database connections",
+)
+app.command(
+    "sqlsaber.cli.knowledge:knowledge_app",
+    name="knowledge",
+    help="Manage database-specific knowledge entries",
+)
+app.command(
+    "sqlsaber.cli.models:models_app",
+    name="models",
+    help="Select and manage models",
+)
+app.command(
+    "sqlsaber.cli.theme:theme_app",
+    name="theme",
+    help="Manage theme settings",
+)
+app.command(
+    "sqlsaber.cli.threads:threads_app",
+    name="threads",
+    help="Manage SQLsaber threads",
+)
 
 
 @app.meta.default
@@ -250,21 +285,7 @@ def query(
     """
 
     async def run_session():
-        schedule_update_check()
-
         selected_database: str | list[str] | None = database
-
-        log = get_logger(__name__)
-        log.info(
-            "cli.session.start",
-            argv=sys.argv[1:],
-            database=selected_database,
-            has_query=query_text is not None,
-            thread_id=thread,
-            thinking=thinking,
-            allow_dangerous=allow_dangerous,
-            system_prompt_provided=system_prompt is not None,
-        )
 
         actual_query = query_text
         if query_text is None and not sys.stdin.isatty():
@@ -280,6 +301,7 @@ def query(
             )
 
         if thread is None and needs_onboarding(selected_database):
+            log = _ensure_logging()
             log.debug("cli.onboarding.start")
             onboarding_success = await run_onboarding()
             if not onboarding_success:
@@ -297,6 +319,18 @@ def query(
         shell = None
         try:
             if actual_query:
+                log = _ensure_logging()
+                schedule_update_check()
+                log.info(
+                    "cli.session.start",
+                    argv=sys.argv[1:],
+                    database=selected_database,
+                    has_query=True,
+                    thread_id=thread,
+                    thinking=thinking,
+                    allow_dangerous=allow_dangerous,
+                    system_prompt_provided=system_prompt is not None,
+                )
                 bind_update_notice(out)
                 from sqlsaber.cli.stream_presenter import AgentStreamPresenter
                 from sqlsaber.cli.usage import UsageMeter, session_summary_blocks
@@ -364,6 +398,18 @@ def query(
                     database=selected_database,
                     allow_dangerous=allow_dangerous,
                 )
+                log = _ensure_logging()
+                schedule_update_check()
+                log.info(
+                    "cli.session.start",
+                    argv=sys.argv[1:],
+                    database=selected_database,
+                    has_query=False,
+                    thread_id=thread,
+                    thinking=thinking,
+                    allow_dangerous=allow_dangerous,
+                    system_prompt_provided=system_prompt is not None,
+                )
                 (
                     saber,
                     storage,
@@ -403,7 +449,7 @@ def query(
     try:
         asyncio.run(run_session())
     except CLIError as e:
-        get_logger(__name__).error("cli.error", error=str(e))
+        _ensure_logging().error("cli.error", error=str(e))
         if e.exit_code == 2:
             fail_usage(str(e))
         fail(str(e), code=e.exit_code)
@@ -411,5 +457,4 @@ def query(
 
 def main():
     """Entry point for the CLI application."""
-    get_logger(__name__).info("cli.start")
     app()
