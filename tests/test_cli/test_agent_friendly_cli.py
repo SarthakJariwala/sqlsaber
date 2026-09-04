@@ -398,11 +398,23 @@ def test_root_bare_mode_passes_public_sdk_to_tui():
             captured["closed"] = True
 
     class FakeInteractiveSession:
+        @classmethod
+        def start_unbound_shell(cls, **kwargs):
+            captured["shell_kwargs"] = kwargs
+
+            class FakeShell:
+                def stop(self):
+                    captured["shell_stopped"] = True
+
+            captured["shell"] = FakeShell()
+            return captured["shell"]
+
         def __init__(self, saber):
             captured["interactive_saber"] = saber
 
-        async def run(self):
+        async def run(self, shell=None):
             captured["ran"] = True
+            captured["run_shell"] = shell
 
     retention = AsyncMock()
     with (
