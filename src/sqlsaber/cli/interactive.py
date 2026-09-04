@@ -24,6 +24,8 @@ from sqlsaber.cli.tui_chat import (
 from sqlsaber.render import blocks as b
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from saber_tui import Terminal
 
     from sqlsaber import SQLSaber, SQLSaberResult
