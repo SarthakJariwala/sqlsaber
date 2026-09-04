@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
 from typing import TYPE_CHECKING
@@ -20,27 +21,56 @@ from sqlsaber.cli.tui_chat import (
     ChatApp,
     build_chat_app,
 )
-from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
 from sqlsaber.cli.update_check import bind_update_notice
-from sqlsaber.cli.usage import (
-    SessionUsage,
-    UsageMeter,
-    format_cost_usd,
-    format_tokens,
-)
 from sqlsaber.config.logging import get_logger
 from sqlsaber.render import blocks as b
 
 if TYPE_CHECKING:
+    from saber_tui import Terminal
+
     from sqlsaber import SQLSaber, SQLSaberResult
+    from sqlsaber.cli.chat_surface import ChatSurface
+    from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
+    from sqlsaber.cli.usage import UsageMeter
 
 QUERY_CANCEL_GRACE_SECONDS = 0.1
+
+
+def __getattr__(name: str):
+    """Expose usage types without importing pydantic-ai at module load."""
+    if name in {"UsageMeter", "SessionUsage", "format_cost_usd", "format_tokens"}:
+        from sqlsaber.cli import usage as usage_mod
+
+        return getattr(usage_mod, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+@dataclass
+class ChatShell:
+    """Painted chat TUI that can bind an InteractiveSession after first paint."""
+
+    app: ChatApp
+    session_slot: dict[str, InteractiveSession]
+    exit_event: asyncio.Event
+    loop: asyncio.AbstractEventLoop
+    _stopped: bool = False
+
+    def stop(self) -> None:
+        """Stop the TUI if it is still running."""
+        if self._stopped:
+            return
+        self._stopped = True
+        if not self.app.tui.stopped:
+            self.app.stop()
+        self.exit_event.set()
 
 
 class InteractiveSession:
     """Manages interactive CLI sessions."""
 
-    def __init__(self, saber: "SQLSaber") -> None:
+    def __init__(self, saber: SQLSaber) -> None:
+        from sqlsaber.cli.usage import UsageMeter
+
         self.saber = saber
         self.streaming_handler: TUIStreamingQueryHandler | None = None
         self.current_task: asyncio.Task[SQLSaberResult | None] | None = None
@@ -52,6 +82,112 @@ class InteractiveSession:
         self.command_processor = SlashCommandProcessor()
         self.usage = UsageMeter(model_id=self._model_id, on_change=self._refresh_footer)
         self.log = get_logger(__name__)
+
+    @staticmethod
+    def boot_footer(
+        database: str | list[str] | None,
+        *,
+        allow_dangerous: bool = False,
+    ) -> str:
+        """Footer shown before SQLSaber is constructed."""
+        if isinstance(database, list) and len(database) > 1:
+            db_part = f"DBs: {', '.join(database)}"
+        elif isinstance(database, list) and database:
+            db_part = f"DB: {Path(database[0]).stem}"
+        elif isinstance(database, str) and database:
+            db_part = f"DB: {Path(database).stem}"
+        else:
+            db_part = "DB: starting..."
+        parts = [db_part]
+        if allow_dangerous:
+            parts.append(DANGEROUS_MODE_FOOTER_LABEL)
+        return " | ".join(parts)
+
+    @classmethod
+    def start_unbound_shell(
+        cls,
+        *,
+        database: str | list[str] | None = None,
+        allow_dangerous: bool = False,
+        terminal: Terminal | None = None,
+    ) -> ChatShell:
+        """Paint the editor before importing pydantic-ai or constructing SQLSaber."""
+        from sqlsaber.cli.chat_surface import ChatSurface
+
+        loop = asyncio.get_running_loop()
+        exit_event = asyncio.Event()
+        session_slot: dict[str, InteractiveSession] = {}
+        app_ref: dict[str, ChatApp] = {}
+        surface_ref: dict[str, ChatSurface] = {}
+
+        def on_submit(user_query: str) -> bool:
+            session = session_slot.get("session")
+            app = app_ref["app"]
+            surface = surface_ref["surface"]
+            if session is None:
+                surface.emit(b.warn("Still starting..."))
+                app.tui.set_focus(app.editor)
+                return False
+            return session._queue_submit(app, surface, user_query, loop=loop)
+
+        def open_command_palette(app: ChatApp) -> None:
+            session = session_slot.get("session")
+            if session is None:
+                from sqlsaber.config.settings import Config
+
+                settings = Config.default()
+                app.show_command_palette(
+                    thinking_enabled=settings.model.thinking_enabled,
+                    thinking_level=settings.model.thinking_level,
+                    commands=SlashCommandProcessor().palette_commands(),
+                )
+                return
+            info = session.saber.info
+            app.show_command_palette(
+                thinking_enabled=info.thinking.enabled,
+                thinking_level=info.thinking.level,
+                commands=session.command_processor.palette_commands(),
+                model_name=info.model_name,
+                database_name=info.primary_database_name,
+            )
+
+        def on_cancel() -> None:
+            session = session_slot.get("session")
+            app = app_ref["app"]
+            if session is None:
+                return
+            loop.call_soon_threadsafe(
+                lambda: asyncio.create_task(session._cancel_current_task(app))
+            )
+
+        def on_exit() -> None:
+            loop.call_soon_threadsafe(exit_event.set)
+
+        app = build_chat_app(
+            terminal=terminal,
+            on_submit=on_submit,
+            on_exit=on_exit,
+            on_cancel=on_cancel,
+            should_submit_empty=lambda: bool(
+                (session := session_slot.get("session")) and session._handoff_mode
+            ),
+            footer_text=cls.boot_footer(database, allow_dangerous=allow_dangerous),
+            on_open_command_palette=open_command_palette,
+        )
+        surface = ChatSurface(app)
+        app_ref["app"] = app
+        surface_ref["surface"] = surface
+        surface.emit(
+            b.panel((b.md(f"```\n{cls._banner()}\n```"),), role="primary"),
+            b.md(cls._instructions()),
+        )
+        app.tui.start()
+        return ChatShell(
+            app=app,
+            session_slot=session_slot,
+            exit_event=exit_event,
+            loop=loop,
+        )
 
     def _history_path(self) -> Path:
         """Get the history file path, ensuring directory exists."""
@@ -79,7 +215,8 @@ class InteractiveSession:
         except OSError:
             return
 
-    def _banner(self) -> str:
+    @staticmethod
+    def _banner() -> str:
         """Get the ASCII banner."""
         return """
 ███████  ██████  ██      ███████  █████  ██████  ███████ ██████
@@ -90,7 +227,8 @@ class InteractiveSession:
             ▀▀
 """.strip()
 
-    def _instructions(self) -> str:
+    @staticmethod
+    def _instructions() -> str:
         """Get the instruction text."""
         return dedent("""
                     - Use `/` for slash commands
@@ -124,6 +262,8 @@ class InteractiveSession:
         return DANGEROUS_MODE_FOOTER_LABEL if self.saber.info.dangerous_mode else None
 
     def _usage_footer_text(self) -> str:
+        from sqlsaber.cli.usage import SessionUsage, format_cost_usd, format_tokens
+
         usage: UsageMeter | None = getattr(self, "usage", None)
         session_usage = usage.session if usage is not None else SessionUsage()
         return (
@@ -136,6 +276,15 @@ class InteractiveSession:
     def _refresh_footer(self) -> None:
         if self.streaming_handler is not None:
             self.streaming_handler.app.set_footer(self._footer_text())
+
+    def _create_streaming_handler(self, app: ChatApp) -> None:
+        from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
+
+        self.streaming_handler = TUIStreamingQueryHandler(
+            app,
+            display_registry_provider=lambda: self.saber.display_registry,
+            query_result_store=self.saber.query_result_store,
+        )
 
     def show_welcome_message(self, app: ChatApp) -> None:
         """Display welcome message for interactive mode."""
@@ -197,11 +346,7 @@ class InteractiveSession:
             self.log.warning("interactive.resume.cleanup_failed", error=str(exc))
             surface.emit(b.warn(f"Previous session cleanup failed: {exc}"))
 
-        self.streaming_handler = TUIStreamingQueryHandler(
-            app,
-            display_registry_provider=lambda: self.saber.display_registry,
-            query_result_store=self.saber.query_result_store,
-        )
+        self._create_streaming_handler(app)
         self.usage.reset()
         app.clear_chat()
         render_prepared_thread(surface, prepared)
@@ -385,89 +530,110 @@ class InteractiveSession:
             out(b.md(f"You can continue this thread using: `{hint}`", role="muted"))
         self._exit_finalized = True
 
-    async def run(self) -> None:
-        """Run the interactive session loop."""
+    def _queue_submit(
+        self,
+        app: ChatApp,
+        surface,
+        user_query: str,
+        *,
+        loop: asyncio.AbstractEventLoop,
+    ) -> bool:
+        if self._submit_pending or (self.current_task and not self.current_task.done()):
+            surface.emit(
+                b.warn("A query is already running. Press Ctrl+C to interrupt it.")
+            )
+            app.tui.set_focus(app.editor)
+            return False
+
+        self._submit_pending = True
+
+        async def submit_query() -> None:
+            try:
+                await self._handle_submit(app, surface, user_query)
+            finally:
+                self._submit_pending = False
+
+        loop.call_soon_threadsafe(lambda: asyncio.create_task(submit_query()))
+        return True
+
+    async def run(self, shell: ChatShell | None = None) -> None:
+        """Run the interactive session loop.
+
+        Args:
+            shell: Pre-started TUI from ``start_unbound_shell``. When omitted,
+                this method builds and starts the TUI itself.
+        """
         self.log.info(
             "interactive.start", database=self.saber.info.primary_database_name
         )
-        await self.before_prompt_loop()
-
         from sqlsaber.cli.chat_surface import ChatSurface
 
-        exit_event = asyncio.Event()
-        loop = asyncio.get_running_loop()
-        app_ref: dict[str, ChatApp] = {}
-        surface_ref: dict[str, ChatSurface] = {}
+        if shell is None:
+            await self.before_prompt_loop()
+            exit_event = asyncio.Event()
+            loop = asyncio.get_running_loop()
+            app_ref: dict[str, ChatApp] = {}
+            surface_ref: dict[str, ChatSurface] = {}
 
-        def on_submit(user_query: str) -> bool:
-            app = app_ref["app"]
-            surface = surface_ref["surface"]
-
-            if self._submit_pending or (
-                self.current_task and not self.current_task.done()
-            ):
-                surface.emit(
-                    b.warn("A query is already running. Press Ctrl+C to interrupt it.")
+            def on_submit(user_query: str) -> bool:
+                return self._queue_submit(
+                    app_ref["app"], surface_ref["surface"], user_query, loop=loop
                 )
-                app.tui.set_focus(app.editor)
-                return False
 
-            self._submit_pending = True
+            def open_command_palette(app: ChatApp) -> None:
+                info = self.saber.info
+                app.show_command_palette(
+                    thinking_enabled=info.thinking.enabled,
+                    thinking_level=info.thinking.level,
+                    commands=self.command_processor.palette_commands(),
+                    model_name=info.model_name,
+                    database_name=info.primary_database_name,
+                )
 
-            async def submit_query() -> None:
-                try:
-                    await self._handle_submit(app, surface, user_query)
-                finally:
-                    self._submit_pending = False
+            def on_cancel() -> None:
+                app = app_ref["app"]
+                loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(self._cancel_current_task(app))
+                )
 
-            loop.call_soon_threadsafe(lambda: asyncio.create_task(submit_query()))
-            return True
+            def on_exit() -> None:
+                loop.call_soon_threadsafe(exit_event.set)
 
-        def open_command_palette(app: ChatApp) -> None:
-            info = self.saber.info
-            app.show_command_palette(
-                thinking_enabled=info.thinking.enabled,
-                thinking_level=info.thinking.level,
-                commands=self.command_processor.palette_commands(),
-                model_name=info.model_name,
-                database_name=info.primary_database_name,
+            app = build_chat_app(
+                on_submit=on_submit,
+                on_exit=on_exit,
+                on_cancel=on_cancel,
+                should_submit_empty=lambda: self._handoff_mode,
+                autocomplete_provider=self.autocomplete_provider,
+                footer_text=self._footer_text(),
+                on_open_command_palette=open_command_palette,
             )
+            surface = ChatSurface(app)
+            app_ref["app"] = app
+            surface_ref["surface"] = surface
+            app.editor.history = self._load_history()
+            self._create_streaming_handler(app)
+            self.show_welcome_message(app)
+            bind_update_notice(surface.emit)
+            app.tui.start()
+        else:
+            app = shell.app
+            surface = ChatSurface(app)
+            shell.session_slot["session"] = self
+            app.editor.set_autocomplete_provider(self.autocomplete_provider)
+            app.editor.history = self._load_history()
+            self._create_streaming_handler(app)
+            bind_update_notice(surface.emit)
+            self._refresh_footer()
+            await self.before_prompt_loop()
+            exit_event = shell.exit_event
 
-        def on_cancel() -> None:
-            app = app_ref["app"]
-            loop.call_soon_threadsafe(
-                lambda: asyncio.create_task(self._cancel_current_task(app))
-            )
-
-        def on_exit() -> None:
-            loop.call_soon_threadsafe(exit_event.set)
-
-        app = build_chat_app(
-            on_submit=on_submit,
-            on_exit=on_exit,
-            on_cancel=on_cancel,
-            should_submit_empty=lambda: self._handoff_mode,
-            autocomplete_provider=self.autocomplete_provider,
-            footer_text=self._footer_text(),
-            on_open_command_palette=open_command_palette,
-        )
-        surface = ChatSurface(app)
-        app_ref["app"] = app
-        surface_ref["surface"] = surface
-        app.editor.history = self._load_history()
-        self.streaming_handler = TUIStreamingQueryHandler(
-            app,
-            display_registry_provider=lambda: self.saber.display_registry,
-            query_result_store=self.saber.query_result_store,
-        )
-        self.show_welcome_message(app)
-        bind_update_notice(surface.emit)
-
-        app.tui.start()
         try:
             await exit_event.wait()
         finally:
             bind_update_notice(None)
-            if not app.tui.stopped:
+            if shell is not None:
+                shell.stop()
+            elif not app.tui.stopped:
                 app.stop()
             await self._finalize_exit()

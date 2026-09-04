@@ -579,7 +579,7 @@ class ChatApp:
         if self.on_open_command_palette is None:
             return False
         self.on_open_command_palette(self)
-        return True
+        return self.is_command_palette_open()
 
     def is_command_palette_open(self) -> bool:
         return self._command_palette_component is not None
