@@ -13,6 +13,20 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.74.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.73.0...sqlsaber-v0.74.0) (2026-09-04)
+
+
+### Features
+
+* **cli:** replace ASCII banner with compact welcome ([#252](https://github.com/SarthakJariwala/sqlsaber/issues/252)) ([627f423](https://github.com/SarthakJariwala/sqlsaber/commit/627f4237a104abd817ba4811b4369d8d51d53abb))
+
+
+### Performance Improvements
+
+* **tui:** configure logging and httpx after first paint ([#249](https://github.com/SarthakJariwala/sqlsaber/issues/249)) ([4c1f8b3](https://github.com/SarthakJariwala/sqlsaber/commit/4c1f8b3ac0afe26245c3242187f8bf6f52c99c06))
+* **tui:** defer retention import until after first paint ([#248](https://github.com/SarthakJariwala/sqlsaber/issues/248)) ([2a0a2a8](https://github.com/SarthakJariwala/sqlsaber/commit/2a0a2a811a1d234760d8a128fff932a330f501a0))
+* **tui:** paint editor before pydantic-ai import ([#247](https://github.com/SarthakJariwala/sqlsaber/issues/247)) ([ba7ca1e](https://github.com/SarthakJariwala/sqlsaber/commit/ba7ca1edd80950029fbe9324dbfacdd6a5debc24))
+
 ## [0.73.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.72.0...sqlsaber-v0.73.0) (2026-09-03)
 
 
