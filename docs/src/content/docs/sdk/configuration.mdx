@@ -22,7 +22,7 @@ options = SQLSaberOptions(
 
 | Field               | Type                                          | Default | Description                                                                                  |
 | ------------------- | --------------------------------------------- | ------- | -------------------------------------------------------------------------------------------- |
-| `database`          | `str \| list[str] \| tuple[str, ...] \| None` | `None`  | Connection string, file path, configured DB name, a list of CSV paths, or a list of targets for a [multi-database](/guides/multi-database) session. |
+| `database`          | `str \| list[str] \| tuple[str, ...] \| None` | `None`  | Connection string, file path, configured DB name, a list of CSV/Parquet paths, or a list of targets for a [multi-database](/guides/multi-database) session. |
 | `model_name`        | `str \| None`                                 | `None`  | Model in `"provider:model"` form. Falls back to your configured/default model.               |
 | `api_key`           | `str \| None`                                 | `None`  | API key for the model's provider. Usually unnecessary — see [Credentials](/sdk/credentials-and-models). |
 | `thinking_enabled`  | `bool \| None`                                | `None`  | Toggle extended thinking on supported reasoning models.                                      |
@@ -130,25 +130,27 @@ SQLSaberOptions(database="duckdb:///path/to/warehouse.duckdb")
 
 ### File paths
 
-Point directly at a SQLite, DuckDB, or CSV file:
+Point directly at a SQLite, DuckDB, CSV, or Parquet file:
 
 ```python
 SQLSaberOptions(database="./data/sales.db")
 SQLSaberOptions(database="./customers.csv")
+SQLSaberOptions(database="./orders.parquet")
 ```
 
-### Multiple CSV files
+### Multiple CSV or Parquet files
 
-Pass a list (or tuple) of CSV paths to query across them together. All CSVs are
+Pass a list (or tuple) of CSV/Parquet paths to query across them together. All files are
 merged into a single in-memory database with one table per file:
 
 ```python
 SQLSaberOptions(database=["users.csv", "orders.csv"])
+SQLSaberOptions(database=["users.csv", "orders.parquet"])
 ```
 
 ### Multiple databases
 
-Pass a list of non-CSV targets (configured names, connection strings, or file
+Pass a list including other targets (configured names, connection strings, or database file
 paths) to connect to [several databases](/guides/multi-database) in one session.
 The agent queries each one separately and combines the results:
 

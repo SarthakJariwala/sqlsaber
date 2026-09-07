@@ -1,11 +1,11 @@
 ---
 title: Database Setup
-description: "Connect SQLsaber to PostgreSQL, MySQL, SQLite, DuckDB, or CSV files. Configure connection strings, SSL certificates, and schema exclusions."
+description: "Connect SQLsaber to PostgreSQL, MySQL, SQLite, DuckDB, CSV, or Parquet files. Configure connection strings, SSL certificates, and schema exclusions."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-SQLsaber supports PostgreSQL, MySQL, SQLite, DuckDB, and CSV data sources. This guide covers all the ways to configure database connections.
+SQLsaber supports PostgreSQL, MySQL, SQLite, DuckDB, CSV, and Parquet data sources. This guide covers all the ways to configure database connections.
 
 ### Supported Database Types
 
@@ -14,6 +14,7 @@ SQLsaber supports PostgreSQL, MySQL, SQLite, DuckDB, and CSV data sources. This 
 - **SQLite** - Local database files
 - **DuckDB** - Local DuckDB files or in-memory analytics
 - **CSV** - Local CSV files
+- **Parquet** - Local Parquet files, queried using DuckDB
 
 ### Adding Database
 
@@ -88,6 +89,27 @@ saber -d "./customers.csv" "How many customers are from each state?"
   For CSV files, first row should contain column headers. SQLsaber will infer
   data types automatically.
 </Aside>
+
+#### Parquet
+
+Query a local `.parquet` file directly, or use a `parquet:///` URL:
+
+```bash
+saber -d "./orders.parquet" "What is total revenue?"
+saber -d "parquet:///orders.parquet" "Describe the columns"
+saber -d "./customers.csv" -d "./orders.parquet" "Revenue by customer"
+```
+
+DuckDB reads column names and types from the Parquet schema; no CSV delimiter or
+header options are needed. Each file becomes a table named after its filename
+without the extension (for example, `orders`). Repeated CSV/Parquet inputs share
+one database, so SQL joins work across them.
+
+Like CSV inputs, files are materialized into in-memory tables on every query,
+then external file access is disabled for read-only execution. This preserves
+the existing safety boundary, but is not a lazy, large-file Parquet scan: allow
+enough memory for the loaded data. Use explicit local files, not remote URLs or
+partition-directory inputs.
 
 ### Managing Connections
 
@@ -176,7 +198,7 @@ Default exclusions:
 
 - **PostgreSQL:** `pg_catalog`, `information_schema`, `_timescaledb_internal`, `_timescaledb_cache`, `_timescaledb_config`, `_timescaledb_catalog`
 - **MySQL:** `information_schema`, `performance_schema`, `mysql`, `sys`
-- **DuckDB / CSV:** `information_schema`, `pg_catalog`, `duckdb_catalog`
+- **DuckDB / CSV / Parquet:** `information_schema`, `pg_catalog`, `duckdb_catalog`
 
 When you run `saber db add`, the interactive flow prompts for extra schemas to ignore (or pass `--exclude-schemas schema1,schema2` in non-interactive mode). You can revisit an existing connection at any time:
 

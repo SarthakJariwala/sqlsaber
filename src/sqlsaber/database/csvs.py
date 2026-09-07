@@ -1,6 +1,6 @@
-"""Multiple-CSV database connection using DuckDB backend.
+"""Multiple CSV/Parquet database connection using DuckDB backend.
 
-This connection creates one DuckDB view per CSV file for each query.
+This connection materializes one DuckDB table per file for each query.
 """
 
 import asyncio
@@ -20,7 +20,7 @@ from .duckdb import (
 
 
 class CSVsConnection(BaseDatabaseConnection):
-    """Connection that exposes multiple CSV files as DuckDB views."""
+    """Connection that exposes multiple CSV/Parquet files as DuckDB tables."""
 
     def __init__(self, connection_string: str):
         super().__init__(connection_string)

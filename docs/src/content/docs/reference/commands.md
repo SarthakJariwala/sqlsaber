@@ -34,7 +34,7 @@ saber --thread a1b2c3d4 "Now compare that with last quarter"
 **Parameters:**
 
 - `QUERY-TEXT` - SQL query in natural language (optional, starts interactive mode if not provided)
-- `-d, --database` - Database connection name, file path (CSV/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://). Repeat the flag to connect to [multiple databases](/guides/multi-database) at once (or to merge multiple CSV files into one session).
+- `-d, --database` - Database connection name, file path (CSV/Parquet/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://, csv:///, parquet:///). Repeat the flag to connect to [multiple databases](/guides/multi-database) at once (or to load multiple CSV/Parquet files into one DuckDB session with one table per file).
 - `--thinking` / `--no-thinking` - Enable/disable extended thinking/reasoning mode
 - `--csv-tool-results` / `--no-csv-tool-results` - Opt in to experimental CSV tables in model-facing SQL tool results. Defaults to JSON; applies to both single-shot queries and interactive mode.
 - `--allow-dangerous` - Allow INSERT/UPDATE/DELETE and restricted DDL (CREATE TABLE/VIEW/INDEX, ALTER TABLE). DROP/TRUNCATE and admin/security operations remain blocked; UPDATE/DELETE require WHERE.
