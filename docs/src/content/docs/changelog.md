@@ -13,6 +13,20 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.75.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.74.0...sqlsaber-v0.75.0) (2026-09-07)
+
+
+### Features
+
+* Add opt-in CSV model-facing SQL tool results ([#253](https://github.com/SarthakJariwala/sqlsaber/issues/253)) ([886daa1](https://github.com/SarthakJariwala/sqlsaber/commit/886daa16e7e04d01313d8b38347b14cd4c0c6eb0))
+* Add Parquet file support using DuckDB ([#257](https://github.com/SarthakJariwala/sqlsaber/issues/257)) ([8411a4f](https://github.com/SarthakJariwala/sqlsaber/commit/8411a4f95080cf69bea4ce8c5ae6d96374c1dc29))
+* Keep interactive prompts inline with themed backgrounds ([#258](https://github.com/SarthakJariwala/sqlsaber/issues/258)) ([7fb7817](https://github.com/SarthakJariwala/sqlsaber/commit/7fb781752cab9fab59c31e42a410c311a34819c0))
+
+
+### Bug Fixes
+
+* live interactive model settings and show thinking in footer ([#255](https://github.com/SarthakJariwala/sqlsaber/issues/255)) ([29df513](https://github.com/SarthakJariwala/sqlsaber/commit/29df513630ebf3da92a272a11717fed68d3ec697))
+
 ## [0.74.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.73.0...sqlsaber-v0.74.0) (2026-09-04)
 
 

@@ -3463,7 +3463,7 @@ wheels = [
 
 [[package]]
 name = "sqlsaber"
-version = "0.74.0"
+version = "0.75.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiomysql" },
