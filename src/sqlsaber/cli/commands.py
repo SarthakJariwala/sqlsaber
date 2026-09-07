@@ -22,9 +22,9 @@ DANGEROUS_MODE_SCOPE = (
 DANGEROUS_MODE_WARNING = f"The assistant can execute {DANGEROUS_MODE_SCOPE}"
 DANGEROUS_MODE_HELP = f"Allow {DANGEROUS_MODE_SCOPE}"
 DATABASE_OPTION_HELP = (
-    "Database connection name, file path (CSV/SQLite/DuckDB), or connection "
+    "Database connection name, file path (CSV/Parquet/SQLite/DuckDB), or connection "
     "string (postgresql://, mysql://, duckdb://). Repeat -d for multiple saved "
-    "names, files, or DSNs. Repeated CSV files merge into one session. Uses "
+    "names, files, or DSNs. Repeated CSV/Parquet files merge into one session. Uses "
     "the default if omitted"
 )
 

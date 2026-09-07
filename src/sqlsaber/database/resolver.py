@@ -21,7 +21,15 @@ class ResolvedDatabase:
     description: str | None = None
 
 
-SUPPORTED_SCHEMES = {"postgresql", "mysql", "sqlite", "duckdb", "csv", "csvs"}
+SUPPORTED_SCHEMES = {
+    "postgresql",
+    "mysql",
+    "sqlite",
+    "duckdb",
+    "csv",
+    "csvs",
+    "parquet",
+}
 
 
 def _is_connection_string(s: str) -> bool:
@@ -46,9 +54,9 @@ def _resolve_multiple_csvs(specs: list[str]) -> ResolvedDatabase:
     for spec in specs:
         if _is_connection_string(spec):
             scheme = urlparse(spec).scheme
-            if scheme != "csv":
+            if scheme not in {"csv", "parquet"}:
                 raise DatabaseResolutionError(
-                    "Multiple database arguments are only supported for CSV files. "
+                    "Multiple database arguments are only supported for CSV/Parquet files. "
                     f"Got connection string with scheme '{scheme}': {spec}"
                 )
             csv_specs.append(spec)
@@ -56,19 +64,22 @@ def _resolve_multiple_csvs(specs: list[str]) -> ResolvedDatabase:
             continue
 
         path = Path(spec).expanduser().resolve()
-        if path.suffix.lower() != ".csv":
+        file_format = path.suffix.lower().lstrip(".")
+        if file_format not in {"csv", "parquet"}:
             raise DatabaseResolutionError(
-                "Multiple database arguments are only supported for CSV files. "
-                f"Got non-CSV path: {spec}"
+                "Multiple database arguments are only supported for CSV/Parquet files. "
+                f"Got unsupported file path: {spec}"
             )
         if not path.exists():
-            raise DatabaseResolutionError(f"CSV file '{spec}' not found.")
-        csv_specs.append(f"csv:///{path}")
+            raise DatabaseResolutionError(
+                f"{file_format.upper()} file '{spec}' not found."
+            )
+        csv_specs.append(f"{file_format}:///{path}")
         stems.append(path.stem or "csv")
 
     if not csv_specs:
         raise DatabaseResolutionError(
-            "Multiple database arguments were provided, but no CSV files were found."
+            "Multiple database arguments were provided, but no CSV/Parquet files were found."
         )
 
     query = urlencode({"spec": csv_specs}, doseq=True)
@@ -84,13 +95,13 @@ def _resolve_multiple_csvs(specs: list[str]) -> ResolvedDatabase:
 
 
 def _all_csv_specs(specs: list[str]) -> bool:
-    """Return True iff every spec resolves to a CSV file (path or csv:// URL)."""
+    """Return True iff every spec is a CSV/Parquet file path or URL."""
     for spec in specs:
         if _is_connection_string(spec):
-            if urlparse(spec).scheme != "csv":
+            if urlparse(spec).scheme not in {"csv", "parquet"}:
                 return False
         else:
-            if Path(spec).suffix.lower() != ".csv":
+            if Path(spec).suffix.lower() not in {".csv", ".parquet"}:
                 return False
     return True
 
@@ -103,8 +114,8 @@ def resolve_databases(
 
     - `None`, single string, or single-element list → returns 1 entry (matches
       `resolve_database` semantics).
-    - All-CSV list → returns 1 entry (CSVs merger, today's behavior).
-    - Mixed/non-CSV list with N > 1 → returns N entries, each resolved
+    - All CSV/Parquet list → returns 1 entry with one table per file.
+    - Other lists with N > 1 → returns N entries, each resolved
       independently. Duplicate names raise `DatabaseResolutionError`.
     """
     if spec is None or isinstance(spec, str):
@@ -143,7 +154,7 @@ def resolve_database(
 
     Args:
         spec: User input - None (default), configured name, connection string, file path,
-            or a list of CSV file paths/CSV connection strings.
+            or a list of CSV/Parquet file paths or connection strings.
         config_mgr: Optional database configuration manager for looking up configured
             connections. If omitted, one is created only when needed for configured
             name/default lookup.
@@ -181,7 +192,7 @@ def resolve_database(
         scheme = urlparse(spec).scheme
         if scheme in {"postgresql", "mysql"}:
             db_name = urlparse(spec).path.lstrip("/") or "database"
-        elif scheme in {"sqlite", "duckdb", "csv", "csvs"}:
+        elif scheme in {"sqlite", "duckdb", "csv", "csvs", "parquet"}:
             db_name = Path(urlparse(spec).path).stem or "database"
         else:  # should not happen because of SUPPORTED_SCHEMES
             db_name = "database"
@@ -191,11 +202,16 @@ def resolve_database(
 
     # 2. Raw file path?
     path = Path(spec).expanduser().resolve()
-    if path.suffix.lower() == ".csv":
+    if path.suffix.lower() in {".csv", ".parquet"}:
+        file_format = path.suffix.lower().lstrip(".")
         if not path.exists():
-            raise DatabaseResolutionError(f"CSV file '{spec}' not found.")
+            raise DatabaseResolutionError(
+                f"{file_format.upper()} file '{spec}' not found."
+            )
         return ResolvedDatabase(
-            name=path.stem, connection_string=f"csv:///{path}", excluded_schemas=[]
+            name=path.stem,
+            connection_string=f"{file_format}:///{path}",
+            excluded_schemas=[],
         )
     if path.suffix.lower() in {".db", ".sqlite", ".sqlite3"}:
         if not path.exists():

@@ -31,7 +31,7 @@ def DatabaseConnection(
         conn = SQLiteConnection(connection_string)
     elif connection_string.startswith("duckdb://"):
         conn = DuckDBConnection(connection_string)
-    elif connection_string.startswith("csv:///"):
+    elif connection_string.startswith(("csv:///", "parquet:///")):
         from .csv import CSVConnection
 
         conn = CSVConnection(connection_string)

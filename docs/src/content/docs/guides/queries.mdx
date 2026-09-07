@@ -245,7 +245,7 @@ saber -d prod-db "What's our revenue this month?"
 
 #### Using Files Directly
 
-Work with SQLite, DuckDB, or CSV files directly:
+Work with SQLite, DuckDB, CSV, or Parquet files directly:
 
 ```bash
 # SQLite file
@@ -256,6 +256,9 @@ saber -d "./data/warehouse.duckdb" "Latest partitions"
 
 # CSV file
 saber -d "./customers.csv" "How many customers per state?"
+
+# Parquet file
+saber -d "./orders.parquet" "What is total revenue?"
 ```
 
 #### Connection Strings

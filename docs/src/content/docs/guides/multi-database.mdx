@@ -47,18 +47,20 @@ DBs: sales, analytics, inventory | Model: ... | ...
   derived from the database/file name for ad-hoc connection strings and paths.
 </Aside>
 
-#### CSV files are different
+#### CSV and Parquet files are different
 
-Passing **multiple CSV files** does not create a multi-database session. Instead,
-all CSVs are merged into a single in-memory database with one table (view) per
+Passing **multiple CSV/Parquet files** does not create a multi-database session. Instead,
+all files are loaded into a single in-memory DuckDB database with one table per
 file, so you can join across them:
 
 ```bash
 saber -d users.csv -d orders.csv "Join users and orders"
+saber -d users.csv -d orders.parquet "Revenue by user"
+saber -d users.parquet -d orders.parquet "Join users and orders"
 ```
 
-Multi-database mode kicks in only when more than one **non-CSV** target is
-provided (or a CSV combined with another database type).
+When repeated targets include another database type or a configured connection,
+each target instead resolves independently into a multi-database session.
 
 ### Describing connections
 

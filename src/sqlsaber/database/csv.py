@@ -1,4 +1,4 @@
-"""CSV database connection using DuckDB backend."""
+"""CSV and Parquet file connections using the same DuckDB backend."""
 
 import asyncio
 from pathlib import Path
@@ -18,12 +18,18 @@ __all__ = ["CSVConnection"]
 
 
 class CSVConnection(BaseDatabaseConnection):
-    """CSV file connection using DuckDB per query."""
+    """Local CSV or Parquet connection using DuckDB per query.
+
+    The historical class and attribute names are retained for compatibility.
+    """
 
     def __init__(self, connection_string: str):
         super().__init__(connection_string)
 
-        raw_path = connection_string.replace("csv:///", "", 1)
+        self.file_format = urlparse(connection_string).scheme
+        if self.file_format not in {"csv", "parquet"}:
+            raise ValueError("Expected a csv:/// or parquet:/// connection string")
+        raw_path = connection_string.removeprefix(f"{self.file_format}:///")
         self.csv_path = raw_path.split("?", 1)[0]
 
         self.delimiter = ","
@@ -72,13 +78,20 @@ class CSVConnection(BaseDatabaseConnection):
         return encoding.replace("-", "").replace("_", "").upper()
 
     def _create_table(self, conn: duckdb.DuckDBPyConnection) -> None:
-        """Materialize the CSV into a real table.
+        """Materialize the source file into a real table.
 
-        A materialized table (rather than a view over read_csv_auto) lets the
+        A materialized table (rather than a view over a file reader) lets the
         session lock down external file access afterwards while still serving the
         intended data — a view would re-read the file on every query and break
         under the lockdown.
         """
+        if self.file_format == "parquet":
+            conn.execute(
+                f"CREATE TABLE {self._quote_identifier(self.table_name)} AS "
+                f"SELECT * FROM read_parquet({self._quote_literal(self.csv_path)})"
+            )
+            return
+
         header_literal = "TRUE" if self.has_header else "FALSE"
         option_parts: list[str] = [f"HEADER={header_literal}"]
 

@@ -5,7 +5,7 @@
 
 > SQLsaber is an open-source agentic SQL assistant. Think Claude Code but for SQL.
 
-Ask questions about databases, SQLite/DuckDB files, and CSVs in plain English from your terminal or Python code. SQLsaber reads your schema, writes SQL, executes read-only queries by default, and explains the results.
+Ask questions about databases, SQLite/DuckDB files, CSVs, and Parquet files in plain English from your terminal or Python code. SQLsaber reads your schema, writes SQL, executes read-only queries by default, and explains the results.
 
 `SQLSaber` is the canonical conversation lifecycle used by the CLI and TUI. Clients own input and presentation, while `SQLSaber` owns agent behavior, completed history, and thread lifecycle.
 
@@ -57,7 +57,11 @@ saber -d "postgresql://user:pass@localhost:5432/mydb" "count users"
 
 # Query local files
 saber -d ./customers.csv "How many customers are from each state?"
+saber -d ./orders.parquet "What is total revenue?"
 saber -d ./warehouse.duckdb "Show me the latest partition"
+
+# Join CSV and Parquet files using DuckDB
+saber -d ./customers.csv -d ./orders.parquet "Revenue by customer"
 
 # Connect multiple databases in one session
 saber -d sales -d analytics "Compare last month's revenue to web sessions"
@@ -68,7 +72,7 @@ saber -d sales -d analytics "Compare last month's revenue to web sessions"
 - **No context switching** — Stay in your terminal, ask questions, get answers.
 - **Schema-aware** — Automatically discovers tables, columns, indexes, comments, and relationships.
 - **Safe by default** — Runs read-only queries unless you explicitly enable dangerous mode.
-- **Works with your stack** — PostgreSQL, MySQL, SQLite, DuckDB, and CSV files.
+- **Works with your stack** — PostgreSQL, MySQL, SQLite, DuckDB, CSV, and Parquet files.
 - **Remembers your work** — Resume previous analysis with conversation threads.
 - **Learns your business context** — Store KPI definitions, SQL patterns, and domain notes in a searchable knowledge base.
 - **Flexible model support** — Use Anthropic, OpenAI, Google, Groq, xAI, Mistral, Cohere, Hugging Face, and other supported providers.

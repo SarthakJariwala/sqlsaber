@@ -98,5 +98,5 @@ class TestCLICommands:
         text = self._help_text(capsys, ["--help"])
         assert "one/more CSV files via repeated -d" not in text
         assert "multiple saved names" in text
-        assert "CSV files merge" in text
+        assert "CSV/Parquet files merge" in text
         assert "-d sales -d analytics" in text
