@@ -83,6 +83,8 @@ def test_html_export_links_artifacts_without_embedding_bytes() -> None:
     assert "report.csv" in html
     assert publication.artifacts[0].uri in html
     assert "secret-data" not in html
+    assert html.count("Artifacts (report)") == 1
+    assert html.count(f'href="{publication.artifacts[0].uri}"') == 1
 
 
 def test_threads_artifacts_lists_retained_publication(

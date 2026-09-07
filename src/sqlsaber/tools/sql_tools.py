@@ -334,9 +334,11 @@ class ExecuteSQLTool(SQLTool):
         schema_manager: SchemaManager | None = None,
         *,
         query_result_store: QueryResultStore | None = None,
+        csv_tool_results: bool = False,
     ) -> None:
         super().__init__(db_connection, schema_manager)
         self.query_result_store = query_result_store
+        self.csv_tool_results = csv_tool_results
 
     display_spec = ToolDisplaySpec(
         metadata=DisplayMetadata(display_name="Execute SQL"),
@@ -531,7 +533,11 @@ class ExecuteSQLTool(SQLTool):
                         metadata=getattr(ctx, "metadata", None) or {},
                     ),
                 )
-                projection = build_model_projection(canonical_payload, descriptor)
+                projection = build_model_projection(
+                    canonical_payload,
+                    descriptor,
+                    csv_tool_results=self.csv_tool_results,
+                )
             except Exception:
                 return json_dumps(
                     {

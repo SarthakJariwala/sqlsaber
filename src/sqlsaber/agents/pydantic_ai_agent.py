@@ -58,6 +58,7 @@ class SQLSaberAgent:
         model_name: str | None = None,
         api_key: str | None = None,
         allow_dangerous: bool = False,
+        csv_tool_results: bool = False,
         system_prompt: str | None = None,
         tool_overides: ToolOveridesInput | None = None,
         extra_capabilities: Sequence[AbstractCapability[Any]] = (),
@@ -89,6 +90,7 @@ class SQLSaberAgent:
         self._api_key_override = api_key
         self.db_type = self.db_connection.display_name
         self.allow_dangerous = allow_dangerous
+        self.csv_tool_results = csv_tool_results
         self._tool_overides = normalize_tool_overides(tool_overides)
         self._extra_capabilities = tuple(extra_capabilities)
         self._artifact_store = artifact_store
@@ -149,6 +151,7 @@ class SQLSaberAgent:
             SqlTools(
                 registry=self.registry,
                 allow_dangerous=self.allow_dangerous,
+                csv_tool_results=self.csv_tool_results,
                 include_catalog_instructions=include_guidance,
                 query_result_store=self.query_result_store,
             ),

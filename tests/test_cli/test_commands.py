@@ -18,6 +18,43 @@ class TestCLICommands:
         assert "SQLsaber" in captured.out
         assert "SQL assistant for your database" in captured.out
         assert "--system-prompt" in captured.out
+        assert "--csv-tool-results" in captured.out
+
+    @pytest.mark.parametrize("prefix", [[], ["threads", "resume", "test-thread"]])
+    @pytest.mark.parametrize(
+        "flag,expected",
+        [(None, False), ("--csv-tool-results", True), ("--no-csv-tool-results", False)],
+    )
+    def test_csv_flag_parsing(self, prefix, flag, expected):
+        _, bound, _ = app.parse_args([*prefix, *([flag] if flag else [])])
+        bound.apply_defaults()
+        assert bound.arguments["csv_tool_results"] is expected
+
+    @pytest.mark.parametrize("interactive", [False, True])
+    @pytest.mark.parametrize("csv_tool_results", [False, True])
+    def test_query_passes_csv_choice_to_session(
+        self, monkeypatch, interactive, csv_tool_results
+    ):
+        from unittest.mock import AsyncMock, MagicMock
+        from sqlsaber.cli import commands
+        from sqlsaber.cli.interactive import InteractiveSession
+
+        class SessionReached(Exception):
+            pass
+
+        create = AsyncMock(side_effect=SessionReached)
+        monkeypatch.setattr(commands, "_create_cli_saber", create)
+        monkeypatch.setattr(commands, "needs_onboarding", lambda _: False)
+        monkeypatch.setattr(commands, "schedule_update_check", lambda: None)
+        monkeypatch.setattr(commands, "_ensure_logging", MagicMock())
+        monkeypatch.setattr(commands.sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr(InteractiveSession, "start_unbound_shell", MagicMock())
+        with pytest.raises(SessionReached):
+            commands.query(
+                None if interactive else "Show tables",
+                csv_tool_results=csv_tool_results,
+            )
+        assert create.await_args.kwargs["csv_tool_results"] is csv_tool_results
 
     def test_query_specific_database_not_found(self, capsys, temp_dir, monkeypatch):
         """Test query with non-existent database name."""

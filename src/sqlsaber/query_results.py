@@ -617,12 +617,18 @@ class FilesystemQueryResultStore:
             os.close(fd)
 
 
-def _projection_json(value: Mapping[str, Any]) -> bytes:
-    return json_dumps(
+def _projection_size(value: Mapping[str, Any], csv_tool_results: bool) -> int:
+    json_bytes = json_dumps(
         value,
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
+    if not csv_tool_results:
+        return len(json_bytes)
+    from sqlsaber.tools.model_output import format_sql_output
+
+    csv_bytes = format_sql_output("execute_sql", value).encode("utf-8")
+    return max(len(json_bytes), len(csv_bytes))
 
 
 def build_model_projection(
@@ -630,8 +636,9 @@ def build_model_projection(
     descriptor: StoredQueryResult,
     *,
     max_bytes: int = MAX_MODEL_QUERY_RESULT_BYTES,
+    csv_tool_results: bool = False,
 ) -> dict[str, Any]:
-    """Build a stable, valid JSON projection within a hard UTF-8 byte budget."""
+    """Bound both structured and model-facing projections by UTF-8 bytes."""
 
     if max_bytes < 256:
         raise ValueError("max_bytes must be at least 256")
@@ -648,7 +655,7 @@ def build_model_projection(
         base["auto_limit_applied"] = True
 
     complete = {**base, "results": rows, "results_truncated": False}
-    if len(_projection_json(complete)) <= max_bytes:
+    if _projection_size(complete, csv_tool_results) <= max_bytes:
         return complete
 
     warning = (
@@ -661,15 +668,15 @@ def build_model_projection(
         "results_truncated": True,
         "warning": warning,
     }
-    if len(_projection_json(projected)) > max_bytes:
+    if _projection_size(projected, csv_tool_results) > max_bytes:
         projected["columns"] = []
         projected["columns_truncated"] = True
-    if len(_projection_json(projected)) > max_bytes:
+    if _projection_size(projected, csv_tool_results) > max_bytes:
         projected.pop("warning", None)
         projected["warning"] = (
             "Preview omitted; use the result handle for complete data."
         )
-    if len(_projection_json(projected)) > max_bytes:
+    if _projection_size(projected, csv_tool_results) > max_bytes:
         minimal: dict[str, Any] = {
             "success": True,
             "result_id": descriptor.id,
@@ -680,21 +687,23 @@ def build_model_projection(
             "preview_rows": [],
             "results_truncated": True,
         }
-        if len(_projection_json(minimal)) > max_bytes:
+        if _projection_size(minimal, csv_tool_results) > max_bytes:
             raise ValueError("max_bytes is too small for a query result descriptor")
         projected = minimal
 
     preview: list[Any] = []
     for row in rows:
         candidate = {**projected, "preview_rows": [*preview, row]}
-        if len(_projection_json(candidate)) > max_bytes:
+        if _projection_size(candidate, csv_tool_results) > max_bytes:
             break
         preview.append(row)
     projected["preview_rows"] = preview
     if not preview and rows:
         projected["preview_row_omitted"] = True
-        if len(_projection_json(projected)) > max_bytes:
+        if _projection_size(projected, csv_tool_results) > max_bytes:
             projected.pop("preview_row_omitted")
-    if len(_projection_json(projected)) > max_bytes:  # defensive hard bound
+    if (
+        _projection_size(projected, csv_tool_results) > max_bytes
+    ):  # defensive hard bound
         raise ValueError("Unable to build a bounded query result projection")
     return projected

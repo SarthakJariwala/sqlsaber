@@ -269,6 +269,7 @@ class SQLSaber:
             dangerous_mode=agent.allow_dangerous,
             thread_id=str(thread_id) if thread_id is not None else None,
             is_new_thread=self._is_new_thread,
+            csv_tool_results=self._runtime.options.csv_tool_results,
         )
 
     @property

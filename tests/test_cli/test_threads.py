@@ -1,3 +1,4 @@
+import json
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -24,6 +25,7 @@ from sqlsaber.cli.threads import (
 from sqlsaber.config.database import DatabaseConfigManager
 from sqlsaber.render.markdown_text import md_of
 from sqlsaber.threads.storage import Thread, ThreadStorage
+from sqlsaber.tools.model_output import format_sql_output
 
 
 class TestThreadsCLI:
@@ -328,7 +330,10 @@ class TestThreadsCLI:
 
         await mock_resume_run()
 
-    def test_resume_uses_public_sdk_and_passes_saber_to_tui(self, sample_messages):
+    @pytest.mark.parametrize("csv_tool_results", [False, True])
+    def test_resume_uses_public_sdk_and_passes_saber_to_tui(
+        self, sample_messages, csv_tool_results
+    ):
         from sqlsaber.cli.threads import resume
 
         store = MagicMock()
@@ -381,11 +386,12 @@ class TestThreadsCLI:
             patch("sqlsaber.cli.retention.run_cli_retention", retention),
             patch("sqlsaber.cli.threads._render_transcript"),
         ):
-            resume("thread-multi")
+            resume("thread-multi", csv_tool_results=csv_tool_results)
 
         thread_id, options, storage = captured["resume"]
         assert thread_id == "thread-multi"
         assert options.database is None
+        assert options.csv_tool_results is csv_tool_results
         assert storage is store
         assert captured["interactive_saber"] is captured["saber"]
         assert captured["ran"] is True
@@ -472,6 +478,109 @@ class TestThreadsCLI:
         assert "User" in html
         assert "Assistant" in html
         assert "Show me all tables" in html
+
+    @pytest.mark.parametrize(
+        "tool_name,payload",
+        [
+            (
+                "introspect_schema",
+                {
+                    "main.users": {
+                        "columns": {
+                            "id": {
+                                "type": "INTEGER",
+                                "nullable": False,
+                                "default": None,
+                            }
+                        },
+                        "primary_keys": ["id"],
+                        "foreign_keys": [],
+                        "indexes": [],
+                    }
+                },
+            ),
+            (
+                "list_tables",
+                {
+                    "tables": [{"schema": "main", "name": "users", "type": "TABLE"}],
+                    "total_tables": 1,
+                },
+            ),
+            (
+                "list_dbs",
+                {
+                    "databases": [
+                        {
+                            "name": "analytics",
+                            "dialect": "sqlite",
+                            "description": "Reports",
+                        }
+                    ],
+                    "total_databases": 1,
+                },
+            ),
+            ("execute_sql", {"success": True, "results": [{"id": 1, "name": "Ada"}]}),
+        ],
+    )
+    def test_html_csv_results_match_json(self, sample_threads, tool_name, payload):
+        def messages(content, metadata=None):
+            return [
+                ModelRequest(parts=[UserPromptPart("Inspect users")]),
+                ModelRequest(
+                    parts=[
+                        ToolReturnPart(
+                            tool_name=tool_name,
+                            tool_call_id="csv-call",
+                            content=content,
+                            metadata=metadata,
+                        )
+                    ]
+                ),
+            ]
+
+        expected = render_thread_html(sample_threads[0], messages(json.dumps(payload)))
+        actual = render_thread_html(
+            sample_threads[0],
+            messages(
+                format_sql_output(tool_name, payload),
+                {"sqlsaber_structured_result": payload},
+            ),
+        )
+        assert "<table" in expected
+        assert actual == expected
+
+    @pytest.mark.parametrize("hydrated", [False, True])
+    def test_html_csv_preview_and_hydrated_result(self, sample_threads, hydrated):
+        preview = {
+            "success": True,
+            "preview_rows": [{"name": "Ada"}],
+            "results_truncated": True,
+        }
+        complete = {"success": True, "results": [{"name": "Ada"}, {"name": "Grace"}]}
+        messages = [
+            ModelRequest(parts=[UserPromptPart("List users")]),
+            ModelRequest(
+                parts=[
+                    ToolReturnPart(
+                        tool_name="execute_sql",
+                        tool_call_id="csv-call",
+                        content=format_sql_output("execute_sql", preview),
+                        metadata={"sqlsaber_structured_result": preview},
+                    )
+                ]
+            ),
+        ]
+        kwargs = (
+            {"hydrated_results": {"csv-call": json.dumps(complete)}}
+            if hydrated
+            else {"unavailable_results": {"csv-call"}}
+        )
+        actual = render_thread_html(sample_threads[0], messages, **kwargs)
+        messages[1].parts[0].content = json.dumps(preview)
+        expected = render_thread_html(sample_threads[0], messages, **kwargs)
+        assert actual == expected
+        assert ("Complete query result unavailable" in actual) is not hydrated
+        assert ("Grace" in actual) is hydrated
 
     def test_render_thread_html_empty_messages(self, sample_threads):
         """Test render_thread_html with empty messages."""

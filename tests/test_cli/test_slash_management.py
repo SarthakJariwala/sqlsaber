@@ -314,9 +314,14 @@ async def test_resume_of_active_thread_does_not_prepare_duplicate() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resume_swaps_after_preparation_and_refreshes_session() -> None:
+@pytest.mark.parametrize("csv_tool_results", [False, True])
+async def test_resume_swaps_after_preparation_and_refreshes_session(
+    csv_tool_results,
+) -> None:
     old = MagicMock()
-    old.info = SimpleNamespace(thread_id="thread-old")
+    old.info = SimpleNamespace(
+        thread_id="thread-old", csv_tool_results=csv_tool_results
+    )
     old.end_thread = AsyncMock(return_value="thread-old")
     old.close = AsyncMock()
     new = MagicMock()
@@ -347,11 +352,14 @@ async def test_resume_swaps_after_preparation_and_refreshes_session() -> None:
         patch(
             "sqlsaber.cli.threads.prepare_thread_resume",
             AsyncMock(return_value=_prepared(new)),
-        ),
+        ) as prepare,
         patch("sqlsaber.cli.threads.render_prepared_thread") as render,
     ):
         await session._resume_thread(app, surface, ThreadResumeRequest("thread-new"))
 
+    prepare.assert_awaited_once_with(
+        "thread-new", None, csv_tool_results=csv_tool_results
+    )
     old.end_thread.assert_awaited_once_with()
     old.close.assert_awaited_once_with()
     assert session.saber is new
@@ -366,7 +374,7 @@ async def test_resume_swaps_after_preparation_and_refreshes_session() -> None:
 @pytest.mark.asyncio
 async def test_resume_keeps_new_session_when_old_cleanup_fails() -> None:
     old = MagicMock()
-    old.info = SimpleNamespace(thread_id="thread-old")
+    old.info = SimpleNamespace(thread_id="thread-old", csv_tool_results=False)
     old.end_thread = AsyncMock(return_value="thread-old")
     old.close = AsyncMock(side_effect=RuntimeError("cleanup broke"))
     new = MagicMock()
@@ -411,7 +419,7 @@ async def test_resume_keeps_new_session_when_old_cleanup_fails() -> None:
 @pytest.mark.asyncio
 async def test_resume_preparation_failure_keeps_old_session() -> None:
     old = MagicMock()
-    old.info = SimpleNamespace(thread_id="thread-old")
+    old.info = SimpleNamespace(thread_id="thread-old", csv_tool_results=False)
     old.end_thread = AsyncMock()
     old.close = AsyncMock()
     session = InteractiveSession.__new__(InteractiveSession)

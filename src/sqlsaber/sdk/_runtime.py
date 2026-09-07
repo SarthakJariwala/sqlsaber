@@ -90,6 +90,7 @@ class _SQLSaberRuntime:
             model_name=options.model_name,
             api_key=options.api_key,
             allow_dangerous=options.allow_dangerous,
+            csv_tool_results=options.csv_tool_results,
             system_prompt=system_prompt_text,
             tool_overides=options.tool_overrides,
             extra_capabilities=options.extra_capabilities,
