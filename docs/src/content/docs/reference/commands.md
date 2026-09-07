@@ -36,6 +36,7 @@ saber --thread a1b2c3d4 "Now compare that with last quarter"
 - `QUERY-TEXT` - SQL query in natural language (optional, starts interactive mode if not provided)
 - `-d, --database` - Database connection name, file path (CSV/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://). Repeat the flag to connect to [multiple databases](/guides/multi-database) at once (or to merge multiple CSV files into one session).
 - `--thinking` / `--no-thinking` - Enable/disable extended thinking/reasoning mode
+- `--csv-tool-results` / `--no-csv-tool-results` - Opt in to experimental CSV tables in model-facing SQL tool results. Defaults to JSON; applies to both single-shot queries and interactive mode.
 - `--allow-dangerous` - Allow INSERT/UPDATE/DELETE and restricted DDL (CREATE TABLE/VIEW/INDEX, ALTER TABLE). DROP/TRUNCATE and admin/security operations remain blocked; UPDATE/DELETE require WHERE.
 - `--system-prompt` - Custom system prompt text or path to a file (overrides built-in prompt)
 - `--thread` - Continue a saved thread non-interactively. Requires a query; uses the stored configured database unless `-d` overrides it.
@@ -44,6 +45,36 @@ saber --thread a1b2c3d4 "Now compare that with last quarter"
 
 - `--help, -h` - Display help message
 - `--version` - Show version information
+
+### Experimental CSV tool results
+
+```bash
+# One query (also works with a query piped through stdin)
+saber --csv-tool-results -d analytics "Show recent orders"
+
+# Interactive session
+saber --csv-tool-results -d analytics
+
+# Resume interactively, opting in for new tool calls
+saber threads resume THREAD_ID --csv-tool-results
+
+# Resume for a single follow-up
+saber --thread THREAD_ID --csv-tool-results "Compare with last month"
+```
+
+JSON remains the default. CSV applies only to tabular results sent to the model
+by `list_tables`, `introspect_schema`, `execute_sql`, and `list_dbs`. Metadata,
+errors, and empty results remain JSON. Displayed terminal tables and complete
+saved JSON results do not change, and SQL previews retain their 12 KiB limit.
+
+This is a session option, not a persisted preference. Interactive thread switches
+keep the current session's choice; a new CLI invocation defaults to JSON unless
+the flag is supplied again. Existing thread messages are not converted. There is
+no in-session toggle; launch with the desired flag.
+
+CSV often reduces token usage for multi-row data, but small results may be larger.
+The effect on model answer quality is not yet established, so this remains opt-in.
+For Python usage, see [SDK configuration](/sdk/configuration#experimental-csv-tool-results).
 
 ---
 

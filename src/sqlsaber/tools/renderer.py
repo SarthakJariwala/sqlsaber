@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -97,6 +98,13 @@ class ToolRenderer:
             Blocks from the tool override, the display spec, or a JSON fallback.
         """
         ctx = context or ToolRenderContext()
+        if isinstance(result, str) and isinstance(ctx.metadata, dict):
+            structured = ctx.metadata.get("sqlsaber_structured_result")
+            if isinstance(structured, dict):
+                try:
+                    json.loads(result)
+                except json.JSONDecodeError:
+                    result = structured
         tool = self._registry.get(tool_name)
         if tool is not None:
             setter = getattr(tool, "set_replay_messages", None)

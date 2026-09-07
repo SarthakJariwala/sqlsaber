@@ -38,12 +38,44 @@ options = SQLSaberOptions(
 | `workspace_input_resolver` | `WorkspaceInputResolver \| None` | `None` | Application-owned resolver for opaque, authorized inputs to the managed notebook analyst. |
 | `tool_overrides`    | `Mapping[str, ModelOverides] \| None`         | `None`  | Per-tool model/API-key overrides (see [Advanced](/sdk/advanced)).                            |
 | `allow_dangerous`   | `bool`                                        | `False` | Allow write operations and a restricted subset of DDL (see [Advanced](/sdk/advanced)).       |
+| `csv_tool_results` | `bool` | `False` | Opt in to experimental CSV tables in model-facing SQL tool results. JSON remains the default. |
 
 <Aside type="note">
   `model_name`, `thinking_*`, `system_prompt`, and the injectable components all
   have sensible defaults. For many use cases just `database` (plus credentials in
   your environment) is enough.
 </Aside>
+
+## Experimental CSV tool results
+
+SQL tool results use JSON by default. Opt in per session:
+
+```python
+from sqlsaber import SQLSaber, SQLSaberOptions
+
+saber = SQLSaber(options=SQLSaberOptions(
+    database="analytics.db",
+    csv_tool_results=True,
+))
+```
+
+This changes the tabular portions of `list_tables`, `introspect_schema`,
+`execute_sql`, and multi-database `list_dbs` results sent to the model. Metadata,
+schema constraints, errors, and empty results remain JSON. CSV cells use standard
+quoting, `\N` for null, and escaped backslashes; nested cell values use JSON.
+Complete retained query results remain typed JSON. Terminal tables, plugin access,
+and the 12 KiB SQL preview limit are unchanged. Structured rendering data is kept
+in message metadata, not sent to the model as a second copy of the result.
+
+CSV can reduce tokens for multi-row results, but tiny results can be larger and
+its effect on answer quality has not been established. Evaluate it with your
+models and queries before enabling it broadly.
+
+The setting is available as `saber.info.csv_tool_results`. It is not a saved
+global preference or restored from thread history: pass it again in
+`SQLSaber.resume(..., options=SQLSaberOptions(csv_tool_results=True))` to opt in
+for new calls. Existing messages are not rewritten. For a standalone capability,
+use [`SqlTools(csv_tool_results=True)`](/sdk/capabilities#experimental-csv-tool-results).
 
 ## Artifact storage
 

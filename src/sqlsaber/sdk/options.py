@@ -50,3 +50,4 @@ class SQLSaberOptions:
     # Tool overrides
     tool_overrides: ToolOveridesInput | None = None
     allow_dangerous: bool = False
+    csv_tool_results: bool = False

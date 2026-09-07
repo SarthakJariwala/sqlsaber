@@ -32,6 +32,32 @@ def test_capabilities_are_exported_from_top_level() -> None:
     assert WorkspaceResolutionContext.__name__ == "WorkspaceResolutionContext"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("csv_tool_results", [None, False, True])
+async def test_csv_tool_results_is_opt_in_and_survives_agent_rebuild(csv_tool_results):
+    options = SQLSaberOptions(
+        database="sqlite:///:memory:",
+        settings=Config.in_memory(
+            model_name="anthropic:claude-3-5-sonnet",
+            api_keys={"anthropic": "test-key"},
+        ),
+    )
+    if csv_tool_results is not None:
+        options.csv_tool_results = csv_tool_results
+    expected = csv_tool_results is True
+    saber = SQLSaber(options=options)
+    try:
+        assert saber.info.csv_tool_results is expected
+        for rebuild in (False, True):
+            if rebuild:
+                saber.set_thinking(enabled=True)
+            sql = next(c for c in saber.agent.capabilities if isinstance(c, SqlTools))
+            assert sql.csv_tool_results is expected
+            assert sql.display_specs["execute_sql"].csv_tool_results is expected
+    finally:
+        await saber.close()
+
+
 def test_invalid_artifact_failure_mode_is_rejected() -> None:
     with pytest.raises(ValueError, match="artifact_failure_mode"):
         SQLSaber(

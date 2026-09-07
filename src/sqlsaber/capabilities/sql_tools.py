@@ -21,6 +21,7 @@ from sqlsaber.prompts.dangerous_mode import DANGEROUS_MODE
 from sqlsaber.prompts.sql_guidance import SQL_GUIDANCE, SQL_GUIDANCE_MULTI
 from sqlsaber.query_results import InMemoryQueryResultStore, QueryResultStore
 from sqlsaber.tools.base import Tool
+from sqlsaber.tools.model_output import model_output_wrapper
 from sqlsaber.tools.sql_tools import (
     ExecuteSQLTool,
     IntrospectSchemaTool,
@@ -91,6 +92,7 @@ class SqlTools(SqlSaberCapability):
         *,
         registry: DatabaseRegistry | None = None,
         allow_dangerous: bool = False,
+        csv_tool_results: bool = False,
         include_catalog_instructions: bool = True,
         query_result_store: QueryResultStore | None = None,
     ) -> None:
@@ -115,6 +117,7 @@ class SqlTools(SqlSaberCapability):
             else InMemoryQueryResultStore()
         )
         self.allow_dangerous = allow_dangerous
+        self.csv_tool_results = csv_tool_results
         self.include_catalog_instructions = include_catalog_instructions
         self._owned = owned
         self._toolset = _SqlToolset(registry, owned=owned)
@@ -122,7 +125,10 @@ class SqlTools(SqlSaberCapability):
         tools: list[Tool] = [
             ListTablesTool(),
             IntrospectSchemaTool(),
-            ExecuteSQLTool(query_result_store=self.query_result_store),
+            ExecuteSQLTool(
+                query_result_store=self.query_result_store,
+                csv_tool_results=csv_tool_results,
+            ),
         ]
         if len(registry) > 1:
             tools.append(ListDatabasesTool())
@@ -157,6 +163,8 @@ class SqlTools(SqlSaberCapability):
                 function = wrap_add_db_name(tool, names)
             else:
                 function = wrap_strip_db_name(tool)
+            if self.csv_tool_results:
+                function = model_output_wrapper(function, tool.name)
             self._toolset.add_function(
                 function,
                 name=tool.name,

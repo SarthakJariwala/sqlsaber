@@ -49,6 +49,20 @@ agent = Agent("openai:gpt-5.2", capabilities=[sql])
 
 SQLsaber includes a database catalog in the capability instructions. Cross-database joins are not attempted; the model queries each database separately.
 
+### Experimental CSV tool results
+
+JSON is the default. Opt in to CSV tables for model-facing SQL tool results:
+
+```python
+sql = SqlTools(database="analytics", csv_tool_results=True)
+```
+
+The option applies to all SQL tools in this capability, including `list_dbs`.
+Metadata and errors remain JSON; retained query data and terminal rendering do
+not change. Token savings do not establish equivalent answer quality. See
+[CSV tool result behavior](/sdk/configuration#experimental-csv-tool-results)
+for details. Managed sessions use `SQLSaberOptions(csv_tool_results=True)` instead.
+
 ### Allow writes
 
 SQL execution is read-only by default. Enable guarded write operations explicitly:

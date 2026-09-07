@@ -67,6 +67,7 @@ async def _create_cli_saber(
     system_prompt: str | None,
     thread: str | None,
     log,
+    csv_tool_results: bool = False,
 ):
     """Construct SQLSaber and persistence handles for a CLI session."""
     from sqlsaber.cli.artifacts import cli_artifact_store
@@ -91,6 +92,7 @@ async def _create_cli_saber(
         database=selected_database,
         thinking_enabled=thinking,
         allow_dangerous=allow_dangerous,
+        csv_tool_results=csv_tool_results,
         system_prompt=system_prompt,
         thread_manager=(ThreadManager(storage=storage) if thread is None else None),
         artifact_store=artifact_store,
@@ -147,6 +149,8 @@ app = cyclopts.App(
     help_epilogue=(
         "Examples:\n\n"
         'saber "show me all users"\n\n'
+        'saber --csv-tool-results "show me all users"\n\n'
+        "saber --csv-tool-results  # Interactive session\n\n"
         'echo "top customers by revenue" | saber\n\n'
         'saber -d sales -d analytics "compare revenue to sessions"\n\n'
         'saber -d users.csv -d orders.csv "join users and orders"\n\n'
@@ -246,6 +250,13 @@ def query(
             help=DANGEROUS_MODE_HELP,
         ),
     ] = False,
+    csv_tool_results: Annotated[
+        bool,
+        cyclopts.Parameter(
+            ["--csv-tool-results"],
+            help="Opt in to experimental CSV tool results for the model (default: JSON; also applies to interactive mode)",
+        ),
+    ] = False,
     system_prompt: Annotated[
         str | None,
         cyclopts.Parameter(
@@ -271,6 +282,7 @@ def query(
 
     Examples:
         saber                             # Start interactive mode
+        saber --csv-tool-results          # Opt in to CSV tool results interactively
         saber "show me all users"         # Run a single query
         saber -d sales -d analytics "compare revenue"  # Multiple saved connections
         saber -d data.csv "show users"    # Run a query with ad-hoc CSV file
@@ -345,6 +357,7 @@ def query(
                     selected_database=selected_database,
                     thinking=thinking,
                     allow_dangerous=allow_dangerous,
+                    csv_tool_results=csv_tool_results,
                     system_prompt=system_prompt,
                     thread=thread,
                     log=log,
@@ -419,6 +432,7 @@ def query(
                     selected_database=selected_database,
                     thinking=thinking,
                     allow_dangerous=allow_dangerous,
+                    csv_tool_results=csv_tool_results,
                     system_prompt=system_prompt,
                     thread=thread,
                     log=log,

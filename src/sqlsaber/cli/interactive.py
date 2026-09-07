@@ -327,6 +327,7 @@ class InteractiveSession:
         prepared = await prepare_thread_resume(
             request.thread_id,
             list(request.databases) or None,
+            csv_tool_results=self.saber.info.csv_tool_results,
         )
         prepared_saber = prepared.saber
         previous = self.saber

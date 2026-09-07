@@ -56,6 +56,7 @@ def _render_tool_result_html(
     args: dict | None = None,
     *,
     replay_messages: list[ModelMessage] | None = None,
+    metadata: object = None,
 ) -> str:
     content_payload = content
     if isinstance(content, (dict, list)):
@@ -66,12 +67,22 @@ def _render_tool_result_html(
     from sqlsaber.render.html import html_of
     from sqlsaber.tools.renderer import ToolRenderContext
 
+    # Artifact publications have their own linked HTML below. Forward only the
+    # structured SQL result needed to render model-facing CSV without duplicating
+    # those publications through ToolRenderer's generic artifact blocks.
+    render_metadata = (
+        {"sqlsaber_structured_result": metadata.get("sqlsaber_structured_result")}
+        if isinstance(metadata, dict)
+        else None
+    )
     html = html_of(
         tuple(
             renderer.result(
                 tool_name,
                 content_payload,
-                context=ToolRenderContext(replay_messages=replay_messages),
+                context=ToolRenderContext(
+                    replay_messages=replay_messages, metadata=render_metadata
+                ),
             )
         )
     )
@@ -686,6 +697,7 @@ def render_thread_html(
                         content_str,
                         args=tool_args,
                         replay_messages=all_msgs,
+                        metadata=getattr(part, "metadata", None),
                     )
                     result_html += _render_artifact_links(
                         getattr(part, "metadata", None)

@@ -434,6 +434,7 @@ async def prepare_thread_resume(
     storage: ThreadStorage | None = None,
     artifact_store: ArtifactStore | None = None,
     query_result_store: QueryResultStore | None = None,
+    csv_tool_results: bool = False,
 ) -> PreparedThreadResume:
     from sqlsaber import (
         SQLSaber,
@@ -463,6 +464,7 @@ async def prepare_thread_resume(
                 database=database,
                 artifact_store=artifacts,
                 query_result_store=query_results,
+                csv_tool_results=csv_tool_results,
             ),
             storage=store,
         )
@@ -568,7 +570,8 @@ def render_prepared_thread(surface: Surface, prepared: PreparedThreadResume) -> 
     help_epilogue=(
         "Examples:\n\n"
         "saber threads resume THREAD_ID\n\n"
-        "saber threads resume THREAD_ID --database analytics"
+        "saber threads resume THREAD_ID --database analytics\n\n"
+        "saber threads resume THREAD_ID --csv-tool-results"
     )
 )
 def resume(
@@ -585,6 +588,13 @@ def resume(
             ),
         ),
     ] = None,
+    csv_tool_results: Annotated[
+        bool,
+        cyclopts.Parameter(
+            ["--csv-tool-results"],
+            help="Opt in to experimental CSV tool results for new model calls (default: JSON)",
+        ),
+    ] = False,
 ):
     """Render transcript, then resume thread in interactive mode.
 
@@ -612,6 +622,7 @@ def resume(
                 storage=store,
                 artifact_store=artifact_store,
                 query_result_store=query_result_store,
+                csv_tool_results=csv_tool_results,
             )
         except ThreadResumePreparationError as exc:
             fail(str(exc))

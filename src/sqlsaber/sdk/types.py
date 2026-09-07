@@ -30,6 +30,7 @@ class SQLSaberInfo:
     dangerous_mode: bool
     thread_id: str | None
     is_new_thread: bool
+    csv_tool_results: bool = False
 
     @property
     def databases(self) -> tuple[str, ...]:
