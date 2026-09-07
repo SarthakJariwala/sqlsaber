@@ -2,12 +2,65 @@
 
 import sys
 
+import pytest
 import sqlglot
 from sqlglot import exp
 
 import sqlsaber.tools.sql_guard as sql_guard
 import sqlsaber.tools.sql_guard._mutation_analysis as mutation_analysis_module
 from sqlsaber.tools.sql_guard import _should_attempt_predicate_simplify, validate_sql
+
+
+@pytest.mark.parametrize("inline_negation", [False, True])
+@pytest.mark.parametrize(
+    ("operand", "rhs", "expected"),
+    [
+        ("NULL", "NULL", {False}),
+        ("1", "NULL", {True}),
+        ("TRUE", "TRUE", {False}),
+        ("FALSE", "TRUE", {True}),
+        ("NULL", "TRUE", {True}),
+        ("id", "NULL", {True, False}),
+        ("NULLIF(id = id, TRUE)", "NULL", {False}),
+    ],
+)
+def test_is_not_ast_representations(inline_negation, operand, rhs, expected):
+    """Support both SQLGlot representations without mutating the parsed tree."""
+    positive = sqlglot.parse_one(f"{operand} IS {rhs}", read="postgres")
+    if inline_negation:
+        positive.set("negate", True)
+        predicate = positive
+    else:
+        predicate = exp.Not(this=positive)
+    original = predicate.copy()
+
+    assert (
+        mutation_analysis_module._predicate_truthiness_possibilities(
+            predicate, "postgres"
+        )
+        == expected
+    )
+    assert predicate == original
+
+
+@pytest.mark.parametrize(
+    ("predicate", "allowed"),
+    [
+        ("1 IS NOT NULL", False),
+        ("NULL IS NOT NULL", True),
+        ("u.id IS NOT NULL", True),
+        ("u.id IS NULL OR u.id IS NOT NULL", False),
+        ("u.id IS NOT NULL OR u.id IS NULL", False),
+        ("u.id = u.id OR u.id IS NOT NULL", True),
+        ("u.id IS NULL OR u.other_id IS NOT NULL", True),
+        ("u.active IS NOT TRUE OR u.active IS TRUE", False),
+    ],
+)
+def test_postgres_is_not_mutation_filter(predicate, allowed):
+    result = validate_sql(
+        f"DELETE FROM users u WHERE {predicate}", "postgres", allow_dangerous=True
+    )
+    assert result.allowed is allowed
 
 
 class TestUnfilteredMutationsInDangerousMode:
@@ -1424,7 +1477,11 @@ class TestDangerousModeTautologyHardening:
         )
         assert not result.allowed
         assert result.reason
-        assert "tautological WHERE" in result.reason
+        # SQLGlot versions that cannot parse LIMIT ALL must still fail closed.
+        assert (
+            "tautological WHERE" in result.reason
+            or "Unable to parse query safely:" in result.reason
+        )
 
     def test_duckdb_delete_with_constant_exists_limit_all_blocked(self):
         """DuckDB LIMIT ALL is unbounded, so EXISTS is tautological."""
@@ -1435,7 +1492,10 @@ class TestDangerousModeTautologyHardening:
         )
         assert not result.allowed
         assert result.reason
-        assert "tautological WHERE" in result.reason
+        assert (
+            "tautological WHERE" in result.reason
+            or "Unable to parse query safely:" in result.reason
+        )
 
     def test_mysql_update_with_abs_constant_predicate_blocked(self):
         """Deterministic constant function predicates should be blocked."""

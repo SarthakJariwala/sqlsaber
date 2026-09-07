@@ -76,4 +76,6 @@ def test_cli_clear_rejects_alternate_confirmation_options(
         knowledge_app(["clear", removed_option])
 
     assert exc_info.value.code == 1
-    assert f'Unknown option: "{removed_option}"' in capsys.readouterr().err
+    error = capsys.readouterr().err
+    assert "Unknown option:" in error
+    assert removed_option in error

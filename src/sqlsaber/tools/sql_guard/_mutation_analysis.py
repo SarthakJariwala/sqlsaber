@@ -968,6 +968,14 @@ def _constant_comparison_predicate_truthiness(
         return None
 
     if isinstance(expr, exp.Is):
+        if expr.args.get("negate"):
+            positive = expr.copy()
+            positive.set("negate", False)
+            truth = _constant_comparison_predicate_truthiness(
+                positive, dialect, source_sql
+            )
+            return None if truth is None else not truth
+
         right_value = _constant_comparison_operand_value(
             expr.expression,
             dialect,
@@ -1631,7 +1639,7 @@ def _self_comparison_nullable_true_operand(
 def _is_null_check_operand(expr: exp.Expression | None) -> exp.Expression | None:
     """Return checked operand for IS NULL expressions."""
     expr = _unwrap_parens(expr)
-    if not isinstance(expr, exp.Is):
+    if not isinstance(expr, exp.Is) or expr.args.get("negate"):
         return None
 
     right_expr = _unwrap_parens(expr.expression)
@@ -1646,7 +1654,7 @@ def _is_null_check_operand(expr: exp.Expression | None) -> exp.Expression | None
 
 
 def _is_or_self_comparison_null_tautology(expr: exp.Or) -> bool:
-    """Detect tautologies like x = x OR x IS NULL."""
+    """Detect scalar null partitions like x = x OR x IS NULL."""
     expression_pairs = (
         (expr.this, expr.expression),
         (expr.expression, expr.this),
@@ -1655,6 +1663,19 @@ def _is_or_self_comparison_null_tautology(expr: exp.Or) -> bool:
     for comparison_side, null_side in expression_pairs:
         comparison_operand = _self_comparison_nullable_true_operand(comparison_side)
         null_check_operand = _is_null_check_operand(null_side)
+
+        # Postgres now represents IS NOT NULL as Is(negate=True), not Not(Is).
+        # Without schema types, conservatively treat an operand as potentially
+        # scalar: its null partition must not authorize an unfiltered mutation.
+        comparison_side = _unwrap_parens(comparison_side)
+        if (
+            isinstance(comparison_side, exp.Is)
+            and comparison_side.args.get("negate")
+            and isinstance(comparison_side.expression, exp.Null)
+            and not isinstance(null_check_operand, exp.Tuple)
+            and _is_row_stable_expression(null_check_operand)
+        ):
+            comparison_operand = _unwrap_parens(comparison_side.this)
 
         if (
             comparison_operand is not None
@@ -1674,7 +1695,7 @@ def _is_boolean_is_operand(
 ) -> exp.Expression | None:
     """Return IS operand for expressions like <expr> IS TRUE/FALSE."""
     expr = _unwrap_parens(expr)
-    if not isinstance(expr, exp.Is):
+    if not isinstance(expr, exp.Is) or expr.args.get("negate"):
         return None
 
     right_value = _constant_scalar_value(expr.expression, dialect, source_sql)
@@ -1696,11 +1717,13 @@ def _is_boolean_is_not_operand(
 ) -> exp.Expression | None:
     """Return IS operand for expressions like <expr> IS NOT TRUE/FALSE."""
     expr = _unwrap_parens(expr)
-    if not isinstance(expr, exp.Not):
-        return None
-
-    inner = _unwrap_parens(expr.this)
-    if not isinstance(inner, exp.Is):
+    if isinstance(expr, exp.Is) and expr.args.get("negate"):
+        inner = expr
+    elif isinstance(expr, exp.Not):
+        inner = _unwrap_parens(expr.this)
+        if not isinstance(inner, exp.Is) or inner.args.get("negate"):
+            return None
+    else:
         return None
 
     right_value = _constant_scalar_value(inner.expression, dialect, source_sql)
@@ -1925,6 +1948,16 @@ def _is_predicate_truthiness_possibilities(
     """Return truthiness outcomes for IS predicates when determinable."""
     if not isinstance(expr, exp.Is):
         return None
+
+    if expr.args.get("negate"):
+        positive = expr.copy()
+        positive.set("negate", False)
+        outcomes = _is_predicate_truthiness_possibilities(positive, dialect, source_sql)
+        return (
+            None
+            if outcomes is None
+            else {_negated_predicate_truthiness(value) for value in outcomes}
+        )
 
     right_value = _constant_scalar_value(expr.expression, dialect, source_sql)
     if right_value is _UNKNOWN_SCALAR_VALUE:
