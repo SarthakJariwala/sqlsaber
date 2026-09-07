@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import NoReturn
 
 from sqlsaber.render import PromptUnavailable, blocks as b, cli_err, cli_out
@@ -16,6 +18,17 @@ def out(*blocks: b.Block) -> None:
 def err(*blocks: b.Block) -> None:
     """Emit finished blocks on stderr."""
     cli_err().emit(*blocks)
+
+
+@contextmanager
+def status(message: str) -> Iterator[None]:
+    """Show progress only while the operation is running."""
+    surface = cli_out()
+    surface.status(message)
+    try:
+        yield
+    finally:
+        surface.status(None)
 
 
 def fail(message: str, code: int = 1) -> NoReturn:

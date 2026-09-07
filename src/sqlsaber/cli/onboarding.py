@@ -2,7 +2,7 @@
 
 import sys
 
-from sqlsaber.cli.output import err, out
+from sqlsaber.cli.output import err, out, status
 from sqlsaber.render import blocks as b
 
 
@@ -88,8 +88,8 @@ async def setup_database_guided() -> str | None:
 
         db_config = build_config(db_input)
 
-        out(b.md(f"Testing connection to '{name}'...", role="muted"))
-        connection_success = await test_connection(db_config, db_input.password)
+        with status(f"Testing connection to '{name}'..."):
+            connection_success = await test_connection(db_config, db_input.password)
 
         if not connection_success:
             retry = await prompter.confirm(
@@ -128,10 +128,9 @@ async def select_model_for_provider(provider: str) -> str | None:
     from sqlsaber.cli.workflows.model_selection import choose_model, fetch_models
 
     try:
-        out(b.md(f"Fetching available {provider.title()} models...", role="muted"))
-
         model_manager = ModelManager()
-        models = await fetch_models(model_manager, providers=[provider])
+        with status(f"Fetching available {provider.title()} models..."):
+            models = await fetch_models(model_manager, providers=[provider])
 
         if not models:
             out(b.warn(f"Could not fetch models for {provider}. Using default."))
