@@ -156,15 +156,17 @@ the managed capability:
 from sqlsaber import ArtifactContext, FilesystemArtifactStore
 from sqlsaber_notebook import Workspace, WorkspaceFile, analyze, publish_analysis
 
-workspace = Workspace.from_files([
-    ("sales.csv", sales_csv_bytes),  # Backwards-compatible tuple form
-    WorkspaceFile(
-        "preview.jpeg",
-        preview_bytes,
-        media_type="image/jpeg",
-        provenance={"attachment_id": "attachment-1"},
-    ),
-])
+workspace = Workspace.from_files(
+    [
+        ("sales.csv", sales_csv_bytes),  # Backwards-compatible tuple form
+        WorkspaceFile(
+            "preview.jpeg",
+            preview_bytes,
+            media_type="image/jpeg",
+            provenance={"attachment_id": "attachment-1"},
+        ),
+    ]
+)
 result = await analyze(
     "Plot monthly revenue and explain anomalies",
     workspace,
