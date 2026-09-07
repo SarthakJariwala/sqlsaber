@@ -380,6 +380,11 @@ class SQLSaber:
             level=agent.thinking_level,
         )
 
+    def reload_model_settings(self) -> None:
+        """Apply configured models and thinking to subsequent queries, retaining history."""
+        self._ensure_not_running()
+        self._runtime.agent.reload_model_settings()
+
     async def list_tables(self) -> tuple[TableInfo, ...]:
         """List tables across all managed databases in registry order."""
         self._ensure_open()

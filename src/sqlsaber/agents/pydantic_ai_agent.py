@@ -218,6 +218,34 @@ class SQLSaberAgent:
             self.thinking_level = level
         self.agent = self._build_agent()
 
+    def reload_model_settings(self) -> None:
+        """Apply saved model settings without replacing conversation resources."""
+        previous = (
+            self._model_name_override,
+            self._api_key_override,
+            self.thinking_enabled,
+            self.thinking_level,
+            self.capabilities,
+            self._tools,
+        )
+        try:
+            self._model_name_override = None
+            self._api_key_override = None
+            self.thinking_enabled = self.config.model.thinking_enabled
+            self.thinking_level = self.config.model.thinking_level
+            agent = self._build_agent()
+        except Exception:
+            (
+                self._model_name_override,
+                self._api_key_override,
+                self.thinking_enabled,
+                self.thinking_level,
+                self.capabilities,
+                self._tools,
+            ) = previous
+            raise
+        self.agent = agent
+
     async def run(
         self,
         prompt: str,

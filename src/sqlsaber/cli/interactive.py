@@ -249,7 +249,12 @@ class InteractiveSession:
         return f"DB: {db_name} ({info.primary_database_type})"
 
     def _footer_text(self) -> str:
-        parts = [self._database_footer_text(), f"Model: {self._model_name()}"]
+        thinking = self.saber.info.thinking
+        parts = [
+            self._database_footer_text(),
+            f"Model: {self._model_name()}",
+            f"Thinking: {thinking.level.value if thinking.enabled else 'off'}",
+        ]
         if dangerous_mode := self._dangerous_mode_footer_text():
             parts.append(dangerous_mode)
         parts.append(self._usage_footer_text())
@@ -508,6 +513,7 @@ class InteractiveSession:
                 return
 
             if cmd_result.handled:
+                self._refresh_footer()
                 return
 
             await self._execute_query_with_cancellation(user_query)

@@ -636,6 +636,18 @@ def test_interactive_footer_includes_usage_cost_and_context() -> None:
     assert "Cost: $0.0123" in footer
 
 
+@pytest.mark.parametrize("level", list(ThinkingLevel))
+@pytest.mark.parametrize("enabled", [False, True])
+def test_interactive_footer_shows_thinking(level, enabled) -> None:
+    session = InteractiveSession(_fake_saber())
+    session.saber.info.thinking = SimpleNamespace(enabled=enabled, level=level)
+
+    footer = session._footer_text()
+
+    expected = level.value if enabled else "off"
+    assert f"Model: gpt-test | Thinking: {expected} |" in footer
+
+
 def test_welcome_message_uses_compact_greeting() -> None:
     terminal = FakeTerminal(columns=100, rows=24)
     session = InteractiveSession(_fake_saber())
