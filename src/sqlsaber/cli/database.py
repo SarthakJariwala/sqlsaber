@@ -7,7 +7,7 @@ from typing import Annotated
 
 import cyclopts
 
-from sqlsaber.cli.output import fail, fail_usage, out
+from sqlsaber.cli.output import fail, fail_usage, out, status
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config.database import DatabaseConfig, DatabaseConfigManager
 from sqlsaber.config.logging import get_logger
@@ -581,16 +581,15 @@ def test(
                     "  Add one with: saber db add <name>"
                 )
 
-        out(b.md(f"Testing connection to '{db_config.name}'..."))
-
         try:
-            connection_string = db_config.to_connection_string()
-            db_conn = DatabaseConnection(
-                connection_string, excluded_schemas=db_config.exclude_schemas
-            )
+            with status(f"Testing connection to '{db_config.name}'..."):
+                connection_string = db_config.to_connection_string()
+                db_conn = DatabaseConnection(
+                    connection_string, excluded_schemas=db_config.exclude_schemas
+                )
 
-            await db_conn.execute_query("SELECT 1 as test")
-            await db_conn.close()
+                await db_conn.execute_query("SELECT 1 as test")
+                await db_conn.close()
 
             out(b.success(f"Connection to '{db_config.name}' successful"))
             logger.info("db.test.success", name=db_config.name)

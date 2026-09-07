@@ -10,7 +10,7 @@ import cyclopts
 import httpx
 
 from sqlsaber.cli.prompts import Choice
-from sqlsaber.cli.output import err, fail, fail_usage, out
+from sqlsaber.cli.output import err, fail, fail_usage, out, status
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config import providers
 from sqlsaber.config.logging import get_logger
@@ -248,8 +248,8 @@ def list_models() -> None:
     logger.info("models.list.start")
 
     async def fetch_and_display() -> None:
-        out(b.md("Fetching available models..."))
-        models = await model_manager.fetch_available_models()
+        with status("Fetching available models..."):
+            models = await model_manager.fetch_available_models()
 
         if not models:
             logger.info("models.list.empty")
@@ -459,8 +459,8 @@ def set_model_command(
         from sqlsaber.cli.prompts import AsyncPrompter
         from sqlsaber.cli.workflows.model_selection import choose_model, fetch_models
 
-        out(b.md("Fetching available models..."))
-        models = await fetch_models(model_manager)
+        with status("Fetching available models..."):
+            models = await fetch_models(model_manager)
 
         if not models:
             logger.error("models.set.no_models")

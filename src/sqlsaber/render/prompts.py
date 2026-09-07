@@ -1,4 +1,4 @@
-"""PromptForm widget plus overlay and transient-TUI hosts."""
+"""PromptForm widget and transient-TUI hosts."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from saber_tui import PosixProcessTerminal, TUI, WindowsProcessTerminal
 from saber_tui.components import Input
 from saber_tui.components.select_list import SelectItem, SelectList, SelectListTheme
 from saber_tui.fuzzy import fuzzy_filter
+from saber_tui.utils import apply_background_to_line, truncate_to_width
 
 from sqlsaber.render.surface import (
     Ask,
@@ -79,6 +80,7 @@ class PromptForm:
         Returns:
             One string per row.
         """
+        content_width = max(1, width - 2)
         lines: list[str] = []
         message = self._styles.assistant_fg(self._prompt.message)
         lines.append(message)
@@ -87,14 +89,21 @@ class PromptForm:
         if self._filter and self._select is not None:
             lines.append(self._styles.muted_fg(f"  filter: {self._filter}"))
         if self._input is not None:
-            lines.extend(self._input.render(width))
+            lines.extend(self._input.render(content_width))
         if self._select is not None:
-            lines.extend(self._select.render(width))
+            lines.extend(self._select.render(content_width))
         hint = "enter confirm · esc cancel"
         if isinstance(self._prompt, AskChoice) and self._prompt.searchable:
             hint = "type to filter · " + hint
         lines.append(self._styles.muted_fg(hint))
-        return lines or [""]
+        return [
+            apply_background_to_line(
+                truncate_to_width(f" {line}", width, "", pad=True),
+                width,
+                self._styles.panel_bg,
+            )
+            for line in ["", *lines, ""]
+        ]
 
     def handle_input(self, data: str) -> None:
         """Dispatch a key sequence to the active child widget.
@@ -205,38 +214,6 @@ def _is_filter_char(data: str) -> bool:
     if data in {"\x7f", "\x08"}:
         return True
     return len(data) == 1 and data.isprintable() and data not in {"\n", "\r", "\t"}
-
-
-async def ask_in_overlay[T](tui: TUI, prompt: Ask[T], styles: Styles) -> T | None:
-    """Host a PromptForm inside a running TUI via ``show_overlay``.
-
-    Args:
-        tui: The live TUI.
-        prompt: Prompt to ask.
-        styles: Resolved theme.
-
-    Returns:
-        The typed value, or None when the user cancelled.
-    """
-    loop = asyncio.get_running_loop()
-    future: asyncio.Future[T | None] = loop.create_future()
-
-    def finish(value: object) -> None:
-        if not future.done():
-            loop.call_soon_threadsafe(future.set_result, cast(T | None, value))
-
-    form = PromptForm(
-        prompt,
-        styles,
-        on_done=finish,
-        on_cancel=lambda: finish(None),
-    )
-    handle = tui.show_overlay(form, {"anchor": "center", "width": 72})
-    handle.focus()
-    try:
-        return await future
-    finally:
-        handle.hide()
 
 
 async def ask_in_transient_tui[T](prompt: Ask[T], styles: Styles) -> T | None:

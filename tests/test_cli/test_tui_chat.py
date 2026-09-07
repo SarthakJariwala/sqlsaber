@@ -34,11 +34,14 @@ import sqlsaber.cli.interactive as interactive
 from sqlsaber.cli import tui_chat
 from sqlsaber.cli.chat_surface import ChatSurface
 from sqlsaber.cli.interactive import InteractiveSession
+from sqlsaber.cli.output import status
 from sqlsaber.cli.tui_chat import ChatApp, build_chat_app
 from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
 from sqlsaber.config.settings import ThinkingLevel
 from sqlsaber.render import blocks as b
-from sqlsaber.render.surface import AskSecret, AskText
+from sqlsaber.render import bind_cli_surfaces
+from sqlsaber.render.prompts import PromptForm
+from sqlsaber.render.surface import AskChoice, AskSecret, AskText, Choice
 from sqlsaber.theme.manager import get_theme_manager
 from sqlsaber.theme.styles import get_styles
 
@@ -427,17 +430,81 @@ def test_bare_slash_opens_command_palette_without_editor_autocomplete() -> None:
 
 
 @pytest.mark.asyncio
-async def test_secret_prompt_uses_masked_live_overlay() -> None:
+async def test_choice_prompt_replaces_palette_and_restores_editor() -> None:
+    terminal = FakeTerminal(columns=80, rows=24)
+    app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
+    app.tui.start()
+    app.append_markdown("Conversation remains above settings.")
+    app.show_command_palette(thinking_enabled=True, thinking_level=ThinkingLevel.MEDIUM)
+    slot = app.tui.children.index(app._command_palette_component)
+
+    prompt = asyncio.create_task(
+        ChatSurface(app).ask(
+            AskChoice(
+                "Select model:", choices=[Choice("First", "a"), Choice("Second", "b")]
+            )
+        )
+    )
+    await asyncio.sleep(0)
+    assert app.tui.children[slot] is app._prompt_form
+    assert not app.tui.has_overlay()
+    viewport = "\n".join(app.render_plain_viewport())
+    assert viewport.index("Conversation remains") < viewport.index("Select model:")
+    terminal.send_input("\x1b[B")
+    terminal.send_input("\r")
+    assert await asyncio.wait_for(prompt, timeout=1) == "b"
+    assert app.tui.children[slot] is app.editor
+    assert app.tui.focused_component is app.editor
+
+
+@pytest.mark.parametrize("width", [20, 80])
+def test_prompt_background_fills_padded_rows(width: int) -> None:
+    styles = get_styles()
+    form = PromptForm(
+        AskText("Name:"), styles, on_done=lambda value: None, on_cancel=lambda: None
+    )
+    lines = form.render(width)
+    assert all(visible_width(line) == width for line in lines)
+    background = styles.panel_bg("sample").partition("sample")[0]
+    assert background
+    assert all(background in line for line in lines)
+    assert strip_ansi(lines[0]) == " " * width
+    assert strip_ansi(lines[-1]) == " " * width
+    assert strip_ansi(lines[1]).startswith(" Name:")
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_temporary_status_is_cleared_without_chat_history(fail: bool) -> None:
+    app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
+    with bind_cli_surfaces(ChatSurface(app)):
+        try:
+            with status("Fetching available models..."):
+                assert "Fetching available models" in "\n".join(
+                    app.render_plain_viewport()
+                )
+                if fail:
+                    raise RuntimeError("fetch failed")
+        except RuntimeError:
+            pass
+    assert "Fetching available models" not in "\n".join(app.render_plain_viewport())
+    assert not app.chat_container.children
+    assert app.status.loader is None
+
+
+@pytest.mark.asyncio
+async def test_secret_prompt_uses_masked_editor_slot() -> None:
     terminal = FakeTerminal(columns=80, rows=18)
     app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
     app.tui.start()
 
     prompt = asyncio.create_task(ChatSurface(app).ask(AskSecret("API key:")))
     for _ in range(100):
-        if app.tui.has_overlay():
+        if app._prompt_form is not None:
             break
         await asyncio.sleep(0.001)
-    assert app.tui.has_overlay() is True
+    assert app._prompt_form is not None
+    assert app.tui.children[2] is app._prompt_form
+    assert app.tui.has_overlay() is False
     terminal.send_input("secret-value")
 
     assert "secret-value" not in "\n".join(app.render_plain_viewport())
@@ -447,8 +514,8 @@ async def test_secret_prompt_uses_masked_live_overlay() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("cancel_key", ["\x03", "\x04"])
-async def test_prompt_cancel_keys_resolve_live_overlay(cancel_key: str) -> None:
+@pytest.mark.parametrize("cancel_key", ["\x1b", "\x03", "\x04"])
+async def test_prompt_cancel_keys_restore_editor(cancel_key: str) -> None:
     terminal = FakeTerminal(columns=80, rows=18)
     app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
     app.tui.start()
@@ -459,6 +526,8 @@ async def test_prompt_cancel_keys_resolve_live_overlay(cancel_key: str) -> None:
 
     assert await asyncio.wait_for(prompt, timeout=1) is None
     assert app.tui.has_overlay() is False
+    assert app.tui.children[2] is app.editor
+    assert app.tui.focused_component is app.editor
     assert terminal.stopped is False
 
 

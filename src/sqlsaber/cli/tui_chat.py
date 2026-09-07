@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import platform
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import cast
 
 import saber_tui.utils as tui_utils
 from saber_tui import (
@@ -40,6 +42,9 @@ from saber_tui.utils import (
 
 from sqlsaber.cli.command_catalog import PaletteCommand, PaletteMode, palette_commands
 from sqlsaber.config.settings import ThinkingLevel
+from sqlsaber.render.prompts import PromptForm
+from sqlsaber.render.surface import Ask
+from sqlsaber.theme.styles import get_styles
 
 type SubmitHandler = Callable[[str], bool | None]
 
@@ -396,6 +401,7 @@ class ChatApp:
         self.should_submit_empty = should_submit_empty
         self.on_open_command_palette = on_open_command_palette
         self._command_palette_component: _CommandPaletteComponent | None = None
+        self._prompt_form: PromptForm | None = None
         self._palette_fill_hint = False
 
     def submit(self, text: str) -> None:
@@ -662,6 +668,34 @@ class ChatApp:
         self.tui.set_focus(self.editor)
         self.tui.request_render()
 
+    async def ask[T](self, prompt: Ask[T]) -> T | None:
+        """Ask in the editor slot, where the command palette opens."""
+        self.close_command_palette()
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[T | None] = loop.create_future()
+
+        def resolve(value: object) -> None:
+            if not future.done():
+                future.set_result(cast(T | None, value))
+
+        def finish(value: object) -> None:
+            loop.call_soon_threadsafe(resolve, value)
+
+        form = PromptForm(
+            prompt, get_styles(), on_done=finish, on_cancel=lambda: finish(None)
+        )
+        self._prompt_form = form
+        self._replace_editor(form)
+        self.tui.set_focus(form)
+        self.tui.request_render()
+        try:
+            return await future
+        finally:
+            self.tui.children[self.tui.children.index(form)] = self.editor
+            self._prompt_form = None
+            self.tui.set_focus(self.editor)
+            self.tui.request_render()
+
     def _replace_editor(self, component) -> None:
         try:
             index = self.tui.children.index(self.editor)
@@ -755,6 +789,10 @@ def build_chat_app(
     editor.on_submit = app.submit
 
     def global_listener(data: str):
+        if app._prompt_form is not None:
+            if matches_key(data, "ctrl+c") or matches_key(data, "ctrl+d"):
+                return {"data": "\x1b"}
+            return None
         if app.is_command_palette_open() and (
             matches_key(data, "escape") or matches_key(data, "ctrl+c")
         ):
