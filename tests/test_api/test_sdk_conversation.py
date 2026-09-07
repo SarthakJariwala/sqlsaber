@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import FrozenInstanceError, dataclass
 from typing import Any
+from unittest.mock import MagicMock
 
 import aiosqlite
 import pytest
@@ -19,6 +20,7 @@ from pydantic_ai.usage import RequestUsage, RunUsage
 from sqlsaber import (
     RunInProgressError,
     SQLSaber,
+    SQLSaberClosedError,
     SQLSaberInfo,
     SQLSaberOptions,
     SQLSaberResult,
@@ -48,6 +50,54 @@ def _options(**overrides: Any) -> SQLSaberOptions:
     }
     values.update(overrides)
     return SQLSaberOptions(**values)
+
+
+@pytest.mark.asyncio
+async def test_reload_model_settings_preserves_session_and_rolls_back_failure(
+    monkeypatch,
+):
+    settings = Config.in_memory(
+        model_name="openai:gpt-5",
+        api_keys={"openai": "test-key"},
+    )
+    saber = SQLSaber(options=_options(settings=settings))
+    history = _turn("previous question", "previous answer")
+    saber._message_history = history.copy()
+    registry = saber.registry
+    store = saber.query_result_store
+    try:
+        settings.model.name = "openai:gpt-6-astra"
+        settings.model.set_thinking(False, ThinkingLevel.HIGH)
+        saber.reload_model_settings()
+        assert saber.info.model_name == "gpt-6-astra"
+        assert saber.info.thinking == ThinkingState(
+            enabled=False, level=ThinkingLevel.HIGH
+        )
+        assert saber._message_history == history
+        assert saber.registry is registry
+        assert saber.query_result_store is store
+
+        active_agent = saber.agent.agent
+        settings.model.set_thinking(True, ThinkingLevel.LOW)
+        with monkeypatch.context() as patcher:
+            patcher.setattr(
+                saber.agent, "_build_agent", MagicMock(side_effect=ValueError("no key"))
+            )
+            with pytest.raises(ValueError, match="no key"):
+                saber.reload_model_settings()
+        assert saber.agent.agent is active_agent
+        assert saber.info.thinking == ThinkingState(
+            enabled=False, level=ThinkingLevel.HIGH
+        )
+
+        saber._query_in_progress = True
+        with pytest.raises(RunInProgressError):
+            saber.reload_model_settings()
+        saber._query_in_progress = False
+    finally:
+        await saber.close()
+    with pytest.raises(SQLSaberClosedError):
+        saber.reload_model_settings()
 
 
 def _turn(

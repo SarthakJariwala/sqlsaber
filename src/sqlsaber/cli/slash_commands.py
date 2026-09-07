@@ -281,11 +281,61 @@ class SlashCommandProcessor:
         def invoke() -> None:
             command(*bound.args, **bound.kwargs)
 
+        model_config = None
+        before = None
+        if spec.path in {("models", "set"), ("models", "reset")}:
+            from sqlsaber.config.settings import ModelConfigManager
+
+            model_config = ModelConfigManager()
+            # A write (even of the same value) is an explicit apply; a cancelled
+            # picker or invalid command must not reset session-only thinking.
+            before = (
+                model_config.config_file.stat().st_mtime_ns
+                if model_config.config_file.exists()
+                else None
+            )
+
+        completed = True
         try:
             with bind_cli_surfaces(context.surface):
                 await asyncio.to_thread(invoke)
         except SystemExit:
-            pass
+            completed = False
+        if model_config is not None:
+            after = (
+                model_config.config_file.stat().st_mtime_ns
+                if model_config.config_file.exists()
+                else None
+            )
+            explicit_model = spec.path == ("models", "set") and bound.arguments.get(
+                "model"
+            )
+            if before != after or (completed and explicit_model):
+                try:
+                    with bind_cli_surfaces(context.surface):
+                        await asyncio.to_thread(context.saber.reload_model_settings)
+                except Exception as exc:
+                    context.surface.emit(
+                        b.error(
+                            f"Settings saved, but could not apply them to this session: {exc}"
+                        ),
+                        b.warn(
+                            "The active model is unchanged. Check authentication and retry, or restart."
+                        ),
+                    )
+        if spec.path in {("theme", "set"), ("theme", "reset")}:
+            context.surface.emit(
+                b.md(
+                    "Theme changes take effect after restarting SQLsaber.", role="muted"
+                )
+            )
+        if spec.path == ("db", "set-default"):
+            context.surface.emit(
+                b.md(
+                    "The default is used by new sessions; this session's active database is unchanged.",
+                    role="muted",
+                )
+            )
         return CommandResult(handled=True)
 
     @staticmethod

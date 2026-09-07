@@ -74,6 +74,54 @@ def _output(context: CommandContext) -> str:
     return "\n\n".join(md_of(call.args) for call in context.surface.emit.call_args_list)
 
 
+@pytest.mark.asyncio
+async def test_model_commands_update_live_session_and_footer(tmp_path, monkeypatch):
+    from sqlsaber import SQLSaber, SQLSaberOptions
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    saber = SQLSaber(options=SQLSaberOptions(database="sqlite:///:memory:"))
+    session = InteractiveSession(saber)
+    app = MagicMock()
+    session.streaming_handler = MagicMock(app=app)
+    surface = MagicMock()
+    surface.ask = AsyncMock(return_value=True)
+    try:
+        for command, expected in [
+            ("/models set openai:gpt-6-astra --thinking-level off", "gpt-6-astra"),
+            ("/models set openai:gpt-6-astra --thinking-level off", "gpt-6-astra"),
+            ("/models reset --yes", "gpt-5.6-sol"),
+        ]:
+            await session._handle_submit(app, surface, command)
+            assert saber.info.model_name == expected
+            assert not saber.info.thinking.enabled
+            assert f"Model: {expected}" in app.set_footer.call_args.args[0]
+            assert "Thinking: off" in app.set_footer.call_args.args[0]
+        await session._handle_submit(app, surface, "/thinking high")
+        assert saber.info.thinking.level == ThinkingLevel.HIGH
+        assert saber.info.thinking.enabled
+        assert "Thinking: high" in app.set_footer.call_args.args[0]
+        with patch.object(saber, "reload_model_settings") as reload:
+            await session._handle_submit(app, surface, "/models set invalid")
+            await session._handle_submit(app, surface, "/models current")
+            reload.assert_not_called()
+        assert saber.info.thinking.enabled
+        with patch.object(
+            saber, "reload_model_settings", side_effect=ValueError("no key")
+        ):
+            await session._handle_submit(app, surface, "/models set openai:gpt-6-astra")
+        assert saber.info.model_name == "gpt-5.6-sol"
+        assert "Model: gpt-5.6-sol" in app.set_footer.call_args.args[0]
+        assert "could not apply" in "\n".join(
+            md_of(call.args) for call in surface.emit.call_args_list
+        )
+        # Retrying the same saved value must attempt live application again.
+        await session._handle_submit(app, surface, "/models set openai:gpt-6-astra")
+        assert saber.info.model_name == "gpt-6-astra"
+    finally:
+        await saber.close()
+
+
 def test_registry_has_exact_management_parity() -> None:
     assert management_paths() == EXPECTED_MANAGEMENT_PATHS
     assert len(management_paths()) == 27
@@ -331,6 +379,7 @@ async def test_resume_swaps_after_preparation_and_refreshes_session(
         primary_database_name="Analytics",
         primary_database_type="SQLite",
         model_name="test-model",
+        thinking=SimpleNamespace(enabled=False, level=ThinkingLevel.MEDIUM),
         dangerous_mode=False,
     )
     new.close = AsyncMock()
@@ -384,6 +433,7 @@ async def test_resume_keeps_new_session_when_old_cleanup_fails() -> None:
         primary_database_name="Analytics",
         primary_database_type="SQLite",
         model_name="test-model",
+        thinking=SimpleNamespace(enabled=False, level=ThinkingLevel.MEDIUM),
         dangerous_mode=False,
     )
     new.display_registry = {}
