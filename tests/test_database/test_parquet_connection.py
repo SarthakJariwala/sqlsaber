@@ -97,9 +97,15 @@ def test_parquet_paths_and_missing_files(parquet_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_quoted_file_and_table_name(parquet_path):
-    path = parquet_path.rename(parquet_path.with_name('order\'s "data".parquet'))
+async def test_quoted_file_and_table_name(parquet_path, monkeypatch):
+    path = parquet_path.rename(parquet_path.with_name("order's data.parquet"))
     conn = DatabaseConnection(resolve_database(str(path)).connection_string)
+    assert await conn.execute_query(
+        'SELECT id FROM "order\'s data"', read_only=True
+    ) == [{"id": 1}]
+
+    # Double quotes are valid SQL identifiers, but not Windows filenames.
+    monkeypatch.setattr(conn, "table_name", 'order\'s "data"')
     assert await conn.execute_query(
         'SELECT id FROM "order\'s ""data"""', read_only=True
     ) == [{"id": 1}]
