@@ -11,7 +11,7 @@ from pydantic_ai.messages import ModelMessage
 
 from sqlsaber.agents.model_factory import build_model
 from sqlsaber.config.settings import Config
-from sqlsaber.prompts.handoff import HANDOFF_SYSTEM_PROMPT
+from sqlsaber.prompts.handoff import HANDOFF_INPUT_INSTRUCTIONS, HANDOFF_SYSTEM_PROMPT
 
 
 class HandoffAgent:
@@ -78,18 +78,18 @@ class HandoffAgent:
                 for part in msg.parts:
                     if part.part_kind == "user-prompt":
                         content = getattr(part, "content", "")
-                        lines.append(f"User: {content}")
+                        lines.append(f"[User]: {content}")
                     elif part.part_kind == "tool-return":
                         tool_name = getattr(part, "tool_name", "tool")
                         content = str(getattr(part, "content", ""))
                         if len(content) > 1000:
                             content = content[:1000] + "...(truncated)"
-                        lines.append(f"[Tool Result - {tool_name}]:\n{content}")
+                        lines.append(f"[Tool result - {tool_name}]: {content}")
             elif msg.kind == "response":
                 for part in msg.parts:
                     if part.part_kind == "text":
                         content = getattr(part, "content", "")
-                        lines.append(f"Assistant: {content}")
+                        lines.append(f"[Assistant]: {content}")
                     elif part.part_kind == "tool-call":
                         tool_name = getattr(part, "tool_name", "unknown")
                         args = getattr(part, "args", {})
@@ -100,10 +100,15 @@ class HandoffAgent:
                             except json.JSONDecodeError:
                                 args = {}
                         if isinstance(args, dict) and args:
-                            args_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
-                            lines.append(f"[Tool Call - {tool_name}]: {args_str}")
+                            args_str = ", ".join(
+                                f"{k}={json.dumps(v, ensure_ascii=False)}"
+                                for k, v in args.items()
+                            )
+                            lines.append(
+                                f"[Assistant tool call - {tool_name}]: {args_str}"
+                            )
                         else:
-                            lines.append(f"[Tool Call - {tool_name}]")
+                            lines.append(f"[Assistant tool call - {tool_name}]:")
 
         return "\n\n".join(lines) if lines else "(No readable messages)"
 
@@ -123,12 +128,15 @@ class HandoffAgent:
         """
         formatted_history = self._format_history_for_prompt(message_history)
 
-        prompt = f"""
-## Conversation History
+        prompt = f"""<source_conversation>
 {formatted_history}
+</source_conversation>
 
-## User's Goal for New Thread
+<handoff_goal>
 {goal}
+</handoff_goal>
+
+{HANDOFF_INPUT_INSTRUCTIONS}
 """
 
         result = await self.agent.run(prompt)
