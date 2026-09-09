@@ -102,6 +102,10 @@ export default defineConfig({
 						{ label: "Configuration", slug: "sdk/configuration" },
 						{ label: "Capabilities", slug: "sdk/capabilities" },
 						{
+							label: "Keep complete SQL results",
+							slug: "sdk/capability-query-results",
+						},
+						{
 							label: "Credentials & Models",
 							slug: "sdk/credentials-and-models",
 						},

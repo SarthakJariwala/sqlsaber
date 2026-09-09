@@ -63,7 +63,9 @@ still retains its safe default.
 ## Retrieving complete query results
 
 Complete rows are deliberately absent from model history. Use the descriptors on
-the result and retrieve bytes through the configured store:
+the result and retrieve bytes through the configured store. On an agent you own,
+pass the same store into `SqlTools` and follow
+[Build an agent that keeps complete SQL results](/sdk/capability-query-results).
 
 ```python
 result = await saber.query(

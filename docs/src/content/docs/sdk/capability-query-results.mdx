@@ -1,0 +1,255 @@
+---
+title: Build an agent that keeps complete SQL results
+description: "Attach SqlTools to a pydantic-ai Agent, store every execute_sql payload, and load the full rows in your process."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+We will build a pydantic-ai agent that queries a local SQLite database with `SqlTools`. The agent keeps every `execute_sql` payload in a `QueryResultStore`. After the run we load all 250 rows in our process, even though the model only saw a truncated preview.
+
+The managed `SQLSaber` client already returns those rows on `result.query_results` and `saber.get_query_result()`. This lesson uses `SqlTools` as a capability on an agent we own.
+
+## Create the database
+
+First we create `customers.sqlite` with 250 wide rows so the model-facing preview cannot hold the full payload.
+
+```python
+import sqlite3
+from pathlib import Path
+
+database = Path("customers.sqlite")
+connection = sqlite3.connect(database)
+connection.execute(
+    "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT, revenue INTEGER)"
+)
+connection.executemany(
+    "INSERT INTO customers (name, revenue) VALUES (?, ?)",
+    [(f"customer-{index:03d}-" + ("x" * 24), 1000 + index) for index in range(250)],
+)
+connection.commit()
+connection.close()
+```
+
+We should now have a `customers.sqlite` file in the working directory.
+
+## Create a shared query result store
+
+`execute_sql` writes the complete payload to a `QueryResultStore` and returns a bounded preview to the model. Create the store first, then pass it into every capability that must see those rows.
+
+```python
+from sqlsaber import InMemoryQueryResultStore, SqlTools
+
+store = InMemoryQueryResultStore()
+sql = SqlTools(database="customers.sqlite", query_result_store=store)
+```
+
+If we omit `query_result_store`, `SqlTools` still creates a private `InMemoryQueryResultStore`. Notebook, sandbox, and viz do the same when they do not receive that object. Those private stores never see each other's rows.
+
+## Attach SqlTools to our agent
+
+`SqlTools` does not claim `ctx.deps`. We can keep our own `deps_type`. This lesson uses pydantic-ai's `FunctionModel`, so the run needs no API key.
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.models.function import FunctionModel
+
+
+def respond(messages, info):
+    del info
+    parts = [part for message in messages for part in message.parts]
+    if any(isinstance(part, ToolReturnPart) for part in parts):
+        return ModelResponse(parts=[TextPart("Listed the customers.")])
+    return ModelResponse(
+        parts=[
+            ToolCallPart(
+                "execute_sql",
+                {"query": "SELECT id, name, revenue FROM customers ORDER BY id"},
+                tool_call_id="sql1",
+            )
+        ]
+    )
+
+
+agent = Agent(
+    FunctionModel(respond),
+    instructions="You query the customers table.",
+    capabilities=[sql],
+)
+```
+
+Replace `FunctionModel(respond)` with a model name such as `"anthropic:claude-sonnet-4-6"` when we want a live model to write the SQL.
+
+## Run the agent and read the model preview
+
+```python
+import json
+
+async with agent:
+    result = await agent.run("Show every customer")
+
+execute_sql = next(
+    part
+    for message in result.new_messages()
+    for part in message.parts
+    if isinstance(part, ToolReturnPart) and part.tool_name == "execute_sql"
+)
+preview = json.loads(execute_sql.content)
+print("model_truncated", preview.get("results_truncated"))
+print(
+    "preview_row_count",
+    len(preview.get("preview_rows") or preview.get("results") or []),
+)
+```
+
+We should see `model_truncated True` and a preview shorter than 250 rows. One measured run printed `preview_row_count 165`.
+
+The preview is not the dataset. Do not compute totals from `preview_rows` when `results_truncated` is true.
+
+## Load the complete result
+
+The tool return metadata holds a `StoredQueryResult` descriptor. Read those descriptors from the run messages, then call `store.get`.
+
+```python
+from sqlsaber.query_result_resolution import query_result_references_from_messages
+from sqlsaber.query_results import QueryResultContext
+
+references = query_result_references_from_messages(result.new_messages())
+loaded = await store.get(
+    references[0].descriptor.id,
+    context=QueryResultContext(),
+)
+print("stored_row_count", len(loaded.rows()))
+print("first_row", loaded.rows()[0])
+print("last_row", loaded.rows()[-1])
+```
+
+We should see:
+
+```text
+stored_row_count 250
+first_row {'id': 1, 'name': 'customer-000-xxxxxxxxxxxxxxxxxxxxxxxx', 'revenue': 1000}
+last_row {'id': 250, 'name': 'customer-249-xxxxxxxxxxxxxxxxxxxxxxxx', 'revenue': 1249}
+```
+
+That is the same retrieve path as `SQLSaber.get_query_result()`, without the managed client. `query_result_references_from_messages` currently lives on `sqlsaber.query_result_resolution`. When the store authorizes by tenant, pass `conversation_id` and `metadata` through `QueryResultContext`.
+
+## Share the store with notebook, viz, or sandbox
+
+`analyze_data`, `viz`, and sandbox Python resolve `result_*.json` handles from conversation history. They load bytes from `PluginContext.query_result_store`. Build one `PluginContext` with the store we already passed to `SqlTools`.
+
+```python
+from sqlsaber.artifacts import InMemoryArtifactStore
+from sqlsaber.capabilities.plugins import PluginContext, discover_capabilities
+from sqlsaber.config.settings import Config
+from sqlsaber.knowledge.manager import KnowledgeManager
+
+context = PluginContext(
+    registry=sql.registry,
+    knowledge_manager=KnowledgeManager(),
+    allow_dangerous=False,
+    tool_overrides={},
+    config=Config.in_memory(
+        model_name="anthropic:claude-sonnet-4-6",
+        api_keys={"anthropic": "test-key"},
+    ),
+    main_model_name="anthropic:claude-sonnet-4-6",
+    query_result_store=store,
+    artifact_store=InMemoryArtifactStore(),
+)
+
+agent = Agent(
+    FunctionModel(respond),
+    instructions="You query the customers table.",
+    capabilities=[sql, *discover_capabilities(context)],
+)
+```
+
+`discover_capabilities(context)` constructs the installed `sqlsaber.capabilities` plugins with that store. A measured run printed the same Python `id` for `SqlTools`, `Notebook`, and `Visualization`.
+
+Sandbox stays absent when no sandbox provider is configured. That empty return is not a second store. `Sandbox()` with no context allocates a new `InMemoryQueryResultStore` and then cannot load `execute_sql` rows.
+
+<Aside type="caution" title="One store per conversation">
+Pass the same `QueryResultStore` into `SqlTools` and `PluginContext`. Two `InMemoryQueryResultStore()` calls look similar and share nothing. The host can still load rows from `sql.query_result_store` while `analyze_data` reports that the complete SQL result is unavailable.
+</Aside>
+
+Close owned connections with `async with agent:` as in the [Capabilities](/sdk/capabilities) guide. The store is application-owned. SQLsaber does not close it.
+
+## Keep this wiring in one object
+
+`SQLSaber` owns this wiring for the managed client. On an agent we own, keep a small session object. That object holds the store, builds `SqlTools`, builds `PluginContext`, and loads descriptors from `Agent.run()`.
+
+```python
+from sqlsaber import InMemoryQueryResultStore, SqlTools
+from sqlsaber.artifacts import InMemoryArtifactStore
+from sqlsaber.capabilities.plugins import PluginContext, discover_capabilities
+from sqlsaber.config.settings import Config
+from sqlsaber.knowledge.manager import KnowledgeManager
+from sqlsaber.query_result_resolution import query_result_references_from_messages
+from sqlsaber.query_results import QueryResultContext, StoredQueryResult
+
+
+class SqlSaberKit:
+    def __init__(self, database: str) -> None:
+        self.query_result_store = InMemoryQueryResultStore()
+        self.artifact_store = InMemoryArtifactStore()
+        self.sql = SqlTools(
+            database=database,
+            query_result_store=self.query_result_store,
+        )
+        self.knowledge_manager = KnowledgeManager()
+
+    def capabilities(self, *, model_name: str, api_key: str):
+        context = PluginContext(
+            registry=self.sql.registry,
+            knowledge_manager=self.knowledge_manager,
+            allow_dangerous=self.sql.allow_dangerous,
+            tool_overrides={},
+            config=Config.in_memory(
+                model_name=model_name,
+                api_keys={model_name.partition(":")[0]: api_key},
+            ),
+            main_model_name=model_name,
+            query_result_store=self.query_result_store,
+            artifact_store=self.artifact_store,
+        )
+        return [self.sql, *discover_capabilities(context)]
+
+    def query_results_from(self, result):
+        return [
+            reference.descriptor
+            for reference in query_result_references_from_messages(result.new_messages())
+            if reference.descriptor is not None
+        ]
+
+    async def get_query_result(self, stored: str | StoredQueryResult):
+        result_id = stored.id if isinstance(stored, StoredQueryResult) else stored
+        return await self.query_result_store.get(
+            result_id,
+            context=QueryResultContext(),
+        )
+```
+
+Use it like this:
+
+```python
+kit = SqlSaberKit("customers.sqlite")
+agent = Agent(
+    "anthropic:claude-sonnet-4-6",
+    instructions="You are our analytics copilot.",
+    capabilities=kit.capabilities(
+        model_name="anthropic:claude-sonnet-4-6",
+        api_key="...",
+    ),
+)
+
+async with agent:
+    result = await agent.run("Show every customer")
+
+loaded = await kit.get_query_result(kit.query_results_from(result)[0])
+print(len(loaded.rows()))
+```
+
+We should print `250`. That call matches `await saber.get_query_result(result.query_results[0])` on the managed client.
+
+`SqlSaberKit` is application code in this lesson, not a `sqlsaber` export. Keep the stores on this object. Do not put them on `ctx.deps`. `SqlTools` ignores agent deps, so it composes with an agent that already defines `deps_type`.

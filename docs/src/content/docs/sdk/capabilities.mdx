@@ -73,6 +73,35 @@ sql = SqlTools(database="production", allow_dangerous=True)
 
 Dangerous mode still blocks destructive and administrative operations such as `DROP`, `TRUNCATE`, and role management. Only enable it for agents and users you trust.
 
+## Keep complete query results
+
+`execute_sql` writes the full payload to a `QueryResultStore` and returns a bounded preview to the model. Pass the store into `SqlTools`. Load rows after `agent.run()`.
+
+```python
+from pydantic_ai import Agent
+from sqlsaber import InMemoryQueryResultStore, SqlTools
+from sqlsaber.query_result_resolution import query_result_references_from_messages
+from sqlsaber.query_results import QueryResultContext
+
+store = InMemoryQueryResultStore()
+sql = SqlTools(database="analytics", query_result_store=store)
+agent = Agent("anthropic:claude-sonnet-4-6", capabilities=[sql])
+
+async with agent:
+    result = await agent.run("Top 5 customers by revenue")
+
+references = query_result_references_from_messages(result.new_messages())
+loaded = await store.get(
+    references[0].descriptor.id,
+    context=QueryResultContext(),
+)
+print(loaded.rows())
+```
+
+Pass that same store into `PluginContext.query_result_store` before you construct notebook, viz, or sandbox. Each capability that omits the store creates its own empty `InMemoryQueryResultStore`, so analysis tools cannot load `execute_sql` rows.
+
+See [Build an agent that keeps complete SQL results](/sdk/capability-query-results) for a step-by-step agent that prints a truncated model preview and then loads all 250 stored rows.
+
 ## Add knowledge search
 
 `Knowledge` exposes saved SQL patterns and domain definitions. Share a manager when your application already owns one:
@@ -142,4 +171,4 @@ def capability(context: PluginContext):
     )
 ```
 
-`PluginContext` supplies the database registry, knowledge manager, dangerous-mode flag, normalized tool model overrides, and the optional application-owned artifact publisher. A factory may return one capability or a sequence of capabilities.
+`PluginContext` supplies the database registry, knowledge manager, dangerous-mode flag, normalized tool model overrides, the shared `QueryResultStore`, and the optional application-owned artifact store. A factory may return one capability or a sequence of capabilities.
