@@ -316,12 +316,72 @@ def test_status_uses_cancellable_loader_without_stealing_editor_focus() -> None:
     assert "Crunching data..." in viewport
     assert app.status.loader is not None
     assert app.editor.focused is True
+    assert viewport.count("Crunching data...") == 1
+    border = strip_ansi(app.editor.render(80)[0])
+    assert border.startswith("─ ")
+    assert "Crunching data... ─" in border
 
     terminal.send_input("\x03")
 
     assert cancelled == [True]
     assert app.editor.focused is True
     app.clear_status()
+
+
+@pytest.mark.parametrize("width", [0, 1, 7, 8, 24, 80])
+def test_loading_border_preserves_editor_and_fits_width(width: int) -> None:
+    app = build_chat_app(terminal=FakeTerminal(), on_submit=lambda text: None)
+    app.editor.set_text("SELECT name\nFROM employees")
+    idle = app.editor.render(width)
+    app.set_loading("Crunching data... 分析売上データ")
+    loader = app.status.loader
+    assert loader is not None
+    loader.stop()
+    try:
+        loading = app.editor.render(width)
+        assert loading[1:] == idle[1:]
+        assert all(visible_width(line) <= width for line in loading)
+        if width >= 8:
+            assert loading[0] != idle[0]
+            assert strip_ansi(loading[0]).endswith("──")
+            app.tui.request_render = MagicMock()
+            loader.tick()
+            assert app.editor.render(width)[0] != loading[0]
+            app.tui.request_render.assert_called_once()
+        else:
+            assert loading == idle
+    finally:
+        app.clear_status()
+    assert app.editor.render(width) == idle
+
+
+def test_replacing_loading_status_disposes_previous_animation() -> None:
+    app = build_chat_app(terminal=FakeTerminal(), on_submit=lambda text: None)
+    app.set_loading("Executing SQL...")
+    previous = app.status.loader
+    assert previous is not None
+    previous.dispose = MagicMock(wraps=previous.dispose)
+    app.set_loading("Crunching data...")
+    previous.dispose.assert_called_once()
+    assert "Crunching data..." in strip_ansi(app.editor.render(80)[0])
+    app.set_status("Type the handoff goal and press Enter.")
+    assert app.status.loader is None
+    assert strip_ansi(app.editor.render(80)[0]) == "─" * 80
+    assert "Type the handoff goal" in strip_ansi(app.status.render(80)[1])
+
+
+def test_cancelled_status_keeps_blank_lines_around_message() -> None:
+    app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
+    app.append_user_message("Show sales by region")
+    app.set_loading("Crunching data...")
+    app.set_status("Query cancelled.")
+
+    lines = app.render_plain_viewport()
+    index = next(i for i, line in enumerate(lines) if "Query cancelled." in line)
+    assert lines[index - 1] == " " * 80
+    assert lines[index + 1] == " " * 80
+    assert lines[index + 2] == "─" * 80
+    assert app.status.loader is None
 
 
 def test_status_and_footer_render_within_narrow_terminal_width() -> None:
@@ -535,9 +595,11 @@ def test_status_snapshots_loader_across_render_cancel_and_dispose() -> None:
     app = build_chat_app(terminal=FakeTerminal(columns=80), on_submit=lambda text: None)
 
     class RacingLoader:
+        message = "loading"
+
         def render(self, width: int) -> list[str]:
             app.status.loader = None
-            return ["loading".ljust(width)]
+            return ["", "loading".ljust(width)]
 
         def handle_input(self, data: str) -> None:
             assert data == "\x03"
@@ -548,7 +610,7 @@ def test_status_snapshots_loader_across_render_cancel_and_dispose() -> None:
 
     loader = RacingLoader()
     app.status.loader = loader
-    assert app.status.render(80)[0].startswith("loading")
+    assert strip_ansi(app.editor.render(80)[0]).startswith("─ loading ─")
 
     app.status.loader = loader
     assert app.status.cancel_loading() is True

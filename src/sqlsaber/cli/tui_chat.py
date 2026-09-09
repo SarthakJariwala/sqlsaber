@@ -37,6 +37,7 @@ from saber_tui.utils import (
     apply_background_to_line,
     strip_ansi,
     truncate_to_width,
+    visible_width,
     wrap_text_with_ansi,
 )
 
@@ -230,12 +231,13 @@ class _StatusComponent:
             self.loader.on_cancel = self.on_cancel
 
     def render(self, width: int) -> list[str]:
-        loader = self.loader
-        if loader is not None:
-            return loader.render(width)
-        if not self.text:
+        if self.loader is not None or not self.text:
             return [" " * width]
-        return [self.theme.status_fg(_pad_to_width(f"  {self.text}", width))]
+        return [
+            " " * width,
+            self.theme.status_fg(_pad_to_width(f"  {self.text}", width)),
+            " " * width,
+        ]
 
     def invalidate(self) -> None:
         return None
@@ -255,6 +257,27 @@ class _StatusComponent:
         self.loader = None
         if loader is not None:
             loader.dispose()
+
+
+class _StatusEditor(Editor):
+    def __init__(self, tui: TUI, status: _StatusComponent, theme: EditorTheme) -> None:
+        super().__init__(tui, theme=theme)
+        self.status = status
+
+    def render(self, width: int) -> list[str]:
+        lines = super().render(width)
+        loader = self.status.loader
+        if loader is not None and width >= 8:
+            # Render without wrapping, then fit the label between border segments.
+            label_width = max(width, visible_width(loader.message) + 4)
+            label = loader.render(label_width)[1].strip()
+            label = truncate_to_width(label, width - 5, "…")
+            lines[0] = (
+                self.border_color("─ ")
+                + label
+                + self.border_color(" " + "─" * (width - visible_width(label) - 3))
+            )
+        return lines
 
 
 class _FooterComponent:
@@ -763,8 +786,9 @@ def build_chat_app(
     chat_container = Container()
     status = _StatusComponent(tui, theme, on_cancel)
     footer = _FooterComponent(footer_text, theme)
-    editor = Editor(
+    editor = _StatusEditor(
         tui,
+        status,
         theme=EditorTheme(
             border_color=theme.muted_fg,
             select_list=SelectListTheme(),
