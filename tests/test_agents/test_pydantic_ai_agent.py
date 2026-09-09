@@ -7,6 +7,7 @@ from pydantic_ai.usage import UsageLimits
 
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.capabilities.base import SqlSaberCapability
+from sqlsaber.capabilities.plugins import load_capability_factories
 from sqlsaber.database.sqlite import SQLiteConnection
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
@@ -62,6 +63,7 @@ class TestSQLSaberAgentDeps:
             db_connection=in_memory_db,
             model_name="anthropic:claude-3-5-sonnet",
             api_key="test-key",
+            capabilities=load_capability_factories(),
             tool_overides={
                 "viz": {
                     "model_name": "openai:gpt-5-mini",

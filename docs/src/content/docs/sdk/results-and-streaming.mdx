@@ -96,10 +96,11 @@ compatibility window, but are not automatically imported into durable storage.
 
 ## Analyzing application-owned inputs
 
-Install `sqlsaber-notebook` and provide a `WorkspaceInputResolver` when the managed
-agent should analyze private images, arrays, JSON, or other application-owned files.
-The model sees only opaque `attachment_refs`; your resolver converts authorized
-references into trusted `WorkspaceFile` bytes:
+Install `sqlsaber-notebook` and list it in `SQLSaberOptions.capabilities` when the
+managed agent should analyze private images, arrays, JSON, or other application-owned
+files. The CLI lists installed plugins for you. The model sees only opaque
+`attachment_refs`; your resolver converts authorized references into trusted
+`WorkspaceFile` bytes:
 
 ```python
 from collections.abc import Sequence
@@ -109,6 +110,7 @@ from sqlsaber import (
     SQLSaberOptions,
     WorkspaceResolutionContext,
 )
+from sqlsaber.capabilities.plugins import load_capability_factories
 from sqlsaber_notebook import WorkspaceFile
 
 
@@ -147,6 +149,7 @@ class AttachmentResolver:
 options = SQLSaberOptions(
     database="sqlite:///analytics.db",
     workspace_input_resolver=AttachmentResolver(repository),
+    capabilities=load_capability_factories(),
 )
 async with SQLSaber(options=options) as saber:
     await saber.query(

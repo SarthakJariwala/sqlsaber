@@ -72,9 +72,9 @@ async def _create_cli_saber(
     """Construct SQLSaber and persistence handles for a CLI session."""
     from sqlsaber.cli.artifacts import cli_artifact_store
     from sqlsaber.cli.query_results import cli_query_result_store
+    from sqlsaber.cli.session import cli_sqlsaber_options
     from sqlsaber import (
         SQLSaber,
-        SQLSaberOptions,
         ThreadDatabaseRequiredError,
         ThreadDatabaseUnavailableError,
         ThreadNotFoundError,
@@ -88,7 +88,7 @@ async def _create_cli_saber(
     storage = ThreadStorage()
     artifact_store = cli_artifact_store()
     query_result_store = cli_query_result_store()
-    options = SQLSaberOptions(
+    options = cli_sqlsaber_options(
         database=selected_database,
         thinking_enabled=thinking,
         allow_dangerous=allow_dangerous,

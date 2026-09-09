@@ -43,7 +43,7 @@ store = InMemoryQueryResultStore()
 sql = SqlTools(database="customers.sqlite", query_result_store=store)
 ```
 
-If we omit `query_result_store`, `SqlTools` still creates a private `InMemoryQueryResultStore`. Notebook, sandbox, and viz do the same when they do not receive that object. Those private stores never see each other's rows.
+If we omit `query_result_store`, `SqlTools` still creates a private `InMemoryQueryResultStore`. Notebook, viz, and sandbox do not. Their constructors take a `PluginContext` whose `query_result_store` is required. A missing store is a `TypeError`, not a second empty store.
 
 ## Attach SqlTools to our agent
 
@@ -136,7 +136,7 @@ That is the same retrieve path as `SQLSaber.get_query_result()`, without the man
 
 ## Share the store with notebook, viz, or sandbox
 
-`analyze_data`, `viz`, and sandbox Python resolve `result_*.json` handles from conversation history. They load bytes from `PluginContext.query_result_store`. Build one `PluginContext` with the store we already passed to `SqlTools`.
+`analyze_data`, `viz`, and sandbox Python resolve `result_*.json` handles from conversation history. They load bytes from `PluginContext.query_result_store`. Build one `PluginContext` with the store we already passed to `SqlTools`. Call `discover_capabilities` in this host process. `SQLSaber` does not call it for us.
 
 ```python
 from sqlsaber.artifacts import InMemoryArtifactStore
@@ -167,7 +167,7 @@ agent = Agent(
 
 `discover_capabilities(context)` constructs the installed `sqlsaber.capabilities` plugins with that store. A measured run printed the same Python `id` for `SqlTools`, `Notebook`, and `Visualization`.
 
-Sandbox stays absent when no sandbox provider is configured. That empty return is not a second store. `Sandbox()` with no context allocates a new `InMemoryQueryResultStore` and then cannot load `execute_sql` rows.
+Sandbox stays absent when no sandbox provider is configured. That empty return is not a second store.
 
 <Aside type="caution" title="One store per conversation">
 Pass the same `QueryResultStore` into `SqlTools` and `PluginContext`. Two `InMemoryQueryResultStore()` calls look similar and share nothing. The host can still load rows from `sql.query_result_store` while `analyze_data` reports that the complete SQL result is unavailable.
@@ -175,81 +175,27 @@ Pass the same `QueryResultStore` into `SqlTools` and `PluginContext`. Two `InMem
 
 Close owned connections with `async with agent:` as in the [Capabilities](/sdk/capabilities) guide. The store is application-owned. SQLsaber does not close it.
 
-## Keep this wiring in one object
+## Use SQLSaber when we want the managed client
 
-`SQLSaber` owns this wiring for the managed client. On an agent we own, keep a small session object. That object holds the store, builds `SqlTools`, builds `PluginContext`, and loads descriptors from `Agent.run()`.
-
-```python
-from sqlsaber import InMemoryQueryResultStore, SqlTools
-from sqlsaber.artifacts import InMemoryArtifactStore
-from sqlsaber.capabilities.plugins import PluginContext, discover_capabilities
-from sqlsaber.config.settings import Config
-from sqlsaber.knowledge.manager import KnowledgeManager
-from sqlsaber.query_result_resolution import query_result_references_from_messages
-from sqlsaber.query_results import QueryResultContext, StoredQueryResult
-
-
-class SqlSaberKit:
-    def __init__(self, database: str) -> None:
-        self.query_result_store = InMemoryQueryResultStore()
-        self.artifact_store = InMemoryArtifactStore()
-        self.sql = SqlTools(
-            database=database,
-            query_result_store=self.query_result_store,
-        )
-        self.knowledge_manager = KnowledgeManager()
-
-    def capabilities(self, *, model_name: str, api_key: str):
-        context = PluginContext(
-            registry=self.sql.registry,
-            knowledge_manager=self.knowledge_manager,
-            allow_dangerous=self.sql.allow_dangerous,
-            tool_overrides={},
-            config=Config.in_memory(
-                model_name=model_name,
-                api_keys={model_name.partition(":")[0]: api_key},
-            ),
-            main_model_name=model_name,
-            query_result_store=self.query_result_store,
-            artifact_store=self.artifact_store,
-        )
-        return [self.sql, *discover_capabilities(context)]
-
-    def query_results_from(self, result):
-        return [
-            reference.descriptor
-            for reference in query_result_references_from_messages(result.new_messages())
-            if reference.descriptor is not None
-        ]
-
-    async def get_query_result(self, stored: str | StoredQueryResult):
-        result_id = stored.id if isinstance(stored, StoredQueryResult) else stored
-        return await self.query_result_store.get(
-            result_id,
-            context=QueryResultContext(),
-        )
-```
-
-Use it like this:
+`SQLSaber` already owns one session store and always attaches `SqlTools` plus `Knowledge`. It does not load notebook, viz, or sandbox unless we pass them. The CLI passes `load_capability_factories()` so installed plugins still appear. Do the same in Python when we want that CLI set.
 
 ```python
-kit = SqlSaberKit("customers.sqlite")
-agent = Agent(
-    "anthropic:claude-sonnet-4-6",
-    instructions="You are our analytics copilot.",
-    capabilities=kit.capabilities(
-        model_name="anthropic:claude-sonnet-4-6",
-        api_key="...",
-    ),
+from sqlsaber import InMemoryQueryResultStore, SQLSaber, SQLSaberOptions
+from sqlsaber.capabilities.plugins import load_capability_factories
+
+store = InMemoryQueryResultStore()
+options = SQLSaberOptions(
+    database="customers.sqlite",
+    query_result_store=store,
+    capabilities=load_capability_factories(),
 )
 
-async with agent:
-    result = await agent.run("Show every customer")
-
-loaded = await kit.get_query_result(kit.query_results_from(result)[0])
-print(len(loaded.rows()))
+async with SQLSaber(options=options) as saber:
+    result = await saber.query("Show every customer")
+    loaded = await saber.get_query_result(result.query_results[0])
+    print(len(loaded.rows()))
 ```
 
-We should print `250`. That call matches `await saber.get_query_result(result.query_results[0])` on the managed client.
+We should print `250`. Factories run later with the session `PluginContext`, so notebook and viz see the same store as `execute_sql`.
 
-`SqlSaberKit` is application code in this lesson, not a `sqlsaber` export. Keep the stores on this object. Do not put them on `ctx.deps`. `SqlTools` ignores agent deps, so it composes with an agent that already defines `deps_type`.
+`SQLSaberOptions.capabilities` also accepts constructed capabilities such as `WebSearch()`. Pass instances that already hold this store, or pass factories and let the session construct them.

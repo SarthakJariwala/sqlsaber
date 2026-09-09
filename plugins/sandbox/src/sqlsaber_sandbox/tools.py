@@ -15,7 +15,6 @@ from sqlsaber.query_result_resolution import (
     resolve_query_result,
 )
 from sqlsaber.query_results import (
-    InMemoryQueryResultStore,
     QueryResultStore,
     QueryResultUnavailable,
 )
@@ -87,13 +86,9 @@ class RunPythonTool(Tool):
 
     requires_ctx = True
 
-    def __init__(self, query_result_store: QueryResultStore | None = None) -> None:
+    def __init__(self, query_result_store: QueryResultStore) -> None:
         super().__init__()
-        self.query_result_store = (
-            query_result_store
-            if query_result_store is not None
-            else InMemoryQueryResultStore()
-        )
+        self.query_result_store = query_result_store
 
     display_spec = ToolDisplaySpec(
         executing=ExecutingConfig(

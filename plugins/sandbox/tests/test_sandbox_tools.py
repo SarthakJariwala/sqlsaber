@@ -10,8 +10,18 @@ import pytest
 
 pytest.importorskip("sqlsaber_sandbox")
 
+from sqlsaber.query_results import InMemoryQueryResultStore
 from sqlsaber_sandbox.capability import Sandbox, capability
 from sqlsaber_sandbox.tools import MAX_CODE_CHARS, MAX_REQUIREMENTS, RunPythonTool
+
+
+def _plugin_context() -> Any:
+    return SimpleNamespace(query_result_store=InMemoryQueryResultStore())
+
+
+def _tool() -> RunPythonTool:
+    return RunPythonTool(InMemoryQueryResultStore())
+
 
 PROVIDER_ENV_VARS = (
     "E2B_API_KEY",
@@ -114,7 +124,7 @@ def test_sandbox_capability_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_provider_env(monkeypatch)
     monkeypatch.setenv("E2B_API_KEY", "test-key")
 
-    assert isinstance(capability(cast(Any, None)), Sandbox)
+    assert isinstance(capability(cast(Any, _plugin_context())), Sandbox)
 
 
 def test_sandbox_capability_disabled_with_modal_id_only(
@@ -137,7 +147,7 @@ def test_sandbox_capability_enabled_with_modal_config(
     modal_config = tmp_path / ".modal.toml"
     modal_config.write_text('token_id = "test"\n', encoding="utf-8")
 
-    assert isinstance(capability(cast(Any, None)), Sandbox)
+    assert isinstance(capability(cast(Any, _plugin_context())), Sandbox)
 
 
 def test_sandbox_capability_enabled_with_modal_config_path(
@@ -149,7 +159,12 @@ def test_sandbox_capability_enabled_with_modal_config_path(
     config_path.write_text('token_id = "test"\n', encoding="utf-8")
     monkeypatch.setenv("MODAL_CONFIG_PATH", str(config_path))
 
-    assert isinstance(capability(cast(Any, None)), Sandbox)
+    assert isinstance(capability(cast(Any, _plugin_context())), Sandbox)
+
+
+def test_run_python_requires_query_result_store() -> None:
+    with pytest.raises(TypeError, match="query_result_store"):
+        RunPythonTool()
 
 
 @pytest.mark.asyncio
@@ -159,7 +174,7 @@ async def test_run_python_requires_provider(
 ) -> None:
     _clear_provider_env(monkeypatch)
     _isolate_modal_home(monkeypatch, tmp_path)
-    tool = RunPythonTool()
+    tool = _tool()
 
     result = _parse_result(await tool.execute(_make_ctx(), code="print('hi')"))
 
@@ -171,7 +186,7 @@ async def test_run_python_rejects_large_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("E2B_API_KEY", "test-key")
-    tool = RunPythonTool()
+    tool = _tool()
 
     result = _parse_result(
         await tool.execute(_make_ctx(), code="x" * (MAX_CODE_CHARS + 1))
@@ -185,7 +200,7 @@ async def test_run_python_rejects_many_requirements(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("E2B_API_KEY", "test-key")
-    tool = RunPythonTool()
+    tool = _tool()
 
     requirements = [f"pkg{i}" for i in range(MAX_REQUIREMENTS + 1)]
     result = _parse_result(
@@ -201,7 +216,7 @@ async def test_run_python_executes_code(monkeypatch: pytest.MonkeyPatch) -> None
     sandbox = DummySandbox([_build_result(stdout="hello")])
     _patch_sandbox(monkeypatch, sandbox)
 
-    tool = RunPythonTool()
+    tool = _tool()
     result = _parse_result(await tool.execute(_make_ctx(), code="print('hello')"))
 
     assert result["success"] is True
@@ -222,7 +237,7 @@ async def test_run_python_installs_requirements(
     )
     _patch_sandbox(monkeypatch, sandbox)
 
-    tool = RunPythonTool()
+    tool = _tool()
     result = _parse_result(
         await tool.execute(_make_ctx(), code="print('done')", requirements=["requests"])
     )
@@ -242,7 +257,7 @@ async def test_run_python_handles_install_failure(
     )
     _patch_sandbox(monkeypatch, sandbox)
 
-    tool = RunPythonTool()
+    tool = _tool()
     result = _parse_result(
         await tool.execute(_make_ctx(), code="print('done')", requirements=["requests"])
     )

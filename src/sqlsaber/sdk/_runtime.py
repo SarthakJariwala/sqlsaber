@@ -93,7 +93,7 @@ class _SQLSaberRuntime:
             csv_tool_results=options.csv_tool_results,
             system_prompt=system_prompt_text,
             tool_overides=options.tool_overrides,
-            extra_capabilities=options.extra_capabilities,
+            capabilities=options.capabilities,
             artifact_store=options.artifact_store,
             artifact_failure_mode=options.artifact_failure_mode,
             query_result_store=self.query_result_store,

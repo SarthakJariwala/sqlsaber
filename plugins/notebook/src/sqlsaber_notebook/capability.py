@@ -29,7 +29,6 @@ from sqlsaber.query_result_resolution import (
     resolve_query_result,
 )
 from sqlsaber.query_results import (
-    InMemoryQueryResultStore,
     QueryResultStore,
     QueryResultUnavailable,
 )
@@ -174,15 +173,9 @@ class AnalyzeDataTool(Tool):
                 ctx,
                 only=files,
                 attachment_refs=attachment_refs,
+                query_result_store=self._context.query_result_store,
                 workspace_input_resolver=getattr(
-                    self._context,
-                    "workspace_input_resolver",
-                    None,
-                ),
-                query_result_store=getattr(
-                    self._context,
-                    "query_result_store",
-                    InMemoryQueryResultStore(),
+                    self._context, "workspace_input_resolver", None
                 ),
             )
             model_name, model, provider = self._context.resolve_subagent_model(

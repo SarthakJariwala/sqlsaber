@@ -5,15 +5,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from sqlsaber.config.settings import ThinkingLevel
 from sqlsaber.overrides import ToolOveridesInput
 
 if TYPE_CHECKING:
-    from pydantic_ai.capabilities import AbstractCapability
-
     from sqlsaber.artifacts import ArtifactFailureMode, ArtifactStore
+    from sqlsaber.capabilities.plugins import CapabilitySpec
     from sqlsaber.config.settings import Config
     from sqlsaber.knowledge.manager import KnowledgeManager
     from sqlsaber.query_results import QueryResultStore
@@ -23,7 +22,13 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class SQLSaberOptions:
-    """Typed options bag for SQLSaber session construction."""
+    """Typed options bag for SQLSaber session construction.
+
+    ``capabilities`` is an explicit list of pydantic-ai capabilities and
+    PluginContext factories. It defaults to empty. SQLSaber always includes
+    Knowledge and SqlTools. Pass ``load_capability_factories()`` to opt into
+    installed ``sqlsaber.capabilities`` plugins, as the CLI does.
+    """
 
     # Database
     database: str | list[str] | tuple[str, ...] | None = None
@@ -41,7 +46,7 @@ class SQLSaberOptions:
     settings: Config | None = None
     knowledge_manager: KnowledgeManager | None = None
     thread_manager: ThreadManager | None = None
-    extra_capabilities: Sequence[AbstractCapability[Any]] = ()
+    capabilities: Sequence[CapabilitySpec] = ()
     artifact_store: ArtifactStore | None = None
     artifact_failure_mode: ArtifactFailureMode = "required"
     query_result_store: QueryResultStore | None = None

@@ -18,8 +18,8 @@ class Sandbox(SqlSaberCapability):
     id = "sandbox"
     description = "Run Python analysis in a configured remote sandbox."
 
-    def __init__(self, context: PluginContext | None = None) -> None:
-        self.tool = RunPythonTool(getattr(context, "query_result_store", None))
+    def __init__(self, context: PluginContext) -> None:
+        self.tool = RunPythonTool(context.query_result_store)
         self._toolset = FunctionToolset[Any](id=self.id)
         self._toolset.add_function(
             self.tool.execute,

@@ -31,7 +31,7 @@ options = SQLSaberOptions(
 | `settings`          | `Config \| None`                              | `None`  | Inject a `Config` (e.g. `Config.in_memory(...)`). Defaults to file-backed `Config.default()`. |
 | `knowledge_manager` | `KnowledgeManager \| None`                    | `None`  | Inject your own knowledge base (see [Advanced](/sdk/advanced)).                              |
 | `thread_manager`    | `ThreadManager \| None`                       | `None`  | Persist conversation history across runs (see [Advanced](/sdk/advanced)).                    |
-| `extra_capabilities` | `Sequence[AbstractCapability[Any]]`           | `()`    | Add pydantic-ai capabilities to the managed agent (see [Capabilities](/sdk/capabilities)).   |
+| `capabilities` | `Sequence[AbstractCapability[Any] \| Callable]` | `()` | Explicit pydantic-ai capabilities and plugin factories (see [Capabilities](/sdk/capabilities)). SQLSaber always includes SQL and knowledge tools. The CLI passes `load_capability_factories()`. |
 | `artifact_store` | `ArtifactStore \| None`                    | `None`  | Application-owned publication and retrieval for artifacts such as analysis notebooks and plots. |
 | `artifact_failure_mode` | `"required" \| "best_effort"`            | `"required"` | Fail the tool or retain its answer when artifact publication fails.                      |
 | `query_result_store` | `QueryResultStore \| None` | `None` | Store for complete SQL row results. Defaults to a session-owned in-memory store. Inject application storage for durable or tenant-scoped retrieval. |
@@ -105,8 +105,9 @@ ID, filename, or historical conversation metadata.
 
 ## Managed notebook inputs
 
-When `sqlsaber-notebook` is installed, `workspace_input_resolver` lets a host
-application make authorized files available to `analyze_data` without exposing
+When `sqlsaber-notebook` is listed in `SQLSaberOptions.capabilities` (the CLI
+does this via `load_capability_factories()`), `workspace_input_resolver` lets a
+host application make authorized files available to `analyze_data` without exposing
 filesystem paths, URLs, bucket names, object keys, or raw bytes to the main model.
 See [Analyzing application-owned inputs](/sdk/results-and-streaming#analyzing-application-owned-inputs)
 for the resolver contract and trust boundary.

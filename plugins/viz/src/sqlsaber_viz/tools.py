@@ -17,7 +17,6 @@ from sqlsaber.query_result_resolution import (
     resolve_query_result,
 )
 from sqlsaber.query_results import (
-    InMemoryQueryResultStore,
     QueryResultStore,
     QueryResultUnavailable,
 )
@@ -43,13 +42,9 @@ class VizTool(Tool):
 
     requires_ctx = True
 
-    def __init__(self, query_result_store: QueryResultStore | None = None):
+    def __init__(self, query_result_store: QueryResultStore) -> None:
         super().__init__()
-        self.query_result_store = (
-            query_result_store
-            if query_result_store is not None
-            else InMemoryQueryResultStore()
-        )
+        self.query_result_store = query_result_store
         self._last_ctx: RunContext | None = None
         self._last_rows: list[dict] | None = None
         self._last_file: str | None = None

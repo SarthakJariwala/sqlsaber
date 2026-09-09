@@ -13,6 +13,7 @@ from sqlsaber import (
     WorkspaceInputResolver,
     WorkspaceResolutionContext,
 )
+from sqlsaber.capabilities.plugins import load_capability_factories
 from sqlsaber.config.settings import Config
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
@@ -90,7 +91,7 @@ def test_api_legacy_constructor_kwargs_are_rejected(
 
 
 @pytest.mark.asyncio
-async def test_extra_capabilities_are_appended_to_managed_agent() -> None:
+async def test_capabilities_are_appended_to_managed_agent() -> None:
     extra = Capability(id="custom", instructions="Custom capability")
     saber = SQLSaber(
         options=SQLSaberOptions(
@@ -99,12 +100,36 @@ async def test_extra_capabilities_are_appended_to_managed_agent() -> None:
                 model_name="anthropic:claude-3-5-sonnet",
                 api_keys={"anthropic": "test-key"},
             ),
-            extra_capabilities=[extra],
+            capabilities=[extra],
         )
     )
 
     assert extra in saber.agent.capabilities
     await saber.close()
+
+
+@pytest.mark.asyncio
+async def test_managed_session_omits_installed_plugins_by_default() -> None:
+    saber = SQLSaber(
+        options=SQLSaberOptions(
+            database="sqlite:///:memory:",
+            settings=Config.in_memory(
+                model_name="anthropic:claude-3-5-sonnet",
+                api_keys={"anthropic": "test-key"},
+            ),
+        )
+    )
+    ids = {getattr(capability, "id", None) for capability in saber.agent.capabilities}
+    assert "notebook" not in ids
+    assert "viz" not in ids
+    assert "sandbox" not in ids
+    assert "analyze_data" not in saber.agent._tools
+    await saber.close()
+
+
+def test_extra_capabilities_is_removed() -> None:
+    with pytest.raises(TypeError, match="extra_capabilities"):
+        SQLSaberOptions(extra_capabilities=())
 
 
 @pytest.mark.asyncio
@@ -123,6 +148,7 @@ async def test_workspace_input_resolver_reaches_managed_notebook_capability() ->
                 api_keys={"anthropic": "test-key"},
             ),
             workspace_input_resolver=resolver,
+            capabilities=load_capability_factories(),
         )
     )
 

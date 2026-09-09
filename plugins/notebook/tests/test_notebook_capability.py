@@ -645,6 +645,7 @@ async def test_analyze_tool_runs_attachment_only_analysis(
 
     context = SimpleNamespace(
         workspace_input_resolver=Resolver(),
+        query_result_store=InMemoryQueryResultStore(),
         resolve_subagent_model=lambda *args, **kwargs: (
             "anthropic:claude-test",
             "anthropic:claude-test",
@@ -696,11 +697,12 @@ async def test_analyze_tool_renders_notebook_and_child_answer(
         },
     )
     context = SimpleNamespace(
+        query_result_store=InMemoryQueryResultStore(),
         resolve_subagent_model=lambda *args, **kwargs: (
             "anthropic:claude-test",
             "anthropic:claude-test",
             "anthropic",
-        )
+        ),
     )
     backend = SimpleNamespace(name="docker")
     captured: dict[str, Any] = {}
@@ -842,6 +844,7 @@ async def test_analyze_tool_publishes_notebook_images_and_generated_files(
 
     store = RecordingStore()
     context = SimpleNamespace(
+        query_result_store=InMemoryQueryResultStore(),
         resolve_subagent_model=lambda *args, **kwargs: (
             "anthropic:claude-test",
             "anthropic:claude-test",
@@ -915,6 +918,7 @@ async def test_analyze_tool_handles_artifact_publication_failure(
             raise RuntimeError("bucket unavailable")
 
     context = SimpleNamespace(
+        query_result_store=InMemoryQueryResultStore(),
         resolve_subagent_model=lambda *args, **kwargs: (
             "anthropic:claude-test",
             "anthropic:claude-test",
@@ -966,11 +970,12 @@ async def test_analyze_tool_maps_backend_failure_to_bounded_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context = SimpleNamespace(
+        query_result_store=InMemoryQueryResultStore(),
         resolve_subagent_model=lambda *args, **kwargs: (
             "anthropic:claude-test",
             "anthropic:claude-test",
             "anthropic",
-        )
+        ),
     )
     monkeypatch.setattr(
         capability_module,

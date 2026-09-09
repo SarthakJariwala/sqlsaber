@@ -2,15 +2,22 @@
 
 from types import SimpleNamespace
 
+import pytest
 from pydantic_ai.capabilities import Capability
 
 from sqlsaber.capabilities import plugins
-from sqlsaber.capabilities.plugins import PluginContext, discover_capabilities
+from sqlsaber.capabilities.plugins import (
+    PluginContext,
+    discover_capabilities,
+    load_capability_factories,
+    resolve_capability_specs,
+)
 from sqlsaber.config.settings import Config
 from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
 from sqlsaber.database.sqlite import SQLiteConnection
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.overrides import ModelOverides
+from sqlsaber.query_results import InMemoryQueryResultStore
 
 
 def _context() -> PluginContext:
@@ -35,6 +42,7 @@ def _context() -> PluginContext:
         ),
         main_model_name="anthropic:claude-main",
         main_api_key="main-key",
+        query_result_store=InMemoryQueryResultStore(),
     )
 
 
@@ -120,3 +128,64 @@ def test_discover_capabilities_isolates_broken_plugin(monkeypatch) -> None:
     monkeypatch.setattr(plugins, "_select_entry_points", lambda group: [broken])
 
     assert discover_capabilities(_context()) == []
+
+
+def test_plugin_context_requires_query_result_store() -> None:
+    registry = DatabaseRegistry(
+        [
+            DatabaseEntry.from_connection(
+                name="test",
+                connection=SQLiteConnection("sqlite:///:memory:"),
+                description=None,
+                excluded_schemas=[],
+            )
+        ]
+    )
+    with pytest.raises(TypeError, match="query_result_store"):
+        PluginContext(
+            registry=registry,
+            knowledge_manager=KnowledgeManager(),
+            allow_dangerous=True,
+            tool_overrides={},
+            config=Config.in_memory(
+                model_name="anthropic:claude-main",
+                api_keys={"anthropic": "main-key"},
+            ),
+            main_model_name="anthropic:claude-main",
+        )
+
+
+def test_load_capability_factories_does_not_invoke(monkeypatch) -> None:
+    called: list[PluginContext] = []
+
+    def factory(context: PluginContext):
+        called.append(context)
+        return Capability(id="lazy", instructions="plugin instructions")
+
+    entry_point = SimpleNamespace(name="lazy", load=lambda: factory)
+    monkeypatch.setattr(
+        plugins,
+        "_select_entry_points",
+        lambda group: [entry_point] if group == "sqlsaber.capabilities" else [],
+    )
+
+    factories = load_capability_factories()
+    assert called == []
+    assert [item.name for item in factories] == ["lazy"]
+
+    context = _context()
+    discovered = resolve_capability_specs(factories, context)
+    assert [capability.id for capability in discovered] == ["lazy"]
+    assert called == [context]
+
+
+def test_resolve_capability_specs_keeps_instances_and_invokes_factories() -> None:
+    extra = Capability(id="custom", instructions="Custom capability")
+    context = _context()
+
+    def factory(plugin_context: PluginContext):
+        assert plugin_context is context
+        return Capability(id="from-factory", instructions="factory")
+
+    resolved = resolve_capability_specs([extra, factory], context)
+    assert [capability.id for capability in resolved] == ["custom", "from-factory"]

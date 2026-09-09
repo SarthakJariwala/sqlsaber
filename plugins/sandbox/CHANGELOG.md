@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Breaking Changes
+
+- `Sandbox` requires a `PluginContext` with `query_result_store`. `RunPythonTool` requires a `QueryResultStore`. Neither allocates a private in-memory store.
+
 ## [0.4.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-sandbox-v0.3.0...sqlsaber-sandbox-v0.4.0) (2026-08-03)
 
 

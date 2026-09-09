@@ -7,6 +7,7 @@ import pytest
 from pydantic_ai.models.test import TestModel
 
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
+from sqlsaber.capabilities.plugins import load_capability_factories
 from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
 from sqlsaber.database.sqlite import SQLiteConnection
 
@@ -65,6 +66,7 @@ async def test_tool_schema_snapshot(
         registry=_registry(*names),
         model_name="anthropic:snapshot-model",
         api_key="test-key",
+        capabilities=load_capability_factories(),
         workspace_input_resolver=(
             Resolver() if with_workspace_input_resolver else None
         ),

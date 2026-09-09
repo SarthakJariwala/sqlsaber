@@ -13,7 +13,7 @@ from sqlsaber.agents.model_factory import UNIFIED_EFFORT_MAP, build_model
 from sqlsaber.artifacts import ArtifactFailureMode, ArtifactStore
 from sqlsaber.capabilities import Knowledge, SqlTools
 from sqlsaber.capabilities.base import SqlSaberCapability
-from sqlsaber.capabilities.plugins import PluginContext, discover_capabilities
+from sqlsaber.capabilities.plugins import PluginContext, resolve_capability_specs
 from sqlsaber.config import providers
 from sqlsaber.config.settings import Config, ThinkingLevel
 from sqlsaber.database import BaseDatabaseConnection
@@ -61,7 +61,7 @@ class SQLSaberAgent:
         csv_tool_results: bool = False,
         system_prompt: str | None = None,
         tool_overides: ToolOveridesInput | None = None,
-        extra_capabilities: Sequence[AbstractCapability[Any]] = (),
+        capabilities: Sequence[Any] = (),
         artifact_store: ArtifactStore | None = None,
         artifact_failure_mode: ArtifactFailureMode = "required",
         query_result_store: QueryResultStore | None = None,
@@ -92,7 +92,7 @@ class SQLSaberAgent:
         self.allow_dangerous = allow_dangerous
         self.csv_tool_results = csv_tool_results
         self._tool_overides = normalize_tool_overides(tool_overides)
-        self._extra_capabilities = tuple(extra_capabilities)
+        self._capability_specs = tuple(capabilities)
         self._artifact_store = artifact_store
         self._artifact_failure_mode = artifact_failure_mode
         self._workspace_input_resolver = workspace_input_resolver
@@ -156,24 +156,25 @@ class SQLSaberAgent:
                 query_result_store=self.query_result_store,
             ),
         ]
-        capabilities.extend(
-            discover_capabilities(
-                PluginContext(
-                    registry=self.registry,
-                    knowledge_manager=self.knowledge_manager,
-                    allow_dangerous=self.allow_dangerous,
-                    tool_overrides=self._tool_overides,
-                    config=self.config,
-                    main_model_name=model_name,
-                    main_api_key=api_key,
-                    artifact_store=self._artifact_store,
-                    artifact_failure_mode=self._artifact_failure_mode,
-                    query_result_store=self.query_result_store,
-                    workspace_input_resolver=self._workspace_input_resolver,
+        if self._capability_specs:
+            capabilities.extend(
+                resolve_capability_specs(
+                    self._capability_specs,
+                    PluginContext(
+                        registry=self.registry,
+                        knowledge_manager=self.knowledge_manager,
+                        allow_dangerous=self.allow_dangerous,
+                        tool_overrides=self._tool_overides,
+                        config=self.config,
+                        main_model_name=model_name,
+                        query_result_store=self.query_result_store,
+                        main_api_key=api_key,
+                        artifact_store=self._artifact_store,
+                        artifact_failure_mode=self._artifact_failure_mode,
+                        workspace_input_resolver=self._workspace_input_resolver,
+                    ),
                 )
             )
-        )
-        capabilities.extend(self._extra_capabilities)
         capabilities.append(ProcessHistory(compact_legacy_query_result_history))
         if self.thinking_enabled:
             capabilities.append(

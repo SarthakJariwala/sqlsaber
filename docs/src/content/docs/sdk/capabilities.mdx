@@ -98,7 +98,7 @@ loaded = await store.get(
 print(loaded.rows())
 ```
 
-Pass that same store into `PluginContext.query_result_store` before you construct notebook, viz, or sandbox. Each capability that omits the store creates its own empty `InMemoryQueryResultStore`, so analysis tools cannot load `execute_sql` rows.
+Pass that same store into `PluginContext.query_result_store` before you construct notebook, viz, or sandbox. `PluginContext.query_result_store` is required. `VizTool` and `RunPythonTool` also require a store. Omitting it is a `TypeError`.
 
 See [Build an agent that keeps complete SQL results](/sdk/capability-query-results) for a step-by-step agent that prints a truncated model preview and then loads all 250 stored rows.
 
@@ -132,22 +132,25 @@ A supplied `KnowledgeManager` is borrowed. If omitted, `Knowledge` creates and c
 
 ## Use your capabilities inside SQLsaber
 
-Pass pydantic-ai capabilities through `SQLSaberOptions.extra_capabilities`:
+Pass pydantic-ai capabilities and plugin factories through `SQLSaberOptions.capabilities`. `SQLSaber` always includes SQL and knowledge tools. It does not load installed plugins unless you list them.
 
 ```python
 from pydantic_ai.capabilities import WebSearch
 from sqlsaber import SQLSaber, SQLSaberOptions
+from sqlsaber.capabilities.plugins import load_capability_factories
 
 options = SQLSaberOptions(
     database="analytics",
-    extra_capabilities=[WebSearch()],
+    capabilities=[*load_capability_factories(), WebSearch()],
 )
 
 async with SQLSaber(options=options) as saber:
     result = await saber.query("Compare our latest revenue with public guidance")
 ```
 
-Extra capabilities are appended to SQLsaber's SQL, knowledge, and installed plugin capabilities. They remain free to use their own dependency type when attached directly to your agent; SQLsaber's built-in capabilities do not claim `ctx.deps`.
+`load_capability_factories()` returns the CLI plugin set. That includes notebook, viz, and sandbox when those packages are installed. Factories run later with the session `PluginContext`, so they share the session `query_result_store`.
+
+Constructed capabilities stay free to use their own dependency type when attached directly to your agent. SQLsaber's built-in capabilities do not claim `ctx.deps`.
 
 ## Build a plugin capability
 
@@ -171,4 +174,4 @@ def capability(context: PluginContext):
     )
 ```
 
-`PluginContext` supplies the database registry, knowledge manager, dangerous-mode flag, normalized tool model overrides, the shared `QueryResultStore`, and the optional application-owned artifact store. A factory may return one capability or a sequence of capabilities.
+`PluginContext` supplies the database registry, knowledge manager, dangerous-mode flag, normalized tool model overrides, the required shared `QueryResultStore`, and the optional application-owned artifact store. A factory may return one capability or a sequence of capabilities. Managed `SQLSaber` does not call `discover_capabilities`. Pass `load_capability_factories()` into `SQLSaberOptions.capabilities`, or call `discover_capabilities(context)` yourself on a host agent.

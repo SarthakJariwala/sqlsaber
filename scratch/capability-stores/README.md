@@ -2,6 +2,8 @@
 
 These scripts compare ways to give a host pydantic-ai `Agent` the same query-result store and retrieve path that `SQLSaber` exposes.
 
+The production API is now an explicit `SQLSaberOptions.capabilities` list plus a required `PluginContext.query_result_store`. `SQLSaber` does not call `discover_capabilities`. The CLI passes `load_capability_factories()`. `Sandbox` and `VizTool` no longer allocate a private store.
+
 They are not package code. Run them with:
 
 ```bash

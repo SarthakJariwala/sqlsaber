@@ -438,7 +438,6 @@ async def prepare_thread_resume(
 ) -> PreparedThreadResume:
     from sqlsaber import (
         SQLSaber,
-        SQLSaberOptions,
         ThreadDatabaseRequiredError,
         ThreadDatabaseUnavailableError,
         ThreadNotFoundError,
@@ -447,6 +446,7 @@ async def prepare_thread_resume(
     )
     from sqlsaber.cli.artifacts import cli_artifact_store
     from sqlsaber.cli.query_results import cli_query_result_store
+    from sqlsaber.cli.session import cli_sqlsaber_options
     from sqlsaber.database.resolver import DatabaseResolutionError
     from sqlsaber.threads import ThreadStorage
 
@@ -460,7 +460,7 @@ async def prepare_thread_resume(
     try:
         saber = await SQLSaber.resume(
             thread_id,
-            options=SQLSaberOptions(
+            options=cli_sqlsaber_options(
                 database=database,
                 artifact_store=artifacts,
                 query_result_store=query_results,
