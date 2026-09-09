@@ -22,13 +22,7 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class SQLSaberOptions:
-    """Typed options bag for SQLSaber session construction.
-
-    ``capabilities`` is an explicit list of pydantic-ai capabilities and
-    PluginContext factories. It defaults to empty. SQLSaber always includes
-    Knowledge and SqlTools. Pass ``load_capability_factories()`` to opt into
-    installed ``sqlsaber.capabilities`` plugins, as the CLI does.
-    """
+    """Typed options bag for SQLSaber session construction."""
 
     # Database
     database: str | list[str] | tuple[str, ...] | None = None

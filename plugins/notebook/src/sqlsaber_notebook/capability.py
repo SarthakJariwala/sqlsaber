@@ -174,16 +174,14 @@ class AnalyzeDataTool(Tool):
                 only=files,
                 attachment_refs=attachment_refs,
                 query_result_store=self._context.query_result_store,
-                workspace_input_resolver=getattr(
-                    self._context, "workspace_input_resolver", None
-                ),
+                workspace_input_resolver=self._context.workspace_input_resolver,
             )
             model_name, model, provider = self._context.resolve_subagent_model(
                 "notebook",
                 tool_name=self.name,
             )
             backend = resolve_notebook_backend()
-            store = getattr(self._context, "artifact_store", None)
+            store = self._context.artifact_store
             result = await analyze(
                 goal,
                 workspace,
@@ -352,7 +350,7 @@ class Notebook(SqlSaberCapability):
         self._toolset = FunctionToolset[Any](id=self.id)
         execute = (
             self.tool.execute_with_attachments
-            if getattr(context, "workspace_input_resolver", None) is not None
+            if context.workspace_input_resolver is not None
             else self.tool.execute
         )
         self._toolset.add_function(

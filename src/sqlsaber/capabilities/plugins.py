@@ -172,10 +172,5 @@ def load_capability_factories() -> tuple[CapabilityFactory, ...]:
 
 
 def discover_capabilities(context: PluginContext) -> list[AbstractCapability[Any]]:
-    """Load and invoke ``sqlsaber.capabilities`` factories with ``context``.
-
-    Call this at a host edge that already owns ``PluginContext``. Managed
-    ``SQLSaber`` sessions do not. Pass :func:`load_capability_factories` into
-    ``SQLSaberOptions.capabilities`` so the session invokes factories itself.
-    """
+    """Load and invoke ``sqlsaber.capabilities`` factories with ``context``."""
     return resolve_capability_specs(load_capability_factories(), context)

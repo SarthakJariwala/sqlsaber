@@ -9,11 +9,7 @@ if TYPE_CHECKING:
 
 
 def cli_sqlsaber_options(**kwargs: Any) -> SQLSaberOptions:
-    """Build session options, including installed plugin factories.
-
-    CLI sessions opt into ``sqlsaber.capabilities`` entry points explicitly.
-    The SDK default is an empty capabilities list.
-    """
+    """Build CLI session options with installed plugin factories."""
     from sqlsaber import SQLSaberOptions
     from sqlsaber.capabilities.plugins import load_capability_factories
 
