@@ -183,6 +183,8 @@ async def test_wait_for_bind_or_exit_skips_bind_when_already_exited() -> None:
     try:
         shell.exit_event.set()
         assert await shell.wait_for_bind_or_exit() is False
+        shell.bind_event.set()
+        assert await shell.wait_for_bind_or_exit() is False
     finally:
         shell.stop()
 
@@ -202,6 +204,43 @@ async def test_unbound_exit_command_does_not_request_bind() -> None:
         assert shell.bind_event.is_set() is False
         assert shell.exit_event.is_set() is True
         assert await shell.wait_for_bind_or_exit() is False
+    finally:
+        shell.stop()
+
+
+@pytest.mark.asyncio
+async def test_unbound_ctrl_c_during_starting_exits_without_bind() -> None:
+    terminal = FakeTerminal(columns=100, rows=24)
+    shell = InteractiveSession.start_unbound_shell(
+        database=None,
+        terminal=terminal,
+    )
+    try:
+        shell.app.submit("count rows")
+        shell.app.tui.flush_render()
+        assert shell.bind_event.is_set() is True
+        terminal.send_input("\x03")
+        shell.app.tui.flush_render()
+        assert shell.exit_event.is_set() is True
+        assert await shell.wait_for_bind_or_exit() is False
+    finally:
+        shell.stop()
+
+
+@pytest.mark.asyncio
+async def test_unbound_clear_does_not_request_bind() -> None:
+    terminal = FakeTerminal(columns=100, rows=24)
+    shell = InteractiveSession.start_unbound_shell(
+        database=None,
+        terminal=terminal,
+    )
+    try:
+        shell.app.submit("/clear")
+        shell.app.tui.flush_render()
+        assert shell.bind_event.is_set() is False
+        assert shell.exit_event.is_set() is False
+        text = "\n".join(shell.app.render_plain_viewport())
+        assert "Conversation history cleared." in text
     finally:
         shell.stop()
 

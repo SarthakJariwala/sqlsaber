@@ -45,6 +45,15 @@ QUERY_CANCEL_GRACE_SECONDS = 0.1
 UNBOUND_EXIT_COMMANDS = frozenset({"/exit", "/quit", "exit", "quit"})
 
 
+def _signal_loop_event(loop: asyncio.AbstractEventLoop, event: asyncio.Event) -> None:
+    """Set an asyncio event from the TUI thread or the loop thread."""
+    event.set()
+    try:
+        loop.call_soon_threadsafe(event.set)
+    except RuntimeError:
+        return
+
+
 def __getattr__(name: str):
     """Expose usage types without importing pydantic-ai at module load."""
     if name in {"UsageMeter", "SessionUsage", "format_cost_usd", "format_tokens"}:
@@ -77,10 +86,10 @@ class ChatShell:
 
     async def wait_for_bind_or_exit(self) -> bool:
         """True when SQLSaber should be constructed."""
-        if self.bind_event.is_set():
-            return True
         if self.exit_event.is_set():
             return False
+        if self.bind_event.is_set():
+            return True
         bind_task = asyncio.create_task(self.bind_event.wait())
         exit_task = asyncio.create_task(self.exit_event.wait())
         _done, pending = await asyncio.wait(
@@ -90,7 +99,7 @@ class ChatShell:
         for task in pending:
             task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
-        return self.bind_event.is_set()
+        return self.bind_event.is_set() and not self.exit_event.is_set()
 
 
 class InteractiveSession:
@@ -194,13 +203,17 @@ class InteractiveSession:
             app = app_ref["app"]
             surface = surface_ref["surface"]
             if session is None:
-                if user_query.strip().casefold() in UNBOUND_EXIT_COMMANDS:
-                    exit_event.set()
+                folded = user_query.strip().casefold()
+                if folded in UNBOUND_EXIT_COMMANDS:
+                    _signal_loop_event(loop, exit_event)
                     app.stop()
                     return False
+                if folded == "/clear":
+                    surface.emit(b.success("Conversation history cleared."))
+                    return True
                 queued["query"] = user_query
                 app.set_loading("Starting...")
-                bind_event.set()
+                _signal_loop_event(loop, bind_event)
                 app.tui.set_focus(app.editor)
                 return False
             return session._queue_submit(app, surface, user_query, loop=loop)
@@ -230,13 +243,15 @@ class InteractiveSession:
             session = session_slot.get("session")
             app = app_ref["app"]
             if session is None:
+                _signal_loop_event(loop, exit_event)
+                app.stop()
                 return
             loop.call_soon_threadsafe(
                 lambda: asyncio.create_task(session._cancel_current_task(app))
             )
 
         def on_exit() -> None:
-            loop.call_soon_threadsafe(exit_event.set)
+            _signal_loop_event(loop, exit_event)
 
         app = build_chat_app(
             terminal=terminal,
