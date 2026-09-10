@@ -360,6 +360,26 @@ async def test_start_unbound_shell_paints_slash_hint_and_db_footer() -> None:
 
 
 @pytest.mark.asyncio
+async def test_unbound_shell_shows_update_notice_without_sqlsaber() -> None:
+    from sqlsaber.cli.update_check import _emit_update_notice
+
+    terminal = FakeTerminal(columns=100, rows=24)
+    shell = InteractiveSession.start_unbound_shell(
+        database=None,
+        terminal=terminal,
+    )
+    try:
+        _emit_update_notice()
+        shell.app.tui.flush_render()
+        text = "\n".join(shell.app.render_plain_viewport())
+        assert "A new version is now available!" in text
+        assert "uv tool update sqlsaber" in text
+        assert "session" not in shell.session_slot
+    finally:
+        shell.stop()
+
+
+@pytest.mark.asyncio
 async def test_unbound_editor_accepts_text_before_session_bind() -> None:
     terminal = FakeTerminal(columns=100, rows=24)
     shell = InteractiveSession.start_unbound_shell(

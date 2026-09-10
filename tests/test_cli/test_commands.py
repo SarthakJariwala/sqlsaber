@@ -113,7 +113,10 @@ class TestCLICommands:
             commands, "_create_cli_saber", AsyncMock(side_effect=create)
         )
         monkeypatch.setattr(commands, "needs_onboarding", lambda _: False)
-        monkeypatch.setattr(commands, "schedule_update_check", lambda: None)
+        scheduled: list[bool] = []
+        monkeypatch.setattr(
+            commands, "schedule_update_check", lambda: scheduled.append(True)
+        )
         monkeypatch.setattr(commands, "_ensure_logging", MagicMock())
         monkeypatch.setattr(commands.sys.stdin, "isatty", lambda: True)
         monkeypatch.setattr(
@@ -126,6 +129,7 @@ class TestCLICommands:
         commands.query(None)
 
         assert created is False
+        assert scheduled == [True]
 
     def test_query_specific_database_not_found(self, capsys, temp_dir, monkeypatch):
         """Test query with non-existent database name."""
