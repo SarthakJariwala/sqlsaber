@@ -17,12 +17,15 @@ Implemented components:
 - reusable artifact publication and persisted notebook replay, and
 - the standalone `sqlsaber-notebook` CLI.
 
-When installed with SQLsaber, the main agent can hand prior successful SQL results to
-`analyze_data` for multi-step calculations, statistics, transformations, and plots.
-The terminal displays the bounded executed notebook and plot previews before the main
+The `saber` CLI loads `analyze_data` when `sqlsaber-notebook` is installed.
+That tool uses prior successful SQL results for calculations, statistics,
+transformations, and plots.
+Bounded executed notebooks and plot previews appear in the terminal before the main
 agent's text response. Notebook bytes and images are not sent to the parent model.
-Managed SDK applications can persist the notebook, plots, and generated files through
-`SQLSaberOptions.artifact_store`; only the store's durable references are stored
+An embedded `SQLSaber` session includes `analyze_data` only when the notebook factory
+is listed in `SQLSaberOptions.capabilities`.
+Managed SDK applications persist the notebook, plots, and generated files through
+`SQLSaberOptions.artifact_store`. Only the store's durable references are stored
 in tool metadata and exposed through `SQLSaberResult.artifacts`.
 
 The default balanced runtime targets larger EDA and classical ML: 4 CPUs, 8 GiB
@@ -104,15 +107,18 @@ Configure a dedicated analyst model with:
 saber models set --agent notebook
 ```
 
-For a web backend, inject an application-owned artifact store and pass tenant scope
-as run metadata:
+For a web backend, list the notebook factory in `SQLSaberOptions.capabilities`.
+Inject an application-owned artifact store.
+Pass tenant scope as run metadata:
 
 ```python
 from sqlsaber import FilesystemArtifactStore, SQLSaber, SQLSaberOptions
+from sqlsaber_notebook.capability import capability as notebook
 
 options = SQLSaberOptions(
     database="sqlite:///analytics.db",
     artifact_store=FilesystemArtifactStore("/private/artifacts"),
+    capabilities=[notebook],
 )
 
 async with SQLSaber(options=options) as saber:
@@ -129,7 +135,7 @@ S3, GCS, Azure Blob Storage, or another bucket. Authorize `get()` from current r
 metadata and return stable private object references rather than expiring signed
 URLs.
 
-Managed applications can also configure
+When the notebook factory is listed, managed applications can also configure
 `SQLSaberOptions.workspace_input_resolver` to expose authorized private inputs to
 `analyze_data`. The model-visible argument is `attachment_refs`, never raw bytes,
 paths, URLs, bucket names, or object keys. The resolver receives only run,

@@ -183,19 +183,21 @@ image, after which existing bounded PNG snapshot behavior applies.
 
 ## Persisting notebooks and plots
 
-Install `sqlsaber-notebook` and configure an artifact store to retain and later
-retrieve executed notebooks, plots, and generated files. Embedded SQLsaber does not
-persist artifacts unless the application injects a store. SQLsaber includes
-filesystem and in-memory stores; cloud applications can implement the same
-`ArtifactStore` protocol for private database/object storage.
+Pass the notebook factory in `SQLSaberOptions.capabilities`.
+Inject an `artifact_store` to retain executed notebooks, plots, and generated files.
+Embedded SQLsaber does not persist artifacts unless the application injects a store.
+SQLsaber includes filesystem and in-memory stores. Cloud applications can implement
+the same `ArtifactStore` protocol for private database or object storage.
 
 ```python
 from sqlsaber import FilesystemArtifactStore, SQLSaber, SQLSaberOptions
+from sqlsaber_notebook.capability import capability as notebook
 
 store = FilesystemArtifactStore("/private/sqlsaber-artifacts")
 options = SQLSaberOptions(
     database="sqlite:///analytics.db",
     artifact_store=store,
+    capabilities=[notebook],
 )
 
 async with SQLSaber(options=options) as saber:
