@@ -146,6 +146,26 @@ async def test_start_unbound_shell_paints_slash_hint_and_db_footer() -> None:
 
 
 @pytest.mark.asyncio
+async def test_unbound_editor_accepts_text_before_session_bind() -> None:
+    terminal = FakeTerminal(columns=100, rows=24)
+    shell = InteractiveSession.start_unbound_shell(
+        database=None,
+        terminal=terminal,
+    )
+    try:
+        for char in "hello":
+            terminal.send_input(char)
+        shell.app.tui.flush_render()
+        assert shell.app.editor.get_text() == "hello"
+        assert "session" not in shell.session_slot
+        text = "\n".join(shell.app.render_plain_viewport())
+        assert "hello" in text
+        assert "DB: starting..." in text
+    finally:
+        shell.stop()
+
+
+@pytest.mark.asyncio
 async def test_unbound_shell_slash_opens_palette() -> None:
     terminal = FakeTerminal(columns=100, rows=24)
     shell = InteractiveSession.start_unbound_shell(

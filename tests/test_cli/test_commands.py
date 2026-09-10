@@ -56,6 +56,53 @@ class TestCLICommands:
             )
         assert create.await_args.kwargs["csv_tool_results"] is csv_tool_results
 
+    def test_interactive_immediate_exit_does_not_construct_sqlsaber(
+        self, monkeypatch
+    ) -> None:
+        """Ctrl+D after first paint must not import or construct SQLSaber."""
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+
+        from sqlsaber.cli import commands
+        from sqlsaber.cli.interactive import ChatShell, InteractiveSession
+
+        created = False
+
+        async def create(**kwargs):
+            nonlocal created
+            created = True
+            raise AssertionError(
+                "interactive exit before a query must not construct SQLSaber"
+            )
+
+        def start_unbound_shell(**kwargs):
+            loop = asyncio.get_running_loop()
+            exit_event = asyncio.Event()
+            exit_event.set()
+            app = MagicMock()
+            app.tui.stopped = True
+            return ChatShell(
+                app=app,
+                session_slot={},
+                exit_event=exit_event,
+                loop=loop,
+            )
+
+        monkeypatch.setattr(
+            commands, "_create_cli_saber", AsyncMock(side_effect=create)
+        )
+        monkeypatch.setattr(commands, "needs_onboarding", lambda _: False)
+        monkeypatch.setattr(commands, "schedule_update_check", lambda: None)
+        monkeypatch.setattr(commands, "_ensure_logging", MagicMock())
+        monkeypatch.setattr(commands.sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr(
+            InteractiveSession, "start_unbound_shell", start_unbound_shell
+        )
+
+        commands.query(None)
+
+        assert created is False
+
     def test_query_specific_database_not_found(self, capsys, temp_dir, monkeypatch):
         """Test query with non-existent database name."""
         config_dir = temp_dir / "config"
