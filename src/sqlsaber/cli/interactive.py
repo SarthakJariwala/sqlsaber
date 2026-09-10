@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from textwrap import dedent
 from typing import TYPE_CHECKING
@@ -42,6 +42,7 @@ def bind_update_notice(emit: Callable[..., None] | None) -> None:
 
 
 QUERY_CANCEL_GRACE_SECONDS = 0.1
+UNBOUND_EXIT_COMMANDS = frozenset({"/exit", "/quit", "exit", "quit"})
 
 
 def __getattr__(name: str):
@@ -61,6 +62,8 @@ class ChatShell:
     session_slot: dict[str, InteractiveSession]
     exit_event: asyncio.Event
     loop: asyncio.AbstractEventLoop
+    bind_event: asyncio.Event = field(default_factory=asyncio.Event)
+    queued: dict[str, str] = field(default_factory=dict)
     _stopped: bool = False
 
     def stop(self) -> None:
@@ -71,6 +74,23 @@ class ChatShell:
         if not self.app.tui.stopped:
             self.app.stop()
         self.exit_event.set()
+
+    async def wait_for_bind_or_exit(self) -> bool:
+        """True when SQLSaber should be constructed."""
+        if self.bind_event.is_set():
+            return True
+        if self.exit_event.is_set():
+            return False
+        bind_task = asyncio.create_task(self.bind_event.wait())
+        exit_task = asyncio.create_task(self.exit_event.wait())
+        _done, pending = await asyncio.wait(
+            {bind_task, exit_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        return self.bind_event.is_set()
 
 
 class InteractiveSession:
@@ -93,21 +113,59 @@ class InteractiveSession:
         self.log = get_logger(__name__)
 
     @staticmethod
+    def _named_database_footer(database: str | list[str] | None) -> str | None:
+        if isinstance(database, list) and len(database) > 1:
+            return f"DBs: {', '.join(database)}"
+        if isinstance(database, list) and database:
+            return f"DB: {Path(database[0]).stem}"
+        if isinstance(database, str) and database:
+            return f"DB: {Path(database).stem}"
+        return None
+
+    @staticmethod
     def boot_footer(
         database: str | list[str] | None,
         *,
         allow_dangerous: bool = False,
     ) -> str:
         """Footer shown before SQLSaber is constructed."""
-        if isinstance(database, list) and len(database) > 1:
-            db_part = f"DBs: {', '.join(database)}"
-        elif isinstance(database, list) and database:
-            db_part = f"DB: {Path(database[0]).stem}"
-        elif isinstance(database, str) and database:
-            db_part = f"DB: {Path(database).stem}"
-        else:
-            db_part = "DB: starting..."
+        db_part = (
+            InteractiveSession._named_database_footer(database) or "DB: starting..."
+        )
         parts = [db_part]
+        if allow_dangerous:
+            parts.append(DANGEROUS_MODE_FOOTER_LABEL)
+        return " | ".join(parts)
+
+    @staticmethod
+    def preview_footer(
+        database: str | list[str] | None,
+        *,
+        allow_dangerous: bool = False,
+    ) -> str:
+        """Footer from config files, without constructing SQLSaber."""
+        from sqlsaber.config.database import DatabaseConfigManager
+        from sqlsaber.config.settings import Config
+
+        db_part = InteractiveSession._named_database_footer(database)
+        if db_part is None:
+            default = DatabaseConfigManager().get_default_database()
+            db_part = (
+                "DB: starting..."
+                if default is None
+                else f"DB: {default.name} ({default.type})"
+            )
+        settings = Config.default()
+        thinking = (
+            settings.model.thinking_level.value
+            if settings.model.thinking_enabled
+            else "off"
+        )
+        parts = [
+            db_part,
+            f"Model: {settings.model.name}",
+            f"Thinking: {thinking}",
+        ]
         if allow_dangerous:
             parts.append(DANGEROUS_MODE_FOOTER_LABEL)
         return " | ".join(parts)
@@ -125,6 +183,8 @@ class InteractiveSession:
 
         loop = asyncio.get_running_loop()
         exit_event = asyncio.Event()
+        bind_event = asyncio.Event()
+        queued: dict[str, str] = {}
         session_slot: dict[str, InteractiveSession] = {}
         app_ref: dict[str, ChatApp] = {}
         surface_ref: dict[str, ChatSurface] = {}
@@ -134,7 +194,13 @@ class InteractiveSession:
             app = app_ref["app"]
             surface = surface_ref["surface"]
             if session is None:
-                surface.emit(b.warn("Still starting..."))
+                if user_query.strip().casefold() in UNBOUND_EXIT_COMMANDS:
+                    exit_event.set()
+                    app.stop()
+                    return False
+                queued["query"] = user_query
+                app.set_loading("Starting...")
+                bind_event.set()
                 app.tui.set_focus(app.editor)
                 return False
             return session._queue_submit(app, surface, user_query, loop=loop)
@@ -196,6 +262,8 @@ class InteractiveSession:
             session_slot=session_slot,
             exit_event=exit_event,
             loop=loop,
+            bind_event=bind_event,
+            queued=queued,
         )
 
     def _history_path(self) -> Path:
@@ -630,6 +698,10 @@ class InteractiveSession:
             bind_update_notice(surface.emit)
             self._refresh_footer()
             await self.before_prompt_loop()
+            queued_query = shell.queued.pop("query", None)
+            if queued_query is not None:
+                app.submit(queued_query)
+            app.clear_status()
             exit_event = shell.exit_event
 
         try:

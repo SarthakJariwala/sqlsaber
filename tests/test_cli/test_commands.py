@@ -35,20 +35,42 @@ class TestCLICommands:
     def test_query_passes_csv_choice_to_session(
         self, monkeypatch, interactive, csv_tool_results
     ):
+        import asyncio
         from unittest.mock import AsyncMock, MagicMock
+
         from sqlsaber.cli import commands
-        from sqlsaber.cli.interactive import InteractiveSession
+        from sqlsaber.cli.interactive import ChatShell, InteractiveSession
 
         class SessionReached(Exception):
             pass
 
         create = AsyncMock(side_effect=SessionReached)
+
+        def start_unbound_shell(**kwargs):
+            loop = asyncio.get_running_loop()
+            bind_event = asyncio.Event()
+            bind_event.set()
+            app = MagicMock()
+            app.tui.stopped = True
+            return ChatShell(
+                app=app,
+                session_slot={},
+                exit_event=asyncio.Event(),
+                loop=loop,
+                bind_event=bind_event,
+            )
+
         monkeypatch.setattr(commands, "_create_cli_saber", create)
         monkeypatch.setattr(commands, "needs_onboarding", lambda _: False)
         monkeypatch.setattr(commands, "schedule_update_check", lambda: None)
         monkeypatch.setattr(commands, "_ensure_logging", MagicMock())
         monkeypatch.setattr(commands.sys.stdin, "isatty", lambda: True)
-        monkeypatch.setattr(InteractiveSession, "start_unbound_shell", MagicMock())
+        monkeypatch.setattr(
+            InteractiveSession, "start_unbound_shell", start_unbound_shell
+        )
+        monkeypatch.setattr(
+            InteractiveSession, "preview_footer", lambda *a, **k: "DB: test"
+        )
         with pytest.raises(SessionReached):
             commands.query(
                 None if interactive else "Show tables",
@@ -59,7 +81,6 @@ class TestCLICommands:
     def test_interactive_immediate_exit_does_not_construct_sqlsaber(
         self, monkeypatch
     ) -> None:
-        """Ctrl+D after first paint must not import or construct SQLSaber."""
         import asyncio
         from unittest.mock import AsyncMock, MagicMock
 
@@ -97,6 +118,9 @@ class TestCLICommands:
         monkeypatch.setattr(commands.sys.stdin, "isatty", lambda: True)
         monkeypatch.setattr(
             InteractiveSession, "start_unbound_shell", start_unbound_shell
+        )
+        monkeypatch.setattr(
+            InteractiveSession, "preview_footer", lambda *a, **k: "DB: test"
         )
 
         commands.query(None)

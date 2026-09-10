@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 import sys
 
@@ -9,7 +10,7 @@ import pytest
 
 from sqlsaber.cli.interactive import InteractiveSession
 
-from tests.test_cli.test_tui_chat import FakeTerminal
+from tests.test_cli.test_tui_chat import FakeTerminal, _fake_saber
 
 
 def test_commands_import_does_not_load_structlog_or_httpx() -> None:
@@ -114,12 +115,165 @@ assert ChatShell.__name__ == "ChatShell"
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_boot_footer_includes_db_ready_needle() -> None:
+def test_preview_footer_does_not_import_pydantic_ai() -> None:
+    code = """
+import sys
+from unittest.mock import MagicMock
+
+from sqlsaber.cli.interactive import InteractiveSession
+
+shell = MagicMock()
+shell.app.set_footer(InteractiveSession.preview_footer(None))
+loaded = [
+    name
+    for name in (
+        "pydantic_ai",
+        "sqlsaber.sdk.client",
+        "sqlsaber.threads.storage",
+        "sqlsaber.cli.retention",
+    )
+    if name in sys.modules
+]
+assert not loaded, loaded
+shell.app.set_footer.assert_called_once()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_preview_footer_uses_saved_default_without_sqlsaber(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "sqlsaber.config.database.DatabaseConfigManager.get_default_database",
+        lambda self: SimpleNamespace(name="verification", type="sqlite"),
+    )
+
+    def fake_default(cls=None):
+        return SimpleNamespace(
+            model=SimpleNamespace(
+                name="openai:gpt-test",
+                thinking_enabled=False,
+                thinking_level=SimpleNamespace(value="medium"),
+            )
+        )
+
+    monkeypatch.setattr(
+        "sqlsaber.config.settings.Config.default",
+        classmethod(fake_default),
+    )
+    text = InteractiveSession.preview_footer(None)
+    assert "DB: verification (sqlite)" in text
+    assert "Model: openai:gpt-test" in text
+    assert "Thinking: off" in text
+
+
+@pytest.mark.asyncio
+async def test_wait_for_bind_or_exit_skips_bind_when_already_exited() -> None:
+    terminal = FakeTerminal(columns=100, rows=24)
+    shell = InteractiveSession.start_unbound_shell(
+        database=None,
+        terminal=terminal,
+    )
+    try:
+        shell.exit_event.set()
+        assert await shell.wait_for_bind_or_exit() is False
+    finally:
+        shell.stop()
+
+
+@pytest.mark.asyncio
+async def test_unbound_exit_command_does_not_request_bind() -> None:
+    terminal = FakeTerminal(columns=100, rows=24)
+    shell = InteractiveSession.start_unbound_shell(
+        database=None,
+        terminal=terminal,
+    )
+    try:
+        for char in "exit":
+            terminal.send_input(char)
+        terminal.send_input("\r")
+        shell.app.tui.flush_render()
+        assert shell.bind_event.is_set() is False
+        assert shell.exit_event.is_set() is True
+        assert await shell.wait_for_bind_or_exit() is False
+    finally:
+        shell.stop()
+
+
+@pytest.mark.asyncio
+async def test_unbound_submit_requests_bind_and_keeps_text() -> None:
+    terminal = FakeTerminal(columns=100, rows=24)
+    shell = InteractiveSession.start_unbound_shell(
+        database=None,
+        terminal=terminal,
+    )
+    try:
+        for char in "count rows":
+            terminal.send_input(char)
+        terminal.send_input("\r")
+        shell.app.tui.flush_render()
+        assert shell.bind_event.is_set() is True
+        assert shell.queued["query"] == "count rows"
+        assert shell.app.editor.get_text() == "count rows"
+        assert await shell.wait_for_bind_or_exit() is True
+    finally:
+        shell.stop()
     assert "DB:" in InteractiveSession.boot_footer("verification.db")
     assert "verification" in InteractiveSession.boot_footer(
         "/tmp/fixtures/verification.db"
     )
     assert "DB:" in InteractiveSession.boot_footer(None)
+
+
+@pytest.mark.asyncio
+async def test_run_submits_queued_query_after_bind() -> None:
+    terminal = FakeTerminal(columns=100, rows=24)
+    shell = InteractiveSession.start_unbound_shell(
+        database=None,
+        terminal=terminal,
+    )
+    try:
+        for char in "count rows":
+            terminal.send_input(char)
+        terminal.send_input("\r")
+        shell.app.tui.flush_render()
+
+        submitted: list[str] = []
+        session = InteractiveSession.__new__(InteractiveSession)
+        session.log = type("FakeLog", (), {"info": lambda *a, **k: None})()
+        session.saber = _fake_saber()
+        session.autocomplete_provider = None
+        session._handoff_mode = False
+        session._submit_pending = False
+        session.current_task = None
+        session._exit_finalized = False
+        session.streaming_handler = None
+        session.before_prompt_loop = lambda: asyncio.sleep(0)
+        session._load_history = lambda: []
+        session._footer_text = lambda: "DB: test"
+        session._create_streaming_handler = lambda app: None
+        session._finalize_exit = lambda: asyncio.sleep(0)
+
+        def capture_queue(app, surface, user_query, *, loop):
+            del app, surface, loop
+            submitted.append(user_query)
+            shell.exit_event.set()
+            return True
+
+        session._queue_submit = capture_queue
+        await session.run(shell=shell)
+        assert submitted == ["count rows"]
+        text = "\n".join(shell.app.render_plain_viewport())
+        assert "count rows" in text
+        assert shell.app.editor.get_text() == ""
+    finally:
+        shell.stop()
 
 
 @pytest.mark.asyncio
