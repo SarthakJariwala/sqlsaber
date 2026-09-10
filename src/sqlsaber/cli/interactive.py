@@ -46,8 +46,12 @@ UNBOUND_EXIT_COMMANDS = frozenset({"/exit", "/quit", "exit", "quit"})
 
 
 def _signal_loop_event(loop: asyncio.AbstractEventLoop, event: asyncio.Event) -> None:
-    """Set an asyncio event from the TUI thread or the loop thread."""
-    event.set()
+    try:
+        if asyncio.get_running_loop() is loop:
+            event.set()
+            return
+    except RuntimeError:
+        pass
     try:
         loop.call_soon_threadsafe(event.set)
     except RuntimeError:

@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import sys
+import threading
 
 import pytest
 
-from sqlsaber.cli.interactive import InteractiveSession
+from sqlsaber.cli.interactive import InteractiveSession, _signal_loop_event
 
 from tests.test_cli.test_tui_chat import FakeTerminal, _fake_saber
 
@@ -171,6 +172,26 @@ def test_preview_footer_uses_saved_default_without_sqlsaber(monkeypatch) -> None
     assert "DB: verification (sqlite)" in text
     assert "Model: openai:gpt-test" in text
     assert "Thinking: off" in text
+
+
+@pytest.mark.asyncio
+async def test_bind_signal_from_other_thread_wakes_wait() -> None:
+    terminal = FakeTerminal(columns=100, rows=24)
+    shell = InteractiveSession.start_unbound_shell(
+        database=None,
+        terminal=terminal,
+    )
+    try:
+        waiter = asyncio.create_task(shell.wait_for_bind_or_exit())
+        await asyncio.sleep(0)
+        threading.Thread(
+            target=_signal_loop_event,
+            args=(shell.loop, shell.bind_event),
+            daemon=True,
+        ).start()
+        assert await asyncio.wait_for(waiter, timeout=2) is True
+    finally:
+        shell.stop()
 
 
 @pytest.mark.asyncio
