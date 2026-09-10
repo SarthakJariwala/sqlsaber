@@ -13,10 +13,10 @@ from sqlsaber import (
     WorkspaceInputResolver,
     WorkspaceResolutionContext,
 )
-from sqlsaber.capabilities.plugins import load_capability_factories
 from sqlsaber.config.settings import Config
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
+from sqlsaber_notebook.capability import capability as notebook_factory
 
 
 def test_api_options_are_required() -> None:
@@ -148,7 +148,7 @@ async def test_workspace_input_resolver_reaches_managed_notebook_capability() ->
                 api_keys={"anthropic": "test-key"},
             ),
             workspace_input_resolver=resolver,
-            capabilities=load_capability_factories(),
+            capabilities=[notebook_factory],
         )
     )
 

@@ -11,15 +11,13 @@ from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolRetu
 from pydantic_ai.models.function import FunctionModel
 
 from sqlsaber import InMemoryQueryResultStore, SQLSaber, SQLSaberOptions, SqlTools
-from sqlsaber.capabilities.plugins import (
-    PluginContext,
-    load_capability_factories,
-)
+from sqlsaber.capabilities.plugins import PluginContext
 from sqlsaber.config.settings import Config
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.query_result_resolution import query_result_references_from_messages
 from sqlsaber.query_results import QueryResultContext
-from sqlsaber_viz.capability import Visualization
+from sqlsaber_notebook.capability import capability as notebook_factory
+from sqlsaber_viz import Visualization, capability as viz_factory
 
 
 def _settings() -> Config:
@@ -50,7 +48,7 @@ async def test_sqlsaber_factories_share_the_session_store() -> None:
             database="sqlite:///:memory:",
             settings=_settings(),
             query_result_store=store,
-            capabilities=load_capability_factories(),
+            capabilities=[notebook_factory, viz_factory],
         )
     )
     try:

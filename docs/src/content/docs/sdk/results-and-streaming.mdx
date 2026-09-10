@@ -110,8 +110,8 @@ from sqlsaber import (
     SQLSaberOptions,
     WorkspaceResolutionContext,
 )
-from sqlsaber.capabilities.plugins import load_capability_factories
 from sqlsaber_notebook import WorkspaceFile
+from sqlsaber_notebook.capability import capability as notebook
 
 
 class AttachmentResolver:
@@ -149,7 +149,7 @@ class AttachmentResolver:
 options = SQLSaberOptions(
     database="sqlite:///analytics.db",
     workspace_input_resolver=AttachmentResolver(repository),
-    capabilities=load_capability_factories(),
+    capabilities=[notebook],
 )
 async with SQLSaber(options=options) as saber:
     await saber.query(

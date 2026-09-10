@@ -8,8 +8,8 @@ from pydantic_ai.capabilities import Capability
 from sqlsaber.capabilities import plugins
 from sqlsaber.capabilities.plugins import (
     PluginContext,
+    _load_capability_factories,
     discover_capabilities,
-    load_capability_factories,
     resolve_capability_specs,
 )
 from sqlsaber.config.settings import Config
@@ -155,7 +155,7 @@ def test_plugin_context_requires_query_result_store() -> None:
         )
 
 
-def test_load_capability_factories_does_not_invoke(monkeypatch) -> None:
+def test_entry_point_loader_does_not_invoke(monkeypatch) -> None:
     called: list[PluginContext] = []
 
     def factory(context: PluginContext):
@@ -169,7 +169,7 @@ def test_load_capability_factories_does_not_invoke(monkeypatch) -> None:
         lambda group: [entry_point] if group == "sqlsaber.capabilities" else [],
     )
 
-    factories = load_capability_factories()
+    factories = _load_capability_factories()
     assert called == []
     assert [item.name for item in factories] == ["lazy"]
 

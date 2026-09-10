@@ -147,7 +147,7 @@ def resolve_capability_specs(
     return capabilities
 
 
-def load_capability_factories() -> tuple[CapabilityFactory, ...]:
+def _load_capability_factories() -> tuple[CapabilityFactory, ...]:
     """Load ``sqlsaber.capabilities`` factories without constructing plugins."""
     factories: list[CapabilityFactory] = []
     discovered = sorted(
@@ -173,4 +173,4 @@ def load_capability_factories() -> tuple[CapabilityFactory, ...]:
 
 def discover_capabilities(context: PluginContext) -> list[AbstractCapability[Any]]:
     """Load and invoke ``sqlsaber.capabilities`` factories with ``context``."""
-    return resolve_capability_specs(load_capability_factories(), context)
+    return resolve_capability_specs(_load_capability_factories(), context)

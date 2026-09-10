@@ -137,18 +137,23 @@ Pass pydantic-ai capabilities and plugin factories through `SQLSaberOptions.capa
 ```python
 from pydantic_ai.capabilities import WebSearch
 from sqlsaber import SQLSaber, SQLSaberOptions
-from sqlsaber.capabilities.plugins import load_capability_factories
+from sqlsaber_notebook.capability import capability as notebook
+from sqlsaber_viz import capability as viz
 
 options = SQLSaberOptions(
     database="analytics",
-    capabilities=[*load_capability_factories(), WebSearch()],
+    capabilities=[notebook, viz, WebSearch()],
 )
 
 async with SQLSaber(options=options) as saber:
     result = await saber.query("Compare our latest revenue with public guidance")
 ```
 
-`load_capability_factories()` returns the CLI plugin set. That includes notebook, viz, and sandbox when those packages are installed. Factories run later with the session `PluginContext`, so they share the session `query_result_store`.
+List only the plugins you want. `SQLSaber` does not scan installed entry points.
+Factories run later with the session `PluginContext`, so they share the session
+`query_result_store`. Add `from sqlsaber_sandbox import capability as sandbox`
+when you want `run_python`. That factory returns nothing if no sandbox provider
+is configured.
 
 Constructed capabilities stay free to use their own dependency type when attached directly to your agent. SQLsaber's built-in capabilities do not claim `ctx.deps`.
 
@@ -174,4 +179,10 @@ def capability(context: PluginContext):
     )
 ```
 
-`PluginContext` supplies the database registry, knowledge manager, dangerous-mode flag, normalized tool model overrides, the required shared `QueryResultStore`, and the optional application-owned artifact store. A factory may return one capability or a sequence of capabilities. Managed `SQLSaber` does not call `discover_capabilities`. Pass `load_capability_factories()` into `SQLSaberOptions.capabilities`, or call `discover_capabilities(context)` yourself on a host agent.
+`PluginContext` supplies the database registry, knowledge manager, dangerous-mode
+flag, normalized tool model overrides, the required shared `QueryResultStore`, and
+the optional application-owned artifact store. A factory may return one capability
+or a sequence of capabilities. Managed `SQLSaber` invokes the factories you list.
+It does not scan installed entry points. On a host agent that already has a
+`PluginContext`, construct the plugin classes you want, such as `Notebook(context)`
+and `Visualization(context)`.

@@ -5,7 +5,7 @@ description: "Extend SQLsaber with plugins for terminal chart visualization and 
 
 SQLsaber supports optional plugins that extend its capabilities. Plugins are installed alongside SQLsaber using `uv tool install --with`.
 
-The `saber` CLI loads installed plugins from the `sqlsaber.capabilities` entry-point group. An embedded `SQLSaber` session does not. Pass `SQLSaberOptions(capabilities=load_capability_factories())` when Python should use the same plugins as the CLI.
+The `saber` CLI loads installed plugins from the `sqlsaber.capabilities` entry-point group. An embedded `SQLSaber` session does not. Import the plugin factories you want and list them in `SQLSaberOptions.capabilities`. See [Capabilities](/sdk/capabilities).
 
 You can even write your own plugins and make them available to SQLsaber to use.
 

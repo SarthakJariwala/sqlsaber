@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 def cli_sqlsaber_options(**kwargs: Any) -> SQLSaberOptions:
     """Build CLI session options with installed plugin factories."""
     from sqlsaber import SQLSaberOptions
-    from sqlsaber.capabilities.plugins import load_capability_factories
+    from sqlsaber.capabilities.plugins import _load_capability_factories
 
-    kwargs.setdefault("capabilities", load_capability_factories())
+    kwargs.setdefault("capabilities", _load_capability_factories())
     return SQLSaberOptions(**kwargs)

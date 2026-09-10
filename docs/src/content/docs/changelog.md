@@ -9,7 +9,7 @@ All notable changes to SQLsaber will be documented here.
 
 ### Breaking Changes
 
-* SQLSaber no longer auto-discovers `sqlsaber.capabilities` plugins. Pass `SQLSaberOptions.capabilities=load_capability_factories()` so an embedded session loads the same plugins as the CLI. `extra_capabilities` is removed. `PluginContext.query_result_store`, `VizTool`, and `RunPythonTool` require a store.
+* SQLSaber no longer auto-discovers `sqlsaber.capabilities` plugins. List the capabilities you want in `SQLSaberOptions.capabilities`. `extra_capabilities` is removed. `PluginContext.query_result_store`, `VizTool`, and `RunPythonTool` require a store. The CLI still loads installed entry points.
 
 ### Features
 

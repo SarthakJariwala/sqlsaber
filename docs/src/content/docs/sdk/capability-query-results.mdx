@@ -136,13 +136,15 @@ That is the same retrieve path as `SQLSaber.get_query_result()`, without the man
 
 ## Share the store with notebook, viz, or sandbox
 
-`analyze_data`, `viz`, and sandbox Python resolve `result_*.json` handles from conversation history. They load bytes from `PluginContext.query_result_store`. Build one `PluginContext` with the store we already passed to `SqlTools`. Call `discover_capabilities` in this host process. `SQLSaber` does not call it for us.
+`analyze_data`, `viz`, and sandbox Python resolve `result_*.json` handles from conversation history. They load bytes from `PluginContext.query_result_store`. Build one `PluginContext` with the store we already passed to `SqlTools`. Construct the plugin classes we want with that context.
 
 ```python
 from sqlsaber.artifacts import InMemoryArtifactStore
-from sqlsaber.capabilities.plugins import PluginContext, discover_capabilities
+from sqlsaber.capabilities.plugins import PluginContext
 from sqlsaber.config.settings import Config
 from sqlsaber.knowledge.manager import KnowledgeManager
+from sqlsaber_notebook.capability import Notebook
+from sqlsaber_viz import Visualization
 
 context = PluginContext(
     registry=sql.registry,
@@ -161,13 +163,11 @@ context = PluginContext(
 agent = Agent(
     FunctionModel(respond),
     instructions="You query the customers table.",
-    capabilities=[sql, *discover_capabilities(context)],
+    capabilities=[sql, Notebook(context), Visualization(context)],
 )
 ```
 
-`discover_capabilities(context)` constructs the installed `sqlsaber.capabilities` plugins with that store. A measured run printed the same Python `id` for `SqlTools`, `Notebook`, and `Visualization`.
-
-Sandbox stays absent when no sandbox provider is configured. That empty return is not a second store.
+A measured run printed the same Python `id` for `SqlTools`, `Notebook`, and `Visualization`. If we want `run_python` and a sandbox provider is configured, add `Sandbox(context)` from `sqlsaber_sandbox`.
 
 <Aside type="caution" title="One store per conversation">
 Pass the same `QueryResultStore` into `SqlTools` and `PluginContext`. Two `InMemoryQueryResultStore()` calls look similar and share nothing. The host can still load rows from `sql.query_result_store` while `analyze_data` reports that the complete SQL result is unavailable.
@@ -177,17 +177,18 @@ Close owned connections with `async with agent:` as in the [Capabilities](/sdk/c
 
 ## Use SQLSaber when we want the managed client
 
-`SQLSaber` already owns one session store and always attaches `SqlTools` plus `Knowledge`. It does not load notebook, viz, or sandbox unless we pass them. The CLI passes `load_capability_factories()` so installed plugins still appear. Do the same in Python when we want that CLI set.
+`SQLSaber` already owns one session store and always attaches `SqlTools` plus `Knowledge`. It does not load notebook, viz, or sandbox unless we list them.
 
 ```python
 from sqlsaber import InMemoryQueryResultStore, SQLSaber, SQLSaberOptions
-from sqlsaber.capabilities.plugins import load_capability_factories
+from sqlsaber_notebook.capability import capability as notebook
+from sqlsaber_viz import capability as viz
 
 store = InMemoryQueryResultStore()
 options = SQLSaberOptions(
     database="customers.sqlite",
     query_result_store=store,
-    capabilities=load_capability_factories(),
+    capabilities=[notebook, viz],
 )
 
 async with SQLSaber(options=options) as saber:
