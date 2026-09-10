@@ -47,43 +47,24 @@ If we omit `query_result_store`, `SqlTools` still creates a private `InMemoryQue
 
 ## Attach SqlTools to our agent
 
-`SqlTools` does not claim `ctx.deps`. We can keep our own `deps_type`. This lesson uses pydantic-ai's `FunctionModel`, so the run needs no API key.
+`SqlTools` does not claim `ctx.deps`. We can keep our own `deps_type`.
 
 ```python
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolReturnPart
-from pydantic_ai.models.function import FunctionModel
-
-
-def respond(messages, info):
-    del info
-    parts = [part for message in messages for part in message.parts]
-    if any(isinstance(part, ToolReturnPart) for part in parts):
-        return ModelResponse(parts=[TextPart("Listed the customers.")])
-    return ModelResponse(
-        parts=[
-            ToolCallPart(
-                "execute_sql",
-                {"query": "SELECT id, name, revenue FROM customers ORDER BY id"},
-                tool_call_id="sql1",
-            )
-        ]
-    )
-
 
 agent = Agent(
-    FunctionModel(respond),
+    "anthropic:claude-sonnet-4-6",
     instructions="You query the customers table.",
     capabilities=[sql],
 )
 ```
 
-Replace `FunctionModel(respond)` with a model name such as `"anthropic:claude-sonnet-4-6"` when we want a live model to write the SQL.
-
 ## Run the agent and read the model preview
 
 ```python
 import json
+
+from pydantic_ai.messages import ToolReturnPart
 
 async with agent:
     result = await agent.run("Show every customer")
@@ -102,7 +83,7 @@ print(
 )
 ```
 
-We should see `model_truncated True` and a preview shorter than 250 rows. One measured run printed `preview_row_count 165`.
+We should see `model_truncated True` and a preview shorter than 250 rows.
 
 The preview is not the dataset. Do not compute totals from `preview_rows` when `results_truncated` is true.
 
@@ -151,17 +132,14 @@ context = PluginContext(
     knowledge_manager=KnowledgeManager(),
     allow_dangerous=False,
     tool_overrides={},
-    config=Config.in_memory(
-        model_name="anthropic:claude-sonnet-4-6",
-        api_keys={"anthropic": "test-key"},
-    ),
+    config=Config.default(),
     main_model_name="anthropic:claude-sonnet-4-6",
     query_result_store=store,
     artifact_store=InMemoryArtifactStore(),
 )
 
 agent = Agent(
-    FunctionModel(respond),
+    "anthropic:claude-sonnet-4-6",
     instructions="You query the customers table.",
     capabilities=[sql, Notebook(context), Visualization(context)],
 )
