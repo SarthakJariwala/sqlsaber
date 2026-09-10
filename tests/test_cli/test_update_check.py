@@ -1,4 +1,6 @@
 import asyncio
+import subprocess
+import sys
 from io import StringIO
 
 import pytest
@@ -82,6 +84,45 @@ def test_notice_before_bind_flushes_into_chat_not_stdout() -> None:
     assert "uv tool update sqlsaber" in viewport
     assert "A new version is now available!" not in buf.getvalue()
     assert "Model: gpt-test" in _footer_line(app)
+
+
+def test_update_check_without_setup_logging_does_not_print_to_stdout() -> None:
+    code = """
+import asyncio
+from unittest.mock import patch
+
+async def fake_fetch():
+    return "99.0.0"
+
+async def main() -> None:
+    from sqlsaber.cli.update_check import (
+        _check_and_notify,
+        bind_update_notice,
+        reset_update_check,
+    )
+
+    reset_update_check()
+    emitted: list[str] = []
+    bind_update_notice(lambda *blocks: emitted.append("yes"))
+    with (
+        patch("sqlsaber.cli.update_check._get_current_version", lambda: "0.1.0"),
+        patch("sqlsaber.cli.update_check._fetch_latest_version", fake_fetch),
+    ):
+        await _check_and_notify()
+    if emitted != ["yes"]:
+        raise SystemExit(f"notice missing: {emitted!r}")
+
+asyncio.run(main())
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "update_check.available" not in result.stdout
+    assert "update_check.available" not in result.stderr
 
 
 def test_one_shot_bind_still_prints_to_stdout() -> None:

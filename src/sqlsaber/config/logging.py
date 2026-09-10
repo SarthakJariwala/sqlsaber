@@ -57,6 +57,11 @@ def get_logger(name: Optional[str] = None) -> structlog.BoundLogger:
     return structlog.get_logger(name)
 
 
+def is_configured() -> bool:
+    """True after ``setup_logging()`` has run."""
+    return _CONFIGURED
+
+
 def _build_file_handler(log_path: Path, level: int) -> Handler:
     rotation = os.getenv("SQLSABER_LOG_ROTATION", "time").strip().lower()
 
@@ -189,6 +194,7 @@ def setup_logging(*, force: bool = False) -> None:
 
 __all__ = [
     "setup_logging",
+    "is_configured",
     "get_logger",
     "default_log_dir",
     "default_log_file",
