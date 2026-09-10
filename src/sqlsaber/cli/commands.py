@@ -417,13 +417,13 @@ def query(
                         allow_dangerous=allow_dangerous,
                     )
                 )
+                schedule_update_check()
                 should_bind = await shell.wait_for_bind_or_exit()
                 if not should_bind:
                     shell.stop()
                     out(b.success("Goodbye!"))
                     return
                 log = _ensure_logging()
-                schedule_update_check()
                 log.info(
                     "cli.session.start",
                     argv=sys.argv[1:],

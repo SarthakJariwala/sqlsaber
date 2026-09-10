@@ -84,6 +84,7 @@ class ChatShell:
         if self._stopped:
             return
         self._stopped = True
+        bind_update_notice(None)
         if not self.app.tui.stopped:
             self.app.stop()
         self.exit_event.set()
@@ -276,6 +277,7 @@ class InteractiveSession:
             b.md(cls._instructions()),
         )
         app.tui.start()
+        bind_update_notice(surface.emit)
         return ChatShell(
             app=app,
             session_slot=session_slot,
