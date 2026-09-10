@@ -403,11 +403,22 @@ def test_root_bare_mode_passes_public_sdk_to_tui():
             captured["shell_kwargs"] = kwargs
 
             class FakeShell:
+                def __init__(self):
+                    self.app = MagicMock()
+
                 def stop(self):
                     captured["shell_stopped"] = True
 
+                async def wait_for_bind_or_exit(self):
+                    return True
+
             captured["shell"] = FakeShell()
             return captured["shell"]
+
+        @staticmethod
+        def preview_footer(database, *, allow_dangerous=False):
+            captured["preview"] = (database, allow_dangerous)
+            return "DB: analytics (SQLite)"
 
         def __init__(self, saber):
             captured["interactive_saber"] = saber

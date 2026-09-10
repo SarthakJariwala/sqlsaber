@@ -11,7 +11,7 @@ from importlib import metadata
 
 import httpx
 
-from sqlsaber.config.logging import get_logger
+from sqlsaber.config.logging import get_logger, is_configured
 from sqlsaber.render import blocks as b
 from sqlsaber.render.blocks import Block
 
@@ -152,7 +152,8 @@ async def _check_and_notify() -> None:
         return
 
     if _is_newer(latest, current):
-        _LOG.info("update_check.available", current=current, latest=latest)
+        if is_configured():
+            _LOG.info("update_check.available", current=current, latest=latest)
         _emit_update_notice()
 
 

@@ -411,8 +411,19 @@ def query(
                     database=selected_database,
                     allow_dangerous=allow_dangerous,
                 )
-                log = _ensure_logging()
+                shell.app.set_footer(
+                    InteractiveSession.preview_footer(
+                        selected_database,
+                        allow_dangerous=allow_dangerous,
+                    )
+                )
                 schedule_update_check()
+                should_bind = await shell.wait_for_bind_or_exit()
+                if not should_bind:
+                    shell.stop()
+                    out(b.success("Goodbye!"))
+                    return
+                log = _ensure_logging()
                 log.info(
                     "cli.session.start",
                     argv=sys.argv[1:],
