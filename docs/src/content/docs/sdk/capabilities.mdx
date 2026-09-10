@@ -73,6 +73,35 @@ sql = SqlTools(database="production", allow_dangerous=True)
 
 Dangerous mode still blocks destructive and administrative operations such as `DROP`, `TRUNCATE`, and role management. Only enable it for agents and users you trust.
 
+## Keep complete query results
+
+`execute_sql` writes the full payload to a `QueryResultStore` and returns a bounded preview to the model. Pass the store into `SqlTools`. Load rows after `agent.run()`.
+
+```python
+from pydantic_ai import Agent
+from sqlsaber import InMemoryQueryResultStore, SqlTools
+from sqlsaber.query_result_resolution import query_result_references_from_messages
+from sqlsaber.query_results import QueryResultContext
+
+store = InMemoryQueryResultStore()
+sql = SqlTools(database="analytics", query_result_store=store)
+agent = Agent("anthropic:claude-sonnet-4-6", capabilities=[sql])
+
+async with agent:
+    result = await agent.run("Top 5 customers by revenue")
+
+references = query_result_references_from_messages(result.new_messages())
+loaded = await store.get(
+    references[0].descriptor.id,
+    context=QueryResultContext(),
+)
+print(loaded.rows())
+```
+
+Pass that same store into `PluginContext.query_result_store` before you construct notebook, viz, or sandbox. `PluginContext.query_result_store` is required. `VizTool` and `RunPythonTool` also require a store. Omitting it is a `TypeError`.
+
+See [Build an agent that keeps complete SQL results](/sdk/capability-query-results) for a step-by-step agent that prints a truncated model preview and then loads all 250 stored rows.
+
 ## Add knowledge search
 
 `Knowledge` exposes saved SQL patterns and domain definitions. Share a manager when your application already owns one:
@@ -103,22 +132,30 @@ A supplied `KnowledgeManager` is borrowed. If omitted, `Knowledge` creates and c
 
 ## Use your capabilities inside SQLsaber
 
-Pass pydantic-ai capabilities through `SQLSaberOptions.extra_capabilities`:
+Pass pydantic-ai capabilities and plugin factories through `SQLSaberOptions.capabilities`. `SQLSaber` always includes SQL and knowledge tools. It does not load installed plugins unless you list them.
 
 ```python
 from pydantic_ai.capabilities import WebSearch
 from sqlsaber import SQLSaber, SQLSaberOptions
+from sqlsaber_notebook.capability import capability as notebook
+from sqlsaber_viz import capability as viz
 
 options = SQLSaberOptions(
     database="analytics",
-    extra_capabilities=[WebSearch()],
+    capabilities=[notebook, viz, WebSearch()],
 )
 
 async with SQLSaber(options=options) as saber:
     result = await saber.query("Compare our latest revenue with public guidance")
 ```
 
-Extra capabilities are appended to SQLsaber's SQL, knowledge, and installed plugin capabilities. They remain free to use their own dependency type when attached directly to your agent; SQLsaber's built-in capabilities do not claim `ctx.deps`.
+List only the plugins you want. `SQLSaber` does not scan installed entry points.
+Factories run later with the session `PluginContext`, so they share the session
+`query_result_store`. Add `from sqlsaber_sandbox import capability as sandbox`
+when you want `run_python`. That factory returns nothing if no sandbox provider
+is configured.
+
+Constructed capabilities stay free to use their own dependency type when attached directly to your agent. SQLsaber's built-in capabilities do not claim `ctx.deps`.
 
 ## Build a plugin capability
 
@@ -142,4 +179,10 @@ def capability(context: PluginContext):
     )
 ```
 
-`PluginContext` supplies the database registry, knowledge manager, dangerous-mode flag, normalized tool model overrides, and the optional application-owned artifact publisher. A factory may return one capability or a sequence of capabilities.
+`PluginContext` supplies the database registry, knowledge manager, dangerous-mode
+flag, normalized tool model overrides, the required shared `QueryResultStore`, and
+the optional application-owned artifact store. A factory may return one capability
+or a sequence of capabilities. Managed `SQLSaber` invokes the factories you list.
+It does not scan installed entry points. On a host agent that already has a
+`PluginContext`, construct the plugin classes you want, such as `Notebook(context)`
+and `Visualization(context)`.

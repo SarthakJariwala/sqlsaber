@@ -12,6 +12,7 @@ from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
 from sqlsaber.run_usage import current_usage_limits
 from sqlsaber.tools.knowledge_tool import SearchKnowledgeTool
+from sqlsaber_viz import capability as viz_factory
 
 
 @pytest.fixture
@@ -62,6 +63,7 @@ class TestSQLSaberAgentDeps:
             db_connection=in_memory_db,
             model_name="anthropic:claude-3-5-sonnet",
             api_key="test-key",
+            capabilities=[viz_factory],
             tool_overides={
                 "viz": {
                     "model_name": "openai:gpt-5-mini",

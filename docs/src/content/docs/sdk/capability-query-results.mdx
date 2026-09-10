@@ -1,0 +1,180 @@
+---
+title: Build an agent that keeps complete SQL results
+description: "Attach SqlTools to a pydantic-ai Agent, store every execute_sql payload, and load the full rows in your process."
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+We will build a pydantic-ai agent that queries a local SQLite database with `SqlTools`. The agent keeps every `execute_sql` payload in a `QueryResultStore`. After the run we load all 250 rows in our process, even though the model only saw a truncated preview.
+
+The managed `SQLSaber` client already returns those rows on `result.query_results` and `saber.get_query_result()`. This lesson uses `SqlTools` as a capability on an agent we own.
+
+## Create the database
+
+First we create `customers.sqlite` with 250 wide rows so the model-facing preview cannot hold the full payload.
+
+```python
+import sqlite3
+from pathlib import Path
+
+database = Path("customers.sqlite")
+connection = sqlite3.connect(database)
+connection.execute(
+    "CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT, revenue INTEGER)"
+)
+connection.executemany(
+    "INSERT INTO customers (name, revenue) VALUES (?, ?)",
+    [(f"customer-{index:03d}-" + ("x" * 24), 1000 + index) for index in range(250)],
+)
+connection.commit()
+connection.close()
+```
+
+We should now have a `customers.sqlite` file in the working directory.
+
+## Create a shared query result store
+
+`execute_sql` writes the complete payload to a `QueryResultStore` and returns a bounded preview to the model. Create the store first, then pass it into every capability that must see those rows.
+
+```python
+from sqlsaber import InMemoryQueryResultStore, SqlTools
+
+store = InMemoryQueryResultStore()
+sql = SqlTools(database="customers.sqlite", query_result_store=store)
+```
+
+If we omit `query_result_store`, `SqlTools` still creates a private `InMemoryQueryResultStore`. Notebook, viz, and sandbox do not. Their constructors take a `PluginContext` whose `query_result_store` is required. A missing store is a `TypeError`, not a second empty store.
+
+## Attach SqlTools to our agent
+
+`SqlTools` does not claim `ctx.deps`. We can keep our own `deps_type`.
+
+```python
+from pydantic_ai import Agent
+
+agent = Agent(
+    "anthropic:claude-sonnet-4-6",
+    instructions="You query the customers table.",
+    capabilities=[sql],
+)
+```
+
+## Run the agent and read the model preview
+
+```python
+import json
+
+from pydantic_ai.messages import ToolReturnPart
+
+async with agent:
+    result = await agent.run("Show every customer")
+
+execute_sql = next(
+    part
+    for message in result.new_messages()
+    for part in message.parts
+    if isinstance(part, ToolReturnPart) and part.tool_name == "execute_sql"
+)
+preview = json.loads(execute_sql.content)
+print("model_truncated", preview.get("results_truncated"))
+print(
+    "preview_row_count",
+    len(preview.get("preview_rows") or preview.get("results") or []),
+)
+```
+
+We should see `model_truncated True` and a preview shorter than 250 rows.
+
+The preview is not the dataset. Do not compute totals from `preview_rows` when `results_truncated` is true.
+
+## Load the complete result
+
+The tool return metadata holds a `StoredQueryResult` descriptor. Read those descriptors from the run messages, then call `store.get`.
+
+```python
+from sqlsaber.query_result_resolution import query_result_references_from_messages
+from sqlsaber.query_results import QueryResultContext
+
+references = query_result_references_from_messages(result.new_messages())
+loaded = await store.get(
+    references[0].descriptor.id,
+    context=QueryResultContext(),
+)
+print("stored_row_count", len(loaded.rows()))
+print("first_row", loaded.rows()[0])
+print("last_row", loaded.rows()[-1])
+```
+
+We should see:
+
+```text
+stored_row_count 250
+first_row {'id': 1, 'name': 'customer-000-xxxxxxxxxxxxxxxxxxxxxxxx', 'revenue': 1000}
+last_row {'id': 250, 'name': 'customer-249-xxxxxxxxxxxxxxxxxxxxxxxx', 'revenue': 1249}
+```
+
+That is the same retrieve path as `SQLSaber.get_query_result()`, without the managed client. `query_result_references_from_messages` currently lives on `sqlsaber.query_result_resolution`. When the store authorizes by tenant, pass `conversation_id` and `metadata` through `QueryResultContext`.
+
+## Share the store with notebook, viz, or sandbox
+
+`analyze_data`, `viz`, and sandbox Python resolve `result_*.json` handles from conversation history. They load bytes from `PluginContext.query_result_store`. Build one `PluginContext` with the store we already passed to `SqlTools`. Construct the plugin classes we want with that context.
+
+```python
+from sqlsaber.artifacts import InMemoryArtifactStore
+from sqlsaber.capabilities.plugins import PluginContext
+from sqlsaber.config.settings import Config
+from sqlsaber.knowledge.manager import KnowledgeManager
+from sqlsaber_notebook.capability import Notebook
+from sqlsaber_viz import Visualization
+
+context = PluginContext(
+    registry=sql.registry,
+    knowledge_manager=KnowledgeManager(),
+    allow_dangerous=False,
+    tool_overrides={},
+    config=Config.default(),
+    main_model_name="anthropic:claude-sonnet-4-6",
+    query_result_store=store,
+    artifact_store=InMemoryArtifactStore(),
+)
+
+agent = Agent(
+    "anthropic:claude-sonnet-4-6",
+    instructions="You query the customers table.",
+    capabilities=[sql, Notebook(context), Visualization(context)],
+)
+```
+
+A measured run printed the same Python `id` for `SqlTools`, `Notebook`, and `Visualization`. If we want `run_python` and a sandbox provider is configured, add `Sandbox(context)` from `sqlsaber_sandbox`.
+
+<Aside type="caution" title="One store per conversation">
+Pass the same `QueryResultStore` into `SqlTools` and `PluginContext`. Two `InMemoryQueryResultStore()` calls look similar and share nothing. The host can still load rows from `sql.query_result_store` while `analyze_data` reports that the complete SQL result is unavailable.
+</Aside>
+
+Close owned connections with `async with agent:` as in the [Capabilities](/sdk/capabilities) guide. The store is application-owned. SQLsaber does not close it.
+
+## Use SQLSaber when we want the managed client
+
+`SQLSaber` already owns one session store and always attaches `SqlTools` plus `Knowledge`. It does not load notebook, viz, or sandbox unless we list them.
+
+```python
+from sqlsaber import InMemoryQueryResultStore, SQLSaber, SQLSaberOptions
+from sqlsaber_notebook.capability import capability as notebook
+from sqlsaber_viz import capability as viz
+
+store = InMemoryQueryResultStore()
+options = SQLSaberOptions(
+    database="customers.sqlite",
+    query_result_store=store,
+    capabilities=[notebook, viz],
+)
+
+async with SQLSaber(options=options) as saber:
+    result = await saber.query("Show every customer")
+    loaded = await saber.get_query_result(result.query_results[0])
+    print(len(loaded.rows()))
+```
+
+We should print `250`. Factories run later with the session `PluginContext`, so notebook and viz see the same store as `execute_sql`.
+
+`SQLSaberOptions.capabilities` also accepts constructed capabilities such as `WebSearch()`. Pass instances that already hold this store, or pass factories and let the session construct them.

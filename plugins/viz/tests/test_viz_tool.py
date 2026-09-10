@@ -8,8 +8,13 @@ import pytest
 import sqlsaber_viz.tools as tools
 from sqlsaber.overrides import ModelOverides
 from sqlsaber.render.blocks import Ansi
+from sqlsaber.query_results import InMemoryQueryResultStore
 from sqlsaber_viz.spec import VizSpec
 from sqlsaber_viz.tools import VizTool
+
+
+def _tool() -> VizTool:
+    return VizTool(InMemoryQueryResultStore())
 
 
 def _make_ctx(
@@ -70,7 +75,7 @@ async def test_viz_tool_execute_adds_bar_defaults(
     }
     ctx = _make_ctx(payload, "call-1")
 
-    tool = VizTool()
+    tool = _tool()
     result = await tool.execute(ctx, request="show values", file="result_call-1.json")
     parsed = json.loads(result)
 
@@ -80,8 +85,13 @@ async def test_viz_tool_execute_adds_bar_defaults(
     assert any("limit" in t for t in transforms)
 
 
+def test_viz_tool_requires_query_result_store() -> None:
+    with pytest.raises(TypeError, match="query_result_store"):
+        VizTool()
+
+
 def test_viz_tool_render_result(monkeypatch: pytest.MonkeyPatch) -> None:
-    tool = VizTool()
+    tool = _tool()
     spec = {
         "version": "1",
         "data": {"source": {"file": "result_call-1.json"}},
@@ -127,7 +137,7 @@ async def test_viz_tool_uses_capability_model_overide(
         ],
     }
     ctx = _make_ctx(payload, "call-2")
-    tool = VizTool()
+    tool = _tool()
     tool.model_overide = ModelOverides(
         model_name="openai:gpt-5-mini", api_key="override-api-key"
     )
