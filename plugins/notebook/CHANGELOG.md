@@ -2,10 +2,6 @@
 
 ## Unreleased
 
-### Breaking Changes
-
-- `PluginContext.query_result_store` is required. `analyze_data` no longer allocates a private `InMemoryQueryResultStore`.
-
 ### Features
 
 - add an opt-in local Microsandbox microVM execution backend while retaining Docker as the default

@@ -7,10 +7,6 @@ All notable changes to SQLsaber will be documented here.
 
 ### Unreleased
 
-### Breaking Changes
-
-* SQLSaber no longer auto-discovers `sqlsaber.capabilities` plugins. List the capabilities you want in `SQLSaberOptions.capabilities`. `extra_capabilities` is removed. `PluginContext.query_result_store`, `VizTool`, and `RunPythonTool` require a store. The CLI still loads installed entry points.
-
 ### Features
 
 * add xAI Grok as a first-class provider (`xai:grok-4.6`)

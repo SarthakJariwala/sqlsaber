@@ -1,11 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Breaking Changes
-
-- `VizTool` requires a `QueryResultStore`. It no longer allocates a private in-memory store.
-
 ## [0.7.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.6.0...sqlsaber-viz-v0.7.0) (2026-09-03)
 
 
