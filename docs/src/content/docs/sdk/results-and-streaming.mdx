@@ -1,21 +1,18 @@
 ---
-title: Results & Streaming
-description: "Read SQLsaber SDK query results: the text answer, generated SQL, token usage, streaming events, and stateful follow-up conversations."
+title: Results and streaming
+description: "Read SQLsaber SDK query results: the text answer, generated SQL, token usage, streaming events, and follow-up conversations."
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-`saber.query()` returns a `SQLSaberResult`. It subclasses `str`, so it is the
-agent's text answer, while also exposing the full execution details. A
-`SQLSaber` instance stores the completed history from each successful query, so a
-later query on the same instance continues the conversation.
+`saber.query()` returns a `SQLSaberResult`. It subclasses `str`, so it is the agent's text answer and also exposes the full execution details. A `SQLSaber` instance stores the completed history from each successful query, so a later query on the same instance continues the conversation.
 
 ```python
 result = await saber.query("How many orders shipped last week?")
 
 print(result)            # the answer, as a string
 print(result.usage)      # token usage for this run
-print(result.new_messages)  # messages from this run (incl. tool calls / SQL)
+print(result.new_messages)  # messages from this run, including tool calls and SQL
 ```
 
 ## Result properties
@@ -33,7 +30,7 @@ print(result.new_messages)  # messages from this run (incl. tool calls / SQL)
 | `.query_results`  | Durable complete-query-result descriptors created during this run.                                      |
 | `.artifacts`      | Durable artifact references published by capabilities during this run.                                   |
 
-## Controlling run usage
+## Run usage limits
 
 Pass Pydantic AI's `UsageLimits` to `query()` when a long-horizon task needs a
 larger request budget or when the embedding application needs token or tool-call
@@ -57,10 +54,10 @@ The managed notebook analyst always shares the parent's live usage counter, so i
 model requests are included exactly once in `result.usage`. When the caller
 explicitly passes `usage_limits`, the analyst inherits that budget. When the caller
 omits `usage_limits`, the analyst itself is uncapped (`request_limit=None`) rather
-than silently acquiring Pydantic AI's per-agent default; the parent SQLsaber run
+than silently acquiring Pydantic AI's per-agent default. The parent SQLsaber run
 still retains its safe default.
 
-## Retrieving complete query results
+## Complete query results
 
 Complete rows are deliberately absent from model history. Use the descriptors on
 the result and retrieve bytes through the configured store. On an agent you own,
@@ -85,21 +82,19 @@ for descriptor in result.query_results:
 
 These are separate concepts:
 
-- **complete result availability** means every row returned by SQLsaber remains
-  retrievable through the store;
-- **UI rendering policy** may show a bounded terminal or HTML table; and
-- **model projection** is a deterministic, byte-bounded preview and must not be
-  used for whole-dataset statistics when marked truncated.
+- **Complete result availability.** Every row returned by SQLsaber remains retrievable through the store.
+- **UI rendering policy.** Terminal and HTML views may still show a bounded table.
+- **Model projection.** A deterministic, byte-bounded preview. Do not use it for whole-dataset statistics when it is marked truncated.
 
 Legacy threads containing embedded complete rows remain readable during the
 compatibility window, but are not automatically imported into durable storage.
 
-## Analyzing application-owned inputs
+## Application-owned notebook inputs
 
 Install `sqlsaber-notebook` and list it in `SQLSaberOptions.capabilities` when the
 managed agent should analyze private images, arrays, JSON, or other application-owned
 files. The CLI lists installed plugins for you. The model sees only opaque
-`attachment_refs`; your resolver converts authorized references into trusted
+`attachment_refs`. Your resolver converts authorized references into trusted
 `WorkspaceFile` bytes:
 
 ```python
@@ -159,16 +154,14 @@ async with SQLSaber(options=options) as saber:
     )
 ```
 
-The host—not SQLsaber or the notebook package—owns reference issuance, retrieval,
+The host, not SQLsaber or the notebook package, owns reference issuance, retrieval,
 authorization, expiration, and history scoping. Never treat possession of a reference
 as authorization, and never interpret model-provided values as local paths, URLs,
 bucket names, or object keys. Raise `WorkspaceInputUnavailable` with the same bounded
 message for missing and unauthorized references. SQLsaber hides unexpected resolver
 exceptions so storage details do not enter model history.
 
-Resolver output is validated before any notebook starts. Names must be visible,
-single-component filenames; `manifest.json` is reserved; bytes must be immutable;
-and duplicate names or collisions with SQL result names fail the request. The managed
+Resolver output is validated before any notebook starts. Names must be visible, single-component filenames. `manifest.json` is reserved. Bytes must be immutable. Duplicate names or collisions with SQL result names fail the request. The managed
 workspace allows at most 50 files, 100 MiB per file, and 250 MiB total across SQL
 results and resolved inputs. Filenames are capped at 255 UTF-8 bytes, and the staged
 metadata manifest has a separate 1 MiB limit. Explicit SQL result order is preserved,
@@ -177,11 +170,11 @@ to `manifest.json`.
 
 With no resolver, `attachment_refs` is omitted from the model-visible tool schema.
 The existing `files` selector still means only complete `execute_sql` result keys.
-Resolved images are staged as notebook files; they are not automatically sent as
+Resolved images are staged as notebook files. They are not automatically sent as
 initial multimodal content to the child model. The analyst can load and display an
 image, after which existing bounded PNG snapshot behavior applies.
 
-## Persisting notebooks and plots
+## Notebook and plot artifacts
 
 Pass the notebook factory in `SQLSaberOptions.capabilities`.
 Inject an `artifact_store` to retain executed notebooks, plots, and generated files.
@@ -217,10 +210,10 @@ async with SQLSaber(options=options) as saber:
 ```
 
 `ArtifactStore.publish()` receives an `ArtifactBundle` and current
-`ArtifactContext`; `get()` retrieves one artifact by opaque ID. A cloud store must
+`ArtifactContext`. `get()` retrieves one artifact by opaque ID. A cloud store must
 authorize retrieval from the *current* context metadata, return
 `ArtifactUnavailable` for both missing and unauthorized IDs, and return stable
-private object keys/internal URIs rather than expiring signed URLs. Generate signed
+private object keys or internal URIs rather than expiring signed URLs. Generate signed
 download URLs only in the host application's serving layer.
 
 The store is application-owned and SQLsaber never closes or garbage-collects it.
@@ -233,7 +226,7 @@ Use `"best_effort"` to preserve the analyst's answer and expose an
 `artifact_error` in tool metadata instead.
 
 The same application-owned store also supports direct `sqlsaber-notebook`
-embedding. Analysis remains storage-independent; publish its completed result in a
+embedding. Analysis remains storage-independent. Publish its completed result in a
 second explicit operation:
 
 ```python
@@ -262,7 +255,7 @@ Managed SQLsaber calls this same publication operation. The standalone
 explicit notebook and sibling artifact directory and never silently uses SQLsaber's
 user-data store.
 
-## Inspecting the generated SQL
+## Generated SQL
 
 The SQL the agent ran lives in the run's messages as tool calls. Message values
 and streaming event values use `pydantic_ai` types, not framework-neutral SDK
@@ -282,9 +275,7 @@ for message in result.new_messages:
 
 ## Streaming events
 
-Pass an `event_stream_handler` to react to events (text chunks, tool calls,
-etc.) as they arrive, rather than waiting for the final answer. The handler is an
-async function that receives the run context and an async iterable of events:
+Pass an `event_stream_handler` to react to events as they arrive, such as text chunks and tool calls, rather than waiting for the final answer. The handler is an async function that receives the run context and an async iterable of events:
 
 ```python
 from collections.abc import AsyncIterable
@@ -324,10 +315,10 @@ columns to PostgreSQL and stores payload bytes in a private `bytea` column (or a
 object key for private blob storage). Its `get` implementation should query by both
 `result_id` and the current `tenant_id` from `QueryResultContext.metadata`, then
 raise `QueryResultUnavailable` for both missing and unauthorized rows. Apply
-application retention, encryption, audit, and deletion policies there; filesystem
+application retention, encryption, audit, and deletion policies there. Filesystem
 storage is not suitable for horizontally scaled web deployments.
 
-## Multi-turn conversations
+## Follow-up queries
 
 Run follow-up queries on the same `SQLSaber` instance. Each completed query updates
 that instance's conversation history automatically.

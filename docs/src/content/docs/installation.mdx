@@ -1,77 +1,90 @@
 ---
 title: Installation
-description: "Install SQLsaber with uv or pipx. Set up the AI-powered SQL assistant CLI tool on macOS, Linux, or Windows in under a minute."
+description: Install the SQLsaber CLI with uv, uvx.sh, or pipx.
 ---
 
-import { Aside } from "@astrojs/starlight/components";
+Install SQLsaber, then confirm that the `saber` command runs.
 
-## Install
+## Install with uv
+
+If you already have [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv tool install sqlsaber
 ```
 
-<Aside type="note">
-**Don't have uv?** Use the standalone installer:
+## Install without uv
 
-macOS and Linux:
+If you do not have uv, use [uvx.sh](https://uvx.sh/). One command installs SQLsaber. You do not need uv or Python first.
+
+On macOS and Linux:
 
 ```bash
-curl -LsSf uvx.sh/sqlsaber/install.sh | sh
+curl -LsSf https://uvx.sh/sqlsaber/install.sh | sh
 ```
 
-Windows:
+On Windows:
 
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://uvx.sh/sqlsaber/install.ps1 | iex"
 ```
 
-You can also use `pipx` if you have it and prefer to use it.
+The script installs uv when it is missing. Then it installs SQLsaber.
+
+## Install with pipx
+
+If you already use pipx:
 
 ```bash
 pipx install sqlsaber
 ```
-</Aside>
 
-## Verify installation
+## Confirm the install
 
 ```bash
 saber --version
 ```
 
-## Plugins
+You should see a version number.
 
-SQLsaber supports optional plugins that allows users to extend its capabilities.
+## Add official plugins
 
-There are two official plugins for visualization and Python execution:
+Plugins add extra tools to the `saber` CLI. Pass each plugin package in `--with` when you run `uv tool install`. After a uvx.sh install, uv is on your machine. The same commands work.
 
 ```bash
-# Visualization plugin - render charts in your terminal
+# Charts in the terminal
 uv tool install --with sqlsaber-viz sqlsaber
 
-# Python sandbox plugin - run Python in a secure sandbox
+# Sandboxed notebook analysis
+uv tool install --with sqlsaber-notebook sqlsaber
+
+# One-off Python in a remote sandbox
 uv tool install --with sqlsaber-sandbox sqlsaber
 
-# Or install both
-uv tool install --with sqlsaber-viz,sqlsaber-sandbox sqlsaber
+# All three
+uv tool install --with sqlsaber-viz,sqlsaber-notebook,sqlsaber-sandbox sqlsaber
 ```
 
-See the [plugins guide](/guides/plugins) for detailed setup and usage.
+See [Plugins](/guides/plugins/) for setup and usage.
 
 ## Upgrade
 
-```bash
-# uv
-uv tool upgrade sqlsaber
+If you installed with uv or uvx.sh:
 
-# pipx
+```bash
+uv tool upgrade sqlsaber
+```
+
+If you installed with pipx:
+
+```bash
 pipx upgrade sqlsaber
 ```
 
-## Next: Run your first query
+## Run SQLsaber
 
 ```bash
 saber
 ```
 
-On first launch, SQLsaber walks you through database and AI provider setup. See the [getting started guide](/guides/getting-started) for a full walkthrough.
+On first launch, SQLsaber walks you through a database connection and an API key. Continue in [Getting started](/guides/getting-started/).

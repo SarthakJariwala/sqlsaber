@@ -1,15 +1,13 @@
 ---
-title: Command Reference
-description: "Complete CLI reference for SQLsaber commands. Database management, authentication, models, knowledge, threads, and query options."
+title: Commands
+description: CLI reference for SQLsaber. Database connections, authentication, models, knowledge, threads, and query options.
 ---
 
-This is a comprehensive reference for all SQLsaber commands and their options.
+Options, flags, and slash commands for the `saber` CLI.
 
-### `saber`
+## `saber`
 
-The main SQLsaber command for running queries.
-
-**Usage:**
+Runs a query. With no question, starts interactive mode.
 
 ```bash
 # Interactive mode (default)
@@ -18,38 +16,38 @@ saber
 # Single query
 saber "How many users do we have?"
 
-# With specific database
+# Named connection
 saber -d my-database "Show me recent orders"
 
-# With connection string
+# Connection string
 saber -d "postgresql://user:pass@host:5432/db" "User statistics for 2024"
 
-# With multiple databases (repeat -d)
+# Several databases (repeat -d)
 saber -d sales -d analytics "Compare revenue to web sessions"
 
-# Continue a saved thread with one non-interactive follow-up
+# One follow-up on a saved thread
 saber --thread a1b2c3d4 "Now compare that with last quarter"
 ```
 
 **Parameters:**
 
-- `QUERY-TEXT` - SQL query in natural language (optional, starts interactive mode if not provided)
-- `-d, --database` - Database connection name, file path (CSV/Parquet/SQLite/DuckDB), or connection string (postgresql://, mysql://, duckdb://, csv:///, parquet:///). Repeat the flag to connect to [multiple databases](/guides/multi-database) at once (or to load multiple CSV/Parquet files into one DuckDB session with one table per file).
-- `--thinking` / `--no-thinking` - Enable/disable extended thinking/reasoning mode
-- `--csv-tool-results` / `--no-csv-tool-results` - Opt in to experimental CSV tables in model-facing SQL tool results. Defaults to JSON; applies to both single-shot queries and interactive mode.
-- `--allow-dangerous` - Allow INSERT/UPDATE/DELETE and restricted DDL (CREATE TABLE/VIEW/INDEX, ALTER TABLE). DROP/TRUNCATE and admin/security operations remain blocked; UPDATE/DELETE require WHERE.
-- `--system-prompt` - Custom system prompt text or path to a file (overrides built-in prompt)
-- `--thread` - Continue a saved thread non-interactively. Requires a query; uses the stored configured database unless `-d` overrides it.
+- `QUERY-TEXT` - Natural-language question. Optional. Omit it to start interactive mode.
+- `-d, --database` - Saved connection name, file path (CSV, Parquet, SQLite, or DuckDB), or connection string (`postgresql://`, `mysql://`, `duckdb://`, `csv:///`, `parquet:///`). Repeat the flag to connect [several databases](/guides/multi-database/) at once, or to load several CSV or Parquet files into one DuckDB session with one table per file.
+- `--thinking` / `--no-thinking` - Enable or disable extended thinking for this run.
+- `--csv-tool-results` / `--no-csv-tool-results` - Opt in to experimental CSV tables in model-facing SQL tool results. JSON is the default. Applies to single queries and interactive mode.
+- `--allow-dangerous` - Allow `INSERT`, `UPDATE`, `DELETE`, and restricted DDL (`CREATE TABLE`, `CREATE VIEW`, `CREATE INDEX`, `ALTER TABLE`). `DROP`, `TRUNCATE`, and admin or security operations stay blocked. `UPDATE` and `DELETE` require `WHERE`.
+- `--system-prompt` - Custom system prompt text, or a path to a file. Overrides the built-in prompt.
+- `--thread` - Continue a saved thread without interactive mode. Requires a query. Uses the stored saved connection unless `-d` overrides it.
 
-**Global Options:**
+**Global options:**
 
-- `--help, -h` - Display help message
-- `--version` - Show version information
+- `--help, -h` - Show help
+- `--version` - Show the version
 
-### Experimental CSV tool results
+## Experimental CSV tool results
 
 ```bash
-# One query (also works with a query piped through stdin)
+# One query (also works with a question piped through stdin)
 saber --csv-tool-results -d analytics "Show recent orders"
 
 # Interactive session
@@ -62,55 +60,37 @@ saber threads resume THREAD_ID --csv-tool-results
 saber --thread THREAD_ID --csv-tool-results "Compare with last month"
 ```
 
-JSON remains the default. CSV applies only to tabular results sent to the model
-by `list_tables`, `introspect_schema`, `execute_sql`, and `list_dbs`. Metadata,
-errors, and empty results remain JSON. Displayed terminal tables and complete
-saved JSON results do not change, and SQL previews retain their 12 KiB limit.
+JSON remains the default. CSV applies only to tabular results sent to the model by `list_tables`, `introspect_schema`, `execute_sql`, and `list_dbs`. Metadata, errors, and empty results stay JSON. Displayed terminal tables and complete saved JSON results do not change. SQL previews keep a 12 KiB limit.
 
-This is a session option, not a persisted preference. Interactive thread switches
-keep the current session's choice; a new CLI invocation defaults to JSON unless
-the flag is supplied again. Existing thread messages are not converted. There is
-no in-session toggle; launch with the desired flag.
+This is a session option, not a saved preference. Interactive thread switches keep the current session's choice. A new CLI process defaults to JSON unless the flag is passed again. Existing thread messages are not converted. There is no in-session toggle. Launch with the flag you want.
 
-CSV often reduces token usage for multi-row data, but small results may be larger.
-The effect on model answer quality is not yet established, so this remains opt-in.
-For Python usage, see [SDK configuration](/sdk/configuration#experimental-csv-tool-results).
+CSV often reduces token usage for multi-row data. Small results can be larger. The effect on answer quality is not established, so the flag stays opt-in. For Python, see [Configuration](/sdk/configuration/#experimental-csv-tool-results).
 
 ---
 
-### `saber auth`
+## `saber auth`
 
-Manage authentication configuration for AI providers.
+Authentication for AI providers.
 
-#### `saber auth setup`
+### `saber auth setup`
 
-Configure authentication for SQLsaber (API keys).
-
-**Usage:**
+Save an API key.
 
 ```bash
 saber auth setup
 ```
 
-#### `saber auth status`
+### `saber auth status`
 
-Check current authentication configuration.
-
-**Usage:**
+Show which providers are configured, and whether each key came from an environment variable or the keychain.
 
 ```bash
 saber auth status
 ```
 
-**Output shows:**
-
-- Configured providers
-
-#### `saber auth reset`
+### `saber auth reset`
 
 Remove stored credentials for a provider.
-
-**Usage:**
 
 ```bash
 saber auth reset
@@ -119,20 +99,17 @@ saber auth reset
 saber auth reset openai --yes
 ```
 
-Pass the provider directly for automation. `--yes` skips confirmation; without it,
-the command prompts only when attached to an interactive terminal.
+Pass the provider for automation. `--yes` skips confirmation. Without `--yes`, the command prompts only when attached to an interactive terminal.
 
 ---
 
-### `saber db`
+## `saber db`
 
-Manage database connections.
+Saved database connections.
 
-#### `saber db add`
+### `saber db add`
 
-Add a new database connection.
-
-**Usage:**
+Add a connection.
 
 ```bash
 saber db add my-database [OPTIONS]
@@ -140,72 +117,61 @@ saber db add my-database [OPTIONS]
 # Non-interactive SQLite setup
 saber db add local --type sqlite --database ./local.db --no-interactive
 
-# Read a server password from stdin instead of an argument or prompt
+# Read a server password from stdin
 printf '%s' "$DB_PASSWORD" | saber db add analytics --no-interactive \
   --host db.example.com --database analytics --username agent --password-stdin
 ```
 
 **Parameters:**
 
-- `NAME` - Name for the database connection (required)
+- `NAME` - Connection name (required)
 
 **Options:**
 
 - `-t, --type` - Database type: `postgresql`, `mysql`, `sqlite`, `duckdb` (default: postgresql)
-- `-h, --host` - Database host
-- `-p, --port` - Database port
+- `-h, --host` - Host
+- `-p, --port` - Port
 - `--database, --db` - Database name
 - `-u, --username` - Username
-- `--exclude-schemas` - Comma-separated list of schemas to skip during introspection
-- `--description` - Short human-readable description of the connection. Shown to the agent in [multi-database sessions](/guides/multi-database) to help it pick the right database.
-- `--ssl-mode` - SSL mode (see SSL options below)
+- `--exclude-schemas` - Comma-separated schemas to skip during introspection
+- `--description` - Short description shown to the agent in [multi-database sessions](/guides/multi-database/)
+- `--ssl-mode` - SSL mode (see SSL modes below)
 - `--ssl-ca` - SSL CA certificate file path
 - `--ssl-cert` - SSL client certificate file path
 - `--ssl-key` - SSL client private key file path
-- `--interactive/--no-interactive` - Use interactive mode (default: true)
+- `--interactive/--no-interactive` - Interactive prompts (default: true)
 - `--password-stdin` - Read the database password from stdin. Requires `--no-interactive`.
 
-**SSL Modes:**
+**SSL modes:**
 
 _PostgreSQL:_
 
 - `disable` - No SSL
-- `allow` - Try SSL, fallback to non-SSL
+- `allow` - Try SSL, fall back to non-SSL
 - `prefer` - Try SSL first (default)
 - `require` - Require SSL
-- `verify-ca` - Require SSL and verify certificate
-- `verify-full` - Require SSL, verify certificate and hostname
+- `verify-ca` - Require SSL and verify the certificate
+- `verify-full` - Require SSL, verify the certificate and hostname
 
 _MySQL:_
 
 - `DISABLED` - No SSL
 - `PREFERRED` - Try SSL first (default)
 - `REQUIRED` - Require SSL
-- `VERIFY_CA` - Require SSL and verify certificate
-- `VERIFY_IDENTITY` - Require SSL, verify certificate and hostname
+- `VERIFY_CA` - Require SSL and verify the certificate
+- `VERIFY_IDENTITY` - Require SSL, verify the certificate and hostname
 
-#### `saber db list`
+### `saber db list`
 
-List all configured database connections.
-
-**Usage:**
+List saved connections: names, host, port, database, excluded schemas, and the default marker.
 
 ```bash
 saber db list
 ```
 
-**Output shows:**
+### `saber db exclude NAME`
 
-- Database names
-- Connection details (host, port, database)
-- Any excluded schemas configured for the connection
-- Default database indicator
-
-#### `saber db exclude NAME`
-
-Update or inspect schema exclusions for an existing database connection.
-
-**Usage:**
+Update or inspect schema exclusions for a saved connection.
 
 ```bash
 saber db exclude my-database [--set SCHEMAS | --add SCHEMAS | --remove SCHEMAS | --clear]
@@ -213,65 +179,45 @@ saber db exclude my-database [--set SCHEMAS | --add SCHEMAS | --remove SCHEMAS |
 
 **Options:**
 
-- `--set` — Replace the exclusion list entirely with the provided comma-separated schemas
-- `--add` — Append schemas to the current exclusion list (duplicates are ignored)
-- `--remove` — Remove the provided schemas from the exclusion list
-- `--clear` — Remove all exclusions
+- `--set` - Replace the exclusion list with the given comma-separated schemas
+- `--add` - Append schemas (duplicates are ignored)
+- `--remove` - Remove the given schemas
+- `--clear` - Remove all exclusions
 
-Run without flags to interactively edit the exclusion list.
+With no flags, the command edits the list interactively.
 
-#### `saber db set-default NAME`
+### `saber db set-default NAME`
 
-Set a database as the default connection.
-
-**Usage:**
+Set the default connection.
 
 ```bash
 saber db set-default my-database
 ```
 
-#### `saber db test NAME`
+### `saber db test NAME`
 
-Test a database connection.
-
-**Usage:**
+Test a connection. Prints success or the error details.
 
 ```bash
 saber db test my-database
 ```
 
-**Output:**
+### `saber db remove`
 
-- Connection success/failure
-- Error details if connection fails
-
-#### `saber db remove`
-
-Remove a database connection.
-
-**Usage:**
+Remove a connection. Prompts for confirmation in a terminal. `--yes` skips the prompt.
 
 ```bash
 saber db remove my-database
 saber db remove my-database --yes
 ```
 
-**Confirmation required** - Will prompt before deletion in a terminal. Use `--yes`
-for a deliberate non-interactive removal.
-
 ---
 
-### `saber knowledge`
+## `saber knowledge`
 
-Manage database-specific knowledge entries used by the `search_knowledge` tool.
+Database-scoped knowledge entries used by the `search_knowledge` tool. Entries may include SQL snippets and source references.
 
-Knowledge entries are scoped per database and support optional SQL snippets and source references.
-
-#### `saber knowledge add`
-
-Add a new knowledge entry.
-
-**Usage:**
+### `saber knowledge add`
 
 ```bash
 saber knowledge add "Name" "Description" [OPTIONS]
@@ -279,37 +225,31 @@ saber knowledge add "Name" "Description" [OPTIONS]
 
 **Parameters:**
 
-- `NAME` - Knowledge entry name (required)
-- `DESCRIPTION` - Knowledge description (required)
+- `NAME` - Entry name (required)
+- `DESCRIPTION` - Description (required)
 
 **Options:**
 
-- `-d, --database` - Database connection name (uses default if not specified)
-- `--sql` - Optional SQL query or pattern
-- `--source` - Optional source reference (wiki, URL, etc.)
+- `-d, --database` - Saved connection name (uses the default if omitted)
+- `--sql` - SQL query or pattern
+- `--source` - Source reference, such as a wiki page or URL
 
 **Examples:**
 
 ```bash
-# Add to default database
 saber knowledge add "Revenue KPI" "Recognized revenue from shipped orders only"
 
-# Include SQL pattern
 saber knowledge add "Monthly revenue rollup" "Use shipped orders for monthly revenue" --sql "SELECT date_trunc('month', shipped_at), SUM(amount) FROM orders WHERE status = 'shipped' GROUP BY 1"
 
-# Include a source reference
 saber knowledge add "NRR definition" "Exclude new logo revenue from NRR" --source "finance-wiki"
 
-# Use files for long content
 saber knowledge add "Revenue definition" "$(cat ./knowledge/revenue_definition.md)"
 saber knowledge add "Monthly revenue rollup" "$(cat ./knowledge/monthly_revenue_notes.md)" --sql "$(cat ./sql/monthly_revenue_rollup.sql)"
 ```
 
-#### `saber knowledge list`
+### `saber knowledge list`
 
-List all knowledge entries for a database.
-
-**Usage:**
+Lists ID, name, description preview, and last updated time.
 
 ```bash
 saber knowledge list [OPTIONS]
@@ -317,20 +257,9 @@ saber knowledge list [OPTIONS]
 
 **Options:**
 
-- `-d, --database` - Database connection name (uses default if not specified)
+- `-d, --database` - Saved connection name (uses the default if omitted)
 
-**Output shows:**
-
-- Knowledge ID
-- Name
-- Description preview
-- Last updated timestamp
-
-#### `saber knowledge show`
-
-Show a full knowledge entry by ID.
-
-**Usage:**
+### `saber knowledge show`
 
 ```bash
 saber knowledge show ENTRY_ID [OPTIONS]
@@ -338,17 +267,13 @@ saber knowledge show ENTRY_ID [OPTIONS]
 
 **Parameters:**
 
-- `ENTRY_ID` - Knowledge ID from `saber knowledge list` output
+- `ENTRY_ID` - ID from `saber knowledge list`
 
 **Options:**
 
-- `-d, --database` - Database connection name (uses default if not specified)
+- `-d, --database` - Saved connection name (uses the default if omitted)
 
-#### `saber knowledge search`
-
-Search knowledge entries for a database.
-
-**Usage:**
+### `saber knowledge search`
 
 ```bash
 saber knowledge search "QUERY" [OPTIONS]
@@ -356,23 +281,16 @@ saber knowledge search "QUERY" [OPTIONS]
 
 **Parameters:**
 
-- `QUERY` - Keyword query to search for
+- `QUERY` - Keyword query
 
 **Options:**
 
-- `-d, --database` - Database connection name (uses default if not specified)
-- `--limit` - Maximum number of entries to return (default: 10)
+- `-d, --database` - Saved connection name (uses the default if omitted)
+- `--limit` - Maximum entries to return (default: 10)
 
-**Notes:**
+Results are ranked by full-text relevance and scoped to one database.
 
-- Results are ranked by full-text relevance.
-- Search is database-scoped.
-
-#### `saber knowledge remove`
-
-Remove a specific knowledge entry.
-
-**Usage:**
+### `saber knowledge remove`
 
 ```bash
 saber knowledge remove ENTRY_ID [OPTIONS]
@@ -380,18 +298,16 @@ saber knowledge remove ENTRY_ID [OPTIONS]
 
 **Parameters:**
 
-- `ENTRY_ID` - Knowledge ID from `saber knowledge list` output
+- `ENTRY_ID` - ID from `saber knowledge list`
 
 **Options:**
 
-- `-d, --database` - Database connection name (uses default if not specified)
-- `--yes` - Skip confirmation prompt (required when no interactive terminal is available)
+- `-d, --database` - Saved connection name (uses the default if omitted)
+- `--yes` - Skip confirmation (required when no interactive terminal is available)
 
-#### `saber knowledge clear`
+### `saber knowledge clear`
 
-Remove all knowledge entries for a database.
-
-**Usage:**
+Remove every knowledge entry for a database.
 
 ```bash
 saber knowledge clear [OPTIONS]
@@ -399,28 +315,22 @@ saber knowledge clear [OPTIONS]
 
 **Options:**
 
-- `-d, --database` - Database connection name (uses default if not specified)
-- `--yes` - Skip confirmation prompt
+- `-d, --database` - Saved connection name (uses the default if omitted)
+- `--yes` - Skip confirmation
 
-### `saber models`
+## `saber models`
 
-Manage LLM models from different providers.
+LLM models from configured providers.
 
-#### `saber models list`
-
-List all available models for configured providers.
-
-**Usage:**
+### `saber models list`
 
 ```bash
 saber models list
 ```
 
-#### `saber models set`
+### `saber models set`
 
-Set the default model and configure thinking level.
-
-**Usage:**
+Set the default model and thinking level.
 
 ```bash
 # Interactive selection
@@ -433,14 +343,10 @@ saber models set openai:gpt-5 --agent handoff
 
 **Options:**
 
-- `--agent` - Target agent to configure (`main`, `handoff`, `viz`, `notebook`). Defaults to `main`.
+- `--agent` - Agent to configure (`main`, `handoff`, `viz`, `notebook`). Defaults to `main`.
 - `--thinking-level` - Main-model thinking mode: `off`, `minimal`, `low`, `medium`, `high`, or `maximum`.
 
-#### `saber models current`
-
-Show the currently configured model and thinking settings.
-
-**Usage:**
+### `saber models current`
 
 ```bash
 saber models current
@@ -448,13 +354,11 @@ saber models current
 
 **Options:**
 
-- `--agent` - Show model for a specific agent (`main`, `handoff`, `viz`, `notebook`).
+- `--agent` - Show the model for one agent (`main`, `handoff`, `viz`, `notebook`).
 
-#### `saber models reset`
+### `saber models reset`
 
-Reset to the default model (`openai:gpt-5.6-sol`).
-
-**Usage:**
+Reset to `openai:gpt-5.6-sol`.
 
 ```bash
 saber models reset
@@ -463,38 +367,34 @@ saber models reset --agent handoff --yes
 
 **Options:**
 
-- `--agent` - Reset a specific agent (`main`, `handoff`, `viz`, `notebook`). Defaults to `main`.
-- `--yes` - Skip confirmation prompt (required when no interactive terminal is available).
+- `--agent` - Agent to reset (`main`, `handoff`, `viz`, `notebook`). Defaults to `main`.
+- `--yes` - Skip confirmation (required when no interactive terminal is available).
 
 ---
 
-### `saber theme`
+## `saber theme`
 
-Manage syntax highlighting theme settings.
+Syntax highlighting theme.
 
-#### `saber theme set`
+### `saber theme set`
 
-Select a syntax highlighting theme. Omit the theme name to browse interactively.
-
-**Usage:**
+Omit the theme name to browse interactively.
 
 ```bash
 saber theme set
 saber theme set dracula
 ```
 
-You can also set themes via environment variable:
+Override the theme for one process:
 
 ```bash
 export SQLSABER_THEME=dracula
 saber
 ```
 
-#### `saber theme reset`
+### `saber theme reset`
 
-Reset to the default theme (nord).
-
-**Usage:**
+Reset to the default theme (`nord`).
 
 ```bash
 saber theme reset
@@ -505,15 +405,11 @@ saber theme reset --yes
 
 ---
 
-### `saber threads`
+## `saber threads`
 
-Manage conversation threads.
+Saved conversation threads.
 
-#### `saber threads list`
-
-List conversation threads.
-
-**Usage:**
+### `saber threads list`
 
 ```bash
 saber threads list [OPTIONS]
@@ -524,11 +420,9 @@ saber threads list [OPTIONS]
 - `-d, --database` - Filter by database name
 - `-n, --limit` - Maximum threads to return (default: 50)
 
-#### `saber threads show`
+### `saber threads show`
 
-Show complete thread transcript.
-
-**Usage:**
+Prints thread metadata (database, model, timestamps), the full transcript, SQL and results, tool calls, and durable artifact names and links.
 
 ```bash
 saber threads show a1b2c3d4
@@ -536,34 +430,36 @@ saber threads show a1b2c3d4
 
 **Parameters:**
 
-- `THREAD_ID` - Thread ID from `saber threads list`
+- `THREAD_ID` - ID from `saber threads list`
 
-**Output shows:**
+### `saber threads artifacts`
 
-- Thread metadata (database, model, timestamps)
-- Complete conversation history
-- SQL queries and results
-- Tool calls and responses
-- Durable artifact names and links
-
-#### `saber threads artifacts`
-
-List durable artifacts referenced by a thread without replaying its full transcript.
-
-**Usage:**
+Lists durable artifacts for a thread without replaying the transcript. Output includes publication ID and kind, artifact kind, name, size, local URI, and an unavailable marker when integrity verification fails.
 
 ```bash
 saber threads artifacts a1b2c3d4
 ```
 
-The output includes publication ID and kind, artifact kind/name/size, local URI,
-and an unavailable marker when integrity verification fails.
+### `saber threads export`
 
-#### `saber threads resume`
+Writes a standalone HTML transcript. Default path is `./thread-<id>.html`.
 
-Resume an existing conversation thread.
+```bash
+saber threads export a1b2c3d4
+saber threads export a1b2c3d4 --output analysis.html
+```
 
-**Usage:**
+**Parameters:**
+
+- `THREAD_ID` - ID from `saber threads list`
+
+**Options:**
+
+- `-o, --output` - Output HTML file path
+
+### `saber threads resume`
+
+Resume a thread in interactive mode.
 
 ```bash
 saber threads resume a1b2c3d4 [OPTIONS]
@@ -571,35 +467,27 @@ saber threads resume a1b2c3d4 [OPTIONS]
 
 **Parameters:**
 
-- `THREAD_ID` - Thread ID to resume
+- `THREAD_ID` - Thread to resume
 
 **Options:**
 
-- `-d, --database` - Use a different database than the original thread. Repeat the flag to resume against multiple databases.
+- `-d, --database` - Use a different database than the original thread. Repeat the flag to resume against several databases.
 
-**Features:**
-
-- Loads full conversation context
-- Uses the currently configured model
-- Reconnects to the original database(s), including [multi-database](/guides/multi-database) threads
-- Continues where conversation left off in interactive mode
+Loads the saved messages, uses the currently configured model, and reconnects to the original database or databases, including [multi-database](/guides/multi-database/) threads.
 
 :::note
-Automatic resume requires every database in the thread to be a saved connection. If a thread used an ad-hoc connection string or file path, resume it with explicit `-d` flags.
+Automatic resume requires every database on the thread to be a saved connection. If a thread used a connection string or file path, resume it with explicit `-d` flags.
 :::
 
-For one automated follow-up rather than an interactive session, use the root
-command:
+For one follow-up without interactive mode, use the root command:
 
 ```bash
 saber --thread a1b2c3d4 "Now compare that with last quarter"
 ```
 
-#### `saber threads prune`
+### `saber threads prune`
 
-Clean up old conversation threads.
-
-**Usage:**
+Delete threads older than a given number of days.
 
 ```bash
 saber threads prune
@@ -610,48 +498,47 @@ saber threads prune --days 30 --yes
 **Options:**
 
 - `-n, --days` - Delete threads older than this many days (default: 30)
-- `--dry-run` - Report how many threads would be deleted without deleting them
-- `--yes` - Skip confirmation prompt (required when no interactive terminal is available)
+- `--dry-run` - Report how many threads would be deleted, without deleting them
+- `--yes` - Skip confirmation (required when no interactive terminal is available)
 
 ---
 
-### Interactive Mode
+## Interactive mode
 
-When in interactive mode (`saber` with no arguments), you have access to a few additional features:
+`saber` with no question starts interactive mode. Session commands:
 
-#### Slash Commands
-
+- `/help [GROUP [COMMAND]]` - Show slash-command help (`/?` is an alias)
 - `/clear` - Clear conversation history
-- `/exit` - Exit SQLsaber
-- `/quit` - Exit SQLsaber (alias for `/exit`)
+- `/exit` - End the session (`/quit` is an alias)
 - `/thinking` - Show current thinking status and level
-- `/thinking on` - Enable extended thinking with current level
+- `/thinking on` - Enable extended thinking at the current level
 - `/thinking off` - Disable extended thinking
-- `/thinking <level>` - Set thinking level (implies enable)
+- `/thinking <level>` - Set thinking level (also enables thinking)
+- `/handoff GOAL` - Draft a prompt for a new thread from the current context
 
-**Thinking Levels:**
+Management commands from the CLI also work with a leading `/`. Examples: `/db list`, `/auth status`, `/threads resume ID`. Type `/help` for the full list.
+
+**Thinking levels:**
 
 | Level | Description |
 |-------|-------------|
-| `off` | Disable extended thinking |
-| `minimal` | Quick responses, minimal reasoning |
+| `off` | No extended thinking |
+| `minimal` | Least reasoning |
 | `low` | Light reasoning |
-| `medium` | Balanced cost/quality (default) |
-| `high` | Deep reasoning |
-| `maximum` | Complex problems, highest cost |
+| `medium` | Default balance of cost and quality |
+| `high` | Deeper reasoning |
+| `maximum` | Highest reasoning depth and cost |
 
-#### Autocomplete
+**Autocomplete:**
 
-- **Table names** - Type `@table_name[TAB]` for completions
-- **Slash commands** - Type `/[TAB]` for command completions
+- Table names: type `@table_name` and press Tab
+- Slash commands: type `/` and press Tab
 
 ---
 
-### Environment Variables
+## Environment variables
 
-These environment variables adjust runtime behavior:
-
-- `SQLSABER_THEME` — Override the configured theme for the session.
-- `SQLSABER_PG_EXCLUDE_SCHEMAS` — Comma-separated list of PostgreSQL schemas to exclude from schema discovery and introspection. Defaults already exclude `pg_catalog`, `information_schema`, `_timescaledb_internal`, `_timescaledb_cache`, `_timescaledb_config`, `_timescaledb_catalog`.
-- `SQLSABER_MYSQL_EXCLUDE_SCHEMAS` — Comma-separated list of MySQL databases to omit from discovery. Defaults exclude `information_schema`, `performance_schema`, `mysql`, and `sys`.
-- `SQLSABER_DUCKDB_EXCLUDE_SCHEMAS` — Comma-separated list of DuckDB schemas to skip during introspection. Defaults exclude `information_schema`, `pg_catalog`, and `duckdb_catalog`.
+- `SQLSABER_THEME` - Override the configured theme for this process
+- `SQLSABER_PG_EXCLUDE_SCHEMAS` - Extra PostgreSQL schemas to skip during discovery and introspection. Defaults already skip `pg_catalog`, `information_schema`, `_timescaledb_internal`, `_timescaledb_cache`, `_timescaledb_config`, `_timescaledb_catalog`.
+- `SQLSABER_MYSQL_EXCLUDE_SCHEMAS` - Extra MySQL databases to skip. Defaults skip `information_schema`, `performance_schema`, `mysql`, and `sys`.
+- `SQLSABER_DUCKDB_EXCLUDE_SCHEMAS` - Extra DuckDB schemas to skip. Defaults skip `information_schema`, `pg_catalog`, and `duckdb_catalog`.

@@ -1,39 +1,35 @@
 ---
 title: Overview
-description: "Use SQLsaber from Python. Run natural-language to SQL queries with the async SQLSaber conversation lifecycle."
+description: Use SQLsaber from Python. Run natural-language SQL queries with the async SQLSaber conversation lifecycle.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-SQLsaber ships a small public Python API (the SDK) for running natural-language
-queries from Python code. `SQLSaber` is the canonical conversation lifecycle used by
-the CLI and TUI. It is not a separate embedded wrapper. Clients own input and
-presentation, while `SQLSaber` owns agent behavior, completed history, thread
-lifecycle, and managed resources.
+The SQLsaber Python API runs natural-language queries from Python. `SQLSaber` is the conversation lifecycle used by the CLI and TUI. It is not a separate wrapper. Clients own input and presentation. `SQLSaber` owns agent behavior, completed history, thread lifecycle, and managed resources.
 
-The SDK exposes its primary agent and capability building blocks from the top-level `sqlsaber` package:
+Primary exports from the `sqlsaber` package:
 
 | Export            | Purpose                                                       |
 | ----------------- | ------------------------------------------------------------- |
-| `SQLSaber`        | Canonical conversation lifecycle for the CLI, TUI, and SDK. |
-| `SQLSaberOptions` | Typed options bag used to configure a `SQLSaber` session.     |
-| `ModelOverides`   | Per-tool model/API-key overrides (see [Advanced](/sdk/advanced)). |
-| `SqlTools`        | SQL capability for composing with your own pydantic-ai agent. |
+| `SQLSaber`        | Conversation lifecycle for the CLI, TUI, and SDK. |
+| `SQLSaberOptions` | Typed options bag for a `SQLSaber` session.     |
+| `ModelOverides`   | Per-tool model and API-key overrides. See [Advanced](/sdk/advanced/). |
+| `SqlTools`        | SQL capability for an agent you own. |
 | `Knowledge`       | Database-scoped knowledge search capability.                  |
 | `ArtifactStore` | Protocol for immutable artifact publication and authorized retrieval. |
-| `FilesystemArtifactStore` | Durable private local artifact store for CLI/server development. |
-| `InMemoryArtifactStore` | Explicit in-memory artifact store for tests and short-lived workflows. |
+| `FilesystemArtifactStore` | Durable private local artifact store for CLI and server development. |
+| `InMemoryArtifactStore` | In-memory artifact store for tests and short-lived workflows. |
 | `StoredArtifact` / `LoadedArtifact` | Serializable descriptor and verified artifact bytes. |
 | `QueryResultStore` | Protocol for private complete SQL result storage and retrieval. |
 | `InMemoryQueryResultStore` | Session-local SDK default and test implementation. |
-| `FilesystemQueryResultStore` | Durable private local implementation (the CLI uses this explicitly). |
+| `FilesystemQueryResultStore` | Durable private local implementation. The CLI uses this explicitly. |
 | `StoredQueryResult` / `LoadedQueryResult` | Serializable descriptor and verified complete result bytes. |
 
-See [Capabilities](/sdk/capabilities) to use SQLsaber inside your own agent or add your capabilities to its managed agent. See [Build an agent that keeps complete SQL results](/sdk/capability-query-results) to store and reload complete `execute_sql` rows on that agent. See [Results & Streaming](/sdk/results-and-streaming#persisting-notebooks-and-plots) for artifact publishing.
+See [Capabilities](/sdk/capabilities/) to use SQLsaber inside your own agent, or to add capabilities to the managed agent. See [Build an agent that keeps complete SQL results](/sdk/capability-query-results/) to store and reload complete `execute_sql` rows. See [Results and streaming](/sdk/results-and-streaming/#notebook-and-plot-artifacts) for artifact publishing.
 
 ## Installation
 
-The SDK is included with the main package — no extra install required.
+The SDK ships in the main package. No extra install is required.
 
 ```bash
 uv add sqlsaber
@@ -43,8 +39,7 @@ pip install sqlsaber
 
 ## Quickstart
 
-Create a `SQLSaberOptions`, open a `SQLSaber` session, and `await` a query. The
-result behaves like a string containing the agent's answer.
+Create a `SQLSaberOptions`, open a `SQLSaber` session, and `await` a query. The result behaves like a string that holds the agent's answer.
 
 ```python
 import asyncio
@@ -69,37 +64,26 @@ if __name__ == "__main__":
 ```
 
 <Aside type="note">
-  `query()` is asynchronous, so call it inside an `async` function (e.g. via
-  `asyncio.run`). The `SQLSaber` constructor is keyword-only — always pass
+  `query()` is asynchronous, so call it inside an `async` function, for example
+  through `asyncio.run`. The `SQLSaber` constructor is keyword-only. Always pass
   `options=...`.
 </Aside>
 
 ## Use the conversation lifecycle
 
-A `SQLSaber` instance keeps the completed history for its conversation. A second
-`query()` on the same instance uses that history automatically.
+A `SQLSaber` instance keeps the completed history for its conversation. A second `query()` on the same instance uses that history automatically.
 
-Use these methods for common lifecycle tasks:
-
-- `SQLSaber.info` returns immutable metadata such as database names, model details,
-  thinking state, dangerous mode, and the current thread ID. Access it as
-  `saber.info`.
-- `saber.set_thinking(enabled=..., level=...)` changes reasoning controls for later
-  queries and returns the new `ThinkingState`.
+- `SQLSaber.info` returns immutable metadata such as database names, model details, thinking state, dangerous mode, and the current thread ID. Access it as `saber.info`.
+- `saber.set_thinking(enabled=..., level=...)` changes reasoning controls for later queries and returns the new `ThinkingState`.
 - `await saber.list_tables()` returns `TableInfo` values for every managed database.
-- `await saber.draft_handoff(goal)` creates a handoff draft from the conversation's
-  history.
+- `await saber.draft_handoff(goal)` creates a handoff draft from the conversation's history.
 - `await saber.end_thread()` marks the current persisted thread as ended.
-- `await saber.new_thread()` ends the current persisted thread, clears conversation
-  history, and returns the previous thread ID.
-- `await SQLSaber.resume(thread_id, options=options)` restores a persisted thread.
-  See [Advanced](/sdk/advanced) for resume errors and storage details.
+- `await saber.new_thread()` ends the current persisted thread, clears conversation history, and returns the previous thread ID.
+- `await SQLSaber.resume(thread_id, options=options)` restores a persisted thread. See [Advanced](/sdk/advanced/) for resume errors and storage details.
 
-## Managing the connection
+## Close the connection
 
-`SQLSaber` owns a live database connection. Use it as an async context manager
-(`async with`) so the connection is closed automatically, or call `await
-saber.close()` yourself:
+`SQLSaber` owns a live database connection. Use it as an async context manager so the connection closes automatically, or call `await saber.close()` yourself:
 
 ```python
 options = SQLSaberOptions(database="sqlite:///my.db")
@@ -112,14 +96,11 @@ finally:
 
 ## Credentials
 
-By default the SDK reuses the credentials you configured for the CLI (via
-`saber auth`) and any provider environment variables such as
-`ANTHROPIC_API_KEY`. You can also pass keys explicitly in code — see
-[Credentials & Models](/sdk/credentials-and-models).
+By default the SDK reuses the credentials you configured for the CLI with `saber auth`, and any provider environment variables such as `ANTHROPIC_API_KEY`. Pass keys in code when you do not want CLI or keyring storage. See [Credentials and models](/sdk/credentials-and-models/).
 
-## Where to next?
+## Next steps
 
-1. [Configuration](/sdk/configuration) — every `SQLSaberOptions` field.
-2. [Credentials & Models](/sdk/credentials-and-models) — auth and model selection.
-3. [Results & Streaming](/sdk/results-and-streaming) — read SQL, usage, and stream events.
-4. [Advanced](/sdk/advanced) — tool overrides, custom prompts, write access, and more.
+1. [Configuration](/sdk/configuration/) for every `SQLSaberOptions` field
+2. [Credentials and models](/sdk/credentials-and-models/) for auth and model selection
+3. [Results and streaming](/sdk/results-and-streaming/) for SQL, usage, and stream events
+4. [Advanced](/sdk/advanced/) for tool overrides, custom prompts, and write access

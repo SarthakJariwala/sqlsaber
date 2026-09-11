@@ -1,75 +1,69 @@
 ---
-title: Knowledge Base
-description: "Store reusable KPI definitions, SQL patterns, and business context in SQLsaber's knowledge base. Searchable, database-scoped entries for better query generation."
+title: Knowledge base
+description: Save KPI definitions, SQL patterns, and domain notes. SQLsaber searches database-scoped entries when a question matches.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-SQLsaber includes a knowledge base for storing reusable context such as metric definitions, query patterns, and domain terminology.
+Save reusable business context so SQLsaber answers the same metric the same way.
 
 Knowledge entries are:
 
-- Database-specific
-- Persisted locally (SQLite by default)
-- Retrieved by the built-in `search_knowledge` tool when relevant
+- Scoped to one database
+- Stored locally, in SQLite by default
+- Retrieved by the built-in `search_knowledge` tool when they match the question
 
-Use knowledge as the default place to store reusable business context, metric definitions, and query patterns.
+## Add an entry
 
-### Add Knowledge
-
-Add entries with a required `name` and `description`, plus optional `--sql` and `--source`.
+`name` and `description` are required. `--sql` and `--source` are optional.
 
 ```bash
-# Add to default database
+# Add to the default database
 saber knowledge add "Revenue KPI" "Recognized revenue from shipped orders only"
 
-# Add SQL pattern and source reference
+# Add a SQL pattern and a source
 saber knowledge add "Monthly revenue rollup" \
   "Use shipped orders for monthly recognized revenue" \
   --sql "SELECT date_trunc('month', shipped_at) AS month, SUM(amount) FROM orders WHERE status = 'shipped' GROUP BY 1" \
   --source "finance-wiki"
 
-# Add to a specific configured database
+# Add to a named connection
 saber knowledge add "NRR formula" "Net Revenue Retention excludes new logo revenue" -d prod-db
 ```
 
-For long descriptions or SQL, keep content in files and pass it in:
+For long text, read from files:
 
 ```bash
-# Long description from a file
 saber knowledge add "Revenue definition" "$(cat ./knowledge/revenue_definition.md)"
 
-# Long description + long SQL from files
 saber knowledge add "Monthly revenue rollup" "$(cat ./knowledge/monthly_revenue_notes.md)" \
   --sql "$(cat ./sql/monthly_revenue_rollup.sql)" \
   --source "finance-wiki"
 ```
 
 <Aside type="tip">
-Use specific names and include searchable terms in descriptions, so retrieval works better.
+Use specific names. Put searchable terms in the description so retrieval can match them.
 </Aside>
 
-### List, Search, and Inspect
-
-List all entries:
+## List, search, and inspect
 
 ```bash
 saber knowledge list
 ```
 
-Search entries by keyword (default limit is 10):
+Search by keyword. The default limit is 10:
 
 ```bash
 saber knowledge search "revenue shipped" --limit 5
 ```
 
-Show a full entry by ID:
+Show one entry by ID:
 
 ```bash
 saber knowledge show a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
 
-### Remove or Clear
+## Remove entries
 
 Remove one entry:
 
@@ -80,7 +74,7 @@ saber knowledge remove a1b2c3d4-e5f6-7890-abcd-ef1234567890
 saber knowledge remove a1b2c3d4-e5f6-7890-abcd-ef1234567890 --yes
 ```
 
-Clear all entries for a database:
+Clear every entry for a database:
 
 ```bash
 saber knowledge clear
@@ -89,21 +83,22 @@ saber knowledge clear
 saber knowledge clear --yes
 ```
 
-### How the Tool Is Used
+## How the agent uses knowledge
 
-You do not invoke `search_knowledge` manually in normal chat flow. The SQLsaber agent calls it when it needs context about definitions, terms, or known SQL patterns.
+You do not call `search_knowledge` in chat. The SQLsaber agent calls it when it needs a definition, a term, or a known SQL pattern.
 
-Search results are scoped to the active database, so entries saved for one database do not leak into another.
+Search is scoped to the active database. Entries saved for one database do not appear in another.
 
-### Python API (Optional)
+## Inject a store from Python
 
-You can inject your own knowledge manager/store via the Python API:
+If you already own a knowledge store, pass it into `SQLSaberOptions`:
 
 ```python
 import asyncio
 
 from sqlsaber import SQLSaber, SQLSaberOptions
 from sqlsaber.knowledge import KnowledgeManager, SQLiteKnowledgeStore
+
 
 async def main() -> None:
     manager = KnowledgeManager(store=SQLiteKnowledgeStore(db_path="knowledge.db"))
@@ -123,23 +118,19 @@ async def main() -> None:
             knowledge_manager=manager,
         )
     ) as saber:
-        answer = await saber.query("How do we define gross margin?")
-        print(answer)
+        result = await saber.query("How do we define gross margin?")
+        print(result.text)
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### Getting Help
+See [Advanced](/sdk/advanced/#inject-a-knowledge-base) for lifecycle details.
 
-```bash
-saber knowledge --help
-saber knowledge add --help
-saber knowledge search --help
-```
+See `saber knowledge --help`, or [Commands](/reference/commands/#saber-knowledge).
 
-### What's Next?
+## Next steps
 
-1. [Run natural-language queries](/guides/queries)
-2. [Review all command options](/reference/commands)
+1. [Run a query](/guides/queries/)
+2. [Command reference](/reference/commands/)
