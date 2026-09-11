@@ -7,7 +7,7 @@ SQLsaber is an open-source agentic SQL assistant. Ask questions about databases,
 
 The CLI and TUI use the `SQLSaber` conversation lifecycle. Clients own input and presentation. `SQLSaber` owns agent behavior, completed history, and thread lifecycle.
 
-![SQLsaber demo showing a natural language database query in the terminal](./sqlsaber.gif)
+[![SQLsaber demo showing a natural language database query in the terminal](https://asciinema.org/a/1265197.svg)](https://asciinema.org/a/1265197)
 
 SQLsaber appears in an ACM Conference on AI and Agentic Systems '26 paper. [Read the paper](https://dl.acm.org/doi/10.1145/3786335.3813217).
 
