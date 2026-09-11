@@ -3,7 +3,13 @@ title: Plugins
 description: Add terminal charts, sandboxed notebook analysis, and remote Python execution to SQLsaber.
 ---
 
-Install a plugin beside SQLsaber with `uv tool install --with`. The `saber` CLI loads installed plugins from the `sqlsaber.capabilities` entry-point group.
+Install a plugin beside SQLsaber by passing the plugin package in `--with`:
+
+```bash
+uv tool install --with sqlsaber-viz sqlsaber
+```
+
+The `saber` CLI loads installed plugins from the `sqlsaber.capabilities` entry-point group.
 
 An embedded `SQLSaber` session does not load installed plugins. Import the plugin factories you want and list them in `SQLSaberOptions.capabilities`. See [Capabilities](/sdk/capabilities/).
 
