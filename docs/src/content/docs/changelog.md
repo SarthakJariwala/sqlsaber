@@ -10,6 +10,11 @@ All notable changes to SQLsaber will be documented here.
 ### Features
 
 * add xAI Grok as a first-class provider (`xai:grok-4.6`)
+* add `saber rpc` headless JSONL mode for embedding the SQL agent
+
+### Bug Fixes
+
+* **rpc:** answer commands while stdin stays open (stop filling an 8 KiB read buffer)
 
 ---
 

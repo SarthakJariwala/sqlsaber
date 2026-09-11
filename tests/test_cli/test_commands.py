@@ -158,6 +158,7 @@ class TestCLICommands:
         assert "knowledge" in captured.out
         assert "models" in captured.out
         assert "auth" in captured.out
+        assert "rpc" in captured.out
 
     @staticmethod
     def _help_text(capsys, args: list[str]) -> str:
