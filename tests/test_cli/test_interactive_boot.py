@@ -350,6 +350,41 @@ async def test_start_unbound_shell_paints_slash_hint_and_db_footer() -> None:
         assert "Welcome to SQLsaber!" in text
         assert "slash commands" in folded
         assert "table name completions" in folded
+        assert "Dangerous mode enabled" not in text
+        assert "DB:" in text
+        assert "verification" in folded
+        assert "█" not in text
+        assert terminal.started is True
+    finally:
+        shell.stop()
+    assert terminal.stopped is True
+
+
+@pytest.mark.asyncio
+async def test_start_unbound_shell_paints_dangerous_mode_notice_below_instructions() -> (
+    None
+):
+    terminal = FakeTerminal(columns=100, rows=24)
+    shell = InteractiveSession.start_unbound_shell(
+        database="/tmp/fixtures/verification.db",
+        allow_dangerous=True,
+        terminal=terminal,
+    )
+    try:
+        shell.app.tui.flush_render()
+        text = "\n".join(shell.app.render_plain_viewport())
+        folded = text.casefold()
+        welcome = text.index("Welcome to SQLsaber!")
+        slash = text.index("slash commands")
+        ctrl_d = text.index("Ctrl+D")
+        notice = text.index("Dangerous mode enabled")
+        insert = text.index("INSERT, UPDATE, and DELETE are allowed")
+        assert welcome < slash < ctrl_d < notice < insert
+        assert (
+            "Restricted DDL is allowed (CREATE TABLE/VIEW/INDEX, ALTER TABLE)" in text
+        )
+        assert "DROP, TRUNCATE, and admin/security operations stay blocked" in text
+        assert "UPDATE and DELETE require WHERE" in text
         assert "DB:" in text
         assert "verification" in folded
         assert "█" not in text

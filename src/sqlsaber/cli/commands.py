@@ -19,7 +19,6 @@ DANGEROUS_MODE_SCOPE = (
     "UPDATE/DELETE require WHERE."
 )
 
-DANGEROUS_MODE_WARNING = f"The assistant can execute {DANGEROUS_MODE_SCOPE}"
 DANGEROUS_MODE_HELP = f"Allow {DANGEROUS_MODE_SCOPE}"
 DATABASE_OPTION_HELP = (
     "Database connection name, file path (CSV/Parquet/SQLite/DuckDB), or connection "
@@ -380,7 +379,9 @@ def query(
                     )
                 )
                 if allow_dangerous:
-                    out(b.warn(DANGEROUS_MODE_WARNING, label="DANGEROUS MODE ENABLED"))
+                    from sqlsaber.cli.interactive import InteractiveSession
+
+                    out(InteractiveSession.dangerous_mode_notice())
                 log.info("query.execute.start", db_name=db_name, db_type=db_type)
                 meter = UsageMeter(model_id=lambda: info.model_id or info.model_name)
                 await streaming_handler.execute_streaming_query(
@@ -405,8 +406,6 @@ def query(
             else:
                 from sqlsaber.cli.interactive import InteractiveSession
 
-                if allow_dangerous:
-                    out(b.warn(DANGEROUS_MODE_WARNING, label="DANGEROUS MODE ENABLED"))
                 shell = InteractiveSession.start_unbound_shell(
                     database=selected_database,
                     allow_dangerous=allow_dangerous,
