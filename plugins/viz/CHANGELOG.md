@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.7.0...sqlsaber-viz-v0.8.0) (2026-09-11)
+
+
+### Features
+
+* **sdk:** require explicit capabilities and a shared store ([#264](https://github.com/SarthakJariwala/sqlsaber/issues/264)) ([3f64360](https://github.com/SarthakJariwala/sqlsaber/commit/3f64360d364841b58f3600fe6bce8bbd5f3aba47))
+
 ## [0.7.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.6.0...sqlsaber-viz-v0.7.0) (2026-09-03)
 
 
