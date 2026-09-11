@@ -1,22 +1,26 @@
 ---
 title: Installation
-description: Install the SQLsaber CLI with uv, pipx, or the standalone installer.
+description: Install the SQLsaber CLI with uv, uvx.sh, or pipx.
 ---
 
 Install SQLsaber, then confirm that the `saber` command runs.
 
 ## Install with uv
 
+If you already have [uv](https://docs.astral.sh/uv/):
+
 ```bash
 uv tool install sqlsaber
 ```
 
-If you do not have uv, use the standalone installer.
+## Install without uv
+
+If you do not have uv, use [uvx.sh](https://uvx.sh/). One command installs SQLsaber. You do not need uv or Python first.
 
 On macOS and Linux:
 
 ```bash
-curl -LsSf uvx.sh/sqlsaber/install.sh | sh
+curl -LsSf https://uvx.sh/sqlsaber/install.sh | sh
 ```
 
 On Windows:
@@ -24,6 +28,10 @@ On Windows:
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://uvx.sh/sqlsaber/install.ps1 | iex"
 ```
+
+The script installs uv when it is missing. Then it installs SQLsaber.
+
+## Install with pipx
 
 If you already use pipx:
 
@@ -41,7 +49,7 @@ You should see a version number.
 
 ## Add official plugins
 
-Plugins add extra tools to the `saber` CLI. Pass each plugin package in `--with` when you run `uv tool install`.
+Plugins add extra tools to the `saber` CLI. Pass each plugin package in `--with` when you run `uv tool install`. After a uvx.sh install, uv is on your machine. The same commands work.
 
 ```bash
 # Charts in the terminal
@@ -60,6 +68,8 @@ uv tool install --with sqlsaber-viz,sqlsaber-notebook,sqlsaber-sandbox sqlsaber
 See [Plugins](/guides/plugins/) for setup and usage.
 
 ## Upgrade
+
+If you installed with uv or uvx.sh:
 
 ```bash
 uv tool upgrade sqlsaber

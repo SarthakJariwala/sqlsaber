@@ -14,8 +14,17 @@ SQLsaber appears in an ACM Conference on AI and Agentic Systems '26 paper. [Read
 ## Quickstart
 
 ```bash
-# Recommended
+# Recommended if you have uv
 uv tool install sqlsaber
+
+# If you do not have uv
+curl -LsSf https://uvx.sh/sqlsaber/install.sh | sh
+```
+
+On Windows without uv:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://uvx.sh/sqlsaber/install.ps1 | iex"
 ```
 
 Try SQLsaber with the sample SQLite database:
