@@ -176,6 +176,34 @@ async def test_query_owns_history_and_preserves_explicit_history_compatibility(
 
 
 @pytest.mark.asyncio
+async def test_messages_is_a_copy_of_committed_history(monkeypatch) -> None:
+    saber = SQLSaber(options=_options())
+
+    async def fake_run(prompt: str, **kwargs: Any) -> _RunResult:
+        history = list(kwargs["message_history"])
+        created = _turn(prompt, "answer")
+        return _RunResult(
+            output="answer",
+            created_messages=created,
+            history=[*history, *created],
+        )
+
+    monkeypatch.setattr(saber.agent, "run", fake_run)
+    try:
+        assert saber.messages == []
+        result = await saber.query("first")
+        snapshot = saber.messages
+        assert snapshot == result.all_messages
+        snapshot.clear()
+        assert saber.messages == result.all_messages
+        saber._query_in_progress = True
+        assert saber.messages == result.all_messages
+        saber._query_in_progress = False
+    finally:
+        await saber.close()
+
+
+@pytest.mark.asyncio
 async def test_result_exposes_complete_run_data(monkeypatch) -> None:
     saber = SQLSaber(options=_options())
     first_response = ModelResponse(
