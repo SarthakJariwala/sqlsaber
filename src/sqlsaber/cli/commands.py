@@ -157,36 +157,23 @@ app = cyclopts.App(
     ),
 )
 
-app.command(
-    "sqlsaber.cli.auth:auth_app",
-    name="auth",
-    help="Manage authentication configuration",
+_LAZY_SUBCOMMANDS: tuple[tuple[str, str, str], ...] = (
+    ("sqlsaber.cli.auth:auth_app", "auth", "Manage authentication configuration"),
+    ("sqlsaber.cli.database:db_app", "db", "Manage database connections"),
+    (
+        "sqlsaber.cli.knowledge:knowledge_app",
+        "knowledge",
+        "Manage database-specific knowledge entries",
+    ),
+    ("sqlsaber.cli.models:models_app", "models", "Select and manage models"),
+    ("sqlsaber.cli.theme:theme_app", "theme", "Manage theme settings"),
+    ("sqlsaber.cli.threads:threads_app", "threads", "Manage SQLsaber threads"),
 )
-app.command(
-    "sqlsaber.cli.database:db_app",
-    name="db",
-    help="Manage database connections",
-)
-app.command(
-    "sqlsaber.cli.knowledge:knowledge_app",
-    name="knowledge",
-    help="Manage database-specific knowledge entries",
-)
-app.command(
-    "sqlsaber.cli.models:models_app",
-    name="models",
-    help="Select and manage models",
-)
-app.command(
-    "sqlsaber.cli.theme:theme_app",
-    name="theme",
-    help="Manage theme settings",
-)
-app.command(
-    "sqlsaber.cli.threads:threads_app",
-    name="threads",
-    help="Manage SQLsaber threads",
-)
+
+for _target, _name, _help in _LAZY_SUBCOMMANDS:
+    app.command(_target, name=_name, help=_help)
+
+_LAZY_SUBCOMMAND_NAMES = frozenset(name for _, name, _ in _LAZY_SUBCOMMANDS)
 
 
 @app.meta.default
@@ -481,4 +468,9 @@ def query(
 
 def main():
     """Entry point for the CLI application."""
+    argv = sys.argv[1:]
+    if argv and argv[0] in _LAZY_SUBCOMMAND_NAMES:
+        from sqlsaber.config.logging import setup_logging
+
+        setup_logging()
     app()

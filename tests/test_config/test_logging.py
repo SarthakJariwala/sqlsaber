@@ -8,7 +8,9 @@ import sys
 from pathlib import Path
 
 
-def _run_isolated(code: str, *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _run_isolated(
+    code: str, *, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     merged = os.environ.copy()
     if env:
         merged.update(env)
