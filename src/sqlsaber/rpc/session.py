@@ -102,8 +102,32 @@ class LineReader(Protocol):
         ...
 
 
+def _read_available(stream: Any) -> bytes:
+    """Read whatever is ready without waiting to fill a buffer.
+
+    ``BufferedReader.read(n)`` keeps pulling from the raw stream until it
+    has ``n`` bytes or hits EOF. On a pipe that deadlocks an interactive
+    JSONL client: the first command is shorter than the buffer, the client
+    waits for a response, and this side waits for more input.
+
+    ``read1`` issues at most one raw read, so a complete line unblocks.
+
+    Args:
+        stream: Binary stdin, typically ``sys.stdin.buffer``.
+
+    Returns:
+        Available bytes, or empty at EOF.
+    """
+    read1 = getattr(stream, "read1", None)
+    try:
+        chunk = read1(8192) if callable(read1) else stream.read(8192)
+    except Exception:
+        return b""
+    return b"" if chunk is None else chunk
+
+
 class ThreadedLineReader:
-    """Portable stdin source: a daemon thread blocks on ``stream.read``.
+    """Portable stdin source: a daemon thread blocks on one raw read at a time.
 
     Enforces the 1 MiB line cap: an oversized line is discarded through the
     next ``\\n`` and surfaced as ``OVERSIZE_LINE``.
@@ -122,10 +146,7 @@ class ThreadedLineReader:
         buf = bytearray()
         oversized = False
         while True:
-            try:
-                chunk = self._stream.read(8192)
-            except Exception:
-                chunk = b""
+            chunk = _read_available(self._stream)
             if not chunk:
                 if buf and not oversized:
                     self._put(loop, bytes(buf))

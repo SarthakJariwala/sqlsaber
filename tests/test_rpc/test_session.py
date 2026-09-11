@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
@@ -29,7 +30,7 @@ from sqlsaber.query_results import (
     new_query_result_id,
 )
 from sqlsaber.rpc.protocol import OVERSIZE_LINE, parse_command
-from sqlsaber.rpc.session import RpcSession, map_sdk_error, serve
+from sqlsaber.rpc.session import RpcSession, ThreadedLineReader, map_sdk_error, serve
 from sqlsaber.sdk.errors import RunInProgressError, SQLSaberClosedError
 
 
@@ -552,3 +553,39 @@ def test_map_sdk_error_is_a_string_table() -> None:
     assert map_sdk_error(SQLSaberClosedError("closed")) == "SQLSaber is closed"
     assert map_sdk_error(ValueError("bad")) == "bad"
     assert map_sdk_error(RuntimeError("x")).startswith("Internal error:")
+
+
+@pytest.mark.asyncio
+async def test_serve_answers_while_stdin_stays_open() -> None:
+    """BufferedReader.read(n) would deadlock here; read1 must not."""
+    saber = SQLSaber(options=_options())
+    buf: list[bytes] = []
+    read_fd, write_fd = os.pipe()
+    reader_file = os.fdopen(read_fd, "rb")
+    writer_file = os.fdopen(write_fd, "wb")
+    loop = asyncio.get_running_loop()
+    reader = ThreadedLineReader(reader_file, loop)
+    task = asyncio.create_task(
+        serve(saber, reader=reader, write=buf.append, persist_thread=False)
+    )
+    try:
+        await _wait_for(buf, lambda rows: rows and rows[0]["type"] == "ready")
+        writer_file.write(b'{"id":"s1","type":"get_state"}\n')
+        writer_file.flush()
+        records = await _wait_for(
+            buf,
+            lambda rows: any(row.get("command") == "get_state" for row in rows),
+        )
+        reply = next(row for row in records if row.get("command") == "get_state")
+        assert reply["success"] is True
+        assert reply["id"] == "s1"
+        assert reply["data"]["state"] == "idle"
+        writer_file.write(b'{"id":"z1","type":"shutdown"}\n')
+        writer_file.flush()
+        await asyncio.wait_for(task, timeout=2)
+    finally:
+        writer_file.close()
+        reader_file.close()
+        if not task.done():
+            task.cancel()
+        await saber.close()
