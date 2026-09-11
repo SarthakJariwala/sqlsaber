@@ -8,8 +8,7 @@ Defaults:
 - JSON logs to a rotating file under the user log directory.
 - Optional pretty console logs when `SQLSABER_DEBUG=1` or
   `SQLSABER_LOG_TO_STDERR=1`.
-- Until `setup_logging()` runs, events are discarded. Unconfigured
-  structlog would otherwise print to stdout.
+- Until `setup_logging()` runs, events are discarded.
 
 Environment variables:
 - `SQLSABER_LOG_LEVEL` (default: INFO)
@@ -53,12 +52,6 @@ def default_log_file() -> Path:
 
 
 def _silence_unconfigured_logging() -> None:
-    """Discard events until ``setup_logging()`` attaches handlers.
-
-    structlog's default PrintLogger writes to stdout. CLI modules log
-    before the TUI path calls ``setup_logging()``, so that default leaks
-    operational events onto the terminal.
-    """
     global _SILENCED
     if _CONFIGURED or _SILENCED:
         return
@@ -79,8 +72,6 @@ def get_logger(name: Optional[str] = None) -> structlog.BoundLogger:
 
     Prefer using this over the stdlib `logging.getLogger` in new code.
     """
-    if not _CONFIGURED:
-        _silence_unconfigured_logging()
     return structlog.get_logger(name)
 
 
@@ -226,3 +217,5 @@ __all__ = [
     "default_log_dir",
     "default_log_file",
 ]
+
+_silence_unconfigured_logging()

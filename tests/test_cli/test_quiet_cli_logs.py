@@ -1,5 +1,3 @@
-"""Management commands must not print structured logs to the terminal."""
-
 from __future__ import annotations
 
 import os

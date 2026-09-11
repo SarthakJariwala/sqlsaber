@@ -1,5 +1,3 @@
-"""Logging must stay off the terminal unless the user opts into console output."""
-
 from __future__ import annotations
 
 import os
