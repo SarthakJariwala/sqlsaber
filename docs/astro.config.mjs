@@ -12,7 +12,7 @@ export default defineConfig({
 		starlight({
 			title: "SQLsaber",
 			description:
-				"Open-source AI SQL assistant. Ask questions in plain English and get SQL queries, results, and explanations. Supports PostgreSQL, MySQL, SQLite, and DuckDB.",
+				"Open-source AI SQL assistant. Ask questions in plain English and get SQL queries, results, and explanations. Supports PostgreSQL, MySQL, SQLite, DuckDB, CSV, and Parquet.",
 			customCss: ["./src/styles/global.css"],
 			head: [
 				{
@@ -77,22 +77,23 @@ export default defineConfig({
 			],
 			sidebar: [
 				{
-					label: "Getting Started",
+					label: "Start",
 					items: [
 						{ label: "Installation", slug: "installation" },
-						{ label: "Quick Start", slug: "guides/getting-started" },
+						{ label: "Getting started", slug: "guides/getting-started" },
 					],
 				},
 				{
 					label: "Guides",
 					items: [
-						{ label: "Database Setup", slug: "guides/database-setup" },
-						{ label: "Multiple Databases", slug: "guides/multi-database" },
+						{ label: "Database setup", slug: "guides/database-setup" },
+						{ label: "Multiple databases", slug: "guides/multi-database" },
 						{ label: "Authentication", slug: "guides/authentication" },
 						{ label: "Models", slug: "guides/models" },
-						{ label: "Running Queries", slug: "guides/queries" },
-						{ label: "Conversation Threads", slug: "guides/threads" },
-						{ label: "Knowledge Base", slug: "guides/knowledge" },
+						{ label: "Running queries", slug: "guides/queries" },
+						{ label: "Conversation threads", slug: "guides/threads" },
+						{ label: "Knowledge base", slug: "guides/knowledge" },
+						{ label: "Plugins", slug: "guides/plugins" },
 					],
 				},
 				{
@@ -106,11 +107,11 @@ export default defineConfig({
 							slug: "sdk/capability-query-results",
 						},
 						{
-							label: "Credentials & Models",
+							label: "Credentials and models",
 							slug: "sdk/credentials-and-models",
 						},
 						{
-							label: "Results & Streaming",
+							label: "Results and streaming",
 							slug: "sdk/results-and-streaming",
 						},
 						{ label: "Advanced", slug: "sdk/advanced" },

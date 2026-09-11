@@ -1,33 +1,27 @@
 ---
 title: Plugins
-description: "Extend SQLsaber with plugins for terminal chart visualization and secure Python sandbox execution. Build and register custom tools."
+description: Add terminal charts, sandboxed notebook analysis, and remote Python execution to SQLsaber.
 ---
 
-SQLsaber supports optional plugins that extend its capabilities. Plugins are installed alongside SQLsaber using `uv tool install --with`.
+Install a plugin beside SQLsaber with `uv tool install --with`. The `saber` CLI loads installed plugins from the `sqlsaber.capabilities` entry-point group.
 
-The `saber` CLI loads installed plugins from the `sqlsaber.capabilities` entry-point group. An embedded `SQLSaber` session does not. Import the plugin factories you want and list them in `SQLSaberOptions.capabilities`. See [Capabilities](/sdk/capabilities).
+An embedded `SQLSaber` session does not load installed plugins. Import the plugin factories you want and list them in `SQLSaberOptions.capabilities`. See [Capabilities](/sdk/capabilities/).
 
-You can even write your own plugins and make them available to SQLsaber to use.
+## Visualization
 
-## Visualization Plugin
-
-The visualization plugin renders charts directly in your terminal from query results.
-
-### Installation
+The visualization plugin renders charts in the terminal from query results.
 
 ```bash
 uv tool install --with sqlsaber-viz sqlsaber
 ```
 
-Or if you already have SQLsaber installed:
+If SQLsaber is already installed:
 
 ```bash
 uv tool install --with sqlsaber-viz --force sqlsaber
 ```
 
-### Usage
-
-After running a query, ask for a visualization in natural language:
+After a query, ask for a chart:
 
 ```
 > Show me the top 10 customers by revenue
@@ -39,116 +33,71 @@ After running a query, ask for a visualization in natural language:
 | ...           | ...           |
 
 > Plot that as a bar chart
-
-┌────────────────────────────────────────────────────┐
-│ ███████████████████████████████████████████  50000 │
-│ ██████████████████████████████████████       45000 │
-│ ...                                                │
-└────────────────────────────────────────────────────┘
 ```
 
-### Supported Chart Types
+You do not need to name the chart type. Describe what you want to see. SQLsaber picks among bar, line, scatter, histogram, and boxplot from the data.
 
-| Chart Type    | Best For                                      |
-| ------------- | --------------------------------------------- |
-| **Bar**       | Comparing categories, rankings, distributions |
-| **Line**      | Time series, trends over time                 |
-| **Scatter**   | Correlations between two numeric variables    |
-| **Histogram** | Distribution of a single numeric variable     |
-| **Boxplot**   | Statistical distribution across categories    |
+## Notebook analysis
 
-You don't need to specify the chart type explicitly. Just describe what you
-want to see and SQLsaber will pick the appropriate chart type based on your
-data.
+The notebook plugin runs multi-step analysis in a sandbox. It uses prior SQL results for calculations, statistics, transformations, and plots. Bounded notebooks and plot previews appear in the terminal. Notebook bytes and images are not sent to the parent model.
 
----
+```bash
+uv tool install --with sqlsaber-notebook sqlsaber
+```
 
-## Python Sandbox Plugin
+Docker is the default local backend. After a query, ask SQLsaber to analyze or plot the results.
 
-The sandbox plugin lets SQLsaber run Python code in a secure remote sandbox. This is useful for calculations, stats, or data transformations that are easier in Python than SQL.
+Set a dedicated notebook model without changing the main model:
 
-### Installation
+```bash
+saber models set --agent notebook
+```
+
+Select a backend with `SQLSABER_NOTEBOOK_BACKEND`. Backends never fall back automatically.
+
+| Backend | Where it runs | Notes |
+| ------- | ------------- | ----- |
+| Docker | Local | Default |
+| Microsandbox | Local microVM | Install the `microsandbox` extra. Query results stay on the machine. |
+| Modal | Remote | Query results are uploaded to a third party. |
+| Daytona | Remote | Query results are uploaded to the configured Daytona service. |
+
+```bash
+uv tool install --with 'sqlsaber-notebook[microsandbox]' sqlsaber
+SQLSABER_NOTEBOOK_BACKEND=microsandbox saber
+```
+
+For an embedded `SQLSaber` session, list the notebook factory in `SQLSaberOptions.capabilities`. Persist notebooks and plots with `SQLSaberOptions.artifact_store`. See [Results and streaming](/sdk/results-and-streaming/#notebook-and-plot-artifacts).
+
+## Python sandbox
+
+The sandbox plugin runs Python in a remote sandbox. Use it for calculations that are easier in Python than in SQL.
 
 ```bash
 uv tool install --with sqlsaber-sandbox sqlsaber
 ```
 
-### Configuration
+Configure at least one provider:
 
-You need to configure at least one sandbox provider:
-
-| Provider   | Environment Variable                                   |
+| Provider   | Environment variable                                   |
 | ---------- | ------------------------------------------------------ |
 | Daytona    | `DAYTONA_API_KEY`                                      |
 | E2B        | `E2B_API_KEY`                                          |
 | Sprites    | `SPRITES_TOKEN`                                        |
 | Hopx       | `HOPX_API_KEY`                                         |
 | Modal      | `MODAL_TOKEN_ID` or `~/.modal.toml`                    |
-| Cloudflare | `CLOUDFLARE_SANDBOX_BASE_URL` + `CLOUDFLARE_API_TOKEN` |
+| Cloudflare | `CLOUDFLARE_SANDBOX_BASE_URL` and `CLOUDFLARE_API_TOKEN` |
 
-When at least one provider is configured, the agent can use a `run_python` tool to execute Python code in that sandbox. If no provider is configured, the tool is not available.
+When a provider is configured, the agent can call `run_python`. If none is configured, the tool is not available.
 
----
-
-## Installing Multiple Plugins
-
-You can install multiple plugins at once:
+## Install several plugins
 
 ```bash
-uv tool install --with sqlsaber-viz,sqlsaber-sandbox sqlsaber
+uv tool install --with sqlsaber-viz,sqlsaber-notebook,sqlsaber-sandbox sqlsaber
 ```
 
-## Building a plugin
+## Build a plugin
 
-Plugins ship pydantic-ai capabilities through an entry point:
+Export a capability factory through the `sqlsaber.capabilities` entry-point group. See [Capabilities](/sdk/capabilities/#build-a-plugin-capability) for the factory contract, `PluginContext`, and display-tool registration.
 
-```toml
-[project.entry-points."sqlsaber.capabilities"]
-my_plugin = "my_plugin:capability"
-```
-
-A typical one-tool plugin is small:
-
-```python
-from pydantic_ai.capabilities import Capability
-from sqlsaber.capabilities.plugins import PluginContext
-
-
-def my_tool(value: str) -> str:
-    """Process a value using my application."""
-    return value
-
-
-def capability(context: PluginContext):
-    return Capability(
-        id="my-plugin",
-        description="Process values with my application.",
-        tools=[my_tool],
-    )
-```
-
-The factory receives a `PluginContext` containing SQLsaber's database registry,
-knowledge manager, dangerous-mode setting, normalized tool model overrides, the
-session's required `query_result_store`, and the optional application-owned
-`artifact_store`. Plugins that consume SQL rows should use
-`query_result_references_from_messages()` and `resolve_query_result()` instead of
-parsing `execute_sql` content; this provides verified complete bytes, current-context
-authorization, and the compatibility-only legacy fallback.
-It can return one capability or a sequence. See the [Capabilities SDK guide](/sdk/capabilities) for standalone composition and lifecycle details.
-
-Plugins that can reconstruct durable results during `saber threads show` may also
-register context-free display tools:
-
-```toml
-[project.entry-points."sqlsaber.display_tools"]
-my_plugin = "my_plugin:display_tools"
-```
-
-The factory takes no arguments and returns a mapping from tool name to `Tool`
-renderer. These renderers must not require live execution resources; SQLsaber may
-supply verified resolved artifact publications through
-`set_resolved_artifact_publications()` before replay.
-
-:::caution[Plugin API change]
-The former `sqlsaber.tools` entry-point group and global `ToolRegistry` no longer load. Existing plugins should keep their execution function or `Tool` class, wrap it in a capability, and export a `capability(context)` factory through `sqlsaber.capabilities`.
-:::
+The former `sqlsaber.tools` entry-point group and global `ToolRegistry` no longer load. Keep your execution function or `Tool` class, wrap it in a capability, and export `capability(context)` through `sqlsaber.capabilities`.

@@ -1,73 +1,64 @@
 ---
 title: Models
-description: "Choose and configure AI models for SQL generation in SQLsaber. Supports Claude, GPT, Gemini, and other LLMs with extended thinking modes."
+description: Choose the model SQLsaber uses for SQL generation. Set the default, override subagents, and configure thinking.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-SQLsaber supports many LLM models across different providers.
+Pick the model SQLsaber uses for queries.
 
-This guide covers model selection, configuration, and recommendations for the best SQL query generation.
-
-### Default Model
+## Default model
 
 SQLsaber uses `openai:gpt-5.6-sol` when no model is configured. `saber models reset` writes that same identifier.
 
-### Recommended Models
+## Recommended models
 
-While SQLsaber supports a lot of models, we recommend the following for best results:
+These models produce strong SQL in practice:
 
-- Claude Opus 5
-- Gemini 3.1 Pro, 3.5 Flash or later
-- Codex-5.3, 5.2, GPT-5.4, 5.5 or later
-- Grok 4.6 (`xai:grok-4.6`)
+- `anthropic:claude-opus-5`
+- `openai:gpt-5.6-sol`
+- `google:gemini-2.5-pro`
+- `xai:grok-4.6`
 
-<Aside type="tip">
-  Consider using one of the recommended models for best results.
-</Aside>
+The picker also ranks a default for Groq, Mistral, and Cohere when those providers are configured. See `saber models list`.
 
-### Model Management
-
-#### List Available Models
+## List available models
 
 ```bash
 saber models list
 ```
 
-#### Set Your Default Model
-
-Change the default model:
+## Set the default model
 
 ```bash
 saber models set
 ```
 
-This interactive command lets you:
+This command lets you:
 
-1. Choose from configured providers
-2. Select a specific model
-3. Set it as your default
+1. Choose a configured provider
+2. Select a model
+3. Save it as the default
 4. Configure thinking
 
 <Aside type="tip">
-  This list is long - type to search and filter the list.
+  The list is long. Type to search and filter it.
 </Aside>
 
-For scripts and coding agents, set the model and thinking level directly without
-fetching the model list or opening a prompt:
+For scripts and coding agents, set the model and thinking level without fetching the list:
 
 ```bash
 saber models set openai:gpt-5 --thinking-level medium
 ```
 
-#### Subagent Overrides
+## Override a subagent model
 
-You can override the model used by subagents like handoff and viz without changing
-the main model:
+Set a model for handoff, viz, or notebook without changing the main model:
 
 ```bash
 saber models set --agent handoff
 saber models set --agent viz
+saber models set --agent notebook
 
 # Direct, non-interactive override
 saber models set openai:gpt-5 --agent handoff
@@ -75,28 +66,24 @@ saber models set openai:gpt-5 --agent handoff
 
 If no override is set, the subagent uses the main model.
 
-#### Reset to Default
-
-Return to `openai:gpt-5.6-sol`:
+## Reset to the default
 
 ```bash
 saber models reset
 saber models reset --yes
 ```
 
-### Getting Help
+This writes `openai:gpt-5.6-sol` again.
 
-Check your current model and available options:
+## Check the current model
 
 ```bash
 saber models current
 saber models --help
 ```
 
-### What's Next?
+## Next steps
 
-After configuring your models:
-
-1. [Learn different ways to query your data](/guides/queries)
-2. [Manage conversation threads](/guides/threads)
-3. [Explore the command reference](/reference/commands)
+1. [Run a query](/guides/queries/)
+2. [Resume a conversation](/guides/threads/)
+3. [Command reference](/reference/commands/)

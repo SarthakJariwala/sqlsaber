@@ -113,7 +113,7 @@ first_row {'id': 1, 'name': 'customer-000-xxxxxxxxxxxxxxxxxxxxxxxx', 'revenue': 
 last_row {'id': 250, 'name': 'customer-249-xxxxxxxxxxxxxxxxxxxxxxxx', 'revenue': 1249}
 ```
 
-That is the same retrieve path as `SQLSaber.get_query_result()`, without the managed client. `query_result_references_from_messages` currently lives on `sqlsaber.query_result_resolution`. When the store authorizes by tenant, pass `conversation_id` and `metadata` through `QueryResultContext`.
+That is the same retrieve path as `SQLSaber.get_query_result()`, without the managed client. Import `query_result_references_from_messages` from `sqlsaber.query_result_resolution`. When the store authorizes by tenant, pass `conversation_id` and `metadata` through `QueryResultContext`.
 
 ## Share the store with notebook, viz, or sandbox
 

@@ -1,12 +1,11 @@
 ---
 title: Configuration
-description: "Configure the SQLsaber Python SDK with SQLSaberOptions: database connections, model selection, thinking, system prompts, and injectable components."
+description: Configure the SQLsaber Python SDK with SQLSaberOptions: database connections, model selection, thinking, system prompts, and injectable components.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-Every `SQLSaber` session is configured through a single `SQLSaberOptions`
-dataclass. Construct it with keyword arguments and pass it to `SQLSaber(options=...)`.
+Every `SQLSaber` session is configured through one `SQLSaberOptions` dataclass. Construct it with keyword arguments and pass it to `SQLSaber(options=...)`.
 
 ```python
 from sqlsaber import SQLSaberOptions
@@ -22,28 +21,28 @@ options = SQLSaberOptions(
 
 | Field               | Type                                          | Default | Description                                                                                  |
 | ------------------- | --------------------------------------------- | ------- | -------------------------------------------------------------------------------------------- |
-| `database`          | `str \| list[str] \| tuple[str, ...] \| None` | `None`  | Connection string, file path, configured DB name, a list of CSV/Parquet paths, or a list of targets for a [multi-database](/guides/multi-database) session. |
-| `model_name`        | `str \| None`                                 | `None`  | Model in `"provider:model"` form. Falls back to your configured/default model.               |
-| `api_key`           | `str \| None`                                 | `None`  | API key for the model's provider. Usually unnecessary — see [Credentials](/sdk/credentials-and-models). |
+| `database`          | `str \| list[str] \| tuple[str, ...] \| None` | `None`  | Connection string, file path, saved connection name, a list of CSV or Parquet paths, or a list of targets for a [multi-database](/guides/multi-database/) session. |
+| `model_name`        | `str \| None`                                 | `None`  | Model in `"provider:model"` form. Falls back to your configured default model.               |
+| `api_key`           | `str \| None`                                 | `None`  | API key for the model's provider. Usually unnecessary. See [Credentials and models](/sdk/credentials-and-models/). |
 | `thinking_enabled`  | `bool \| None`                                | `None`  | Toggle extended thinking on supported reasoning models.                                      |
 | `thinking_level`    | `ThinkingLevel \| str \| None`                | `None`  | `"minimal" \| "low" \| "medium" \| "high" \| "maximum"`. Setting a level enables thinking.   |
 | `system_prompt`     | `str \| Path \| None`                         | `None`  | Custom system prompt text, or a path to a file containing it.                                |
-| `settings`          | `Config \| None`                              | `None`  | Inject a `Config` (e.g. `Config.in_memory(...)`). Defaults to file-backed `Config.default()`. |
-| `knowledge_manager` | `KnowledgeManager \| None`                    | `None`  | Inject your own knowledge base (see [Advanced](/sdk/advanced)).                              |
-| `thread_manager`    | `ThreadManager \| None`                       | `None`  | Persist conversation history across runs (see [Advanced](/sdk/advanced)).                    |
-| `capabilities` | `Sequence[AbstractCapability[Any] \| Callable]` | `()` | Explicit pydantic-ai capabilities and plugin factories (see [Capabilities](/sdk/capabilities)). SQLSaber always includes SQL and knowledge tools. An embedded session includes only the listed capabilities. The CLI loads installed plugins. |
+| `settings`          | `Config \| None`                              | `None`  | Inject a `Config`, for example `Config.in_memory(...)`. Defaults to file-backed `Config.default()`. |
+| `knowledge_manager` | `KnowledgeManager \| None`                    | `None`  | Inject your own knowledge base. See [Advanced](/sdk/advanced/).                              |
+| `thread_manager`    | `ThreadManager \| None`                       | `None`  | Persist conversation history across runs. See [Advanced](/sdk/advanced/).                    |
+| `capabilities` | `Sequence[AbstractCapability[Any] \| Callable]` | `()` | Explicit pydantic-ai capabilities and plugin factories. See [Capabilities](/sdk/capabilities/). SQLsaber always includes SQL and knowledge tools. An embedded session includes only the listed capabilities. The CLI loads installed plugins. |
 | `artifact_store` | `ArtifactStore \| None`                    | `None`  | Application-owned publication and retrieval for artifacts such as analysis notebooks and plots. |
 | `artifact_failure_mode` | `"required" \| "best_effort"`            | `"required"` | Fail the tool or retain its answer when artifact publication fails.                      |
 | `query_result_store` | `QueryResultStore \| None` | `None` | Store for complete SQL row results. Defaults to a session-owned in-memory store. Inject application storage for durable or tenant-scoped retrieval. |
 | `workspace_input_resolver` | `WorkspaceInputResolver \| None` | `None` | Application-owned resolver for opaque, authorized inputs to the managed notebook analyst. |
-| `tool_overrides`    | `Mapping[str, ModelOverides] \| None`         | `None`  | Per-tool model/API-key overrides (see [Advanced](/sdk/advanced)).                            |
-| `allow_dangerous`   | `bool`                                        | `False` | Allow write operations and a restricted subset of DDL (see [Advanced](/sdk/advanced)).       |
+| `tool_overrides`    | `Mapping[str, ModelOverides] \| None`         | `None`  | Per-tool model and API-key overrides. See [Advanced](/sdk/advanced/).                            |
+| `allow_dangerous`   | `bool`                                        | `False` | Allow write operations and a restricted subset of DDL. See [Advanced](/sdk/advanced/).       |
 | `csv_tool_results` | `bool` | `False` | Opt in to experimental CSV tables in model-facing SQL tool results. JSON remains the default. |
 
 <Aside type="note">
-  `model_name`, `thinking_*`, `system_prompt`, and the injectable components all
-  have sensible defaults. For many use cases just `database` (plus credentials in
-  your environment) is enough.
+  `model_name`, `thinking_*`, `system_prompt`, and the injectable components have
+  defaults. For many cases, `database` plus credentials in the environment is
+  enough.
 </Aside>
 
 ## Experimental CSV tool results
@@ -59,66 +58,33 @@ saber = SQLSaber(options=SQLSaberOptions(
 ))
 ```
 
-This changes the tabular portions of `list_tables`, `introspect_schema`,
-`execute_sql`, and multi-database `list_dbs` results sent to the model. Metadata,
-schema constraints, errors, and empty results remain JSON. CSV cells use standard
-quoting, `\N` for null, and escaped backslashes; nested cell values use JSON.
-Complete retained query results remain typed JSON. Terminal tables, plugin access,
-and the 12 KiB SQL preview limit are unchanged. Structured rendering data is kept
-in message metadata, not sent to the model as a second copy of the result.
+This changes the tabular portions of `list_tables`, `introspect_schema`, `execute_sql`, and multi-database `list_dbs` results sent to the model. Metadata, schema constraints, errors, and empty results remain JSON. CSV cells use standard quoting, `\N` for null, and escaped backslashes. Nested cell values use JSON. Complete retained query results remain typed JSON. Terminal tables, plugin access, and the 12 KiB SQL preview limit are unchanged. Structured rendering data stays in message metadata. It is not sent to the model as a second copy of the result.
 
-CSV can reduce tokens for multi-row results, but tiny results can be larger and
-its effect on answer quality has not been established. Evaluate it with your
-models and queries before enabling it broadly.
+CSV can reduce tokens for multi-row results. Tiny results can be larger. The effect on answer quality has not been established. Evaluate it with your models and queries before enabling it broadly.
 
-The setting is available as `saber.info.csv_tool_results`. It is not a saved
-global preference or restored from thread history: pass it again in
-`SQLSaber.resume(..., options=SQLSaberOptions(csv_tool_results=True))` to opt in
-for new calls. Existing messages are not rewritten. For a standalone capability,
-use [`SqlTools(csv_tool_results=True)`](/sdk/capabilities#experimental-csv-tool-results).
+The setting is available as `saber.info.csv_tool_results`. It is not a saved global preference, and it is not restored from thread history. Pass it again in `SQLSaber.resume(..., options=SQLSaberOptions(csv_tool_results=True))` to opt in for new calls. Existing messages are not rewritten. For a standalone capability, use [`SqlTools(csv_tool_results=True)`](/sdk/capabilities/#experimental-csv-tool-results).
 
 ## Artifact storage
 
-Embedded SQLsaber does not persist artifacts unless `artifact_store` is injected.
-The injected store is application-owned and is never closed or garbage-collected by
-SQLsaber. The CLI explicitly uses `FilesystemArtifactStore` under its private user
-data directory.
+Embedded SQLsaber does not persist artifacts unless `artifact_store` is injected. The injected store is application-owned. SQLsaber never closes it or garbage-collects it. The CLI uses `FilesystemArtifactStore` under its private user data directory.
 
-Cloud stores should authorize `get()` from the current identity in
-`ArtifactContext.metadata`, keep objects private, and return `ArtifactUnavailable`
-for both missing and unauthorized IDs. Stable descriptor URIs are locators; SQLsaber
-retrieves bytes through the store rather than dereferencing those URIs.
+Cloud stores should authorize `get()` from the current identity in `ArtifactContext.metadata`, keep objects private, and return `ArtifactUnavailable` for both missing and unauthorized IDs. Stable descriptor URIs are locators. SQLsaber retrieves bytes through the store rather than opening those URIs.
 
 ## Query result storage
 
-Every successful row-returning query writes its complete canonical JSON payload to
-`query_result_store`. The model and message history receive only a stable 12 KiB
-projection. An injected store is application-owned and SQLsaber does not close it.
-The SDK default is in-memory; the CLI explicitly uses private filesystem storage.
-A storage failure makes that row-returning tool call fail rather than silently
-claiming complete data is available.
+Every successful row-returning query writes its complete canonical JSON payload to `query_result_store`. The model and message history receive only a stable 12 KiB projection. An injected store is application-owned. SQLsaber does not close it. The SDK default is in-memory. The CLI uses private filesystem storage. A storage failure makes that row-returning tool call fail rather than claiming complete data is available.
 
-For web applications, implement `QueryResultStore.put/get` over a private database
-or object store. Authorize `get` from current identity in
-`QueryResultContext.metadata`; do not authorize solely from possession of a result
-ID, filename, or historical conversation metadata.
+For web applications, implement `QueryResultStore.put` and `QueryResultStore.get` over a private database or object store. Authorize `get` from the current identity in `QueryResultContext.metadata`. Do not authorize solely from possession of a result ID, filename, or historical conversation metadata.
 
 ## Managed notebook inputs
 
-When `sqlsaber-notebook` is listed in `SQLSaberOptions.capabilities`,
-`workspace_input_resolver` lets a
-host application make authorized files available to `analyze_data` without exposing
-filesystem paths, URLs, bucket names, object keys, or raw bytes to the main model.
-See [Analyzing application-owned inputs](/sdk/results-and-streaming#analyzing-application-owned-inputs)
-for the resolver contract and trust boundary.
+When `sqlsaber-notebook` is listed in `SQLSaberOptions.capabilities`, `workspace_input_resolver` lets a host application make authorized files available to `analyze_data` without exposing filesystem paths, URLs, bucket names, object keys, or raw bytes to the main model. See [Application-owned notebook inputs](/sdk/results-and-streaming/#application-owned-notebook-inputs) for the resolver contract and trust boundary.
 
-Without a resolver, SQLsaber preserves the original `analyze_data(goal, files=None)`
-schema: `attachment_refs` is not advertised to the model and SQL result selection is
-unchanged.
+Without a resolver, SQLsaber keeps the original `analyze_data(goal, files=None)` schema: `attachment_refs` is not advertised to the model, and SQL result selection is unchanged.
 
-## Choosing a database
+## Database targets
 
-The `database` option accepts the same targets as the CLI's `-d` flag.
+The `database` option accepts the same targets as the CLI `-d` flag.
 
 ### Connection strings
 
@@ -139,21 +105,18 @@ SQLSaberOptions(database="./customers.csv")
 SQLSaberOptions(database="./orders.parquet")
 ```
 
-### Multiple CSV or Parquet files
+### Several CSV or Parquet files
 
-Pass a list (or tuple) of CSV/Parquet paths to query across them together. All files are
-merged into a single in-memory database with one table per file:
+Pass a list or tuple of CSV or Parquet paths to query them together. All files merge into one in-memory database with one table per file:
 
 ```python
 SQLSaberOptions(database=["users.csv", "orders.csv"])
 SQLSaberOptions(database=["users.csv", "orders.parquet"])
 ```
 
-### Multiple databases
+### Several databases
 
-Pass a list including other targets (configured names, connection strings, or database file
-paths) to connect to [several databases](/guides/multi-database) in one session.
-The agent queries each one separately and combines the results:
+Pass a list that includes other targets (saved names, connection strings, or database file paths) to connect to [several databases](/guides/multi-database/) in one session. The agent queries each one separately and combines the results:
 
 ```python
 SQLSaberOptions(database=["sales", "postgresql://user:pass@host:5432/events"])
@@ -168,8 +131,7 @@ async with SQLSaber(options=options) as saber:
     saber.info.database_names  # ("sales", "events")
 ```
 
-The compatibility properties `saber.db_names` and `saber.connections` remain
-available for callers that need the managed names or connection objects:
+The compatibility properties `saber.db_names` and `saber.connections` remain available for callers that need the managed names or connection objects:
 
 ```python
 async with SQLSaber(options=options) as saber:
@@ -177,14 +139,12 @@ async with SQLSaber(options=options) as saber:
     saber.connections  # {name: connection, ...}
 ```
 
-### A configured database
+### Saved connection
 
-If you've already registered a connection with the CLI (`saber db add`), refer
-to it by name:
+If you already registered a connection with the CLI (`saber db add`), refer to it by name:
 
 ```python
 SQLSaberOptions(database="prod-db")
 ```
 
-See the [Database Setup guide](/guides/database-setup) for details on connection
-strings and registering databases.
+See [Database setup](/guides/database-setup/) for connection strings and registering databases.
