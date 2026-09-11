@@ -313,7 +313,6 @@ class InteractiveSession:
 
     @staticmethod
     def dangerous_mode_notice() -> Md:
-        """Warning-tinted markdown describing what dangerous mode permits."""
         bullets = (
             "INSERT, UPDATE, and DELETE are allowed",
             "Restricted DDL is allowed (CREATE TABLE/VIEW/INDEX, ALTER TABLE)",
