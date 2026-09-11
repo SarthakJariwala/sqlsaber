@@ -41,6 +41,8 @@ saber --thread a1b2c3d4 "Now compare that with last quarter"
 - `--system-prompt` - Custom system prompt text or path to a file (overrides built-in prompt)
 - `--thread` - Continue a saved thread non-interactively. Requires a query; uses the stored configured database unless `-d` overrides it.
 
+Headless embedding uses [`saber rpc`](/reference/rpc), not a flag on this command. Piped stdin (`echo "show users" | saber`) is still a one-shot question.
+
 **Global Options:**
 
 - `--help, -h` - Display help message
@@ -75,6 +77,34 @@ no in-session toggle; launch with the desired flag.
 CSV often reduces token usage for multi-row data, but small results may be larger.
 The effect on model answer quality is not yet established, so this remains opt-in.
 For Python usage, see [SDK configuration](/sdk/configuration#experimental-csv-tool-results).
+
+---
+
+### `saber rpc`
+
+Headless JSONL over stdin/stdout so IDEs and other applications can embed SQLsaber. Full protocol: [RPC mode](/reference/rpc).
+
+**Usage:**
+
+```bash
+saber rpc
+saber rpc -d analytics
+saber rpc -d ./orders.csv --no-thread
+saber rpc --thread THREAD_ID
+echo '{"type":"prompt","message":"how many users?"}' | saber rpc -d analytics --no-thread
+```
+
+**Parameters:**
+
+- `-d, --database` - Same selectors as `saber` (repeatable).
+- `--thread` - Resume a saved thread. Mutually exclusive with `--no-thread`.
+- `--no-thread` - Do not persist the conversation.
+- `--thinking` / `--no-thinking` - Initial reasoning setting.
+- `--allow-dangerous` - Same write scope as interactive mode.
+- `--csv-tool-results` - Model-facing SQL results as CSV.
+- `--system-prompt` - Custom system prompt text or path.
+
+This command never starts onboarding or an update check. Missing database configuration yields one JSON `startup` error on stdout and exit 1. `echo "show users" | saber` is unchanged.
 
 ---
 
