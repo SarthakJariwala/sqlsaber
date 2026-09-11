@@ -13,6 +13,22 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.76.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.75.0...sqlsaber-v0.76.0) (2026-09-11)
+
+
+### Features
+
+* Render loading status in the editor border ([#263](https://github.com/SarthakJariwala/sqlsaber/issues/263)) ([bc9ad89](https://github.com/SarthakJariwala/sqlsaber/commit/bc9ad8934d50215a4b3f9d4b5490839b9df418df))
+* **sdk:** require explicit capabilities and a shared store ([#264](https://github.com/SarthakJariwala/sqlsaber/issues/264)) ([3f64360](https://github.com/SarthakJariwala/sqlsaber/commit/3f64360d364841b58f3600fe6bce8bbd5f3aba47))
+* Update handoff prompts and transcript format ([#262](https://github.com/SarthakJariwala/sqlsaber/issues/262)) ([2c92720](https://github.com/SarthakJariwala/sqlsaber/commit/2c9272092daa7ac72c463b155b0a98f8efbbbbc5))
+
+
+### Bug Fixes
+
+* **cli:** keep the TUI editor ready until SQLSaber binds ([#267](https://github.com/SarthakJariwala/sqlsaber/issues/267)) ([e8295f2](https://github.com/SarthakJariwala/sqlsaber/commit/e8295f26f01e75f61153e48a191c1182664335fe))
+* **cli:** paint dangerous-mode notice below intro bullets ([#269](https://github.com/SarthakJariwala/sqlsaber/issues/269)) ([932c214](https://github.com/SarthakJariwala/sqlsaber/commit/932c214f7d43a6af989cfd546b4baa686edff2a5))
+* support newer dependencies without compatibility caps ([#259](https://github.com/SarthakJariwala/sqlsaber/issues/259)) ([b0dc8e6](https://github.com/SarthakJariwala/sqlsaber/commit/b0dc8e619dbdeb117b9819e823f12a8e43b66fbf))
+
 ## [0.75.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.74.0...sqlsaber-v0.75.0) (2026-09-07)
 
 
