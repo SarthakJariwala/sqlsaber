@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from sqlsaber.cli.chat_surface import ChatSurface
     from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
     from sqlsaber.cli.usage import UsageMeter
+    from sqlsaber.render.blocks import Md
 
 
 def bind_update_notice(emit: Callable[..., None] | None) -> None:
@@ -272,10 +273,7 @@ class InteractiveSession:
         surface = ChatSurface(app)
         app_ref["app"] = app
         surface_ref["surface"] = surface
-        surface.emit(
-            b.md("**Welcome to SQLsaber!**", role="primary"),
-            b.md(cls._instructions()),
-        )
+        surface.emit(*cls._intro_blocks(allow_dangerous=allow_dangerous))
         app.tui.start()
         bind_update_notice(surface.emit)
         return ChatShell(
@@ -312,6 +310,28 @@ class InteractiveSession:
                 history_file.write(f"+{text.replace('\n', ' ')}\n")
         except OSError:
             return
+
+    @staticmethod
+    def dangerous_mode_notice() -> Md:
+        bullets = (
+            "INSERT, UPDATE, and DELETE are allowed",
+            "Restricted DDL is allowed (CREATE TABLE/VIEW/INDEX, ALTER TABLE)",
+            "DROP, TRUNCATE, and admin/security operations stay blocked",
+            "UPDATE and DELETE require WHERE",
+        )
+        body = "**Dangerous mode enabled**\n\n" + "\n".join(
+            f"- {item}" for item in bullets
+        )
+        return b.md(body, role="warning")
+
+    @classmethod
+    def _intro_blocks(cls, *, allow_dangerous: bool) -> tuple[Md, ...]:
+        notice = (cls.dangerous_mode_notice(),) if allow_dangerous else ()
+        return (
+            b.md("**Welcome to SQLsaber!**", role="primary"),
+            b.md(cls._instructions()),
+            *notice,
+        )
 
     @staticmethod
     def _instructions() -> str:
@@ -385,8 +405,7 @@ class InteractiveSession:
         info = self.saber.info
         if info.is_new_thread:
             surface.emit(
-                b.md("**Welcome to SQLsaber!**", role="primary"),
-                b.md(self._instructions()),
+                *self._intro_blocks(allow_dangerous=self.saber.info.dangerous_mode),
             )
 
         if info.thread_id:

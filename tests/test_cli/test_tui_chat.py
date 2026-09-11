@@ -38,8 +38,9 @@ from sqlsaber.cli.output import status
 from sqlsaber.cli.tui_chat import ChatApp, build_chat_app
 from sqlsaber.cli.tui_streaming import TUIStreamingQueryHandler
 from sqlsaber.config.settings import ThinkingLevel
-from sqlsaber.render import blocks as b
 from sqlsaber.render import bind_cli_surfaces
+from sqlsaber.render import blocks as b
+from sqlsaber.render.markdown_text import markdown_source
 from sqlsaber.render.prompts import PromptForm
 from sqlsaber.render.surface import AskChoice, AskSecret, AskText, Choice
 from sqlsaber.theme.manager import get_theme_manager
@@ -794,11 +795,50 @@ def test_welcome_message_uses_compact_greeting() -> None:
     viewport = "\n".join(app.render_plain_viewport())
     assert "Welcome to SQLsaber!" in viewport
     assert "slash commands" in viewport
+    assert "Dangerous mode enabled" not in viewport
     assert "█" not in viewport
 
 
+def test_welcome_message_paints_dangerous_mode_notice_below_instructions() -> None:
+    terminal = FakeTerminal(columns=100, rows=24)
+    session = InteractiveSession(_fake_saber(dangerous_mode=True))
+    app = build_chat_app(
+        terminal=terminal,
+        on_submit=lambda text: None,
+        footer_text=session._footer_text(),
+    )
+    session.show_welcome_message(app)
+    app.tui.start()
+    app.tui.flush_render()
+
+    viewport = "\n".join(app.render_plain_viewport())
+    welcome = viewport.index("Welcome to SQLsaber!")
+    slash = viewport.index("slash commands")
+    ctrl_d = viewport.index("Ctrl+D")
+    notice = viewport.index("Dangerous mode enabled")
+    insert = viewport.index("INSERT, UPDATE, and DELETE are allowed")
+    assert welcome < slash < ctrl_d < notice < insert
+    assert (
+        "Restricted DDL is allowed (CREATE TABLE/VIEW/INDEX, ALTER TABLE)" in viewport
+    )
+    assert "DROP, TRUNCATE, and admin/security operations stay blocked" in viewport
+    assert "UPDATE and DELETE require WHERE" in viewport
+    assert "█" not in viewport
+
+
+def test_dangerous_mode_notice_markdown_source() -> None:
+    assert markdown_source(InteractiveSession.dangerous_mode_notice()) == (
+        "**Dangerous mode enabled**\n"
+        "\n"
+        "- INSERT, UPDATE, and DELETE are allowed\n"
+        "- Restricted DDL is allowed (CREATE TABLE/VIEW/INDEX, ALTER TABLE)\n"
+        "- DROP, TRUNCATE, and admin/security operations stay blocked\n"
+        "- UPDATE and DELETE require WHERE"
+    )
+
+
 def test_welcome_message_skips_greeting_when_resuming_thread() -> None:
-    saber = _fake_saber()
+    saber = _fake_saber(dangerous_mode=True)
     saber.info.is_new_thread = False
     saber.info.thread_id = "thread-123"
     terminal = FakeTerminal(columns=100, rows=24)
@@ -814,6 +854,7 @@ def test_welcome_message_skips_greeting_when_resuming_thread() -> None:
 
     viewport = "\n".join(app.render_plain_viewport())
     assert "Welcome to SQLsaber!" not in viewport
+    assert "Dangerous mode enabled" not in viewport
     assert "Resuming thread: thread-123" in viewport
     assert "█" not in viewport
 
