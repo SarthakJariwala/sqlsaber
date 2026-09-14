@@ -318,10 +318,61 @@ raise `QueryResultUnavailable` for both missing and unauthorized rows. Apply
 application retention, encryption, audit, and deletion policies there. Filesystem
 storage is not suitable for horizontally scaled web deployments.
 
+## Steer a running query
+
+`query()` is one pydantic-ai run. `steer()` appends a user message to that same run.
+pydantic-ai delivers it before the next model request. SQLSaber does not keep a
+second queue. `pending_steers` is read from the run's live queue.
+
+```python
+import asyncio
+from sqlsaber import SQLSaber, SQLSaberOptions, SteerIdleError
+
+async def main() -> None:
+    async with SQLSaber(options=SQLSaberOptions(database="analytics")) as saber:
+        run = asyncio.create_task(saber.query("Revenue by region for 2025"))
+        await asyncio.sleep(0)
+
+        enqueue_id = saber.steer("Only US customers, and use last quarter.")
+        assert saber.pending_steers == ("Only US customers, and use last quarter.",)
+
+        dropped = saber.clear_steers()
+        assert dropped == ["Only US customers, and use last quarter."]
+        assert saber.pending_steers == ()
+
+        saber.steer("Only US customers.")
+        result = await run
+
+        assert any("Only US customers." in str(m) for m in saber.messages)
+        assert saber.pending_steers == ()
+
+        try:
+            saber.steer("too late")
+        except SteerIdleError as exc:
+            assert str(exc) == "No query is running."
+```
+
+`steer`, `clear_steers`, and `pending_steers` are synchronous and must run on the
+event loop that is running `query()`. From another thread, marshal with
+`loop.call_soon_threadsafe(saber.steer, text)`. Calling from the wrong thread
+raises `RuntimeError` instead of racing the drain.
+
+`steer` raises `SteerIdleError` when no run can take the message, `ValueError`
+for an empty message, and `SQLSaberClosedError` after `close()`. Two `steer`
+calls queue two items. `clear_steers` does not abort the run.
+
+A steer sent before the first model request lands in that first request. A steer
+sent while the model or a tool is busy lands in the next request. A steer sent
+as the agent was about to stop starts one more model request. The current token
+stream is never cut. Abort discards the whole turn, delivered and pending steers
+included. `pending_steers` is `()` afterwards.
+
 ## Follow-up queries
 
-Run follow-up queries on the same `SQLSaber` instance. Each completed query updates
-that instance's conversation history automatically.
+Run a later query on the same `SQLSaber` instance after the previous `query()`
+returns. Each completed query updates that instance's conversation history
+automatically. This starts a new run. Use `steer()` to redirect the run that is
+already in flight.
 
 ```python
 async with SQLSaber(options=options) as saber:

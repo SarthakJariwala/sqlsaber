@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterable, Awaitable, Mapping, Sequence
 from dataclasses import replace
 from types import MappingProxyType, TracebackType
@@ -12,6 +13,7 @@ from pydantic_ai.messages import AgentStreamEvent, ModelMessage, ModelResponse
 from pydantic_ai.usage import RequestUsage, RunUsage, UsageLimits
 
 from ._runtime import _SQLSaberRuntime
+from ._steering import Steering
 from sqlsaber.artifact_resolution import artifact_references_from_messages
 from sqlsaber.artifacts import (
     ArtifactContext,
@@ -172,6 +174,7 @@ class SQLSaber:
         thread_manager = self._runtime.thread_manager
         self._is_new_thread = bool(getattr(thread_manager, "first_message", True))
         self._query_in_progress = False
+        self._steering: Steering = Steering.ended()
         self._closed = False
 
     @classmethod
@@ -347,9 +350,13 @@ class SQLSaber:
         metadata: dict[str, Any] | None = None,
         usage_limits: UsageLimits | None = None,
     ) -> SQLSaberResult:
-        """Run a query and commit its completed history to this SDK instance."""
+        """Run a query and commit its completed history to this SDK instance.
+
+        While it runs, `steer` queues user text onto the same run.
+        """
         self._ensure_not_running()
         self._query_in_progress = True
+        self._steering = Steering(loop=asyncio.get_running_loop())
         try:
             history = (
                 list(message_history)
@@ -363,6 +370,7 @@ class SQLSaber:
                 conversation_id=conversation_id,
                 metadata=metadata,
                 usage_limits=usage_limits,
+                capabilities=(self._steering,),
             )
             content = getattr(run_result, "data", None)
             if content is None:
@@ -372,7 +380,42 @@ class SQLSaber:
             self._is_new_thread = False
             return result
         finally:
+            self._steering.end()
             self._query_in_progress = False
+
+    def steer(self, message: str) -> str:
+        """Queue `message` as a user turn on the running query. Delivered before the next model request.
+
+        Args:
+            message: Non-empty text. Stored verbatim (not stripped), like `prompt` on the RPC.
+
+        Returns:
+            The pydantic-ai enqueue_id, echoed on EnqueuedMessagesEvent when delivered.
+
+        Raises:
+            SQLSaberClosedError: after close().
+            ValueError: `message` is empty after strip.
+            SteerIdleError: no query is running, or the run has already produced its result.
+            RuntimeError: called off the event loop that runs query().
+        """
+        self._ensure_open()
+        if not message.strip():
+            raise ValueError("steer message must be a non-empty string")
+        return self._steering.steer(message)
+
+    def clear_steers(self) -> list[str]:
+        """Drop undelivered steers. Returns their texts in queue order. `[]` when idle. Does not abort.
+
+        Returns:
+            Dropped steer texts in queue order.
+        """
+        self._ensure_open()
+        return self._steering.clear()
+
+    @property
+    def pending_steers(self) -> tuple[str, ...]:
+        """Snapshot of queued, not-yet-delivered steer texts. `()` when idle."""
+        return self._steering.pending
 
     def set_thinking(
         self,

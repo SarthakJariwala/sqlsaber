@@ -6,6 +6,7 @@ from collections.abc import AsyncIterable, Awaitable, Sequence
 from typing import Any, Callable
 
 from pydantic_ai import RunContext
+from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 from pydantic_ai.usage import UsageLimits
 
@@ -113,6 +114,7 @@ class _SQLSaberRuntime:
         conversation_id: str | None = None,
         metadata: dict[str, Any] | None = None,
         usage_limits: UsageLimits | None = None,
+        capabilities: Sequence[AbstractCapability[Any]] = (),
     ) -> Any:
         """Run a natural language query against the configured database."""
         run_result = await self.agent.run(
@@ -122,6 +124,7 @@ class _SQLSaberRuntime:
             conversation_id=conversation_id,
             metadata=metadata,
             usage_limits=usage_limits,
+            capabilities=capabilities,
         )
 
         if self.thread_manager is not None:

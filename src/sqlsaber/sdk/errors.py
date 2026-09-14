@@ -15,6 +15,13 @@ class RunInProgressError(SQLSaberError):
     """Raised when an operation conflicts with an active query."""
 
 
+class SteerIdleError(SQLSaberError):
+    """Raised by SQLSaber.steer when no query can take the message."""
+
+    def __init__(self, message: str = "No query is running.") -> None:
+        super().__init__(message)
+
+
 class ThreadResumeError(SQLSaberError):
     """Base class for failures to resume a stored thread."""
 
