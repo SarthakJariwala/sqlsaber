@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from pydantic_ai import RunContext
-from pydantic_ai.messages import AgentStreamEvent
+from pydantic_ai.messages import AgentStreamEvent, EnqueuedMessagesEvent
 
 from sqlsaber import SQLSaber, SQLSaberResult
 from sqlsaber.artifacts import ArtifactUnavailable
@@ -20,6 +20,7 @@ from sqlsaber.query_results import QueryResultUnavailable
 from sqlsaber.sdk.errors import (
     RunInProgressError,
     SQLSaberClosedError,
+    SteerIdleError,
     ThreadResumeError,
 )
 
@@ -30,6 +31,7 @@ from .protocol import (
     Aborted,
     AgentEnd,
     AgentStart,
+    ClearQueue,
     Command,
     Completed,
     Err,
@@ -45,15 +47,18 @@ from .protocol import (
     NewSession,
     Ok,
     Prompt,
+    QueueUpdate,
     ReadCommand,
     Ready,
     ReloadModel,
+    RequestId,
     Response,
     RunOutcome,
     RunUsageSummary,
     SetThinkingLevel,
     Shutdown,
     StateSnapshot,
+    Steer,
     encode,
     parse_command,
     query_result_page,
@@ -65,6 +70,7 @@ from .transcript import StreamTranslator, last_assistant_text, transcript
 
 BUSY_ERROR = 'A query is already running. Send {"type":"abort"} or wait for agent_end.'
 IDLE_ONLY_ERROR = 'A query is running. Send {"type":"abort"} or wait for agent_end.'
+STEER_IDLE_ERROR = 'No query is running. Send {"type":"prompt"} instead.'
 HARD_CANCEL_TIMEOUT = 5.0
 
 
@@ -79,6 +85,8 @@ class Running:
     abort: asyncio.Event
     prompt: str
     prompt_id: str | int | None
+    started: asyncio.Event = field(default_factory=asyncio.Event)
+    sent_steers: tuple[str, ...] = ()
     abort_waiters: list[Abort] = field(default_factory=list)
     shutdown_waiters: list[Shutdown] = field(default_factory=list)
     watch: asyncio.Task[None] | None = None
@@ -214,8 +222,16 @@ class RpcSession:
                 return Err(name, rid, error)
             case Closed(), _:
                 return Err(_command_name(command), command.id, "Session is closed")
+            case Running() as running, Prompt(if_running="steer") as prompt:
+                return await self._steer(running, prompt.message, "prompt", prompt.id)
             case _, Prompt() as prompt:
                 return self._start_prompt(prompt)
+            case Running() as running, Steer() as steer:
+                return await self._steer(running, steer.message, "steer", steer.id)
+            case Idle(), Steer() as steer:
+                return Err("steer", steer.id, STEER_IDLE_ERROR)
+            case _, ClearQueue() as clear:
+                return self._clear_queue(clear)
             case _, Abort() as abort:
                 return await self._abort(abort)
             case _, Shutdown() as shutdown:
@@ -277,30 +293,71 @@ class RpcSession:
             case Running():
                 return Err("prompt", command.id, BUSY_ERROR)
             case Idle():
-                abort = asyncio.Event()
-                task = asyncio.create_task(
-                    self._run(command.message, abort, command.id)
-                )
-                self._state = Running(
+                holder: list[Running] = []
+
+                async def _bound() -> None:
+                    await self._run(holder[0])
+
+                task = asyncio.create_task(_bound())
+                running = Running(
                     task=task,
-                    abort=abort,
+                    abort=asyncio.Event(),
                     prompt=command.message,
                     prompt_id=command.id,
                 )
+                holder.append(running)
+                self._state = running
                 return Ok("prompt", command.id)
         return Err("prompt", command.id, "Session is closed")
 
-    async def _run(
+    async def _steer(
         self,
-        prompt: str,
-        abort: asyncio.Event,
-        prompt_id: str | int | None,
+        running: Running,
+        text: str,
+        command: str,
+        rid: RequestId | None,
     ) -> None:
+        await running.started.wait()
+        try:
+            enqueue_id = self._saber.steer(text)
+        except Exception as exc:
+            self.send(Err(command, rid, map_sdk_error(exc)))
+            return None
+        self.send(
+            Ok(
+                command,
+                rid,
+                {
+                    "enqueueId": enqueue_id,
+                    "pendingSteers": list(self._saber.pending_steers),
+                },
+            )
+        )
+        self._sync_queue(running)
+        return None
+
+    def _clear_queue(self, command: ClearQueue) -> None:
+        cleared = self._saber.clear_steers()
+        self.send(Ok("clear_queue", command.id, {"steering": cleared}))
+        match self._state:
+            case Running() as running:
+                self._sync_queue(running)
+        return None
+
+    def _sync_queue(self, running: Running) -> None:
+        now = self._saber.pending_steers
+        if now == running.sent_steers:
+            return
+        running.sent_steers = now
+        self._emit(QueueUpdate(steering=now))
+
+    async def _run(self, running: Running) -> None:
         outcome: RunOutcome = Failed("internal error")
         try:
-            self._emit(AgentStart(prompt_id=prompt_id))
+            self._emit(AgentStart(prompt_id=running.prompt_id))
+            running.started.set()
             result = await self._saber.query(
-                prompt, event_stream_handler=self._translate
+                running.prompt, event_stream_handler=self._translate
             )
             outcome = Completed(
                 messages=tuple(transcript(result.new_messages)),
@@ -317,14 +374,15 @@ class RpcSession:
         except Exception as exc:
             outcome = Failed(str(exc))
         finally:
+            self._sync_queue(running)
             abort_waiters: list[Abort] = []
             shutdown_waiters: list[Shutdown] = []
             match self._state:
-                case Running() as running:
-                    abort_waiters = list(running.abort_waiters)
-                    shutdown_waiters = list(running.shutdown_waiters)
-                    running.abort_waiters.clear()
-                    running.shutdown_waiters.clear()
+                case Running() as current:
+                    abort_waiters = list(current.abort_waiters)
+                    shutdown_waiters = list(current.shutdown_waiters)
+                    current.abort_waiters.clear()
+                    current.shutdown_waiters.clear()
             self._state = Idle()
             self._emit(AgentEnd(outcome))
             for waiter in abort_waiters:
@@ -346,6 +404,10 @@ class RpcSession:
         self._raise_if_aborted()
         async for event in events:
             self._raise_if_aborted()
+            if isinstance(event, EnqueuedMessagesEvent):
+                match self._state:
+                    case Running() as running:
+                        self._sync_queue(running)
             for wire in translator.translate(event):
                 self._emit(wire)
         self._raise_if_aborted()
@@ -494,6 +556,7 @@ class RpcSession:
             thread_id=info.thread_id,
             thread_persistence=self._persist_thread,
             message_count=len(transcript(self._saber.messages)),
+            pending_steers=self._saber.pending_steers,
         )
 
     def _emit(self, event: Event) -> None:
@@ -517,6 +580,8 @@ def map_sdk_error(exc: BaseException) -> str:
     Returns:
         Client-facing error text. ``error`` stays a string (Pi-shaped).
     """
+    if isinstance(exc, SteerIdleError):
+        return STEER_IDLE_ERROR
     if isinstance(exc, RunInProgressError):
         return BUSY_ERROR
     if isinstance(exc, SQLSaberClosedError):
@@ -536,6 +601,10 @@ def _command_name(command: Command) -> str:
     match command:
         case Prompt():
             return "prompt"
+        case Steer():
+            return "steer"
+        case ClearQueue():
+            return "clear_queue"
         case Abort():
             return "abort"
         case NewSession():

@@ -28,16 +28,17 @@ type Json = dict[str, Any]
 THINKING_CHOICES: tuple[str, ...] = ("off", *(level.value for level in ThinkingLevel))
 
 _UNSUPPORTED_FIELDS: dict[str, str] = {
-    "streamingBehavior": (
-        "streamingBehavior is not supported: SQLSaber has no steer/follow-up "
-        "queue. Wait for agent_end, then send the prompt."
-    ),
     "images": "images is not supported: SQLSaber prompts are text.",
     "parentSession": (
         "parentSession is not supported: SQLSaber threads are linear, "
         "not a session tree."
     ),
 }
+
+FOLLOW_UP_UNSUPPORTED = (
+    'streamingBehavior "followUp" is not supported. Use steer for an in-run redirect, '
+    "or wait for agent_end and send prompt."
+)
 
 
 # --- commands (stdin) --------------------------------------------------------
@@ -46,6 +47,18 @@ _UNSUPPORTED_FIELDS: dict[str, str] = {
 @dataclass(frozen=True, slots=True)
 class Prompt:
     message: str
+    id: RequestId | None = None
+    if_running: Literal["reject", "steer"] = "reject"
+
+
+@dataclass(frozen=True, slots=True)
+class Steer:
+    message: str
+    id: RequestId | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ClearQueue:
     id: RequestId | None = None
 
 
@@ -127,7 +140,15 @@ type MutateCommand = NewSession | SetThinkingLevel | ReloadModel
 """Idle-only mutations. ``get_tables`` is idle-only too (live connections)."""
 
 type Command = (
-    Prompt | Abort | Shutdown | ReadCommand | MutateCommand | GetTables | Invalid
+    Prompt
+    | Steer
+    | ClearQueue
+    | Abort
+    | Shutdown
+    | ReadCommand
+    | MutateCommand
+    | GetTables
+    | Invalid
 )
 
 
@@ -162,6 +183,10 @@ def parse_command(line: bytes) -> Command:
     match raw_type:
         case "prompt":
             return _parse_prompt(obj, rid)
+        case "steer":
+            return _parse_steer(obj, rid)
+        case "clear_queue":
+            return ClearQueue(id=rid)
         case "abort":
             return Abort(id=rid)
         case "new_session":
@@ -213,7 +238,24 @@ def _parse_prompt(obj: dict[str, Any], rid: RequestId | None) -> Command:
     message = obj.get("message")
     if not isinstance(message, str) or not message.strip():
         return Invalid("message must be a non-empty string", command="prompt", id=rid)
-    return Prompt(message=message, id=rid)
+    match obj.get("streamingBehavior"):
+        case None:
+            return Prompt(message=message, id=rid)
+        case "steer":
+            return Prompt(message=message, id=rid, if_running="steer")
+        case "followUp":
+            return Invalid(FOLLOW_UP_UNSUPPORTED, command="prompt", id=rid)
+        case _:
+            return Invalid(
+                'streamingBehavior must be "steer"', command="prompt", id=rid
+            )
+
+
+def _parse_steer(obj: dict[str, Any], rid: RequestId | None) -> Command:
+    message = obj.get("message")
+    if not isinstance(message, str) or not message.strip():
+        return Invalid("message must be a non-empty string", command="steer", id=rid)
+    return Steer(message=message, id=rid)
 
 
 def _parse_set_thinking_level(obj: dict[str, Any], rid: RequestId | None) -> Command:
@@ -376,6 +418,7 @@ class StateSnapshot:
     thread_id: str | None
     thread_persistence: bool
     message_count: int
+    pending_steers: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -532,6 +575,11 @@ class AgentEnd:
     outcome: RunOutcome
 
 
+@dataclass(frozen=True, slots=True)
+class QueueUpdate:
+    steering: tuple[str, ...]
+
+
 type Event = (
     Ready
     | AgentStart
@@ -542,6 +590,7 @@ type Event = (
     | ToolExecutionStart
     | ToolExecutionEnd
     | AgentEnd
+    | QueueUpdate
 )
 
 
@@ -644,6 +693,8 @@ def _wire_dict(message: Response | Event) -> Json:
             return {"type": "agent_end", "status": "aborted"}
         case AgentEnd(outcome=Failed(error=error)):
             return {"type": "agent_end", "status": "error", "error": error}
+        case QueueUpdate(steering=steering):
+            return {"type": "queue_update", "steering": list(steering)}
     raise TypeError(f"unencodable RPC message: {type(message)!r}")
 
 
@@ -671,6 +722,7 @@ def state_json(state: StateSnapshot) -> Json:
         "threadId": state.thread_id,
         "threadPersistence": state.thread_persistence,
         "messageCount": state.message_count,
+        "pendingSteers": list(state.pending_steers),
     }
 
 
