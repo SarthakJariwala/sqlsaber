@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from .sdk.errors import (
         RunInProgressError,
         SQLSaberClosedError,
+        SteerIdleError,
         SQLSaberError,
         ThreadDatabaseRequiredError,
         ThreadDatabaseUnavailableError,
@@ -76,6 +77,7 @@ __all__ = [
     "SQLSaberInfo",
     "SQLSaberOptions",
     "SQLSaberResult",
+    "SteerIdleError",
     "SqlTools",
     "TableInfo",
     "ThinkingLevel",
@@ -157,6 +159,7 @@ def __getattr__(name: str):
     if name in {
         "RunInProgressError",
         "SQLSaberClosedError",
+        "SteerIdleError",
         "SQLSaberError",
         "ThreadDatabaseRequiredError",
         "ThreadDatabaseUnavailableError",

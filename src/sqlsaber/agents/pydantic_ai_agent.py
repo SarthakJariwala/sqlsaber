@@ -260,6 +260,7 @@ class SQLSaberAgent:
         conversation_id: str | None = None,
         metadata: dict[str, Any] | None = None,
         usage_limits: UsageLimits | None = None,
+        capabilities: Sequence[AbstractCapability[Any]] = (),
     ) -> Any:
         """Run the agent without occupying the embedding agent's deps slot."""
         with bind_usage_limits(usage_limits):
@@ -270,6 +271,7 @@ class SQLSaberAgent:
                 metadata=metadata,
                 usage_limits=usage_limits,
                 event_stream_handler=event_stream_handler,
+                capabilities=list(capabilities) or None,
             )
 
     async def close(self) -> None:
