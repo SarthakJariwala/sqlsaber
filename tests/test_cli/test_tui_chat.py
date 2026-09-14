@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import time
 from collections.abc import Callable
 from io import BytesIO
@@ -905,6 +906,7 @@ async def test_execute_query_refreshes_footer_usage_cost_and_context() -> None:
     )
     session.current_task = None
     session.cancellation_token = None
+    session._steer_armed_for = None
 
     class FakeSQLSaberResult:
         usage = RunUsage(input_tokens=300_000, output_tokens=0, requests=2)
@@ -1850,6 +1852,7 @@ async def test_interactive_session_routes_empty_submit_only_during_handoff(
     session._handoff_mode = False
     session.current_task = None
     session._submit_pending = False
+    session._steer_armed_for = None
     session._exit_finalized = False
     session.before_prompt_loop = lambda: asyncio.sleep(0)
     session._footer_text = lambda: None
@@ -1874,25 +1877,51 @@ async def test_interactive_session_routes_empty_submit_only_during_handoff(
     assert captured["should_submit_empty"]() is True
 
 
-@pytest.mark.asyncio
-async def test_interactive_session_rejects_running_query_submit_without_echo(
-    monkeypatch,
-) -> None:
-    terminal = FakeTerminal(columns=80, rows=12)
+def _steer_session(saber=None) -> InteractiveSession:
     session = InteractiveSession.__new__(InteractiveSession)
     session.log = type("FakeLog", (), {"info": lambda *args, **kwargs: None})()
-    session.saber = _fake_saber(database_names=("test",))
+    session.saber = saber or _recording_saber()
     session.autocomplete_provider = None
     session._handoff_mode = False
     session.current_task = None
     session._submit_pending = False
+    session._steer_armed_for = None
     session._exit_finalized = False
+    session.cancellation_token = None
+    return session
+
+
+def _recording_saber():
+    saber = _fake_saber(database_names=("test",))
+    saber.steers = []
+    saber.steer_error = None
+
+    def steer(message: str) -> str:
+        if saber.steer_error is not None:
+            raise saber.steer_error
+        saber.steers.append((message, threading.current_thread().ident))
+        return "enq-1"
+
+    saber.steer = steer
+    return saber
+
+
+class _RunningTask:
+    def done(self) -> bool:
+        return False
+
+
+@pytest.mark.asyncio
+async def test_first_enter_while_running_arms_steer_without_echo(
+    monkeypatch,
+) -> None:
+    terminal = FakeTerminal(columns=80, rows=12)
+    session = _steer_session()
     session.before_prompt_loop = lambda: asyncio.sleep(0)
     session._footer_text = lambda: None
     session._load_history = lambda: []
     session.show_welcome_message = lambda app: None
     session._finalize_exit = lambda: asyncio.sleep(0)
-
     captured: dict[str, ChatApp] = {}
 
     def fake_build_chat_app(**kwargs):
@@ -1902,22 +1931,208 @@ async def test_interactive_session_rejects_running_query_submit_without_echo(
         return app
 
     monkeypatch.setattr(interactive, "build_chat_app", fake_build_chat_app)
-
     await session.run()
     app = captured["app"]
+    session.current_task = _RunningTask()
+    app.editor.set_text("only US")
+    app.submit("only US")
 
-    class RunningTask:
-        def done(self) -> bool:
-            return False
-
-    session.current_task = RunningTask()
-    app.editor.set_text("still running")
-
-    app.submit("still running")
-
-    assert app.editor.get_text() == "still running"
+    viewport = "\n".join(app.render_plain_viewport())
+    assert "Press Enter again to steer." in viewport
+    assert "already running" not in viewport
+    assert app.editor.get_text() == "only US"
     assert app.editor.history == []
-    assert all("still running" not in line for line in app.chat_container.render(80))
+    assert all(
+        "only US" not in strip_ansi(line) for line in app.chat_container.render(80)
+    )
+    assert session.saber.steers == []
+
+
+@pytest.mark.asyncio
+async def test_second_enter_steers_on_the_loop_thread(monkeypatch) -> None:
+    terminal = FakeTerminal(columns=80, rows=12)
+    session = _steer_session()
+    session.before_prompt_loop = lambda: asyncio.sleep(0)
+    session._footer_text = lambda: None
+    session._load_history = lambda: []
+    session.show_welcome_message = lambda app: None
+    session._finalize_exit = lambda: asyncio.sleep(0)
+    session._append_history = lambda text: None
+    captured: dict[str, ChatApp] = {}
+
+    def fake_build_chat_app(**kwargs):
+        app = build_chat_app(terminal=terminal, **kwargs)
+        captured["app"] = app
+        asyncio.get_running_loop().call_soon(app.stop)
+        return app
+
+    monkeypatch.setattr(interactive, "build_chat_app", fake_build_chat_app)
+    await session.run()
+    app = captured["app"]
+    session.current_task = _RunningTask()
+    loop = asyncio.get_running_loop()
+    loop_ident = threading.current_thread().ident
+    app.editor.set_text("only US")
+    app.submit("only US")
+    accepted = await loop.run_in_executor(None, lambda: app.submit("only US"))
+    assert accepted is None
+    for _ in range(20):
+        await asyncio.sleep(0)
+        if session.saber.steers:
+            break
+    assert [text for text, _ in session.saber.steers] == ["only US"]
+    assert session.saber.steers[0][1] == loop_ident
+    assert app.editor.get_text() == ""
+    assert session._steer_armed_for is None
+    viewport = "\n".join(app.render_plain_viewport())
+    assert "only US" in viewport
+
+
+@pytest.mark.asyncio
+async def test_slash_while_running_does_not_arm(monkeypatch) -> None:
+    terminal = FakeTerminal(columns=80, rows=12)
+    session = _steer_session()
+    session.before_prompt_loop = lambda: asyncio.sleep(0)
+    session._footer_text = lambda: None
+    session._load_history = lambda: []
+    session.show_welcome_message = lambda app: None
+    session._finalize_exit = lambda: asyncio.sleep(0)
+    captured: dict[str, ChatApp] = {}
+
+    def fake_build_chat_app(**kwargs):
+        app = build_chat_app(terminal=terminal, **kwargs)
+        captured["app"] = app
+        asyncio.get_running_loop().call_soon(app.stop)
+        return app
+
+    monkeypatch.setattr(interactive, "build_chat_app", fake_build_chat_app)
+    await session.run()
+    app = captured["app"]
+    session.current_task = _RunningTask()
+    app.editor.set_text("/model")
+    app.submit("/model")
+    viewport = "\n".join(app.render_plain_viewport())
+    assert "Commands are unavailable while a query is running" in viewport
+    assert session._steer_armed_for is None
+    assert app.editor.get_text() == "/model"
+    app.editor.set_text("only US")
+    app.submit("only US")
+    assert "Press Enter again to steer." in "\n".join(app.render_plain_viewport())
+    assert session.saber.steers == []
+
+
+@pytest.mark.asyncio
+async def test_stale_arm_cannot_fire_on_the_next_query(monkeypatch) -> None:
+    terminal = FakeTerminal(columns=80, rows=12)
+    session = _steer_session()
+    session.before_prompt_loop = lambda: asyncio.sleep(0)
+    session._footer_text = lambda: None
+    session._load_history = lambda: []
+    session.show_welcome_message = lambda app: None
+    session._finalize_exit = lambda: asyncio.sleep(0)
+    captured: dict[str, ChatApp] = {}
+
+    def fake_build_chat_app(**kwargs):
+        app = build_chat_app(terminal=terminal, **kwargs)
+        captured["app"] = app
+        asyncio.get_running_loop().call_soon(app.stop)
+        return app
+
+    monkeypatch.setattr(interactive, "build_chat_app", fake_build_chat_app)
+    await session.run()
+    app = captured["app"]
+    first = _RunningTask()
+    session.current_task = first
+    app.submit("only US")
+    assert session._steer_armed_for is first
+    session.current_task = _RunningTask()
+    app.editor.set_text("only US")
+    app.submit("only US")
+    assert session.saber.steers == []
+    assert "Press Enter again to steer." in "\n".join(app.render_plain_viewport())
+
+
+@pytest.mark.asyncio
+async def test_idle_steer_falls_through_to_submit_without_duplicate_bubble(
+    monkeypatch,
+) -> None:
+    from sqlsaber import SteerIdleError
+
+    terminal = FakeTerminal(columns=80, rows=12)
+    session = _steer_session()
+    session.saber.steer_error = SteerIdleError()
+    session.before_prompt_loop = lambda: asyncio.sleep(0)
+    session._footer_text = lambda: None
+    session._load_history = lambda: []
+    session.show_welcome_message = lambda app: None
+    session._finalize_exit = lambda: asyncio.sleep(0)
+    handled: list[str] = []
+
+    async def capture(app, surface, text):
+        handled.append(text)
+
+    session._handle_submit = capture
+    captured: dict[str, ChatApp] = {}
+
+    def fake_build_chat_app(**kwargs):
+        app = build_chat_app(terminal=terminal, **kwargs)
+        captured["app"] = app
+        asyncio.get_running_loop().call_soon(app.stop)
+        return app
+
+    monkeypatch.setattr(interactive, "build_chat_app", fake_build_chat_app)
+    await session.run()
+    app = captured["app"]
+    session.current_task = _RunningTask()
+    app.submit("only US")
+    app.submit("only US")
+    for _ in range(20):
+        await asyncio.sleep(0)
+        if handled:
+            break
+    assert handled == ["only US"]
+    user_blocks = [
+        strip_ansi("\n".join(child.render(80)))
+        for child in app.chat_container.children
+        if "only US" in strip_ansi("\n".join(child.render(80)))
+    ]
+    assert len(user_blocks) == 1
+
+
+@pytest.mark.asyncio
+async def test_ctrl_c_while_armed_follows_interrupt_path() -> None:
+    terminal = FakeTerminal(columns=80, rows=12)
+    app = build_chat_app(terminal=terminal, on_submit=lambda text: None)
+    app.tui.start()
+    session = _steer_session()
+    session.log = SimpleNamespace(info=lambda *args, **kwargs: None)
+    session.streaming_handler = TUIStreamingQueryHandler(app)
+    started = asyncio.Event()
+
+    async def hanging_query(prompt, **kwargs):
+        _ = prompt, kwargs
+        started.set()
+        await asyncio.Event().wait()
+
+    session.saber.query = hanging_query
+    session.usage = SimpleNamespace(metered=lambda fn: fn)
+    query = asyncio.create_task(
+        session._execute_query_with_cancellation("first prompt")
+    )
+    await started.wait()
+    app.append_user_message("first prompt")
+    surface = ChatSurface(app)
+    accepted = session._queue_submit(
+        app, surface, "only US", loop=asyncio.get_running_loop()
+    )
+    assert accepted is False
+    assert session._steer_armed_for is session.current_task
+    await session._cancel_current_task(app)
+    await query
+    assert session._steer_armed_for is None
+    viewport = "\n".join(app.render_plain_viewport())
+    assert "Query interrupted" in viewport
+    assert "first prompt" in viewport
 
 
 @pytest.mark.asyncio
