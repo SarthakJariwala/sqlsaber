@@ -9,6 +9,7 @@ import time
 
 import pytest
 
+# Windows has no termios; skip this module instead of failing collection.
 pty = pytest.importorskip("pty")
 
 pytestmark = pytest.mark.skipif(
