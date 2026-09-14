@@ -4,6 +4,7 @@ import importlib.util
 import os
 import pty
 import select
+import subprocess
 import sys
 import time
 
@@ -39,34 +40,54 @@ def _run_on_pty(code: str) -> str:
     env["NO_COLOR"] = "1"
     env["TERM"] = "xterm-256color"
 
-    pid, fd = pty.fork()
-    if pid == 0:
-        os.execve(sys.executable, [sys.executable, "-c", code], env)
+    master_fd, slave_fd = pty.openpty()
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, "-c", code],
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            env=env,
+            close_fds=True,
+        )
+    finally:
+        os.close(slave_fd)
 
     chunks: list[bytes] = []
     deadline = time.time() + 30
-    while time.time() < deadline:
-        ready, _, _ = select.select([fd], [], [], 0.2)
-        if fd in ready:
-            try:
-                data = os.read(fd, 8192)
-            except OSError:
-                break
-            if not data:
-                break
-            chunks.append(data)
-        else:
-            try:
-                waited, _ = os.waitpid(pid, os.WNOHANG)
-            except ChildProcessError:
-                break
-            if waited:
-                break
     try:
-        os.waitpid(pid, 0)
-    except ChildProcessError:
-        pass
-    return b"".join(chunks).decode("utf-8", "replace")
+        while True:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                proc.kill()
+                break
+            ready, _, _ = select.select([master_fd], [], [], min(0.2, remaining))
+            if master_fd in ready:
+                try:
+                    data = os.read(master_fd, 8192)
+                except OSError:
+                    break
+                if not data:
+                    break
+                chunks.append(data)
+            elif proc.poll() is not None:
+                drain, _, _ = select.select([master_fd], [], [], 0.05)
+                if master_fd in drain:
+                    try:
+                        data = os.read(master_fd, 8192)
+                    except OSError:
+                        pass
+                    else:
+                        if data:
+                            chunks.append(data)
+                break
+        proc.wait(timeout=5)
+    finally:
+        os.close(master_fd)
+
+    output = b"".join(chunks).decode("utf-8", "replace")
+    assert proc.returncode == 0, output
+    return output
 
 
 def test_pydantic_ai_prints_first_run_banner_on_a_tty() -> None:
