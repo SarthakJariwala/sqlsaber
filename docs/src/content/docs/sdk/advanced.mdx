@@ -1,15 +1,13 @@
 ---
 title: Advanced
-description: "Advanced SQLsaber SDK usage: per-tool model overrides, custom system prompts, write access, and injecting knowledge base and conversation thread managers."
+description: Per-tool model overrides, custom system prompts, write access, and injectable knowledge and thread managers in the SQLsaber SDK.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
 ## Per-tool model overrides
 
-You can run specific internal tools (for example a visualization or summarization
-tool) on a different model than the main agent. Use `tool_overrides`, mapping a
-tool name to a `ModelOverides`:
+Run a specific internal tool, such as visualization or summarization, on a different model than the main agent. Use `tool_overrides`, mapping a tool name to a `ModelOverides`:
 
 ```python
 from sqlsaber import SQLSaber, SQLSaberOptions, ModelOverides
@@ -26,7 +24,7 @@ options = SQLSaberOptions(
 )
 ```
 
-You may also pass a plain dict instead of `ModelOverides`:
+A plain dict also works:
 
 ```python
 tool_overrides={"viz": {"model_name": "openai:gpt-5-mini"}}
@@ -57,26 +55,24 @@ SQLSaberOptions(
 )
 ```
 
-## Allowing write operations
+## Allow write operations
 
-By default the SDK only permits read-only `SELECT` queries. Set
-`allow_dangerous=True` to permit DML and a restricted subset of DDL:
+By default the SDK only permits read-only `SELECT` queries. Set `allow_dangerous=True` to permit DML and a restricted subset of DDL:
 
 ```python
 SQLSaberOptions(database="sqlite:///my.db", allow_dangerous=True)
 ```
 
 <Aside type="caution">
-  This allows data modifications (INSERT/UPDATE/DELETE, with UPDATE/DELETE
-  requiring a `WHERE`) and limited DDL. Destructive operations such as DROP and
-  TRUNCATE remain blocked. See [Running Queries](/guides/queries#dangerous-mode)
-  for the full policy.
+  This allows data modifications (`INSERT`, `UPDATE`, `DELETE`, with `UPDATE`
+  and `DELETE` requiring a `WHERE`) and limited DDL. Destructive operations such
+  as `DROP` and `TRUNCATE` remain blocked. See [Running
+  queries](/guides/queries/#allow-writes) for the full policy.
 </Aside>
 
-## Injecting a knowledge base
+## Inject a knowledge base
 
-Provide domain context by injecting your own `KnowledgeManager`. The agent can
-search it while answering:
+Provide domain context by injecting your own `KnowledgeManager`. The agent can search it while answering:
 
 ```python
 import asyncio
@@ -109,17 +105,16 @@ if __name__ == "__main__":
 ```
 
 <Aside type="note">
-  When you inject your own `knowledge_manager`, the session does **not** close it
-  for you — you own its lifecycle. If you omit it, the session creates and closes
-  one automatically.
+  When you inject your own `knowledge_manager`, the session does not close it.
+  You own its lifecycle. If you omit it, the session creates and closes one
+  automatically.
 </Aside>
 
-See the [Knowledge Base guide](/guides/knowledge) for managing entries.
+See [Knowledge base](/guides/knowledge/) for managing entries.
 
-## Persisting conversation threads
+## Persist conversation threads
 
-Inject a `ThreadManager` to persist each completed query's history, as the CLI does
-between sessions:
+Inject a `ThreadManager` to persist each completed query's history, as the CLI does between sessions:
 
 ```python
 from sqlsaber import SQLSaber, SQLSaberOptions
@@ -134,13 +129,9 @@ async with SQLSaber(options=options) as saber:
     result = await saber.query("How many orders shipped last week?")
 ```
 
-The session saves each completed query and ends the current thread when it closes.
-The default manager uses SQLsaber's local thread storage. Inject a manager with your
-own `ThreadStorage` when the application needs a different storage location or
-lifecycle.
+The session saves each completed query and ends the current thread when it closes. The default manager uses SQLsaber's local thread storage. Inject a manager with your own `ThreadStorage` when the application needs a different storage location or lifecycle.
 
-Resume a stored thread with `SQLSaber.resume()`. If the thread stores a configured
-database name, leave `options.database` as `None` and SQLsaber selects that name:
+Resume a stored thread with `SQLSaber.resume()`. If the thread stores a saved connection name, leave `options.database` as `None` and SQLsaber selects that name:
 
 ```python
 import asyncio
@@ -161,13 +152,8 @@ async def continue_thread() -> None:
 asyncio.run(continue_thread())
 ```
 
-Pass an explicit `options.database` to override the stored selector. SQLsaber does
-not persist raw connection strings or file paths for automatic resume.
+Pass an explicit `options.database` to override the stored selector. SQLsaber does not persist raw connection strings or file paths for automatic resume.
 
-`SQLSaber.resume()` raises typed errors. Catch `ThreadNotFoundError` when the ID does
-not exist, `ThreadResumeHistoryError` when the stored Pydantic AI history is missing
-or corrupt, `ThreadDatabaseRequiredError` when a safe database selector is missing,
-and `ThreadDatabaseUnavailableError` when a stored configured database is no longer
-available. All resume errors inherit from `ThreadResumeError`.
+`SQLSaber.resume()` raises typed errors. Catch `ThreadNotFoundError` when the ID does not exist, `ThreadResumeHistoryError` when the stored Pydantic AI history is missing or corrupt, `ThreadDatabaseRequiredError` when a safe database selector is missing, and `ThreadDatabaseUnavailableError` when a stored saved connection is no longer available. All resume errors inherit from `ThreadResumeError`.
 
-See the [Conversation Threads guide](/guides/threads) for CLI thread commands.
+See [Conversation threads](/guides/threads/) for CLI thread commands.

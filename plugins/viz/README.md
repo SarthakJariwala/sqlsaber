@@ -1,3 +1,9 @@
-# SQLSaber Visualization Plugin
+# SQLsaber visualization plugin
 
-Provides the `viz` tool for SQLSaber via the `sqlsaber-viz` plugin. The tool generates a declarative chart spec and renders ASCII charts in the terminal using plotext.
+The `sqlsaber-viz` plugin adds a `viz` tool. It builds a chart spec from query results and renders ASCII charts in the terminal with plotext.
+
+```bash
+uv tool install --with sqlsaber-viz sqlsaber
+```
+
+After a query, ask SQLsaber to plot the result. See [Plugins](https://sqlsaber.com/guides/plugins/).
