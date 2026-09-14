@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-sandbox-v0.4.0...sqlsaber-sandbox-v0.5.0) (2026-09-11)
+
+
+### Features
+
+* **sdk:** require explicit capabilities and a shared store ([#264](https://github.com/SarthakJariwala/sqlsaber/issues/264)) ([3f64360](https://github.com/SarthakJariwala/sqlsaber/commit/3f64360d364841b58f3600fe6bce8bbd5f3aba47))
+
 ## [0.4.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-sandbox-v0.3.0...sqlsaber-sandbox-v0.4.0) (2026-08-03)
 
 
