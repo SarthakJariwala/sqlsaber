@@ -44,6 +44,10 @@ def bind_update_notice(emit: Callable[..., None] | None) -> None:
 
 QUERY_CANCEL_GRACE_SECONDS = 0.1
 UNBOUND_EXIT_COMMANDS = frozenset({"/exit", "/quit", "exit", "quit"})
+STEER_HINT = "Press Enter again to steer."
+COMMANDS_BLOCKED_WHILE_RUNNING = (
+    "Commands are unavailable while a query is running. Press Ctrl+C to interrupt it."
+)
 
 
 def _signal_loop_event(loop: asyncio.AbstractEventLoop, event: asyncio.Event) -> None:
@@ -119,6 +123,7 @@ class InteractiveSession:
         self.streaming_handler: TUIStreamingQueryHandler | None = None
         self.current_task: asyncio.Task[SQLSaberResult | None] | None = None
         self.cancellation_token: asyncio.Event | None = None
+        self._steer_armed_for: asyncio.Task[SQLSaberResult | None] | None = None
         self._submit_pending = False
         self.autocomplete_provider = SQLSaberAutocompleteProvider()
         self._handoff_mode = False
@@ -534,6 +539,7 @@ class InteractiveSession:
         finally:
             self.current_task = None
             self.cancellation_token = None
+            self._steer_armed_for = None
             self.log.info("interactive.query.end")
 
     async def _cancel_current_task(self, app: ChatApp) -> None:
@@ -642,6 +648,10 @@ class InteractiveSession:
             out(b.md(f"You can continue this thread using: `{hint}`", role="muted"))
         self._exit_finalized = True
 
+    def _running_query_task(self) -> asyncio.Task[SQLSaberResult | None] | None:
+        task = self.current_task
+        return task if task is not None and not task.done() else None
+
     def _queue_submit(
         self,
         app: ChatApp,
@@ -650,23 +660,51 @@ class InteractiveSession:
         *,
         loop: asyncio.AbstractEventLoop,
     ) -> bool:
-        if self._submit_pending or (self.current_task and not self.current_task.done()):
-            surface.emit(
-                b.warn("A query is already running. Press Ctrl+C to interrupt it.")
+        running = self._running_query_task()
+        if running is not None:
+            if user_query.lstrip().startswith("/"):
+                surface.emit(b.warn(COMMANDS_BLOCKED_WHILE_RUNNING))
+                app.tui.set_focus(app.editor)
+                return False
+            if self._steer_armed_for is not running:
+                self._steer_armed_for = running
+                surface.emit(b.md(STEER_HINT, role="muted"))
+                app.tui.set_focus(app.editor)
+                return False
+            self._steer_armed_for = None
+            loop.call_soon_threadsafe(
+                lambda: asyncio.create_task(self._steer(app, surface, user_query))
             )
+            return True
+        if self._submit_pending:
+            surface.emit(b.warn("Still processing the previous command."))
             app.tui.set_focus(app.editor)
             return False
-
         self._submit_pending = True
-
-        async def submit_query() -> None:
-            try:
-                await self._handle_submit(app, surface, user_query)
-            finally:
-                self._submit_pending = False
-
-        loop.call_soon_threadsafe(lambda: asyncio.create_task(submit_query()))
+        loop.call_soon_threadsafe(
+            lambda: asyncio.create_task(self._run_submit(app, surface, user_query))
+        )
         return True
+
+    async def _run_submit(self, app, surface, user_query: str) -> None:
+        self._submit_pending = True
+        try:
+            await self._handle_submit(app, surface, user_query)
+        finally:
+            self._submit_pending = False
+
+    async def _steer(self, app, surface, text: str) -> None:
+        from sqlsaber import SteerIdleError
+
+        try:
+            self.saber.steer(text)
+        except SteerIdleError:
+            await self._run_submit(app, surface, text)
+            return
+        except Exception as exc:
+            surface.emit(b.error(str(exc)))
+            return
+        self._append_history(text)
 
     async def run(self, shell: ChatShell | None = None) -> None:
         """Run the interactive session loop.
