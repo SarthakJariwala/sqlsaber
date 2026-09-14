@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+
 from pydantic_ai.messages import (
     ModelMessage,
     ModelMessagesTypeAdapter,
@@ -18,6 +20,7 @@ from pydantic_ai.messages import (
     TextPart,
     UserPromptPart,
 )
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.usage import RequestUsage, RunUsage
 
 from sqlsaber import SQLSaber, SQLSaberOptions
@@ -30,8 +33,15 @@ from sqlsaber.query_results import (
     new_query_result_id,
 )
 from sqlsaber.rpc.protocol import OVERSIZE_LINE, parse_command
-from sqlsaber.rpc.session import RpcSession, ThreadedLineReader, map_sdk_error, serve
-from sqlsaber.sdk.errors import RunInProgressError, SQLSaberClosedError
+from sqlsaber.rpc.session import (
+    BUSY_ERROR,
+    STEER_IDLE_ERROR,
+    RpcSession,
+    ThreadedLineReader,
+    map_sdk_error,
+    serve,
+)
+from sqlsaber.sdk.errors import RunInProgressError, SQLSaberClosedError, SteerIdleError
 
 
 def _options(**overrides: Any) -> SQLSaberOptions:
@@ -550,6 +560,8 @@ async def test_set_thinking_off_is_real_off(monkeypatch) -> None:
 
 def test_map_sdk_error_is_a_string_table() -> None:
     assert "already running" in map_sdk_error(RunInProgressError("busy"))
+    assert map_sdk_error(SteerIdleError()) == STEER_IDLE_ERROR
+    assert map_sdk_error(SteerIdleError()) != BUSY_ERROR
     assert map_sdk_error(SQLSaberClosedError("closed")) == "SQLSaber is closed"
     assert map_sdk_error(ValueError("bad")) == "bad"
     assert map_sdk_error(RuntimeError("x")).startswith("Internal error:")
@@ -588,4 +600,312 @@ async def test_serve_answers_while_stdin_stays_open() -> None:
         reader_file.close()
         if not task.done():
             task.cancel()
+        await saber.close()
+
+
+@pytest.mark.asyncio
+async def test_steer_idle_returns_exact_error() -> None:
+    saber = SQLSaber(options=_options())
+    buf: list[bytes] = []
+    session = RpcSession(saber, write=buf.append, persist_thread=False)
+    try:
+        response = await session.handle(
+            parse_command(b'{"id":"s2","type":"steer","message":"x"}')
+        )
+        session.send(response)
+        record = _load(buf)[0]
+        assert record["command"] == "steer"
+        assert record["success"] is False
+        assert record["error"] == STEER_IDLE_ERROR
+    finally:
+        await saber.close()
+
+
+@pytest.mark.asyncio
+async def test_bare_prompt_while_running_stays_busy(monkeypatch) -> None:
+    saber = SQLSaber(options=_options())
+    hang = asyncio.Event()
+    _patch_answer(monkeypatch, saber, hang=hang)
+    buf: list[bytes] = []
+    session = RpcSession(saber, write=buf.append, persist_thread=False)
+    try:
+        accepted = await session.handle(
+            parse_command(b'{"id":"p1","type":"prompt","message":"first"}')
+        )
+        session.send(accepted)
+        rejected = await session.handle(
+            parse_command(b'{"id":"p5","type":"prompt","message":"x"}')
+        )
+        session.send(rejected)
+        record = _load(buf)[-1]
+        assert record["success"] is False
+        assert record["error"] == BUSY_ERROR
+        hang.set()
+        await session.close()
+    finally:
+        hang.set()
+        await saber.close()
+
+
+@pytest.mark.asyncio
+async def test_steer_and_clear_queue_and_get_state_while_running(monkeypatch) -> None:
+    saber = SQLSaber(options=_options())
+    hang = asyncio.Event()
+    _patch_answer(monkeypatch, saber, hang=hang)
+    buf: list[bytes] = []
+    session = RpcSession(saber, write=buf.append, persist_thread=False)
+    try:
+        accepted = await session.handle(
+            parse_command(b'{"id":"q1","type":"prompt","message":"first"}')
+        )
+        session.send(accepted)
+        steer = await session.handle(
+            parse_command(b'{"id":"s1","type":"steer","message":"Only US customers."}')
+        )
+        assert steer is None
+        records = _load(buf)
+        steer_row = next(row for row in records if row.get("id") == "s1")
+        assert steer_row["command"] == "steer"
+        assert steer_row["success"] is True
+        assert isinstance(steer_row["data"]["enqueueId"], str)
+        assert steer_row["data"]["pendingSteers"] == ["Only US customers."]
+        assert records[records.index(steer_row) + 1] == {
+            "type": "queue_update",
+            "steering": ["Only US customers."],
+        }
+        state = await session.handle(parse_command(b'{"id":"g1","type":"get_state"}'))
+        session.send(state)
+        state_row = next(row for row in _load(buf) if row.get("id") == "g1")
+        assert state_row["data"]["pendingSteers"] == ["Only US customers."]
+        cleared = await session.handle(
+            parse_command(b'{"id":"c1","type":"clear_queue"}')
+        )
+        assert cleared is None
+        clear_row = next(row for row in _load(buf) if row.get("id") == "c1")
+        assert clear_row["data"] == {"steering": ["Only US customers."]}
+        assert any(
+            row.get("type") == "queue_update" and row.get("steering") == []
+            for row in _load(buf)
+        )
+        hang.set()
+        await session.close()
+    finally:
+        hang.set()
+        await saber.close()
+
+
+@pytest.mark.asyncio
+async def test_clear_queue_idle_returns_empty_and_no_event() -> None:
+    saber = SQLSaber(options=_options())
+    buf: list[bytes] = []
+    session = RpcSession(saber, write=buf.append, persist_thread=False)
+    try:
+        await session.handle(parse_command(b'{"id":"c1","type":"clear_queue"}'))
+        records = _load(buf)
+        assert records == [
+            {
+                "type": "response",
+                "command": "clear_queue",
+                "success": True,
+                "id": "c1",
+                "data": {"steering": []},
+            }
+        ]
+    finally:
+        await saber.close()
+
+
+@pytest.mark.asyncio
+async def test_prompt_steer_alias_running_and_idle(monkeypatch) -> None:
+    saber = SQLSaber(options=_options())
+    hang = asyncio.Event()
+    _patch_answer(monkeypatch, saber, hang=hang)
+    buf: list[bytes] = []
+    session = RpcSession(saber, write=buf.append, persist_thread=False)
+    try:
+        first = await session.handle(
+            parse_command(b'{"id":"q1","type":"prompt","message":"first"}')
+        )
+        session.send(first)
+        alias = await session.handle(
+            parse_command(
+                b'{"id":"p2","type":"prompt","message":"x","streamingBehavior":"steer"}'
+            )
+        )
+        assert alias is None
+        row = next(item for item in _load(buf) if item.get("id") == "p2")
+        assert row["command"] == "prompt"
+        assert row["success"] is True
+        assert isinstance(row["data"]["enqueueId"], str)
+        hang.set()
+        await asyncio.sleep(0)
+        await session.close()
+
+        idle_buf: list[bytes] = []
+        idle = RpcSession(saber, write=idle_buf.append, persist_thread=False)
+        hang2 = asyncio.Event()
+        hang2.set()
+        _patch_answer(monkeypatch, saber, hang=None)
+        started = await idle.handle(
+            parse_command(
+                b'{"id":"p3","type":"prompt","message":"x","streamingBehavior":"steer"}'
+            )
+        )
+        idle.send(started)
+        records = _load(idle_buf)
+        assert records[0]["command"] == "prompt"
+        assert records[0]["success"] is True
+        assert "enqueueId" not in records[0]
+        await idle.close()
+    finally:
+        hang.set()
+        await saber.close()
+
+
+@pytest.mark.asyncio
+async def test_handle_prompt_then_steer_with_no_yield(monkeypatch) -> None:
+    saber = SQLSaber(options=_options())
+    hang = asyncio.Event()
+    _patch_answer(monkeypatch, saber, hang=hang)
+    buf: list[bytes] = []
+    session = RpcSession(saber, write=buf.append, persist_thread=False)
+    try:
+        accepted = await session.handle(
+            parse_command(b'{"id":"q1","type":"prompt","message":"hello"}')
+        )
+        session.send(accepted)
+        steer = await session.handle(
+            parse_command(b'{"id":"s1","type":"steer","message":"only US"}')
+        )
+        assert steer is None
+        row = next(item for item in _load(buf) if item.get("id") == "s1")
+        assert row["success"] is True
+        hang.set()
+        await session.close()
+    finally:
+        hang.set()
+        await saber.close()
+
+
+@pytest.mark.asyncio
+async def test_abort_emits_empty_queue_update_only_when_queue_was_nonempty(
+    monkeypatch,
+) -> None:
+    saber = SQLSaber(options=_options())
+    hang = asyncio.Event()
+    _patch_answer(monkeypatch, saber, hang=hang)
+    buf: list[bytes] = []
+    session = RpcSession(saber, write=buf.append, persist_thread=False)
+    try:
+        session.send(
+            await session.handle(
+                parse_command(b'{"id":"q","type":"prompt","message":"slow"}')
+            )
+        )
+        await session.handle(
+            parse_command(b'{"id":"s1","type":"steer","message":"keep"}')
+        )
+        await session.handle(parse_command(b'{"id":"a1","type":"abort"}'))
+        records = await _wait_for(
+            buf, lambda rows: any(row.get("type") == "agent_end" for row in rows)
+        )
+        end = next(row for row in records if row["type"] == "agent_end")
+        updates = [row for row in records if row.get("type") == "queue_update"]
+        assert updates[-1] == {"type": "queue_update", "steering": []}
+        assert records.index(updates[-1]) < records.index(end)
+        assert end["status"] == "aborted"
+        hang.set()
+        await session.close()
+    finally:
+        hang.set()
+        await saber.close()
+
+    empty_buf: list[bytes] = []
+    hang = asyncio.Event()
+    saber = SQLSaber(options=_options())
+    _patch_answer(monkeypatch, saber, hang=hang)
+    session = RpcSession(saber, write=empty_buf.append, persist_thread=False)
+    try:
+        session.send(
+            await session.handle(
+                parse_command(b'{"id":"q","type":"prompt","message":"slow"}')
+            )
+        )
+        await asyncio.sleep(0)
+        await session.handle(parse_command(b'{"id":"a1","type":"abort"}'))
+        records = await _wait_for(
+            empty_buf, lambda rows: any(row.get("type") == "agent_end" for row in rows)
+        )
+        assert all(row.get("type") != "queue_update" for row in records)
+        hang.set()
+        await session.close()
+    finally:
+        hang.set()
+        await saber.close()
+
+
+@pytest.mark.asyncio
+async def test_steer_while_running_uses_real_function_model() -> None:
+    saber = SQLSaber(options=_options())
+    requests: list[list[ModelMessage]] = []
+    first_entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def stream_fn(
+        messages: list[ModelMessage], info: AgentInfo
+    ) -> AsyncIterator[Any]:
+        requests.append(list(messages))
+        if len(requests) == 1:
+            first_entered.set()
+            await release.wait()
+            yield "first"
+            return
+        yield "second"
+
+    buf: list[bytes] = []
+    session = RpcSession(saber, write=buf.append, persist_thread=False)
+    try:
+        with saber.agent.agent.override(model=FunctionModel(stream_function=stream_fn)):
+            session.send(
+                await session.handle(
+                    parse_command(b'{"id":"q1","type":"prompt","message":"hello"}')
+                )
+            )
+            await _wait_for(
+                buf, lambda rows: any(row.get("type") == "agent_start" for row in rows)
+            )
+            await first_entered.wait()
+            await session.handle(
+                parse_command(b'{"id":"s1","type":"steer","message":"only US"}')
+            )
+            records = _load(buf)
+            steer_row = next(row for row in records if row.get("id") == "s1")
+            assert steer_row["command"] == "steer"
+            assert isinstance(steer_row["data"]["enqueueId"], str)
+            assert steer_row["data"]["pendingSteers"] == ["only US"]
+            queued = next(row for row in records if row.get("type") == "queue_update")
+            assert queued["steering"] == ["only US"]
+            release.set()
+            records = await _wait_for(
+                buf, lambda rows: any(row.get("type") == "agent_end" for row in rows)
+            )
+        emptied = [
+            row
+            for row in records
+            if row.get("type") == "queue_update" and row.get("steering") == []
+        ]
+        assert emptied
+        starts = [
+            i for i, row in enumerate(records) if row.get("type") == "message_start"
+        ]
+        empty_idx = records.index(emptied[0])
+        assert empty_idx < starts[1]
+        end = next(row for row in records if row["type"] == "agent_end")
+        user_contents = [
+            item["content"] for item in end["messages"] if item.get("role") == "user"
+        ]
+        assert "only US" in user_contents
+    finally:
+        release.set()
+        await session.close()
         await saber.close()
