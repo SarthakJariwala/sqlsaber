@@ -121,6 +121,7 @@ export default defineConfig({
 					label: "Reference",
 					items: [
 						{ label: "Commands", slug: "reference/commands" },
+						{ label: "RPC mode", slug: "reference/rpc" },
 					],
 				},
 				{

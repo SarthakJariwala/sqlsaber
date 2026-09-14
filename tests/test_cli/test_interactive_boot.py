@@ -28,6 +28,7 @@ loaded = [
         "pydantic_ai",
         "sqlsaber.cli.auth",
         "sqlsaber.cli.models",
+        "sqlsaber.cli.rpc",
         "sqlsaber.cli.update_check",
         "sqlsaber.config.logging",
     )

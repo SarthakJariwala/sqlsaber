@@ -39,6 +39,8 @@ saber --thread a1b2c3d4 "Now compare that with last quarter"
 - `--system-prompt` - Custom system prompt text, or a path to a file. Overrides the built-in prompt.
 - `--thread` - Continue a saved thread without interactive mode. Requires a query. Uses the stored saved connection unless `-d` overrides it.
 
+Headless embedding uses [`saber rpc`](/reference/rpc/), not a flag on this command. Piped stdin (`echo "show users" | saber`) is still a one-shot question.
+
 **Global options:**
 
 - `--help, -h` - Show help
@@ -65,6 +67,32 @@ JSON remains the default. CSV applies only to tabular results sent to the model 
 This is a session option, not a saved preference. Interactive thread switches keep the current session's choice. A new CLI process defaults to JSON unless the flag is passed again. Existing thread messages are not converted. There is no in-session toggle. Launch with the flag you want.
 
 CSV often reduces token usage for multi-row data. Small results can be larger. The effect on answer quality is not established, so the flag stays opt-in. For Python, see [Configuration](/sdk/configuration/#experimental-csv-tool-results).
+
+---
+
+## `saber rpc`
+
+Headless JSONL on stdin and stdout so IDEs and other apps can embed SQLsaber. Protocol: [RPC mode](/reference/rpc/).
+
+```bash
+saber rpc
+saber rpc -d analytics
+saber rpc -d ./orders.csv --no-thread
+saber rpc --thread THREAD_ID
+echo '{"type":"prompt","message":"how many users?"}' | saber rpc -d analytics --no-thread
+```
+
+**Parameters:**
+
+- `-d, --database` - Same selectors as `saber`. Repeatable.
+- `--thread` - Resume a saved thread. Cannot be combined with `--no-thread`.
+- `--no-thread` - Do not save the conversation.
+- `--thinking` / `--no-thinking` - Initial reasoning setting.
+- `--allow-dangerous` - Same write scope as interactive mode.
+- `--csv-tool-results` - Model-facing SQL results as CSV.
+- `--system-prompt` - Custom system prompt text, or a path to a file.
+
+Does not start onboarding or an update check. Missing database configuration writes one JSON `startup` error to stdout and exits 1. `echo "show users" | saber` is still a one-shot question.
 
 ---
 

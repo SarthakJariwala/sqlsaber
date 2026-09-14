@@ -28,6 +28,7 @@ from sqlsaber.config.settings import ThinkingLevel
         ["theme", "set"],
         ["theme", "reset"],
         ["threads", "prune"],
+        ["rpc"],
     ],
 )
 def test_affected_help_includes_examples(command, capsys):

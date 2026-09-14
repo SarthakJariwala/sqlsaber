@@ -21,8 +21,6 @@ from pydantic_ai.messages import (
     ToolCallPart,
     ToolCallPartDelta,
 )
-from pydantic_core import from_json
-
 from sqlsaber.config.logging import get_logger
 from sqlsaber.query_result_resolution import (
     QueryResultReference,
@@ -40,6 +38,7 @@ from sqlsaber.tools.renderer import (
     ToolRenderer,
     core_display_registry,
 )
+from sqlsaber.utils.partial_json import partial_json_query
 from sqlsaber.utils.text_input import sanitize_terminal_text
 
 if TYPE_CHECKING:
@@ -356,7 +355,7 @@ class AgentStreamPresenter:
             return
         args = self._tool_call_args.get(index)
         if isinstance(args, str):
-            query = _partial_json_query(args)
+            query = partial_json_query(args)
         elif isinstance(args, dict):
             value = args.get("query")
             query = value if isinstance(value, str) else None
@@ -476,15 +475,3 @@ class AgentStreamPresenter:
             self._reset_tool_call_state(remove_previews=True)
             self._reset_response_stream_state()
             self._cancellation_token = None
-
-
-def _partial_json_query(args: str) -> str | None:
-    """Decode the complete portion of a query value from partial JSON arguments."""
-    try:
-        parsed = from_json(args, allow_partial="trailing-strings")
-    except ValueError:
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    query = parsed.get("query")
-    return query if isinstance(query, str) else None

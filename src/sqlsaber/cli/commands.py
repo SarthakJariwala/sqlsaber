@@ -67,6 +67,7 @@ async def _create_cli_saber(
     thread: str | None,
     log,
     csv_tool_results: bool = False,
+    persist_thread: bool = True,
 ):
     """Construct SQLSaber and persistence handles for a CLI session."""
     from sqlsaber.cli.artifacts import cli_artifact_store
@@ -93,7 +94,11 @@ async def _create_cli_saber(
         allow_dangerous=allow_dangerous,
         csv_tool_results=csv_tool_results,
         system_prompt=system_prompt,
-        thread_manager=(ThreadManager(storage=storage) if thread is None else None),
+        thread_manager=(
+            ThreadManager(storage=storage)
+            if thread is None and persist_thread
+            else None
+        ),
         artifact_store=artifact_store,
         query_result_store=query_result_store,
     )
@@ -168,6 +173,11 @@ _LAZY_SUBCOMMANDS: tuple[tuple[str, str, str], ...] = (
     ("sqlsaber.cli.models:models_app", "models", "Select and manage models"),
     ("sqlsaber.cli.theme:theme_app", "theme", "Manage theme settings"),
     ("sqlsaber.cli.threads:threads_app", "threads", "Manage SQLsaber threads"),
+    (
+        "sqlsaber.cli.rpc:rpc_app",
+        "rpc",
+        "Headless JSONL mode for embedding (IDEs, apps)",
+    ),
 )
 
 for _target, _name, _help in _LAZY_SUBCOMMANDS:

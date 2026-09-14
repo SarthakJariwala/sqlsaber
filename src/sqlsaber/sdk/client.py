@@ -273,6 +273,15 @@ class SQLSaber:
         )
 
     @property
+    def messages(self) -> list[ModelMessage]:
+        """Committed conversation history (copy).
+
+        Aborted or failed queries leave this unchanged. The list is a snapshot;
+        mutating it does not affect the SDK-owned history.
+        """
+        return list(self._message_history)
+
+    @property
     def display_registry(self) -> Mapping[str, Tool]:
         """Read-only display adapters for streaming renderers."""
         return MappingProxyType(dict(self._runtime.agent.display_registry))

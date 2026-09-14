@@ -49,3 +49,4 @@ Each feature file has an H1 title and one user-focused summary. It then uses fou
 - [Knowledge base](./knowledge-base.md) covers database-scoped add, list, show, search, remove, clear, and agent retrieval.
 - [Conversation threads](./conversation-threads.md) covers empty and populated listing, transcript display, artifacts, resume, export, and pruning.
 - [Terminal output](./terminal-output.md) covers redirected Markdown, stream separation, and ANSI-free output.
+- [RPC mode](./rpc-mode.md) covers headless JSONL embedding: help, startup errors, idle commands, keep-open stdin, and abort.
