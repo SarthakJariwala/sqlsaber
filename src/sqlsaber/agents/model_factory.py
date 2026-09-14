@@ -14,8 +14,6 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from sqlsaber.config import providers
 from sqlsaber.config.settings import ThinkingLevel
 
-# pydantic-ai 2.43+ prints a first-run banner to stderr on a TTY. SQLsaber owns
-# that TTY, so suppress before any Agent.run. Read at run time, not import.
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
 type UnifiedEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
