@@ -13,6 +13,22 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.77.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.76.0...sqlsaber-v0.77.0) (2026-09-14)
+
+
+### Features
+
+* **rpc:** add saber rpc JSONL protocol for embedding ([#270](https://github.com/SarthakJariwala/sqlsaber/issues/270)) ([ed2c02b](https://github.com/SarthakJariwala/sqlsaber/commit/ed2c02b118cf3d6dba5c7a638182d530cd17c6dc))
+* **rpc:** add steer, clear_queue, and queue_update ([ae96b8f](https://github.com/SarthakJariwala/sqlsaber/commit/ae96b8ff2abd26d9323d4dd5b771bdaf6becea5b))
+* **sdk:** add SQLSaber.steer for in-flight redirects ([21da3bc](https://github.com/SarthakJariwala/sqlsaber/commit/21da3bc68eaa35068b57c3477e5a7a5b0a4f5da4))
+* **tui:** steer a running query with double Enter ([fb47bb2](https://github.com/SarthakJariwala/sqlsaber/commit/fb47bb2ef2612906a874d97de50c2c7e60355ac1))
+
+
+### Bug Fixes
+
+* **agents:** keep pydantic-ai first-run banner off the TTY ([#274](https://github.com/SarthakJariwala/sqlsaber/issues/274)) ([e0bb6c0](https://github.com/SarthakJariwala/sqlsaber/commit/e0bb6c0217f6a1f17bf3f2b8b8bb3cab325fb5d9))
+* **cli:** keep structlog off management command terminals ([#271](https://github.com/SarthakJariwala/sqlsaber/issues/271)) ([be73e52](https://github.com/SarthakJariwala/sqlsaber/commit/be73e52d64330eaec32e3a6f174f3f0e869a003f))
+
 ## [0.76.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.75.0...sqlsaber-v0.76.0) (2026-09-11)
 
 
