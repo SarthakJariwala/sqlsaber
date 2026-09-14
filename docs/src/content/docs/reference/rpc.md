@@ -45,7 +45,7 @@ Process rules:
 The first stdout line is the `ready` event, or a startup failure after which the process exits 1:
 
 ```json
-{"type":"ready","protocolVersion":1,"state":"idle","database":{"name":"analytics","type":"PostgreSQL","names":["analytics"]},"model":{"name":"claude-sonnet-4-5","id":"anthropic:claude-sonnet-4-5"},"thinkingLevel":"off","thinkingLevels":["off","minimal","low","medium","high","maximum"],"dangerousMode":false,"csvToolResults":false,"threadId":null,"threadPersistence":true,"messageCount":0}
+{"type":"ready","protocolVersion":1,"state":"idle","database":{"name":"analytics","type":"PostgreSQL","names":["analytics"]},"model":{"name":"claude-sonnet-4-5","id":"anthropic:claude-sonnet-4-5"},"thinkingLevel":"off","thinkingLevels":["off","minimal","low","medium","high","maximum"],"dangerousMode":false,"csvToolResults":false,"threadId":null,"threadPersistence":true,"messageCount":0,"pendingSteers":[]}
 ```
 
 ```json
@@ -54,7 +54,7 @@ The first stdout line is the `ready` event, or a startup failure after which the
 
 Each command produces exactly one `response`, in command order. `prompt` additionally streams events. The stream always ends with `agent_end`. Finish with `{"type":"shutdown"}` or close stdin. `SIGTERM` / `SIGINT` take the same graceful path.
 
-While `running`, these commands are accepted: `abort`, `get_state`, `get_messages`, `get_last_assistant_text`, `get_query_result`, `get_artifact`, `shutdown`. These are rejected because they would race the running query: `prompt`, `new_session`, `set_thinking_level`, `reload_model`, `get_tables`. There is no steer/follow-up queue. A `prompt` carrying Pi's `streamingBehavior` is rejected whether or not a query is running.
+While `running`, these commands are accepted: `steer`, `clear_queue`, `abort`, `get_state`, `get_messages`, `get_last_assistant_text`, `get_query_result`, `get_artifact`, `shutdown`. A `prompt` with `"streamingBehavior":"steer"` is accepted as `steer` (response `command` stays `"prompt"`). A bare `prompt` while running is rejected with `A query is already running. Send {"type":"abort"} or wait for agent_end.` These stay idle-only because they would race the running query: `new_session`, `set_thinking_level`, `reload_model`, `get_tables`. `"streamingBehavior":"followUp"` is rejected at parse time. `protocolVersion` stays `1`.
 
 `get_messages` returns committed turns only. A turn is committed when its `agent_end` has `status:"completed"`. Aborted or failed turns leave no trace in history or in the saved thread.
 
@@ -71,6 +71,44 @@ Start one agent run. The response means "accepted". The answer arrives as events
 
 Failures after acceptance (model API error, database error) are reported as `agent_end` with `status:"error"`, never as a second response.
 
+A `prompt` may carry `"streamingBehavior":"steer"`. While idle that field is ignored and a normal run starts. While running the message is queued on the current run. The response uses `"command":"prompt"` and includes `enqueueId` and `pendingSteers`, then a `queue_update` event.
+
+`"streamingBehavior":"followUp"` is not supported:
+
+```text
+streamingBehavior "followUp" is not supported. Use steer for an in-run redirect, or wait for agent_end and send prompt.
+```
+
+Any other `streamingBehavior` value is a parse error: `streamingBehavior must be "steer"`.
+
+### `steer`
+
+Legal while `running`. Queues `message` on the current run. Delivery happens before the next model request. The current token stream is not cut.
+
+```json
+{"id":"s1","type":"steer","message":"Only US customers, and use last quarter."}
+{"id":"s1","type":"response","command":"steer","success":true,"data":{"enqueueId":"019…","pendingSteers":["Only US customers, and use last quarter."]}}
+```
+
+Then emit `queue_update`. Do not emit a second `agent_start`. Idle steer is:
+
+```text
+No query is running. Send {"type":"prompt"} instead.
+```
+
+Empty or missing `message` is the same parse error as an empty `prompt`. `images` on `steer` is rejected the same way as on `prompt`.
+
+### `clear_queue`
+
+Drops queued steers that have not been delivered yet. Always succeeds when the session is open. Idle returns `"steering":[]` and emits no event. Does not abort the run.
+
+```json
+{"id":"c1","type":"clear_queue"}
+{"id":"c1","type":"response","command":"clear_queue","success":true,"data":{"steering":["Only US customers, and use last quarter."]}}
+```
+
+Then emit `queue_update` with `"steering":[]` when the session is running and the list changed.
+
 ### `abort`
 
 Stop the running query. `agent_end` with `status:"aborted"` is emitted before the abort response. Idempotent: when idle it responds immediately with `aborted:false`. Stdin is still read while a run unwinds, so `get_state` can land between `abort` and `agent_end`.
@@ -81,7 +119,7 @@ Clear history and start a fresh thread. Idle only.
 
 ### `get_state`
 
-Same object as `ready` minus `protocolVersion`. Allowed while running (`state:"running"`).
+Same object as `ready` minus `protocolVersion`. Allowed while running (`state:"running"`). Includes `pendingSteers`, an array of queued steer texts. Idle is `[]`.
 
 ### `get_messages`
 
@@ -126,10 +164,13 @@ Abort any running query, end the session, respond, exit 0. Closing stdin without
 | --- | --- |
 | `ready` | Once, first line, session accepting commands. |
 | `agent_start` | A `prompt` began. Carries `promptId` when the command had an `id`. |
+| `queue_update` | The pending steer list changed (queue, clear, delivery, or abort-drop). No `id`. Payload is `{"type":"queue_update","steering":[…]}`. |
 | `message_start` / `message_update` / `message_end` | One assistant message (one per model request in a tool loop). |
 | `sql_update` | Cumulative SQL recovered from a streaming `execute_sql` tool call. |
 | `tool_execution_start` / `tool_execution_end` | A tool ran. SQL tools include a `queryResult` handle, not the full grid. |
 | `agent_end` | The run finished: `completed`, `aborted`, or `error`. Always last. |
+
+Abort with a non-empty queue emits `queue_update` with `"steering":[]` before `agent_end` `aborted`. An empty queue emits no `queue_update`. `steer` accepted after the `prompt` response, including before the first `message_start`.
 
 `message_update.assistantMessageEvent.type` is one of `text_start`, `text_delta`, `text_end`, `thinking_start`, `thinking_delta`, `thinking_end`, `toolcall_start`, `toolcall_delta`, `toolcall_end`.
 
@@ -139,7 +180,7 @@ Abort any running query, end the session, respond, exit 0. Closing stdin without
 
 All RPC-defined field names are camelCase. Timestamps are epoch milliseconds.
 
-**State** (`ready`, `get_state`, mutating responses): `state`, `database` (`name`, `type`, `names`), `model` (`name`, `id`), `thinkingLevel`, `thinkingLevels`, `dangerousMode`, `csvToolResults`, `threadPersistence`, `threadId`, `messageCount`.
+**State** (`ready`, `get_state`, mutating responses): `state`, `database` (`name`, `type`, `names`), `model` (`name`, `id`), `thinkingLevel`, `thinkingLevels`, `dangerousMode`, `csvToolResults`, `threadPersistence`, `threadId`, `messageCount`, `pendingSteers`.
 
 **Transcript message**
 
@@ -164,12 +205,17 @@ import subprocess
 
 proc = subprocess.Popen(
     ["saber", "rpc", "-d", "analytics", "--no-thread"],
-    stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding="utf-8",
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    text=True,
+    encoding="utf-8",
 )
+
 
 def send(command: dict) -> None:
     proc.stdin.write(json.dumps(command) + "\n")
     proc.stdin.flush()
+
 
 first = json.loads(proc.stdout.readline())
 if first["type"] != "ready":

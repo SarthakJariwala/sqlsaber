@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 
 from sqlsaber.rpc.protocol import (
+    FOLLOW_UP_UNSUPPORTED,
     MAX_STDIN_LINE,
     Aborted,
     AgentEnd,
     AgentStart,
+    ClearQueue,
     Completed,
     Err,
     Failed,
@@ -15,9 +17,13 @@ from sqlsaber.rpc.protocol import (
     MessageUpdate,
     Ok,
     Prompt,
+    QueueUpdate,
+    StateSnapshot,
+    Steer,
     TextDelta,
     encode,
     parse_command,
+    state_json,
 )
 
 
@@ -86,13 +92,66 @@ def test_parse_unknown_command() -> None:
     assert command.error == "Unknown command: compact"
 
 
-def test_parse_rejects_streaming_behavior() -> None:
+def test_parse_prompt_streaming_behavior_steer() -> None:
     command = parse_command(
-        b'{"type":"prompt","message":"hi","streamingBehavior":"steer"}'
+        b'{"id":"p1","type":"prompt","message":"hi","streamingBehavior":"steer"}'
+    )
+    assert command == Prompt(message="hi", id="p1", if_running="steer")
+
+
+def test_parse_prompt_streaming_behavior_follow_up() -> None:
+    command = parse_command(
+        b'{"type":"prompt","message":"hi","streamingBehavior":"followUp"}'
     )
     assert isinstance(command, Invalid)
     assert command.command == "prompt"
-    assert "streamingBehavior" in command.error
+    assert command.error == FOLLOW_UP_UNSUPPORTED
+
+
+def test_parse_prompt_streaming_behavior_unknown() -> None:
+    command = parse_command(
+        b'{"type":"prompt","message":"hi","streamingBehavior":"bogus"}'
+    )
+    assert isinstance(command, Invalid)
+    assert command.error == 'streamingBehavior must be "steer"'
+
+
+def test_parse_steer_and_blank_and_images() -> None:
+    ok = parse_command(b'{"id":"s1","type":"steer","message":"only US"}')
+    assert ok == Steer(message="only US", id="s1")
+    blank = parse_command(b'{"type":"steer","message":"   "}')
+    assert isinstance(blank, Invalid)
+    assert blank.command == "steer"
+    assert blank.error == "message must be a non-empty string"
+    images = parse_command(b'{"type":"steer","message":"hi","images":[]}')
+    assert isinstance(images, Invalid)
+    assert "images" in images.error
+
+
+def test_parse_clear_queue() -> None:
+    command = parse_command(b'{"id":"c1","type":"clear_queue"}')
+    assert command == ClearQueue(id="c1")
+
+
+def test_encode_queue_update_and_pending_steers() -> None:
+    record = _load(encode(QueueUpdate(("a",))))
+    assert record == {"type": "queue_update", "steering": ["a"]}
+    state = StateSnapshot(
+        state="running",
+        database_names=("db",),
+        primary_database="db",
+        database_type="SQLite",
+        model_name="m",
+        model_id=None,
+        thinking="off",
+        dangerous_mode=False,
+        csv_tool_results=False,
+        thread_id=None,
+        thread_persistence=False,
+        message_count=0,
+        pending_steers=("a",),
+    )
+    assert state_json(state)["pendingSteers"] == ["a"]
 
 
 def test_parse_rejects_images_and_parent_session() -> None:
