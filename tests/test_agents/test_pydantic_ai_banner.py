@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import importlib.util
 import os
-import pty
 import select
 import subprocess
 import sys
 import time
 
 import pytest
+
+pty = pytest.importorskip("pty")
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("pydantic_ai._display") is None,
