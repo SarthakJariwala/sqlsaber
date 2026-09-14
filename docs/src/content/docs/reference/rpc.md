@@ -190,10 +190,3 @@ for raw in proc.stdout:
 send({"type": "shutdown"})
 proc.wait()
 ```
-
-## What is not here
-
-- `steer`, `follow_up`, queues: `SQLSaber.query` rejects overlapping runs. Wait for `agent_end`.
-- `bash*`, extension UI, `compact*`, auto-retry, session trees (`fork` / `clone` / `get_tree`): threads are linear snapshots.
-- `set_model` / `cycle_model`: model selection is `saber models set`. `reload_model` applies it live.
-- Images on `prompt`: SQLSaber prompts are text.
