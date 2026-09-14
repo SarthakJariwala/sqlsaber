@@ -1,5 +1,6 @@
 """Minimal pydantic-ai model construction helpers."""
 
+import os
 from typing import Literal
 
 from pydantic_ai.models import Model
@@ -12,6 +13,8 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 from sqlsaber.config import providers
 from sqlsaber.config.settings import ThinkingLevel
+
+os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
 type UnifiedEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
 
