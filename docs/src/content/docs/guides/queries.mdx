@@ -1,15 +1,13 @@
 ---
-title: Running Queries
-description: "Query databases using natural language with SQLsaber. Interactive REPL, single-shot CLI queries, stdin piping, extended thinking, and table autocomplete."
+title: Running queries
+description: Ask SQLsaber questions in interactive mode, as a single CLI query, or from stdin. Control thinking, handoff, and write access.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-SQLsaber offers multiple ways to query your database using natural language. This guide covers all the different query modes and their use cases.
+Ask a question about your data. SQLsaber writes SQL, runs it, and explains the result.
 
-### Interactive Mode
-
-Ideal for back and forth conversations about your data.
+## Start interactive mode
 
 ```bash
 saber
@@ -21,96 +19,58 @@ saber
   async="true"
 ></script>
 
-### Single Query Mode
+Type `/help` for slash commands. Type `@` and press Tab to complete a table name. The full list is in [Commands](/reference/commands/#interactive-mode).
 
-Run a one-off query without entering interactive mode:
+## Ask one question
 
 ```bash
 saber "How many orders were placed last week?"
 ```
 
-Useful for:
+Use this in scripts, for a quick check, or for a one-line report.
 
-- Shell scripting
-- Quick checks
-- Automated reporting
-
-### Stdin Mode
-
-Pipe queries from other commands or files:
+## Pipe a question
 
 ```bash
-# From echo
 echo "Count all active customers from last week" | saber
 
-# From file
 cat query.txt | saber
-
-# From other commands
-curl -s https://api.example.com/query | saber
 ```
 
-Useful for:
+## Select a database
 
-- Shell scripting
-- Batch processing
-- Integration with other tools
-- Automation
+If a default connection exists:
 
-### Features
-
-#### Slash Commands
-
-Special commands in interactive mode:
-
-- `/clear` - Clear conversation history
-- `/exit` or `/quit` - Exit SQLsaber
-- `/thinking on` - Enable extended thinking mode
-- `/thinking off` - Disable extended thinking mode
-- `/handoff <goal>` - Start a fresh thread with context from current conversation
-
-```
-> /clear
-Conversation history cleared.
-
-> /thinking on
-✓ Thinking enabled
-
-> /exit
-Goodbye!
+```bash
+saber "Show me sales data"
 ```
 
-#### Table Autocomplete
+To use a saved connection by name:
 
-Type `@` followed by a table name to get autocomplete suggestions:
-
-```
-> Show me all records from @cus[TAB]
-> Show me all records from @customers
+```bash
+saber -d prod-db "What's our revenue this month?"
 ```
 
-Supports schema-aware completions:
+To use a local file:
 
+```bash
+saber -d "./data/sales.db" "Top selling products"
+saber -d "./data/warehouse.duckdb" "Latest partitions"
+saber -d "./customers.csv" "How many customers per state?"
+saber -d "./orders.parquet" "What is total revenue?"
 ```
-> @pub[TAB] → @public.customers
+
+To use a connection string for this run only:
+
+```bash
+saber -d "postgresql://user:pass@host:5432/db" "Count all users"
 ```
 
-#### Extended Thinking Mode
+## Turn thinking on or off
 
-A fresh install has thinking on at medium. Change the level or turn thinking off when a query does not need it.
+A fresh install has thinking on at medium. Raise the level for harder analysis. Turn thinking off when the question is small.
 
-**Thinking Levels:**
-
-| Level     | Use Case           | Description                           |
-| --------- | ------------------ | ------------------------------------- |
-| `off`     | Disable            | No extended thinking                  |
-| `minimal` | Quick responses    | Minimal reasoning overhead            |
-| `low`     | Light reasoning    | Faster, cheaper                       |
-| `medium`  | Balanced (default) | Good balance of cost and quality      |
-| `high`    | Deep reasoning     | More thorough analysis                |
-| `maximum` | Complex problems   | Highest reasoning depth, highest cost |
-
-**In interactive mode:**
+In interactive mode:
 
 ```
 > /thinking
@@ -120,169 +80,73 @@ Thinking: enabled (medium)
 ✓ Thinking: enabled (high)
 
 > Analyze sales trends and forecast next quarter
-💭 Thinking...
-[reasoning process appears here]
-[followed by final answer]
 
 > /thinking off
 ✓ Thinking: disabled
 ```
 
-**For single queries:**
+For a single query:
 
 ```bash
-# Enable thinking for complex analysis
 saber --thinking "Compare performance across regions with seasonal adjustments"
 
-# Disable for simple queries
 saber --no-thinking "How many users do we have?"
 ```
 
-**Configuring thinking level:**
+To save a default level, run `saber models set` and answer the thinking prompts. Check the saved values with `saber models current`.
 
-Use `saber models set` to configure thinking level after selecting a model:
+Levels are `off`, `minimal`, `low`, `medium`, `high`, and `maximum`. Each level maps to a provider setting:
 
-```bash
-saber models set
-# After selecting model, you'll be prompted:
-# ? Configure thinking mode? [Y/n]: y
-# ? Select thinking level: medium (Recommended)
-```
-
-Check current settings with:
-
-```bash
-saber models current
-# Current model: anthropic:claude-sonnet-4-5-20250929
-# Thinking: enabled (medium)
-```
-
-**Provider-specific mapping:**
-
-Each thinking level maps to provider-specific configurations:
-
-- **Anthropic**: `budget_tokens` (1,024 → 100,000)
-- **OpenAI**: `reasoning_effort` (minimal → xhigh)
-- **Google**: `thinking_level` (MINIMAL → HIGH)
-- **Groq**: Binary (any non-off level enables reasoning)
+- Anthropic: `budget_tokens` from 1,024 to 100,000
+- OpenAI: `reasoning_effort` from minimal to xhigh
+- Google: `thinking_level` from MINIMAL to HIGH
+- Groq: any non-off level enables reasoning
 
 <Aside type="note">
   Extended thinking is supported for Anthropic, OpenAI, Google, and Groq
   reasoning models.
 </Aside>
 
-#### Handoff
+## Start a fresh thread with context
 
-When your conversation gets long or you want to start fresh while preserving context, use the `/handoff` command:
+When the conversation is long, or you want a new direction without losing what you found, run `/handoff`:
 
 ```
 > /handoff optimize the monthly revenue query for better performance
 ```
 
-The handoff:
+SQLsaber summarizes the conversation, shows an editable draft prompt, ends the current thread, and starts a new one with that prompt.
 
-1. Summarizes your conversation (tables discovered, SQL queries run, key findings)
-2. Presents an editable draft prompt
-3. Ends the current thread and starts fresh with your edited prompt
+## Allow writes
 
-<Aside type="tip">
-  Use handoff when you want to pivot to a new direction while keeping relevant
-  history.
-</Aside>
-
-#### Dangerous Mode
-
-By default, SQLsaber only allows read-only SELECT queries. To enable write operations, use the `--allow-dangerous` flag:
+SQLsaber allows `SELECT` only unless you pass `--allow-dangerous`:
 
 ```bash
-# Single query with write access
 saber --allow-dangerous "Insert a new user with email test@example.com"
 
-# Interactive mode with write access
 saber --allow-dangerous
 ```
 
 <Aside type="caution">
-  This mode allows data modifications and a restricted subset of DDL. Use with
-  caution as these can modify your data.
+  This mode allows data changes and a restricted subset of DDL. Review the
+  generated SQL before you rely on it.
 </Aside>
 
-**What's allowed in dangerous mode:**
+Dangerous mode allows `INSERT`, `UPDATE`, and `DELETE` (`UPDATE` and `DELETE` require `WHERE`), plus `CREATE TABLE`, `CREATE VIEW`, `CREATE INDEX`, and `ALTER TABLE`.
 
-- DML: INSERT, UPDATE, DELETE (UPDATE/DELETE require `WHERE`)
-- Restricted DDL:
-  - CREATE TABLE
-  - CREATE VIEW
-  - CREATE INDEX
-  - ALTER TABLE
+It still blocks `DROP`, `TRUNCATE`, transaction control, `GRANT`, `REVOKE`, `ATTACH`, `DETACH`, and admin objects such as functions, procedures, triggers, users, roles, and databases.
 
-**What's always blocked (even in dangerous mode):**
+The full policy is in [Commands](/reference/commands/#saber).
 
-- DROP, TRUNCATE (destructive operations)
-- Transaction control (BEGIN, COMMIT, ROLLBACK)
-- Security operations (GRANT, REVOKE)
-- Database operations (ATTACH, DETACH)
-- Admin/executable schema objects (e.g., CREATE FUNCTION/PROCEDURE/TRIGGER,
-  CREATE USER/ROLE/DATABASE)
-
-### Database Selection
-
-#### Using Default
-
-If you have a default database configured:
+## If the connection fails
 
 ```bash
-saber "Show me sales data"
-```
-
-#### Specifying Database by Name
-
-Use a configured database connection:
-
-```bash
-saber -d prod-db "What's our revenue this month?"
-```
-
-#### Using Files Directly
-
-Work with SQLite, DuckDB, CSV, or Parquet files directly:
-
-```bash
-# SQLite file
-saber -d "./data/sales.db" "Top selling products"
-
-# DuckDB file
-saber -d "./data/warehouse.duckdb" "Latest partitions"
-
-# CSV file
-saber -d "./customers.csv" "How many customers per state?"
-
-# Parquet file
-saber -d "./orders.parquet" "What is total revenue?"
-```
-
-#### Connection Strings
-
-Use connection strings for temporary connections:
-
-```bash
-saber -d "postgresql://user:pass@host:5432/db" "Count all users"
-```
-
-### Connection Issues
-
-```bash
-# Test the connection
 saber db test my-database
-
-# Check database list
 saber db list
 ```
 
-### What's Next?
+## Next steps
 
-Now that you know how to query effectively:
-
-1. [Learn about conversation threads](/guides/threads)
-2. [Explore the command reference](/reference/commands)
-3. [Configure advanced database settings](/guides/database-setup)
+1. [Resume a conversation](/guides/threads/)
+2. [Command reference](/reference/commands/)
+3. [Database setup](/guides/database-setup/)

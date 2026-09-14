@@ -1,57 +1,48 @@
 ---
-title: Multiple Databases
-description: "Connect a single SQLsaber session to several databases at once. Query each database separately and let the agent combine the results."
+title: Multiple databases
+description: Connect one SQLsaber session to several databases. Query each database separately and let the agent combine the answers.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-A single SQLsaber session can connect to more than one database at the same time.
-The agent picks which database to query for each step, runs the queries separately,
-and combines the results in its answer. You can ask a question that spans several
-databases without switching sessions.
+Connect one SQLsaber session to more than one database. The agent picks a database for each step, runs those queries separately, and combines the answers.
 
 <Aside type="note">
-  SQLsaber does **not** attempt cross-database JOINs. When multiple databases
-  are connected, the agent queries each one independently and stitches the
-  results together in plain language in its reply.
+  SQLsaber does not run cross-database JOINs. It queries each database on its
+  own and combines the results in the reply.
 </Aside>
 
-### Starting a multi-database session
+## Start a multi-database session
 
-Connect to multiple databases by repeating the `-d` / `--database` flag. Each
-value can be a configured connection name, a connection string, or a file path.
-You can mix these target types freely.
+Repeat `-d` or `--database`. Each value can be a saved connection name, a connection string, or a file path. Mix those forms.
 
 ```bash
-# Two configured connections
+# Two saved connections
 saber -d sales -d analytics "Compare last month's revenue to web sessions"
 
-# Mix a configured name with a connection string
+# Mix a saved name with a connection string
 saber -d sales -d "postgresql://user:pass@host:5432/events" "..."
 
-# Start interactive mode across several databases
+# Interactive mode across several databases
 saber -d sales -d analytics -d inventory
 ```
 
-Everything works the same in single-query mode and interactive mode. In
-interactive mode the footer shows all connected databases:
+Single-query mode and interactive mode both work. In interactive mode the footer lists every connected database:
 
 ```
 DBs: sales, analytics, inventory | Model: ... | ...
 ```
 
 <Aside type="caution">
-  Each connected database must resolve to a **unique name**. Connecting two
-  databases that resolve to the same name (for example the same connection used
-  twice) raises an error. Names come from the configured connection name, or are
-  derived from the database/file name for ad-hoc connection strings and paths.
+  Each connected database must resolve to a unique name. Connecting two
+  databases that share a name raises an error. The name is the saved connection
+  name, or a name derived from the database or file for ad-hoc strings and
+  paths.
 </Aside>
 
-#### CSV and Parquet files are different
+### CSV and Parquet files are different
 
-Passing **multiple CSV/Parquet files** does not create a multi-database session. Instead,
-all files are loaded into a single in-memory DuckDB database with one table per
-file, so you can join across them:
+Passing several CSV or Parquet files does not create a multi-database session. SQLsaber loads every file into one in-memory DuckDB database, with one table per file, so you can join across them:
 
 ```bash
 saber -d users.csv -d orders.csv "Join users and orders"
@@ -59,15 +50,11 @@ saber -d users.csv -d orders.parquet "Revenue by user"
 saber -d users.parquet -d orders.parquet "Join users and orders"
 ```
 
-When repeated targets include another database type or a configured connection,
-each target instead resolves independently into a multi-database session.
+If the repeated targets include another database type or a saved connection, each target resolves on its own into a multi-database session.
 
-### Describing connections
+## Describe connections
 
-When several databases are connected, the agent needs to decide which one holds
-the data for a given question. You can help it by attaching a short description
-to each connection. Descriptions are shown to the agent (and surfaced by the
-`list_dbs` tool) but are otherwise optional.
+When several databases are connected, the agent has to choose which one holds the data. Attach a short description to each connection. Descriptions are shown to the agent, and by the `list_dbs` tool. They are otherwise optional.
 
 ```bash
 saber db add sales \
@@ -77,48 +64,35 @@ saber db add analytics \
   --description "ClickHouse warehouse: web sessions, events, funnels"
 ```
 
-You can add a description to any connection. See [Database Setup](/guides/database-setup)
-for the full `saber db add` flow.
+Add a description to any connection. See [Database setup](/guides/database-setup/) for `saber db add`.
 
 <Aside type="tip">
-  Clear, distinct descriptions noticeably improve how reliably the agent routes
-  a question to the right database. Mention the kind of data each connection
-  holds (tables, domains, environments).
+  Distinct descriptions help the agent route a question. Name the kind of data
+  each connection holds: tables, domains, or environments.
 </Aside>
 
-### How the agent routes queries
+## How the agent routes queries
 
-When more than one database is connected, the agent's behavior changes in a few
-ways:
+When more than one database is connected:
 
-- **`db_name` on every tool call.** The SQL and knowledge tools require a
-  `db_name` argument that names the target database. The agent must choose a
-  connected database for each `list_tables`, `introspect_schema`,
-  `execute_sql`, and knowledge-base call.
-- **A `list_dbs` tool.** A dedicated tool lists every connected database with
-  its name, dialect, and description, so the agent can see its options before
-  exploring schemas.
-- **Per-database knowledge.** [Knowledge entries](/guides/knowledge) remain
-  scoped per database, so each connection contributes its own context.
+- SQL and knowledge tools require a `db_name` argument. The agent must choose a connected database for each `list_tables`, `introspect_schema`, `execute_sql`, and knowledge-base call.
+- A `list_dbs` tool lists every connected database with its name, dialect, and description.
+- [Knowledge entries](/guides/knowledge/) stay scoped per database. Each connection contributes its own context.
 
-In single-database sessions none of this is visible. The tool schemas and system
-prompt are identical to before, and there is no `db_name` argument or `list_dbs`
-tool.
+In a single-database session none of this is visible. Tool schemas have no `db_name` argument, and there is no `list_dbs` tool.
 
-### Resuming multi-database threads
+## Resume a multi-database thread
 
-[Conversation threads](/guides/threads) created in a multi-database session
-record all of the connected databases. When you resume such a thread, SQLsaber
-reconnects to the same set automatically:
+[Conversation threads](/guides/threads/) created in a multi-database session record every connected database. When you resume that thread, SQLsaber reconnects to the same set:
 
 ```bash
 saber threads resume a1b2c3d4
 ```
 
 <Aside type="note">
-  Automatic resume only works when **every** database in the thread is a saved
-  connection (added with `saber db add`). If a thread used an ad-hoc connection
-  string or file path, resume it with explicit `-d` flags:
+  Automatic resume works only when every database on the thread is a saved
+  connection (added with `saber db add`). If a thread used a connection string
+  or file path, resume it with explicit `-d` flags:
 
 ```bash
 saber threads resume a1b2c3d4 -d sales -d "postgresql://user:pass@host:5432/events"
@@ -126,11 +100,9 @@ saber threads resume a1b2c3d4 -d sales -d "postgresql://user:pass@host:5432/even
 
 </Aside>
 
-### Using the Python SDK
+## Use the Python SDK
 
-The SDK exposes the same capability through `SQLSaberOptions`. Pass a list of
-targets to connect to multiple databases at once. Use `saber.info.database_names`
-when you need metadata only:
+Pass a list of targets in `SQLSaberOptions`. Read names from `saber.info.database_names` when you need metadata only:
 
 ```python
 import asyncio
@@ -152,11 +124,10 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-See the [SDK Configuration guide](/sdk/configuration) for the full set of
-options.
+See [Configuration](/sdk/configuration/) for the full options list.
 
-### What's Next?
+## Next steps
 
-- [Database Setup](/guides/database-setup) — register and describe connections
-- [Knowledge Base](/guides/knowledge) — give each database extra context
-- [Conversation Threads](/guides/threads) — resume multi-database sessions
+- [Database setup](/guides/database-setup/) to register and describe connections
+- [Knowledge base](/guides/knowledge/) to give each database extra context
+- [Conversation threads](/guides/threads/) to resume a multi-database session

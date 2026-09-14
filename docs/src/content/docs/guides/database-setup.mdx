@@ -1,51 +1,44 @@
 ---
-title: Database Setup
-description: "Connect SQLsaber to PostgreSQL, MySQL, SQLite, DuckDB, CSV, or Parquet files. Configure connection strings, SSL certificates, and schema exclusions."
+title: Database setup
+description: Connect SQLsaber to PostgreSQL, MySQL, SQLite, DuckDB, CSV, or Parquet. Configure connection strings, SSL, and schema exclusions.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-SQLsaber supports PostgreSQL, MySQL, SQLite, DuckDB, CSV, and Parquet data sources. This guide covers all the ways to configure database connections.
+Connect SQLsaber to a database or a local file, then test the connection.
 
-### Supported Database Types
+SQLsaber works with PostgreSQL, MySQL, SQLite, DuckDB, CSV, and Parquet. PostgreSQL and MySQL support SSL. DuckDB can open a file or run in memory. SQLsaber queries Parquet through DuckDB.
 
-- **PostgreSQL** - Full support with SSL
-- **MySQL** - Full support with SSL
-- **SQLite** - Local database files
-- **DuckDB** - Local DuckDB files or in-memory analytics
-- **CSV** - Local CSV files
-- **Parquet** - Local Parquet files, queried using DuckDB
-
-### Adding Database
+## Add a saved connection
 
 ```bash
 saber db add my-database
 ```
 
-This will prompt you for all necessary connection details.
+SQLsaber prompts for the connection details.
 
-For scripts and coding agents, provide every required value and disable prompts:
+For scripts and coding agents, pass every required value and disable prompts:
 
 ```bash
 # Local database
 saber db add local --type sqlite --database ./local.db --no-interactive
 
-# Server database; keep the password out of argv and shell history
+# Server database. Keep the password out of argv and shell history.
 printf '%s' "$DB_PASSWORD" | saber db add analytics --no-interactive \
   --host db.example.com --database analytics --username agent --password-stdin
 ```
 
-You can also attach an optional description to a connection. Descriptions are
-shown to the agent when [several databases are connected at once](/guides/multi-database)
-to help it pick the right one:
+If you will connect several databases in one session, add a short description so the agent can tell them apart:
 
 ```bash
 saber db add my-database --description "Production Postgres: orders and revenue"
 ```
 
-### Connection Strings
+See [Multiple databases](/guides/multi-database/) for that session type.
 
-SQLsaber supports direct connection strings for PostgreSQL and MySQL, plus file URIs for SQLite and DuckDB.
+## Connect with a string
+
+Pass a PostgreSQL or MySQL URL, or a SQLite or DuckDB file URI:
 
 ```bash
 saber -d "postgresql://user:password@localhost:5432/database"
@@ -55,44 +48,37 @@ saber -d "mysql://user:password@localhost:3306/database"
 saber -d "duckdb:///path/to/data.duckdb"
 ```
 
-### Files
+## Query a local file
 
-#### SQLite
+### SQLite
 
 ```bash
-# Use SQLite file directly
 saber -d "./data/sales.db" "Show me total sales by month"
 
-# Relative paths work too
 saber -d "~/Documents/mydata.db" "Count all records"
 ```
 
-#### DuckDB
+### DuckDB
 
 ```bash
-# Query a DuckDB file
 saber -d "./warehouse/data.duckdb" "Show the latest partition"
 
-# Use an absolute path
 saber -d "duckdb:///Users/me/analytics.duckdb" "Describe orders"
 ```
 
-#### CSV
-
-SQLsaber can also analyze CSV files directly.
+### CSV
 
 ```bash
 saber -d "./customers.csv" "How many customers are from each state?"
 ```
 
 <Aside type="note">
-  For CSV files, first row should contain column headers. SQLsaber will infer
-  data types automatically.
+  The first row must contain column headers. SQLsaber infers column types.
 </Aside>
 
-#### Parquet
+### Parquet
 
-Query a local `.parquet` file directly, or use a `parquet:///` URL:
+Query a local `.parquet` file, or use a `parquet:///` URL:
 
 ```bash
 saber -d "./orders.parquet" "What is total revenue?"
@@ -100,107 +86,83 @@ saber -d "parquet:///orders.parquet" "Describe the columns"
 saber -d "./customers.csv" -d "./orders.parquet" "Revenue by customer"
 ```
 
-DuckDB reads column names and types from the Parquet schema; no CSV delimiter or
-header options are needed. Each file becomes a table named after its filename
-without the extension (for example, `orders`). Repeated CSV/Parquet inputs share
-one database, so SQL joins work across them.
+DuckDB reads column names and types from the Parquet schema. Each file becomes a table named after its filename without the extension. For example, `orders.parquet` is the table `orders`. Repeated CSV and Parquet inputs share one database, so SQL joins work across them.
 
-Like CSV inputs, files are materialized into in-memory tables on every query,
-then external file access is disabled for read-only execution. This preserves
-the existing safety boundary, but is not a lazy, large-file Parquet scan: allow
-enough memory for the loaded data. Use explicit local files, not remote URLs or
-partition-directory inputs.
+SQLsaber loads each file into memory on every query, then disables further file access for read-only execution. That is not a lazy scan of a large Parquet file. Give the process enough memory for the loaded data. Use explicit local files. Remote URLs and partition-directory inputs are not supported.
 
-### Managing Connections
+## Manage saved connections
 
-#### List All Connections
+List connections:
 
 ```bash
 saber db list
 ```
 
-#### Set Default Database
-
-If you have multiple databases, set one as default:
+If you have several connections, set one as the default:
 
 ```bash
 saber db set-default my-database
 ```
 
 <Aside type="note">
-  By default, SQLsaber will set the first added connection as default.
+  The first connection you add becomes the default.
 </Aside>
 
-#### Test Connections
-
-Verify that a database connection works:
+Test a connection:
 
 ```bash
 saber db test my-database
 ```
 
-#### Remove Connections
+Remove a connection:
 
 ```bash
 saber db remove my-database
 
-# Non-interactive, explicit deletion
+# Non-interactive deletion
 saber db remove my-database --yes
 ```
 
-### Connecting to Multiple Databases
+## Connect several databases at once
 
-A single session can be connected to several databases at once by repeating the
-`-d` flag. The agent then queries each database separately and combines the
-results in its answer:
+Repeat `-d` to attach more than one database to a session. The agent queries each database separately and combines the answers:
 
 ```bash
 saber -d sales -d analytics "Compare revenue to web sessions"
 ```
 
-See the [Multiple Databases guide](/guides/multi-database) for details.
+See [Multiple databases](/guides/multi-database/).
 
-### Security
+## Keep queries read-only
 
-#### Read-only by Default
+SQLsaber blocks `INSERT`, `UPDATE`, `DELETE`, and DDL by default. Only `SELECT` runs unless you pass `--allow-dangerous`.
 
-SQLsaber blocks all write operations (INSERT, UPDATE, DELETE, DDL) by default. Only SELECT queries are allowed unless you explicitly enable dangerous mode with `--allow-dangerous`.
+Even with `--allow-dangerous`, SQLsaber still blocks destructive statements such as `DROP` and `TRUNCATE`, and admin statements such as `GRANT`, `REVOKE`, and `CREATE FUNCTION`, `CREATE USER`, `CREATE ROLE`, or `CREATE DATABASE`.
 
-Even in dangerous mode, destructive operations like DROP/TRUNCATE and admin/security operations (for example GRANT/REVOKE, CREATE FUNCTION/USER/ROLE/DATABASE) are always blocked.
+If you connect a production database, create a read-only database role and use those credentials in SQLsaber.
 
-#### Read-only Database Role
-
-> **If you are using SQLsaber with a production database, we recommend setting up a read-only role for your database and using those credentials to setup connection in SQLsaber.**
-
-SQLsaber uses AST-based validation (via sqlglot) to analyze every query before execution. This catches write operations in nested queries, CTEs, subqueries, and dialect-specific dangerous functions. However, no validation is fool-proof.
-
-**The most secure approach is to create a read-only database role and use those credentials with SQLsaber.** This provides database-level enforcement that cannot be bypassed regardless of what queries are generated.
+SQLsaber uses AST validation through sqlglot before it runs a query. That catches writes in nested queries, CTEs, subqueries, and some dialect-specific functions. Validation can miss a case. A read-only role enforces the limit in the database.
 
 <Aside type="note">
-  For development setups, this isn't required but is a good practice if you wish
-  to ensure with absolute certainty that no data modifying queries are ever
-  executed.
+  A read-only role is optional for local development. Use one when you need the
+  database itself to reject writes.
 </Aside>
 
-#### Password Storage
+SQLsaber stores database passwords in your operating system credentials store.
 
-SQLsaber stores database passwords securely using your operating system's credentials store.
+Store SSL certificates in a secure location. Use absolute paths when you configure a connection. SSL modes are listed in [Commands](/reference/commands/#saber-db-add).
 
-#### SSL Certificates
+## Skip schemas during introspection
 
-Store SSL certificates in a secure location and use absolute paths when configuring connections.
-
-### Schema Introspection Filters
-
-SQLsaber skips noisy system schemas for every supported database when it introspects metadata, and you can layer on your own exclusions during setup or later via `saber db exclude`.
+SQLsaber skips noisy system schemas for every supported database. Add more exclusions when you add a connection, or later with `saber db exclude`.
 
 Default exclusions:
 
-- **PostgreSQL:** `pg_catalog`, `information_schema`, `_timescaledb_internal`, `_timescaledb_cache`, `_timescaledb_config`, `_timescaledb_catalog`
-- **MySQL:** `information_schema`, `performance_schema`, `mysql`, `sys`
-- **DuckDB / CSV / Parquet:** `information_schema`, `pg_catalog`, `duckdb_catalog`
+- PostgreSQL: `pg_catalog`, `information_schema`, `_timescaledb_internal`, `_timescaledb_cache`, `_timescaledb_config`, `_timescaledb_catalog`
+- MySQL: `information_schema`, `performance_schema`, `mysql`, `sys`
+- DuckDB, CSV, and Parquet: `information_schema`, `pg_catalog`, `duckdb_catalog`
 
-When you run `saber db add`, the interactive flow prompts for extra schemas to ignore (or pass `--exclude-schemas schema1,schema2` in non-interactive mode). You can revisit an existing connection at any time:
+When you run `saber db add`, the interactive flow asks for extra schemas to ignore. In non-interactive mode, pass `--exclude-schemas schema1,schema2`. Change an existing connection at any time:
 
 ```bash
 # Replace the exclusion list interactively
@@ -210,46 +172,32 @@ saber db exclude my-database
 saber db exclude my-database --add reporting_temp,rollups
 ```
 
-For ad-hoc connections created from raw URLs or file paths, use environment variables to extend the default filters:
+For ad-hoc connections from URLs or file paths, extend the defaults with environment variables:
 
 ```bash
 export SQLSABER_PG_EXCLUDE_SCHEMAS="schema1,schema2"
-export SQLSABER_MYSQL_EXCLUDE_SCHEMAS="temp_db, staging"
+export SQLSABER_MYSQL_EXCLUDE_SCHEMAS="temp_db,staging"
 export SQLSABER_DUCKDB_EXCLUDE_SCHEMAS="internal_schema"
 ```
 
-Both the `list_tables` and `introspect_schema` tools respect these filters.
+Both `list_tables` and `introspect_schema` apply these filters.
 
-### Troubleshooting
-
-Always test new connections after adding them.
+## Fix a failed connection
 
 ```bash
-# Test the connection
 saber db test my-database
 
-# If connection fails, check the details
 saber db list
 
-# Update connection if needed
 saber db remove my-database
-saber db add my-database  # Start over with correct details
+saber db add my-database
 ```
 
-### Getting Help
+See `saber db --help` and `saber db add --help`, or [Commands](/reference/commands/#saber-db).
 
-Use the help commands for more information:
+## Next steps
 
-```bash
-saber db --help
-saber db add --help
-```
-
-### What's Next?
-
-After setting up your database connections:
-
-1. [Configure authentication](/guides/authentication) for AI providers
-2. [Start querying your data](/guides/getting-started)
-3. [Connect to multiple databases at once](/guides/multi-database)
-4. [Manage conversation threads](/guides/threads)
+1. [Set up authentication](/guides/authentication/)
+2. [Run your first query](/guides/getting-started/)
+3. [Connect several databases](/guides/multi-database/)
+4. [Resume a conversation](/guides/threads/)

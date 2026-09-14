@@ -5,7 +5,7 @@ description: "Compose SQLsaber SQL and knowledge tools into your own pydantic-ai
 
 import { Aside } from '@astrojs/starlight/components';
 
-SQLsaber exposes its database behavior as [pydantic-ai capabilities](https://ai.pydantic.dev/capabilities/). You can attach SQLsaber to an agent you own, or add your capabilities to SQLsaber's managed agent.
+SQLsaber exposes its database behavior as [pydantic-ai capabilities](https://ai.pydantic.dev/capabilities/). Attach SQLsaber to an agent you own, or add your capabilities to SQLsaber's managed agent.
 
 ## Add SQL tools to your agent
 
@@ -40,14 +40,14 @@ When `SqlTools` receives `database=`, it owns the resulting connections. Enter t
 
 ### Multiple databases
 
-Pass configured database names or DSNs as a sequence:
+Pass saved connection names or DSNs as a sequence:
 
 ```python
 sql = SqlTools(database=["production", "warehouse"])
 agent = Agent("openai:gpt-5.2", capabilities=[sql])
 ```
 
-SQLsaber includes a database catalog in the capability instructions. Cross-database joins are not attempted; the model queries each database separately.
+SQLsaber includes a database catalog in the capability instructions. Cross-database joins are not attempted. The model queries each database separately.
 
 ### Experimental CSV tool results
 
@@ -58,7 +58,7 @@ sql = SqlTools(database="analytics", csv_tool_results=True)
 ```
 
 The option applies to all SQL tools in this capability, including `list_dbs`.
-Metadata and errors remain JSON; retained query data and terminal rendering do
+Metadata and errors remain JSON. Retained query data and terminal rendering do
 not change. Token savings do not establish equivalent answer quality. See
 [CSV tool result behavior](/sdk/configuration#experimental-csv-tool-results)
 for details. Managed sessions use `SQLSaberOptions(csv_tool_results=True)` instead.
