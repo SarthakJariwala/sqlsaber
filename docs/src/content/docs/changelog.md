@@ -13,6 +13,13 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.78.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.77.0...sqlsaber-v0.78.0) (2026-09-15)
+
+
+### Features
+
+* Unify notebook capability and API configuration ([#279](https://github.com/SarthakJariwala/sqlsaber/issues/279)) ([2090fac](https://github.com/SarthakJariwala/sqlsaber/commit/2090fac7ad4a915e3b955edc87e0c3456962bfc9))
+
 ## [0.77.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.76.0...sqlsaber-v0.77.0) (2026-09-14)
 
 
