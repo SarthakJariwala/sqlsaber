@@ -15,13 +15,12 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from ._shared import (
-    DEFAULT_EXECUTION_LIMITS,
     MAX_GOAL_CHARS,
     MAX_SNAPSHOT_IMAGE_BYTES,
     MAX_SNAPSHOT_IMAGES,
 )
+from .config import DEFAULT_NOTEBOOK_CONFIG, NotebookConfig
 from .execution import (
-    ExecutionLimits,
     NotebookBackend,
     resolve_notebook_backend,
     resolve_notebook_image,
@@ -68,7 +67,7 @@ async def analyze(
     image: str | None = None,
     include_snapshot_images: bool = False,
     collect_files: bool = True,
-    execution_limits: ExecutionLimits = DEFAULT_EXECUTION_LIMITS,
+    config: NotebookConfig | None = None,
     usage_limits: UsageLimits | None = None,
     parent_usage: RunUsage | None = None,
 ) -> AnalysisResult:
@@ -76,8 +75,13 @@ async def analyze(
 
     Omitted ``usage_limits`` leave the analyst uncapped; managed SQLsaber supplies
     limits only when its embedding caller explicitly selected them.
+    Explicit backend/image arguments override config selectors, then environment
+    settings and library defaults apply.
     """
 
+    selected_config = config or DEFAULT_NOTEBOOK_CONFIG
+    backend = backend if backend is not None else selected_config.backend
+    image = image if image is not None else selected_config.image
     if not goal.strip():
         raise ValueError("Analysis goal cannot be empty")
     if len(goal) > MAX_GOAL_CHARS:
@@ -91,7 +95,8 @@ async def analyze(
         workspace=workspace,
         backend=selected_backend,
         image=resolve_notebook_image(image),
-        execution_limits=execution_limits,
+        execution_limits=selected_config.execution_limits(),
+        workspace_limits=selected_config.workspace,
         include_snapshot_images=include_snapshot_images,
     )
     agent = build_analyst_agent(model, model_provider=model_provider)

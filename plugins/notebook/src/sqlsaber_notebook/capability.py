@@ -44,22 +44,16 @@ from sqlsaber.workspace_inputs import (
     WorkspaceResolutionContext,
 )
 
-from ._shared import (
-    MAX_DEFAULT_RESULTS,
-    MAX_WORKSPACE_FILE_BYTES,
-    MAX_WORKSPACE_FILES,
-    MAX_WORKSPACE_MANIFEST_BYTES,
-    MAX_WORKSPACE_TOTAL_BYTES,
-)
 from .analyst import analyze, supports_notebook_images
+from .config import DEFAULT_NOTEBOOK_CONFIG, NotebookConfig, WorkspaceLimits
 from .execution import (
+    NotebookBackend,
     NotebookExecutionError,
     NotebookInput,
     NotebookLimitExceeded,
     resolve_notebook_backend,
     resolve_notebook_image,
 )
-from .execution.base import validate_input_name
 from .publication import display_from_publication, publish_analysis
 from .rendering import limit_output, render_notebook_bytes
 from .result import (
@@ -103,9 +97,15 @@ class AnalyzeDataTool(Tool):
 
     requires_ctx = True
 
-    def __init__(self, context: PluginContext) -> None:
+    def __init__(
+        self,
+        context: PluginContext,
+        *,
+        config: NotebookConfig = DEFAULT_NOTEBOOK_CONFIG,
+    ) -> None:
         super().__init__()
         self._context = context
+        self._config = config
         self._display_results: OrderedDict[str, _NotebookDisplay] = OrderedDict()
         self._resolved_publications: Mapping[str, ResolvedArtifactPublication] = {}
 
@@ -175,12 +175,17 @@ class AnalyzeDataTool(Tool):
                 attachment_refs=attachment_refs,
                 query_result_store=self._context.query_result_store,
                 workspace_input_resolver=self._context.workspace_input_resolver,
+                limits=self._config.workspace,
             )
             model_name, model, provider = self._context.resolve_subagent_model(
                 "notebook",
                 tool_name=self.name,
             )
-            backend = resolve_notebook_backend()
+            backend = (
+                self._config.backend
+                if isinstance(self._config.backend, NotebookBackend)
+                else resolve_notebook_backend(self._config.backend)
+            )
             store = self._context.artifact_store
             result = await analyze(
                 goal,
@@ -188,7 +193,8 @@ class AnalyzeDataTool(Tool):
                 model=model,
                 model_provider=provider,
                 backend=backend,
-                image=resolve_notebook_image(),
+                image=resolve_notebook_image(self._config.image),
+                config=self._config,
                 include_snapshot_images=supports_notebook_images(model_name, provider),
                 collect_files=store is not None,
                 usage_limits=_nested_usage_limits(),
@@ -345,8 +351,13 @@ class Notebook(SqlSaberCapability):
     id = "notebook"
     description = "Delegate multi-step data analysis to a notebook subagent."
 
-    def __init__(self, context: PluginContext) -> None:
-        self.tool = AnalyzeDataTool(context)
+    def __init__(
+        self,
+        context: PluginContext,
+        *,
+        config: NotebookConfig = DEFAULT_NOTEBOOK_CONFIG,
+    ) -> None:
+        self.tool = AnalyzeDataTool(context, config=config)
         self._toolset = FunctionToolset[Any](id=self.id)
         execute = (
             self.tool.execute_with_attachments
@@ -379,10 +390,12 @@ def display_tools() -> Mapping[str, Tool]:
 
 def capability(
     context: PluginContext,
+    *,
+    config: NotebookConfig = DEFAULT_NOTEBOOK_CONFIG,
 ) -> AbstractCapability[Any] | Sequence[AbstractCapability[Any]]:
     """Always expose the installed plugin; backend checks happen on use."""
 
-    return Notebook(context)
+    return Notebook(context, config=config)
 
 
 async def build_workspace_from_history(
@@ -392,13 +405,14 @@ async def build_workspace_from_history(
     query_result_store: QueryResultStore,
     attachment_refs: list[str] | None = None,
     workspace_input_resolver: WorkspaceInputResolver | None = None,
+    limits: WorkspaceLimits = DEFAULT_NOTEBOOK_CONFIG.workspace,
 ) -> Workspace:
     """Build one bounded workspace from SQL results and authorized inputs."""
 
     requested = _normalize_requested_files(only)
-    if requested is not None and len(requested) > MAX_WORKSPACE_FILES:
+    if requested is not None and len(requested) > limits.max_files:
         raise NotebookLimitExceeded(
-            f"Workspace has {len(requested)} files; maximum is {MAX_WORKSPACE_FILES}",
+            f"Workspace has {len(requested)} files; maximum is {limits.max_files}",
             backend="notebook",
             phase="input-validation",
         )
@@ -406,12 +420,13 @@ async def build_workspace_from_history(
         ctx,
         attachment_refs,
         resolver=workspace_input_resolver,
+        limits=limits,
     )
     external_bytes = sum(len(item.data) for item in resolved_inputs)
 
     if requested is None:
         references = list(reversed(query_result_references_from_messages(ctx.messages)))
-        references = references[:MAX_DEFAULT_RESULTS]
+        references = references[: limits.default_results]
     else:
         references = []
         missing: list[str] = []
@@ -434,10 +449,10 @@ async def build_workspace_from_history(
     selected: list[tuple[str, bytes, ManifestEntry]] = []
     total_bytes = external_bytes
     for reference in references:
-        if len(selected) + len(resolved_inputs) >= MAX_WORKSPACE_FILES:
+        if len(selected) + len(resolved_inputs) >= limits.max_files:
             if requested is not None:
                 raise NotebookLimitExceeded(
-                    f"Workspace has more than {MAX_WORKSPACE_FILES} files",
+                    f"Workspace has more than {limits.max_files} files",
                     backend="notebook",
                     phase="input-validation",
                 )
@@ -452,11 +467,16 @@ async def build_workspace_from_history(
             raise ValueError(
                 f"Complete SQL result is unavailable: {reference.file}"
             ) from exc
-        _validate_file_size(reference.file, resolved.data)
-        if total_bytes + len(resolved.data) > MAX_WORKSPACE_TOTAL_BYTES:
+        if len(resolved.data) > limits.max_file_bytes:
+            raise NotebookLimitExceeded(
+                f"Workspace file exceeds {limits.max_file_bytes} bytes: {reference.file}",
+                backend="notebook",
+                phase="input-validation",
+            )
+        if total_bytes + len(resolved.data) > limits.max_total_bytes:
             if requested is not None:
                 raise NotebookLimitExceeded(
-                    f"Workspace exceeds {MAX_WORKSPACE_TOTAL_BYTES} total bytes",
+                    f"Workspace exceeds {limits.max_total_bytes} total bytes",
                     backend="notebook",
                     phase="input-validation",
                 )
@@ -486,15 +506,9 @@ async def build_workspace_from_history(
         )
         for item in resolved_inputs
     )
-    _validate_workspace(files)
+    limits.validate_files(files)
     workspace = Workspace(files=files, manifest=manifest)
-    manifest_size = len(workspace_manifest_bytes(workspace))
-    if manifest_size > MAX_WORKSPACE_MANIFEST_BYTES:
-        raise NotebookLimitExceeded(
-            f"Workspace manifest exceeds {MAX_WORKSPACE_MANIFEST_BYTES} bytes",
-            backend="notebook",
-            phase="input-validation",
-        )
+    limits.validate_manifest(workspace_manifest_bytes(workspace))
     return workspace
 
 
@@ -503,8 +517,9 @@ async def _resolve_workspace_inputs(
     attachment_refs: list[str] | None,
     *,
     resolver: WorkspaceInputResolver | None,
+    limits: WorkspaceLimits,
 ) -> tuple[WorkspaceFile, ...]:
-    refs = _normalize_attachment_refs(attachment_refs)
+    refs = _normalize_attachment_refs(attachment_refs, limits=limits)
     if refs is None:
         return ()
     if resolver is None:
@@ -553,11 +568,13 @@ async def _resolve_workspace_inputs(
             ) from exc
         _validate_workspace_file(workspace_file)
         files.append(workspace_file)
-    _validate_workspace(tuple(NotebookInput(item.name, item.data) for item in files))
+    limits.validate_files(tuple(NotebookInput(item.name, item.data) for item in files))
     return tuple(files)
 
 
-def _normalize_attachment_refs(refs: list[str] | None) -> list[str] | None:
+def _normalize_attachment_refs(
+    refs: list[str] | None, *, limits: WorkspaceLimits
+) -> list[str] | None:
     if refs is None:
         return None
     normalized: list[str] = []
@@ -576,9 +593,9 @@ def _normalize_attachment_refs(refs: list[str] | None) -> list[str] | None:
         seen.add(ref)
     if not normalized:
         raise ValueError("attachment_refs must contain at least one reference")
-    if len(normalized) > MAX_WORKSPACE_FILES:
+    if len(normalized) > limits.max_files:
         raise NotebookLimitExceeded(
-            f"Too many attachment references; maximum is {MAX_WORKSPACE_FILES}",
+            f"Too many attachment references; maximum is {limits.max_files}",
             backend="notebook",
             phase="input-validation",
         )
@@ -601,40 +618,6 @@ def _normalize_requested_files(files: list[str] | None) -> list[str] | None:
     return normalized
 
 
-def _validate_workspace(files: tuple[NotebookInput, ...]) -> None:
-    if len(files) > MAX_WORKSPACE_FILES:
-        raise NotebookLimitExceeded(
-            f"Workspace has {len(files)} files; maximum is {MAX_WORKSPACE_FILES}",
-            backend="notebook",
-            phase="input-validation",
-        )
-    total = 0
-    names: set[str] = set()
-    for item in files:
-        validate_input_name(item.name, backend="notebook")
-        if item.name == "manifest.json":
-            raise NotebookLimitExceeded(
-                "Workspace filename 'manifest.json' is reserved",
-                backend="notebook",
-                phase="input-validation",
-            )
-        if item.name in names:
-            raise NotebookLimitExceeded(
-                f"Duplicate workspace filename: {item.name}",
-                backend="notebook",
-                phase="input-validation",
-            )
-        names.add(item.name)
-        _validate_file_size(item.name, item.data)
-        total += len(item.data)
-    if total > MAX_WORKSPACE_TOTAL_BYTES:
-        raise NotebookLimitExceeded(
-            f"Workspace exceeds {MAX_WORKSPACE_TOTAL_BYTES} total bytes",
-            backend="notebook",
-            phase="input-validation",
-        )
-
-
 def _validate_workspace_file(item: WorkspaceFile) -> None:
     if item.media_type is not None and (
         not isinstance(item.media_type, str)
@@ -650,15 +633,6 @@ def _validate_workspace_file(item: WorkspaceFile) -> None:
     ):
         raise WorkspaceInputUnavailable(
             f"Invalid provenance for workspace file: {item.name}"
-        )
-
-
-def _validate_file_size(key: str, data: bytes) -> None:
-    if len(data) > MAX_WORKSPACE_FILE_BYTES:
-        raise NotebookLimitExceeded(
-            f"Workspace file exceeds {MAX_WORKSPACE_FILE_BYTES} bytes: {key}",
-            backend="notebook",
-            phase="input-validation",
         )
 
 

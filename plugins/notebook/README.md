@@ -32,9 +32,10 @@ The default balanced runtime targets larger EDA and classical ML: 4 CPUs, 8 GiB
 memory, and up to 100 MiB per input/250 MiB total. SQLsaber does not cap model
 requests, notebook cell count, the analyst loop, or the whole operation. Individual
 cells retain a 10-minute timeout so a stuck computation can be diagnosed without
-ending the overall analysis. These are fixed product defaults rather than CLI tuning
-flags. Use an immutable custom image through `SQLSABER_NOTEBOOK_IMAGE` when
-additional ML libraries are required.
+ending the overall analysis. Embedded callers can change these defaults and select
+a custom image through `NotebookConfig` on either the capability or direct API.
+The CLI uses the default budgets and supports `SQLSABER_NOTEBOOK_IMAGE` for a custom
+image with additional libraries.
 
 ## Managed SQLsaber usage
 
@@ -147,10 +148,84 @@ starting a notebook. When no resolver is configured, `attachment_refs` is omitte
 from the tool schema and existing SQL-only behavior is unchanged.
 
 SQL result files are staged first in their selected order, followed by resolver
-outputs in resolver order. The 50-file, 100-MiB-per-file, and 250-MiB-total limits
-apply to the combined workspace. Filenames are capped at 255 UTF-8 bytes.
-`manifest.json` is reserved, has a separate 1-MiB limit, and records each resolved
-file's media type and structured string provenance.
+outputs in resolver order. By default, the combined workspace allows 50 files,
+100 MiB per file, and 250 MiB total. Filenames are capped at 255 UTF-8 bytes.
+`manifest.json` is reserved, has a separate default 1-MiB limit, and records each
+resolved file's media type and structured string provenance.
+
+### Configure notebook resources and the base image
+
+Pass the same immutable `NotebookConfig` to a configured capability factory or to
+`analyze()`. Configuration belongs to the host application, not model tool arguments.
+
+```python
+from functools import partial
+
+from sqlsaber import SQLSaberOptions
+from sqlsaber_notebook import NotebookConfig, WorkspaceLimits
+from sqlsaber_notebook.capability import capability as notebook
+
+MiB = 1024**2
+GiB = 1024**3
+config = NotebookConfig(
+    backend="docker",
+    image="registry.example.com/analysis-with-ml:2026-09",
+    workspace=WorkspaceLimits(
+        max_files=2_000,
+        max_file_bytes=512 * MiB,
+        max_total_bytes=2 * GiB,
+        max_manifest_bytes=4 * MiB,
+    ),
+    memory_mb=16_384,
+    cpu_cores=8,
+    cell_seconds=3_600,
+    max_artifact_bytes=512 * MiB,
+    max_total_artifact_bytes=GiB,
+)
+
+options = SQLSaberOptions(
+    database="analytics",
+    capabilities=[partial(notebook, config=config)],
+)
+# The independent API accepts the same object:
+# result = await analyze(goal, workspace, model=model,
+#                        model_provider=provider, config=config)
+```
+
+Use an image accessible to the selected backend, preferably pinned by digest.
+Extend the default Jupyter scipy image to preserve its runtime layout, Python
+kernel, and `jupyter nbconvert` installation. The remote adapters also depend on
+the `jovyan` user, `/opt/conda/bin/python`, and `/usr/sbin/runuser`.
+This option selects the base image; it does not install dependencies or allocate GPUs.
+
+Explicit `analyze(backend=..., image=...)` arguments override the corresponding
+config selectors. Unspecified selectors fall back to `SQLSABER_NOTEBOOK_BACKEND`
+and `SQLSABER_NOTEBOOK_IMAGE`, then library defaults. Empty selectors are errors.
+`backend` can also be an application-supplied `NotebookBackend` instance.
+
+Workspace budgets exclude `manifest.json`; SQLsaber adds its allowance when staging
+inputs. `workspace.default_results` controls how many recent SQL results are considered
+when `files` is omitted, defaulting to 20. Automatic selection stops at the file-count
+or combined-byte budget. Explicit selections fail rather than being partially admitted.
+An individual file above `max_file_bytes` is always an error.
+
+`cell_seconds=None` disables the cell timer. `command_seconds=None`, the default,
+disables the timer for one whole-notebook execution. Neither disables provider
+lifetime limits. `image_prepare_seconds` and `open_seconds` bound provisioning and
+transfer operations. CPU, memory, and PID enforcement remain backend-specific.
+Numeric budgets must be positive; only the two execution timers accept `None`.
+
+`max_artifacts`, `max_artifact_bytes`, `max_total_artifact_bytes`, and
+`max_notebook_bytes` control generated output and transfer budgets, not scratch-disk
+quotas. `max_log_chars` bounds backend diagnostics. Model-preview, image-history,
+and source-text budgets remain unchanged. The analyst's `list_workspace` tool
+reports configured budgets and file totals, with 50-file pages and `next_offset`.
+
+`analyze()` accepts resource settings only through `config=`. This replaces the
+removed `execution_limits=` argument. When migrating input limits, specify user-file
+budgets in `WorkspaceLimits` without adding manifest overhead.
+Increasing budgets does not change the bytes-based input interface or fresh-kernel
+execution: inputs still occupy host memory, and each edit reruns all cells.
 
 ## Direct embedded usage
 

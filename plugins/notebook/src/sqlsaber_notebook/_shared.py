@@ -1,14 +1,14 @@
 """Central limits and defaults for notebook analysis."""
 
+from .config import DEFAULT_NOTEBOOK_CONFIG
 from .execution import DEFAULT_NOTEBOOK_IMAGE, ExecutionLimits
 
 # Balanced defaults target larger EDA and classical ML while retaining finite
 # model-context, host-memory, runtime, and cost boundaries.
-MAX_DEFAULT_RESULTS = 20
-MAX_WORKSPACE_FILES = 50
-MAX_WORKSPACE_FILE_BYTES = 100 * 1024 * 1024
-MAX_WORKSPACE_TOTAL_BYTES = 250 * 1024 * 1024
-MAX_WORKSPACE_MANIFEST_BYTES = 1 * 1024 * 1024
+MAX_WORKSPACE_FILES = DEFAULT_NOTEBOOK_CONFIG.workspace.max_files
+MAX_WORKSPACE_FILE_BYTES = DEFAULT_NOTEBOOK_CONFIG.workspace.max_file_bytes
+MAX_WORKSPACE_TOTAL_BYTES = DEFAULT_NOTEBOOK_CONFIG.workspace.max_total_bytes
+MAX_WORKSPACE_MANIFEST_BYTES = DEFAULT_NOTEBOOK_CONFIG.workspace.max_manifest_bytes
 MAX_CELL_SOURCE_CHARS = 30_000
 MAX_TOTAL_SOURCE_CHARS = 200_000
 MAX_OUTPUT_CHARS = 6_000

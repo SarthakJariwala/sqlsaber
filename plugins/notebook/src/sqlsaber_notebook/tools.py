@@ -67,11 +67,16 @@ async def edit_cell(
         return _snapshot_return(acknowledgement, markdown, images, target)
 
 
-async def list_workspace(ctx: RunContext[NotebookSession]) -> str:
-    """List immutable inputs, generated files, and available provenance metadata."""
+async def list_workspace(ctx: RunContext[NotebookSession], offset: int = 0) -> str:
+    """List input and generated files, totals, and configured execution budgets.
+
+    Args:
+        offset: Non-negative start index for each 50-file page. Use next_offset
+            from the previous response to read more files.
+    """
 
     async with ctx.deps.run_lock:
-        return await ctx.deps.list_workspace()
+        return await ctx.deps.list_workspace(offset=offset)
 
 
 def analyst_toolset() -> FunctionToolset[NotebookSession]:
