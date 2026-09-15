@@ -19,6 +19,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.usage import RunUsage, UsageLimits
 from sqlsaber_notebook import capability as capability_module
+from sqlsaber_notebook import WorkspaceLimits
 from sqlsaber_notebook.capability import (
     AnalyzeDataTool,
     Notebook,
@@ -447,11 +448,7 @@ async def test_workspace_rejects_invalid_resolver_output() -> None:
 
 
 @pytest.mark.asyncio
-async def test_workspace_enforces_file_count_across_sql_and_resolved_inputs(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(capability_module, "MAX_WORKSPACE_FILES", 1)
-
+async def test_workspace_enforces_file_count_across_sql_and_resolved_inputs() -> None:
     class Resolver:
         async def resolve(self, refs, *, context):
             del refs, context
@@ -469,16 +466,15 @@ async def test_workspace_enforces_file_count_across_sql_and_resolved_inputs(
             attachment_refs=["opaque-ref"],
             workspace_input_resolver=Resolver(),
             query_result_store=InMemoryQueryResultStore(),
+            limits=WorkspaceLimits(max_files=1),
         )
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("include_sql", [False, True])
 async def test_workspace_enforces_per_file_limit_for_each_input_class(
-    monkeypatch: pytest.MonkeyPatch,
     include_sql: bool,
 ) -> None:
-    monkeypatch.setattr(capability_module, "MAX_WORKSPACE_FILE_BYTES", 3)
     if include_sql:
         messages = _sql_exchange(
             "rows",
@@ -505,14 +501,15 @@ async def test_workspace_enforces_per_file_limit_for_each_input_class(
             attachment_refs=None if include_sql else ["opaque-ref"],
             workspace_input_resolver=Resolver(),
             query_result_store=InMemoryQueryResultStore(),
+            limits=WorkspaceLimits(max_file_bytes=3),
             **kwargs,
         )
 
 
 @pytest.mark.asyncio
-async def test_workspace_enforces_aggregate_bytes_across_sql_and_resolved_inputs(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_workspace_enforces_aggregate_bytes_across_sql_and_resolved_inputs() -> (
+    None
+):
     class Resolver:
         async def resolve(self, refs, *, context):
             del refs, context
@@ -531,11 +528,6 @@ async def test_workspace_enforces_aggregate_bytes_across_sql_and_resolved_inputs
         query_result_store=InMemoryQueryResultStore(),
     )
     combined_bytes = sum(len(item.data) for item in baseline.files)
-    monkeypatch.setattr(
-        capability_module,
-        "MAX_WORKSPACE_TOTAL_BYTES",
-        combined_bytes - 1,
-    )
 
     with pytest.raises(NotebookExecutionError, match="total bytes"):
         await build_workspace_from_history(
@@ -544,15 +536,12 @@ async def test_workspace_enforces_aggregate_bytes_across_sql_and_resolved_inputs
             attachment_refs=["opaque-ref"],
             workspace_input_resolver=Resolver(),
             query_result_store=InMemoryQueryResultStore(),
+            limits=WorkspaceLimits(max_total_bytes=combined_bytes - 1),
         )
 
 
 @pytest.mark.asyncio
-async def test_workspace_enforces_reserved_manifest_byte_limit(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(capability_module, "MAX_WORKSPACE_MANIFEST_BYTES", 100)
-
+async def test_workspace_enforces_reserved_manifest_byte_limit() -> None:
     class Resolver:
         async def resolve(self, refs, *, context):
             del refs, context
@@ -571,6 +560,7 @@ async def test_workspace_enforces_reserved_manifest_byte_limit(
             attachment_refs=["opaque-ref"],
             workspace_input_resolver=Resolver(),
             query_result_store=InMemoryQueryResultStore(),
+            limits=WorkspaceLimits(max_manifest_bytes=100),
         )
 
 
@@ -667,9 +657,11 @@ async def test_analyze_tool_runs_attachment_only_analysis(
         )
 
     monkeypatch.setattr(capability_module, "analyze", fake_analyze)
-    monkeypatch.setattr(capability_module, "resolve_notebook_backend", lambda: backend)
     monkeypatch.setattr(
-        capability_module, "resolve_notebook_image", lambda: "test-image"
+        capability_module, "resolve_notebook_backend", lambda name: backend
+    )
+    monkeypatch.setattr(
+        capability_module, "resolve_notebook_image", lambda image: "test-image"
     )
 
     returned = await AnalyzeDataTool(cast(Any, context)).execute_with_attachments(
@@ -721,9 +713,11 @@ async def test_analyze_tool_renders_notebook_and_child_answer(
         )
 
     monkeypatch.setattr(capability_module, "analyze", fake_analyze)
-    monkeypatch.setattr(capability_module, "resolve_notebook_backend", lambda: backend)
     monkeypatch.setattr(
-        capability_module, "resolve_notebook_image", lambda: "test-image"
+        capability_module, "resolve_notebook_backend", lambda name: backend
+    )
+    monkeypatch.setattr(
+        capability_module, "resolve_notebook_image", lambda image: "test-image"
     )
     tool = AnalyzeDataTool(cast(Any, context))
     run_ctx = _ctx(messages)
@@ -873,9 +867,11 @@ async def test_analyze_tool_publishes_notebook_images_and_generated_files(
         )
 
     monkeypatch.setattr(capability_module, "analyze", fake_analyze)
-    monkeypatch.setattr(capability_module, "resolve_notebook_backend", lambda: backend)
     monkeypatch.setattr(
-        capability_module, "resolve_notebook_image", lambda: "test-image"
+        capability_module, "resolve_notebook_backend", lambda name: backend
+    )
+    monkeypatch.setattr(
+        capability_module, "resolve_notebook_image", lambda image: "test-image"
     )
 
     returned = await AnalyzeDataTool(cast(Any, context)).execute(
@@ -945,9 +941,11 @@ async def test_analyze_tool_handles_artifact_publication_failure(
         )
 
     monkeypatch.setattr(capability_module, "analyze", fake_analyze)
-    monkeypatch.setattr(capability_module, "resolve_notebook_backend", lambda: backend)
     monkeypatch.setattr(
-        capability_module, "resolve_notebook_image", lambda: "test-image"
+        capability_module, "resolve_notebook_backend", lambda name: backend
+    )
+    monkeypatch.setattr(
+        capability_module, "resolve_notebook_image", lambda image: "test-image"
     )
     messages = _sql_exchange(
         "rows",
@@ -987,7 +985,7 @@ async def test_analyze_tool_maps_backend_failure_to_bounded_error(
     monkeypatch.setattr(
         capability_module,
         "resolve_notebook_backend",
-        lambda: (_ for _ in ()).throw(
+        lambda name: (_ for _ in ()).throw(
             NotebookBackendUnavailable(
                 "Docker is unavailable",
                 backend="docker",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import nbformat
@@ -16,6 +16,7 @@ from ._shared import (
     MAX_TOTAL_SOURCE_CHARS,
     MAX_WORKSPACE_MANIFEST_BYTES,
 )
+from .config import WorkspaceLimits
 from .execution import (
     ArtifactInfo,
     ExecutionLimits,
@@ -38,6 +39,7 @@ class NotebookSession:
     image: str
     execution_limits: ExecutionLimits = DEFAULT_EXECUTION_LIMITS
     include_snapshot_images: bool = False
+    workspace_limits: WorkspaceLimits | None = field(default=None, kw_only=True)
     environment: NotebookEnvironment | None = None
     cells: list[str] = field(default_factory=list)
     outputs: list[list[dict[str, Any]]] = field(default_factory=list)
@@ -135,8 +137,11 @@ class NotebookSession:
     def notebook_bytes(self) -> bytes:
         return bytes(self._notebook)
 
-    async def list_workspace(self) -> str:
+    async def list_workspace(self, *, offset: int = 0) -> str:
+        if offset < 0:
+            raise ValueError("Workspace offset must be non-negative")
         generated = await self.environment.list_workspace() if self.environment else ()
+        end = offset + 50
         payload = {
             "inputs": [
                 {
@@ -149,7 +154,7 @@ class NotebookSession:
                         _manifest_for(self.workspace, item.name).provenance
                     ),
                 }
-                for item in self.workspace.files
+                for item in self.workspace.files[offset:end]
             ],
             "generated": [
                 {
@@ -157,8 +162,20 @@ class NotebookSession:
                     "size": item.size,
                     "media_type": item.media_type,
                 }
-                for item in generated
+                for item in generated[offset:end]
             ],
+            "input_count": len(self.workspace.files),
+            "input_bytes": sum(len(item.data) for item in self.workspace.files),
+            "generated_count": len(generated),
+            "next_offset": (
+                end if end < max(len(self.workspace.files), len(generated)) else None
+            ),
+            "configured_execution_limits": asdict(self.execution_limits),
+            "configured_workspace_limits": (
+                asdict(self.workspace_limits)
+                if self.workspace_limits is not None
+                else None
+            ),
             "working_directory": "run/",
         }
         return json.dumps(payload, indent=2, sort_keys=True)
@@ -179,7 +196,10 @@ class NotebookSession:
                 phase="input-validation",
             )
         manifest = workspace_manifest_bytes(self.workspace)
-        if len(manifest) > MAX_WORKSPACE_MANIFEST_BYTES:
+        if self.workspace_limits is not None:
+            self.workspace_limits.validate_files(self.workspace.files)
+            self.workspace_limits.validate_manifest(manifest)
+        elif len(manifest) > MAX_WORKSPACE_MANIFEST_BYTES:
             raise NotebookLimitExceeded(
                 f"Workspace manifest exceeds {MAX_WORKSPACE_MANIFEST_BYTES} bytes",
                 backend=self.backend.name,

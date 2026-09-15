@@ -30,7 +30,11 @@ DEFAULT_NOTEBOOK_IMAGE = (
 def resolve_notebook_backend(name: str | None = None) -> NotebookBackend:
     """Resolve one explicitly selected backend without cross-domain fallback."""
 
-    selected = name or os.getenv("SQLSABER_NOTEBOOK_BACKEND", DEFAULT_NOTEBOOK_BACKEND)
+    selected = (
+        name
+        if name is not None
+        else os.getenv("SQLSABER_NOTEBOOK_BACKEND", DEFAULT_NOTEBOOK_BACKEND)
+    )
     normalized = selected.strip().lower()
     if normalized == "docker":
         return DockerNotebookBackend()
@@ -55,9 +59,13 @@ def resolve_notebook_backend(name: str | None = None) -> NotebookBackend:
 
 
 def resolve_notebook_image(image: str | None = None) -> str:
-    """Resolve the immutable default image or an explicit environment override."""
+    """Prefer an explicit image, then the environment, then the immutable default."""
 
-    selected = image or os.getenv("SQLSABER_NOTEBOOK_IMAGE", DEFAULT_NOTEBOOK_IMAGE)
+    selected = (
+        image
+        if image is not None
+        else os.getenv("SQLSABER_NOTEBOOK_IMAGE", DEFAULT_NOTEBOOK_IMAGE)
+    )
     if not selected.strip():
         raise NotebookImageError(
             "Notebook image cannot be empty",

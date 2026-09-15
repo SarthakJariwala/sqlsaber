@@ -155,6 +155,30 @@ Factories run later with the session `PluginContext`, so they share the session
 when you want `run_python`. That factory returns nothing if no sandbox provider
 is configured.
 
+Configure notebook resources and the base image with a plugin-owned `NotebookConfig`:
+
+```python
+from functools import partial
+from sqlsaber_notebook import NotebookConfig, WorkspaceLimits
+
+notebook_config = NotebookConfig(
+    backend="docker",
+    image="registry.example.com/analysis-with-ml:2026-09",
+    workspace=WorkspaceLimits(max_total_bytes=2 * 1024**3),
+    cell_seconds=3600,
+)
+options = SQLSaberOptions(
+    database="analytics",
+    capabilities=[partial(notebook, config=notebook_config)],
+)
+```
+
+The direct `sqlsaber_notebook.analyze(..., config=notebook_config)` API accepts the
+same configuration. Explicit image and backend selectors take precedence over
+environment settings. Workspace budgets exclude the generated manifest; resource
+and artifact budgets do not increase model-preview budgets. Only the host can
+change this configuration, not the model calling `analyze_data`.
+
 Constructed capabilities stay free to use their own dependency type when attached directly to your agent. SQLsaber's built-in capabilities do not claim `ctx.deps`.
 
 ## Build a plugin capability

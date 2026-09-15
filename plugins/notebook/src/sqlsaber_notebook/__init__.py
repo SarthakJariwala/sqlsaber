@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from .config import NotebookConfig, WorkspaceLimits
 from .execution import (
     DEFAULT_NOTEBOOK_BACKEND,
     DEFAULT_NOTEBOOK_IMAGE,
@@ -79,6 +80,7 @@ __all__ = [
     "DockerNotebookBackend",
     "ExecutionLimits",
     "NotebookBackend",
+    "NotebookConfig",
     "NotebookEnvironment",
     "NotebookExecutionResult",
     "ManifestEntry",
@@ -86,6 +88,7 @@ __all__ = [
     "Workspace",
     "WorkspaceFile",
     "WorkspaceInputResolver",
+    "WorkspaceLimits",
     "WorkspaceInputUnavailable",
     "WorkspaceResolutionContext",
     "analyze",
