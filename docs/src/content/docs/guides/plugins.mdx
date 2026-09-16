@@ -77,24 +77,27 @@ For an embedded `SQLSaber` session, list the notebook factory in `SQLSaberOption
 
 ## Python sandbox
 
-The sandbox plugin runs Python in a remote sandbox. Use it for calculations that are easier in Python than in SQL.
+The sandbox plugin runs Python analysis and keeps variables, installed packages,
+and generated files available for follow-up requests. An analysis agent writes
+and runs the code. SQLsaber receives the findings and artifact references.
+
+To use E2B, set `E2B_API_KEY` and install the plugin:
 
 ```bash
-uv tool install --with sqlsaber-sandbox sqlsaber
+uv tool install --with 'sqlsaber-sandbox[e2b]' sqlsaber
+SQLSABER_SANDBOX_PROVIDER=e2b saber
 ```
 
-Configure at least one provider:
+After a query, ask SQLsaber to analyze the results, save a plot, or train a model.
+For a follow-up, ask it to continue the same analysis.
 
-| Provider   | Environment variable                                   |
-| ---------- | ------------------------------------------------------ |
-| Daytona    | `DAYTONA_API_KEY`                                      |
-| E2B        | `E2B_API_KEY`                                          |
-| Sprites    | `SPRITES_TOKEN`                                        |
-| Hopx       | `HOPX_API_KEY`                                         |
-| Modal      | `MODAL_TOKEN_ID` or `~/.modal.toml`                    |
-| Cloudflare | `CLOUDFLARE_SANDBOX_BASE_URL` and `CLOUDFLARE_API_TOKEN` |
+To use another provider, install its extra and set `SQLSABER_SANDBOX_PROVIDER`.
+Docker requires no extra. It needs the Docker CLI and a running daemon.
+For microsandbox on Linux, provide read and write access to `/dev/kvm`.
 
-When a provider is configured, the agent can call `run_python`. If none is configured, the tool is not available.
+See [Sandbox providers](/sdk/capabilities/#sandbox-providers) for extras and credentials.
+For embedded use, configure the capability with `SandboxConfig` as shown in
+[Persistent sandbox analysis](/sdk/capabilities/#persistent-sandbox-analysis).
 
 ## Install several plugins
 

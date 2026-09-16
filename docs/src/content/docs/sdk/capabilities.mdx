@@ -98,7 +98,7 @@ loaded = await store.get(
 print(loaded.rows())
 ```
 
-Pass that same store into `PluginContext.query_result_store` before you construct notebook, viz, or sandbox. `PluginContext.query_result_store` is required. `VizTool` and `RunPythonTool` also require a store. Omitting it is a `TypeError`.
+Pass the same store into `PluginContext.query_result_store` when you construct notebook, viz, or sandbox capabilities. These capabilities use the store to load complete SQL results.
 
 See [Build an agent that keeps complete SQL results](/sdk/capability-query-results) for a step-by-step agent that prints a truncated model preview and then loads all 250 stored rows.
 
@@ -151,9 +151,8 @@ async with SQLSaber(options=options) as saber:
 
 List only the plugins you want. `SQLSaber` does not scan installed entry points.
 Factories run later with the session `PluginContext`, so they share the session
-`query_result_store`. Add `from sqlsaber_sandbox import capability as sandbox`
-when you want `run_python`. That factory returns nothing if no sandbox provider
-is configured.
+`query_result_store`. For sandbox analysis, see
+[Persistent sandbox analysis](#persistent-sandbox-analysis).
 
 Configure notebook resources and the base image with a plugin-owned `NotebookConfig`:
 
@@ -180,6 +179,156 @@ and artifact budgets do not increase model-preview budgets. Only the host can
 change this configuration, not the model calling `analyze_data`.
 
 Constructed capabilities stay free to use their own dependency type when attached directly to your agent. SQLsaber's built-in capabilities do not claim `ctx.deps`.
+
+## Persistent sandbox analysis
+
+`SandboxSession` gives an analysis agent a persistent Python kernel. Follow-up
+goals reuse variables, installed packages, files, and the analysis agent's history.
+
+### Start a session
+
+Select a provider and pass input files through `Workspace`:
+
+```python
+from pathlib import Path
+
+from pydantic_ai.usage import UsageLimits
+from sqlsaber_sandbox import SandboxConfig, SandboxSession, Workspace
+
+config = SandboxConfig(provider="e2b", idle_seconds=300)
+workspace = Workspace.from_files([
+    ("observations.csv", Path("observations.csv").read_bytes()),
+])
+
+async with SandboxSession(
+    model="anthropic:claude-sonnet-4-6",
+    config=config,
+) as session:
+    first = await session.analyze(
+        "Fit a model and save a diagnostic plot",
+        workspace=workspace,
+        usage_limits=UsageLimits(request_limit=12),
+    )
+    follow_up = await session.analyze(
+        "Explain the largest residual using the same fitted model",
+        usage_limits=UsageLimits(request_limit=6),
+    )
+```
+
+The session closes when the `async with` block exits. To add files on a later
+call, pass another `Workspace`. Existing filenames must have the same contents
+and provenance.
+
+To execute a cell without a model request, call `await session.execute(code)`.
+To export files and the executed notebook, call `await session.snapshot()`.
+Snapshots do not rerun cells.
+
+Both `analyze` and `snapshot` return an `AnalysisResult` with notebook bytes and
+generated files. Results remain usable after the session closes.
+`publish_analysis(result, store=artifact_store, context=artifact_context)` stores
+the notebook and files in your application's `ArtifactStore`.
+
+For a custom backend, pass a `SandboxBackend` implementation through
+`SandboxSession(..., backend=my_backend)`. The session closes that backend on exit.
+
+### Add the managed capability
+
+Register the factory with `partial` to supply `SandboxConfig`. SQLsaber supplies
+the stores and other `PluginContext` values:
+
+```python
+from functools import partial
+
+from sqlsaber import SQLSaberOptions
+from sqlsaber_sandbox import SandboxConfig, capability as sandbox
+
+options = SQLSaberOptions(
+    database="analytics",
+    query_result_store=store,
+    artifact_store=artifact_store,
+    capabilities=[
+        partial(sandbox, config=SandboxConfig(provider="e2b")),
+    ],
+)
+```
+
+The main agent receives these tools:
+
+- `analyze_in_sandbox` accepts a goal and returns an answer, session ID, and artifact references. Passing `session_id` continues that analysis.
+- `close_sandbox` releases a session's environment.
+- `publish_sandbox_artifacts` retries publication of the latest snapshot without rerunning code.
+
+`analyze_in_sandbox` replaces `run_python` and accepts a goal rather than Python
+code. The analysis agent keeps its code iterations in a separate conversation.
+
+To accept non-SQL inputs, set `SQLSaberOptions.workspace_input_resolver` to your
+application's attachment resolver. The tool then accepts `attachment_refs`.
+
+For a Pydantic AI agent you own, use `async with Sandbox(context, config=...)`
+around the agent's lifetime to close its sandbox sessions on exit.
+
+### Sandbox providers
+
+`SandboxConfig.provider` takes precedence over `SQLSABER_SANDBOX_PROVIDER`.
+Without either setting, selection requires exactly one complete cloud credential
+set. Docker and microsandbox require explicit selection.
+
+| Provider | Package | Credentials or prerequisites |
+| --- | --- | --- |
+| `docker` | `sqlsaber-sandbox` | Docker CLI and a running daemon |
+| `microsandbox` | `sqlsaber-sandbox[microsandbox]` | Host virtualization. On Linux, readable and writable `/dev/kvm` |
+| `modal` | `sqlsaber-sandbox[modal]` | `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` |
+| `e2b` | `sqlsaber-sandbox[e2b]` | `E2B_API_KEY` |
+| `daytona` | `sqlsaber-sandbox[daytona]` | `DAYTONA_API_KEY` |
+| `sprites` | `sqlsaber-sandbox[sprites]` | `SPRITES_TOKEN` |
+
+### Resources and usage limits
+
+One immutable `SandboxConfig` applies to each session or capability. The main
+agent cannot change its provider, resources, or file limits through tool arguments.
+
+`image` accepts a registry image for Docker, microsandbox, Modal, and Daytona.
+Docker and microsandbox default to `python:3.12-slim`. Modal and Daytona default
+to Python 3.12. For E2B, `image` is a template ID. Sprites does not accept custom images.
+
+`cpu_cores` and `memory_mb` set CPU and memory resources. Microsandbox and Sprites
+require whole CPU counts. Daytona requires whole CPU counts and memory in multiples
+of 1024 MiB. E2B takes both settings from its template.
+
+`gpu` is a provider-specific string:
+
+- Modal accepts a GPU selector such as `"L4"`.
+- Docker accepts a `--gpus` selector such as `"all"`. The host needs a GPU and the NVIDIA container runtime.
+- Daytona accepts a positive GPU-count string such as `"1"`.
+
+E2B, microsandbox, and Sprites reject GPU requests. Python code must use a
+GPU-enabled library to run computations on an allocated GPU.
+
+Workspace, artifact, and model-preview limits are separate. Increasing
+`max_artifact_bytes` does not increase `max_output_chars`, `max_image_bytes`, or
+`max_history_image_bytes`.
+
+Each direct `analyze(..., usage_limits=...)` call starts a fresh usage count unless
+you pass `parent_usage`. Managed analysis shares the current `saber.query()` budget.
+Independent sessions can run concurrently. Calls within one session run sequentially,
+as do managed calls that share a finite request or tool-call budget.
+
+### Session lifetime
+
+Sessions start their sandbox on first use. `idle_seconds` measures time between
+operations, excluding active model calls and file transfers. `max_lifetime_seconds`
+limits the total session lifetime.
+
+With no configured lifetime, E2B uses one hour and Modal uses 24 hours.
+Other providers retain their default lifetime. A host crash can prevent cleanup,
+so an environment can remain billable until its provider stops it.
+
+Sessions do not recover after a host process restart. Errors can leave partial
+changes in Python state. SQLsaber does not replay code when an execution outcome
+is unknown.
+
+Managed session IDs are scoped to a conversation. Sandbox code has outbound
+network access and can modify its input files.
 
 ## Build a plugin capability
 

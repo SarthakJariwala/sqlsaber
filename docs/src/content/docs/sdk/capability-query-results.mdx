@@ -117,7 +117,9 @@ That is the same retrieve path as `SQLSaber.get_query_result()`, without the man
 
 ## Share the store with notebook, viz, or sandbox
 
-`analyze_data`, `viz`, and sandbox Python resolve `result_*.json` handles from conversation history. They load bytes from `PluginContext.query_result_store`. Build one `PluginContext` with the store we already passed to `SqlTools`. Construct the plugin classes we want with that context.
+`analyze_data`, `viz`, and `analyze_in_sandbox` load complete SQL results from
+`PluginContext.query_result_store`. Create a context with the store we passed to
+`SqlTools`, then pass that context to the plugins:
 
 ```python
 from sqlsaber.artifacts import InMemoryArtifactStore
@@ -125,6 +127,7 @@ from sqlsaber.capabilities.plugins import PluginContext
 from sqlsaber.config.settings import Config
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber_notebook.capability import Notebook
+from sqlsaber_sandbox import Sandbox
 from sqlsaber_viz import Visualization
 
 context = PluginContext(
@@ -141,11 +144,12 @@ context = PluginContext(
 agent = Agent(
     "anthropic:claude-sonnet-4-6",
     instructions="You query the customers table.",
-    capabilities=[sql, Notebook(context), Visualization(context)],
+    capabilities=[sql, Notebook(context), Visualization(context), Sandbox(context)],
 )
 ```
 
-A measured run printed the same Python `id` for `SqlTools`, `Notebook`, and `Visualization`. If we want `run_python` and a sandbox provider is configured, add `Sandbox(context)` from `sqlsaber_sandbox`.
+All four capabilities now read from the same store. For sandbox configuration and
+session cleanup, see [Persistent sandbox analysis](/sdk/capabilities/#persistent-sandbox-analysis).
 
 <Aside type="caution" title="One store per conversation">
 Pass the same `QueryResultStore` into `SqlTools` and `PluginContext`. Two `InMemoryQueryResultStore()` calls look similar and share nothing. The host can still load rows from `sql.query_result_store` while `analyze_data` reports that the complete SQL result is unavailable.
@@ -158,15 +162,22 @@ Close owned connections with `async with agent:` as in the [Capabilities](/sdk/c
 `SQLSaber` already owns one session store and always attaches `SqlTools` plus `Knowledge`. It does not load notebook, viz, or sandbox unless we list them.
 
 ```python
+from functools import partial
+
 from sqlsaber import InMemoryQueryResultStore, SQLSaber, SQLSaberOptions
 from sqlsaber_notebook.capability import capability as notebook
+from sqlsaber_sandbox import SandboxConfig, capability as sandbox
 from sqlsaber_viz import capability as viz
 
 store = InMemoryQueryResultStore()
 options = SQLSaberOptions(
     database="customers.sqlite",
     query_result_store=store,
-    capabilities=[notebook, viz],
+    capabilities=[
+        notebook,
+        viz,
+        partial(sandbox, config=SandboxConfig(provider="e2b")),
+    ],
 )
 
 async with SQLSaber(options=options) as saber:
@@ -175,6 +186,7 @@ async with SQLSaber(options=options) as saber:
     print(len(loaded.rows()))
 ```
 
-We should print `250`. Factories run later with the session `PluginContext`, so notebook and viz see the same store as `execute_sql`.
+The example prints `250`. The plugin factories receive the session's
+`PluginContext`, so notebook, viz, and sandbox share the store with `execute_sql`.
 
 `SQLSaberOptions.capabilities` also accepts constructed capabilities such as `WebSearch()`. Pass instances that already hold this store, or pass factories and let the session construct them.

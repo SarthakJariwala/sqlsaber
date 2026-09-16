@@ -1,9 +1,106 @@
 # SQLsaber sandbox plugin
 
-The `sqlsaber-sandbox` plugin adds a `run_python` tool. SQLsaber executes Python in a remote sandbox when a provider is configured.
+`sqlsaber-sandbox` runs Python analysis in a persistent local or remote sandbox.
+Give the analysis agent a goal and input files. It runs code and returns findings,
+plots, and generated files.
+
+To use E2B from the CLI, set `E2B_API_KEY` and install the plugin:
 
 ```bash
-uv tool install --with sqlsaber-sandbox sqlsaber
+uv tool install --with 'sqlsaber-sandbox[e2b]' sqlsaber
+SQLSABER_SANDBOX_PROVIDER=e2b saber
 ```
 
-Set at least one provider key, such as `E2B_API_KEY` or `DAYTONA_API_KEY`. See [Plugins](https://sqlsaber.com/guides/plugins/).
+## Start an SDK session
+
+Select a provider with `SandboxConfig`. Pass input files through `Workspace`:
+
+```python
+from pathlib import Path
+
+from pydantic_ai.usage import UsageLimits
+from sqlsaber_sandbox import SandboxConfig, SandboxSession, Workspace
+
+config = SandboxConfig(provider="e2b", idle_seconds=300, max_lifetime_seconds=900)
+
+async with SandboxSession(
+    model="anthropic:claude-sonnet-4-6",
+    config=config,
+) as session:
+    first = await session.analyze(
+        "Fit a trend and save a plot",
+        workspace=Workspace.from_files([("sales.csv", Path("sales.csv").read_bytes())]),
+        usage_limits=UsageLimits(request_limit=12),
+    )
+    follow_up = await session.analyze(
+        "Use the same fitted model to explain the final month",
+        usage_limits=UsageLimits(request_limit=6),
+    )
+```
+
+Reuse the session for follow-up goals. Variables, installed packages, generated
+files, and the analysis agent's history remain available until the session closes.
+The `async with` block closes the sandbox on exit.
+
+Pass `usage_limits` to limit model requests for each `analyze` call. To run Python
+without a model request, call `await session.execute(code, workspace=...)`.
+
+## Save analysis files
+
+Ask the analysis agent to save deliverables in its working directory. The returned
+`AnalysisResult` contains notebook bytes and generated files, including plots and
+model weights. To export the current state without running another cell, call
+`await session.snapshot()`.
+
+Pass the result to your application's `ArtifactStore` to publish the files.
+The result remains usable after the session closes:
+
+```python
+from sqlsaber.artifacts import ArtifactContext
+from sqlsaber_sandbox import publish_analysis
+
+publication = await publish_analysis(
+    follow_up,
+    store=artifact_store,
+    context=ArtifactContext(conversation_id="conversation-123"),
+)
+```
+
+## Add sandbox analysis to SQLsaber
+
+Register the capability through `SQLSaberOptions.capabilities`. Pass your query
+result store and artifact store to share SQL inputs and retain generated files:
+
+```python
+from functools import partial
+
+from sqlsaber import SQLSaber, SQLSaberOptions
+from sqlsaber_sandbox import SandboxConfig, capability
+
+options = SQLSaberOptions(
+    database="analytics",
+    query_result_store=query_result_store,
+    artifact_store=artifact_store,
+    capabilities=[
+        partial(capability, config=SandboxConfig(provider="e2b")),
+    ],
+)
+
+async with SQLSaber(options=options) as saber:
+    result = await saber.query("Analyze recent revenue in a sandbox")
+```
+
+The main agent delegates goals through `analyze_in_sandbox` and receives the
+answer and artifact references. The analysis agent keeps its code iterations in
+a separate conversation.
+
+To continue an analysis, pass the returned `session_id` to `analyze_in_sandbox`.
+To release the environment, call `close_sandbox`. If publication fails, call
+`publish_sandbox_artifacts` to retry without rerunning Python.
+
+Pass `usage_limits` to `saber.query()` to share a model budget between the main
+agent and the analysis agent. For non-SQL inputs, set
+`SQLSaberOptions.workspace_input_resolver` to your application's attachment resolver.
+
+For provider requirements, GPU options, resource limits, and session lifetime, see
+the [sandbox SDK reference](https://sqlsaber.com/sdk/capabilities/#persistent-sandbox-analysis).
