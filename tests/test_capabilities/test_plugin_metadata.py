@@ -17,7 +17,7 @@ def test_plugins_require_capabilities_compatible_sqlsaber() -> None:
     assert core_version >= (0, 69, 0)
 
     minimum_versions = {
-        "sandbox": "0.69.0",
+        "sandbox": "0.77.0",
         "viz": "0.69.0",
         "notebook": "0.72.0",
     }

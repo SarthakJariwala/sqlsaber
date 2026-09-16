@@ -421,26 +421,6 @@ wheels = [
 ]
 
 [[package]]
-name = "cased-sandboxes"
-version = "0.7.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "click" },
-    { name = "daytona" },
-    { name = "e2b" },
-    { name = "hopx-ai" },
-    { name = "httpx" },
-    { name = "modal" },
-    { name = "tabulate" },
-    { name = "typing-extensions" },
-    { name = "vercel" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/64/d8/93f6758f8ada0f6e89fa6dbe2bbf330931e1f95fac83ade77f6ee1471763/cased_sandboxes-0.7.0.tar.gz", hash = "sha256:f73d5a3fa2dbe17aee2d2d4a7bbf48f6932277d21a1aff98976ce688684c1778", size = 67146, upload-time = "2026-02-17T23:16:50.775Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3d/e9/ee283a46d547200f43c54696c78d5f9bc0335955c827ef39b52a4eadfc4d/cased_sandboxes-0.7.0-py3-none-any.whl", hash = "sha256:5b8e8a5eacc86eb59f52c8f333e1d1ab50073e259c9140c238b302a4c64ff1b4", size = 72486, upload-time = "2026-02-17T23:16:49.684Z" },
-]
-
-[[package]]
 name = "cbor2"
 version = "6.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1132,7 +1112,7 @@ wheels = [
 
 [[package]]
 name = "e2b"
-version = "2.46.4"
+version = "2.49.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
@@ -1148,9 +1128,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "wcmatch" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7d/04/3e7d3ca8abaeffcfc41d36b9d6fe3aa055cecf3b56234e051991de848b2d/e2b-2.46.4.tar.gz", hash = "sha256:777d35beb00194b401a6c4ac2498aa836628839649f17aae86e85920382c8f6c", size = 228801, upload-time = "2026-09-02T20:48:36.725Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/14/c1/fb9bf7726dafdc5e8be439218d4c8819e251baca3591ef5ed4ed4c1e883f/e2b-2.49.1.tar.gz", hash = "sha256:300810e78cdd7d9a0b96b0c66e26ed53ed643bc3227f8dd7e9725e04f271dff3", size = 228685, upload-time = "2026-09-10T17:37:25.249Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/b5/585a30223d9ee95bc94f32f8d5358b147bf93832e37b809545a3ab7892a0/e2b-2.46.4-py3-none-any.whl", hash = "sha256:5d77e9fee8571a0d24a179f14244984127d18bd93a99a5e90226c876087035b5", size = 403067, upload-time = "2026-09-02T20:48:35.082Z" },
+    { url = "https://files.pythonhosted.org/packages/a0/51/ea23a1d61460199b4c250d0a6beffc2fb750aab1fbf9301a3db01a6b7fe1/e2b-2.49.1-py3-none-any.whl", hash = "sha256:2ea7c10927ab6e75aae54badef41b49ab0ef0db03b747bf09db2a86f7906ffe6", size = 389026, upload-time = "2026-09-10T17:37:23.907Z" },
 ]
 
 [[package]]
@@ -1649,22 +1629,6 @@ wheels = [
 ]
 
 [[package]]
-name = "hopx-ai"
-version = "0.5.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aiohttp" },
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "typing-extensions" },
-    { name = "websockets" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/64/cd/aecaca44c6d02dfe37f09646f0384a16f84f5813744efba90f7b423331df/hopx_ai-0.5.0.tar.gz", hash = "sha256:cc433fca7352a355318ec711bf2dad7d402972e106688375eb77fde6fac5278b", size = 278382, upload-time = "2025-12-29T23:07:58.109Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/4c/7ee81dc4ced2c939994a19e37b44eb4ed7c03b7d3deac18d238a8027d3cb/hopx_ai-0.5.0-py3-none-any.whl", hash = "sha256:8a3f2eb1acf85c66080f763c614150d2546b3ab26b1c2f3dbdd48f1e6ccc763f", size = 103327, upload-time = "2025-12-29T23:07:56.735Z" },
-]
-
-[[package]]
 name = "hpack"
 version = "4.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1712,11 +1676,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b1/df/48c586a5fe32a0f01324ee087459e112ebb7224f646c0b5023f5e79e9956/httpx-0.28.1.tar.gz", hash = "sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc", size = 141406, upload-time = "2024-12-06T15:37:23.222Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad", size = 73517, upload-time = "2024-12-06T15:37:21.509Z" },
-]
-
-[package.optional-dependencies]
-http2 = [
-    { name = "h2" },
 ]
 
 [[package]]
@@ -4272,7 +4231,6 @@ name = "sqlsaber-sandbox"
 version = "0.5.0"
 source = { editable = "plugins/sandbox" }
 dependencies = [
-    { name = "cased-sandboxes" },
     { name = "sqlsaber" },
 ]
 
@@ -4292,7 +4250,6 @@ sprites = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cased-sandboxes", specifier = ">=0.5.0" },
     { name = "daytona", marker = "extra == 'daytona'", specifier = ">=0.143,<1" },
     { name = "e2b", marker = "extra == 'e2b'", specifier = ">=2.46,<3" },
     { name = "microsandbox", marker = "extra == 'microsandbox'", specifier = ">=0.6.6,<0.7" },
@@ -4634,127 +4591,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f2/0f/3f86e61397dd33bf2ccf28188c40db6a740658aeebbbf6e7dbc101a1f487/uvicorn-0.52.4.tar.gz", hash = "sha256:73acfee47a0b133c5de13d219492d62d8a31e935f4fe6e41a232451a15379f86", size = 100627, upload-time = "2026-08-19T06:27:41.821Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/79/4a20b54ab0491485ccd8c077db2d39187c7f12b3e15485d38a7be37c81b4/uvicorn-0.52.4-py3-none-any.whl", hash = "sha256:f86e41a149d7d05a9969337e3946a9c171c06a5d42680896daaba624aeac8da1", size = 79871, upload-time = "2026-08-19T06:27:40.36Z" },
-]
-
-[[package]]
-name = "vercel"
-version = "0.10.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "cbor2" },
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "python-dotenv" },
-    { name = "vercel-cache" },
-    { name = "vercel-headers" },
-    { name = "vercel-internal-core" },
-    { name = "vercel-internal-telemetry" },
-    { name = "vercel-oidc" },
-    { name = "vercel-queue" },
-    { name = "vercel-sandbox" },
-    { name = "websockets" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/a7/1a6278c8e66085c25162f41268d45d8db8ab368cd59a36a72c7766c7431b/vercel-0.10.0.tar.gz", hash = "sha256:050ca9c7dcf3c43e7d2af7401aed2b7de620164363e6fb486b8c3518cd4d8ff9", size = 273649, upload-time = "2026-08-12T23:41:01.469Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/d6/cff1f421d6fa412abd0d634d6c4162ccdecc96663a9868936cf2d7e4dc60/vercel-0.10.0-py3-none-any.whl", hash = "sha256:ce6d3bf7f784d9e1dbf5dd085de50eac206df9d7cdd9ef1ce9f9cde9c9be71e0", size = 166648, upload-time = "2026-08-12T23:41:00.274Z" },
-]
-
-[[package]]
-name = "vercel-cache"
-version = "0.7.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "httpx" },
-    { name = "vercel-headers" },
-    { name = "vercel-internal-telemetry" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f2/c7/f264c2e7a5ec54851257a504e746cbd20d37c85a39a285a7c4e89c06c1e3/vercel_cache-0.7.2.tar.gz", hash = "sha256:d0ef5499b412adbe813a6cc77fad32f908b7453c1e3c8a9471fd2ad0718397cb", size = 9919, upload-time = "2026-08-08T00:33:48.089Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ed/d4/62c87adef7e7802854eb019c22eef7115ff9282c15f16cde34471bf913c9/vercel_cache-0.7.2-py3-none-any.whl", hash = "sha256:f744d6b3916aace4ca943239336362363994c30583654599fd8d415ae6915948", size = 10346, upload-time = "2026-08-08T00:33:47.208Z" },
-]
-
-[[package]]
-name = "vercel-headers"
-version = "0.7.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/20/50/2fbe5563b1f710c5cec3076efe94df887dd89c7ce0f4238b81f169f5d733/vercel_headers-0.7.1.tar.gz", hash = "sha256:46e63a99a3095f3b4fa324c80e5aeee5886ca474ef5ecbfe6eabb5f2bd64928a", size = 5410, upload-time = "2026-07-16T14:23:35.768Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/b8/5484e7ecf876c031831623efc547edcf94e2e33db4251d17c2d117c18cb0/vercel_headers-0.7.1-py3-none-any.whl", hash = "sha256:6ef65f0baffdf19775b693265d6118e125251456fb192324f4006dd341c77abc", size = 3907, upload-time = "2026-07-16T14:23:34.942Z" },
-]
-
-[[package]]
-name = "vercel-internal-core"
-version = "0.1.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "httpx" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/60/3b/187c5e5974e5bd9a9bcfb6b0a54aaa032a784d5eb0bfbfe8e8de7fd786fa/vercel_internal_core-0.1.2.tar.gz", hash = "sha256:044ac7da4e16d31fa3ef95726194ec35bdf1821a5226e4d7109be1eed71c828d", size = 18663, upload-time = "2026-08-07T23:45:59.862Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/89/b4/853d703b06a12f5ff1a661e569efa9b45674fa1dbd8fa27a3129dd618240/vercel_internal_core-0.1.2-py3-none-any.whl", hash = "sha256:a70f900723a3e8a08d7746489ae8307d68e4dc385fc35d9fd4245b4ea1fd4f2c", size = 22507, upload-time = "2026-08-07T23:45:58.909Z" },
-]
-
-[[package]]
-name = "vercel-internal-telemetry"
-version = "0.7.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "httpx" },
-    { name = "vercel-oidc" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e9/d8/fdbe1e76dca9520e628715dd232f8567d045cd0b3cc2c559182caf2c74c5/vercel_internal_telemetry-0.7.2.tar.gz", hash = "sha256:bbe3d943252911853615722767a54be8e0873c00d1b079d25121f1ea88ed70f8", size = 9176, upload-time = "2026-08-08T00:32:51.89Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c5/db/fa4879dc9b1914424496e2e12966aec0f3a5849556f4586592235c8fa312/vercel_internal_telemetry-0.7.2-py3-none-any.whl", hash = "sha256:6c6dd20e0803ab070b71e887c9b56a1e0d7e1ccdabcaf45aa0b12b6be54ba7a3", size = 8253, upload-time = "2026-08-08T00:32:51.095Z" },
-]
-
-[[package]]
-name = "vercel-oidc"
-version = "0.8.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "httpx" },
-    { name = "vercel-headers" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/34/c5/fa8c0c298f86e9e144fb012b3f6d45490e9af240dd6d3319cd2e2441002b/vercel_oidc-0.8.0.tar.gz", hash = "sha256:dbcb1e19697c87f89ae25c5bfeb8018fdb3904d9d92290796cc290ae7eeef61e", size = 16117, upload-time = "2026-08-08T00:16:40.203Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1a/d6/c380d2d171840a67883a30f453b2edb3adabab3b5519941b445c312135c6/vercel_oidc-0.8.0-py3-none-any.whl", hash = "sha256:fb8bb715f20edf5539554951d0374b4956550688c8a8b7ccb69f8275ff464e22", size = 15996, upload-time = "2026-08-08T00:16:39.349Z" },
-]
-
-[[package]]
-name = "vercel-queue"
-version = "0.8.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "httpx", extra = ["http2"] },
-    { name = "python-multipart" },
-    { name = "typing-extensions" },
-    { name = "vercel-headers" },
-    { name = "vercel-internal-core" },
-    { name = "vercel-oidc" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/43/c9/805f5d3ee0c5c2685732293a5d6294da746cc48004432f1461d2f8417ada/vercel_queue-0.8.0.tar.gz", hash = "sha256:f8758804f1efeba14d1d0e4ca55a0e9d63d9917a8c37645073a6688d44129967", size = 81809, upload-time = "2026-08-12T23:40:56.177Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/a9/981ac481e938807103ba0253831dde93ed7c7a6aa6e00d9b5c6ea21082d8/vercel_queue-0.8.0-py3-none-any.whl", hash = "sha256:077dc24cc2cf4557193df03b59b61acdde41d29bab12d994c18f4b133a79437e", size = 97105, upload-time = "2026-08-12T23:40:55.172Z" },
-]
-
-[[package]]
-name = "vercel-sandbox"
-version = "0.4.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "vercel-internal-core" },
-    { name = "vercel-oidc" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a0/96/190a7c397a3f05ae4186c3b7d2c84afde9257e5da554df5654d14e870b95/vercel_sandbox-0.4.0.tar.gz", hash = "sha256:e0a58b727cce3712fca8ad90132554b50361e6f68b5d4328a247e42ff78bb481", size = 66629, upload-time = "2026-08-08T00:33:33.553Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0f/f5/f2c73825ebc24f614f28ce0940b8372ea609a51bc88331f0a880ac414f6a/vercel_sandbox-0.4.0-py3-none-any.whl", hash = "sha256:b516e087e93805a75cc02d5f6379c942ebbe939f8adc680ae69d9cc8f5cb564b", size = 78054, upload-time = "2026-08-08T00:33:32.631Z" },
 ]
 
 [[package]]

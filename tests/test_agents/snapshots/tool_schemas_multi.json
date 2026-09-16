@@ -147,6 +147,82 @@
     }
   },
   {
+    "description": "Delegate a goal to a persistent sandbox analyst.",
+    "name": "analyze_in_sandbox",
+    "parameters_json_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SQL result keys. Omit for recent results on a new session;\nomission adds no files on continuation. An empty list selects none."
+        },
+        "goal": {
+          "description": "Analysis to perform. The subagent writes and iterates on code.",
+          "type": "string"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Omit to create an independent analysis session; provide a\nprevious ID to reuse its variables, files, and analyst history."
+        }
+      },
+      "required": [
+        "goal"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Release a sandbox session. Already published files remain available.",
+    "name": "close_sandbox",
+    "parameters_json_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Publish the latest completed snapshot without executing Python again.",
+    "name": "publish_sandbox_artifacts",
+    "parameters_json_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "description": "<summary>Generate a visualization spec for SQL results.</summary>\n<returns>\n<description>JSON string containing the visualization spec.</description>\n</returns>",
     "name": "viz",
     "parameters_json_schema": {
