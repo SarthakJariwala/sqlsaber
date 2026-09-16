@@ -5,8 +5,11 @@ from types import SimpleNamespace
 import pytest
 from pydantic_ai.usage import UsageLimits
 
+from sqlsaber.agents import pydantic_ai_agent as agent_module
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.capabilities.base import SqlSaberCapability
+from sqlsaber.capabilities.plugins import PluginContext
+from sqlsaber.config.settings import Config
 from sqlsaber.database.sqlite import SQLiteConnection
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.knowledge.sqlite_store import SQLiteKnowledgeStore
@@ -101,12 +104,119 @@ class TestSQLSaberAgentDeps:
 class _ClosingCapability(SqlSaberCapability):
     def __init__(self) -> None:
         self.close_calls = 0
+        self.contexts: list[PluginContext] = []
+
+    def update_context(self, context: PluginContext) -> None:
+        self.contexts.append(context)
 
     async def close(self) -> None:
         self.close_calls += 1
 
 
 class TestSQLSaberAgentLifecycle:
+    @pytest.mark.asyncio
+    async def test_plugin_capability_survives_rebuilds_and_refreshes_context(
+        self, in_memory_db
+    ):
+        created: list[_ClosingCapability] = []
+
+        def factory(context: PluginContext) -> _ClosingCapability:
+            capability = _ClosingCapability()
+            capability.contexts.append(context)
+            created.append(capability)
+            return capability
+
+        config = Config.in_memory(
+            model_name="anthropic:claude-3-5-sonnet",
+            api_keys={"anthropic": "test-key"},
+        )
+        agent = SQLSaberAgent(
+            db_connection=in_memory_db, settings=config, capabilities=[factory]
+        )
+        plugin = created[0]
+
+        agent.set_thinking(True)
+        config.model.name = "anthropic:claude-3-5-haiku"
+        agent.reload_model_settings()
+
+        assert created == [plugin]
+        assert plugin in agent.capabilities
+        assert [context.main_model_name for context in plugin.contexts] == [
+            "anthropic:claude-3-5-sonnet",
+            "anthropic:claude-3-5-sonnet",
+            "anthropic:claude-3-5-haiku",
+        ]
+
+        await agent.close()
+        await agent.close()
+        assert plugin.close_calls == 1
+
+    @pytest.mark.asyncio
+    async def test_failed_rebuild_preserves_plugin_and_agent_state(
+        self, in_memory_db, monkeypatch
+    ):
+        plugin = _ClosingCapability()
+        factory_calls = 0
+
+        def factory(context: PluginContext) -> _ClosingCapability:
+            nonlocal factory_calls
+            factory_calls += 1
+            plugin.contexts.append(context)
+            return plugin
+
+        agent = SQLSaberAgent(
+            db_connection=in_memory_db,
+            model_name="anthropic:claude-3-5-sonnet",
+            api_key="test-key",
+            capabilities=[factory],
+        )
+        previous_agent = agent.agent
+        previous_capabilities = agent.capabilities
+        previous_thinking = agent.thinking_enabled
+
+        def fail_agent(*args, **kwargs):
+            raise RuntimeError("rebuild failed")
+
+        monkeypatch.setattr(agent_module, "Agent", fail_agent)
+        with pytest.raises(RuntimeError, match="rebuild failed"):
+            agent.set_thinking(not previous_thinking)
+
+        assert factory_calls == 1
+        assert agent.agent is previous_agent
+        assert agent.capabilities is previous_capabilities
+        assert agent.thinking_enabled is previous_thinking
+        assert len(plugin.contexts) == 1
+
+        await agent.close()
+        assert plugin.close_calls == 1
+
+    @pytest.mark.asyncio
+    async def test_plugin_capabilities_are_not_shared_between_agents(self):
+        created: list[_ClosingCapability] = []
+
+        def factory(context: PluginContext) -> _ClosingCapability:
+            capability = _ClosingCapability()
+            capability.contexts.append(context)
+            created.append(capability)
+            return capability
+
+        agents = [
+            SQLSaberAgent(
+                db_connection=SQLiteConnection("sqlite:///:memory:"),
+                model_name="anthropic:claude-3-5-sonnet",
+                api_key="test-key",
+                capabilities=[factory],
+            )
+            for _ in range(2)
+        ]
+
+        assert len(created) == 2
+        assert created[0] is not created[1]
+
+        for agent in agents:
+            await agent.close()
+        assert [capability.close_calls for capability in created] == [1, 1]
+
     @pytest.mark.asyncio
     async def test_close_does_not_close_injected_knowledge_manager(
         self, in_memory_db, temp_dir, monkeypatch
