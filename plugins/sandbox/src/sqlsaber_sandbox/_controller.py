@@ -390,15 +390,24 @@ class Controller:
                 await self.manager.shutdown_kernel(now=True)
 
 
-async def bridge(root: Path, encoded: str):
-    reader, writer = await asyncio.open_unix_connection(
-        root / "controller.sock", limit=64 * 1024 * 1024
-    )
-    writer.write(base64.b64decode(encoded) + b"\n")
+async def bridge(root: Path, encoded: str) -> int:
+    request = base64.b64decode(encoded)
+    try:
+        reader, writer = await asyncio.open_unix_connection(
+            root / "controller.sock", limit=64 * 1024 * 1024
+        )
+    except (FileNotFoundError, ConnectionRefusedError):
+        # The socket is bound only after kernel startup. The host retries
+        # readiness pings within open_seconds; these are not command failures.
+        if json.loads(request).get("operation") == "ping":
+            return 1
+        raise
+    writer.write(request + b"\n")
     await writer.drain()
     print((await reader.readline()).decode(), end="")
     writer.close()
     await writer.wait_closed()
+    return 0
 
 
 if __name__ == "__main__":
@@ -408,4 +417,4 @@ if __name__ == "__main__":
             Controller(Path(root), json.loads(Path(argument).read_text())).serve()
         )
     else:
-        asyncio.run(bridge(Path(root), argument))
+        sys.exit(asyncio.run(bridge(Path(root), argument)))

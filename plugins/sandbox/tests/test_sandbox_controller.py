@@ -1,11 +1,13 @@
 """Execute the actual controller against a local IPython kernel, without cloud."""
 
 import asyncio
+import base64
 from dataclasses import asdict
 import hashlib
 import json
 from pathlib import Path
 import shlex
+import socket
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -13,10 +15,71 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from sqlsaber_sandbox._controller import Controller
+from sqlsaber_sandbox import _controller
+from sqlsaber_sandbox._controller import Controller, bridge
 from sqlsaber_sandbox.backends.base import CommandResult
 from sqlsaber_sandbox.config import SandboxConfig
 from sqlsaber_sandbox.execution import KernelExecution, SandboxError
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Guest bridge uses Unix sockets")
+@pytest.mark.parametrize("stale_socket", [False, True])
+async def test_bridge_startup_ping_is_quiet_until_socket_is_ready(stale_socket):
+    with tempfile.TemporaryDirectory(prefix="ss-bridge-") as directory:
+        root = Path(directory)
+        path = root / "controller.sock"
+        if stale_socket:
+            with socket.socket(socket.AF_UNIX) as sock:
+                sock.bind(str(path))
+
+        async def call(operation):
+            encoded = base64.b64encode(json.dumps({"operation": operation}).encode())
+            process = await asyncio.create_subprocess_exec(
+                sys.executable,
+                _controller.__file__,
+                "call",
+                str(root),
+                encoded.decode(),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), 10)
+                return process.returncode, stdout, stderr
+            finally:
+                if process.returncode is None:
+                    process.kill()
+                    await process.wait()
+
+        assert await call("ping") == (1, b"", b"")
+        # Only readiness probes are quiet. Losing the socket during execution
+        # must still expose the underlying connection failure.
+        code, stdout, stderr = await call("execute")
+        assert code == 1 and not stdout
+        assert (
+            b"ConnectionRefusedError" if stale_socket else b"FileNotFoundError"
+        ) in stderr
+
+        controller = Controller(root, asdict(SandboxConfig()))
+        async with await asyncio.start_unix_server(controller.connection, path=path):
+            code, stdout, stderr = await call("ping")
+            assert code == 0 and not stderr
+            assert json.loads(stdout) == {
+                "epoch": controller.epoch,
+                "result": {"epoch": controller.epoch, "lost": False},
+            }
+
+
+async def test_bridge_does_not_hide_unexpected_connection_errors(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        asyncio,
+        "open_unix_connection",
+        AsyncMock(side_effect=PermissionError("socket access denied")),
+        raising=False,
+    )
+    encoded = base64.b64encode(b'{"operation":"ping"}').decode()
+    with pytest.raises(PermissionError, match="socket access denied"):
+        await bridge(tmp_path, encoded)
 
 
 @pytest.mark.skipif(
