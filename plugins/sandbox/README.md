@@ -91,12 +91,18 @@ async with SQLSaber(options=options) as saber:
 ```
 
 The main agent delegates goals through `analyze_in_sandbox` and receives the
-answer and artifact references. The analysis agent keeps its code iterations in
-a separate conversation.
+answer and artifact references. Each completed analysis automatically publishes
+its notebook and files to the configured artifact store. The analysis agent keeps
+its code iterations in a separate conversation.
 
 To continue an analysis, pass the returned `session_id` to `analyze_in_sandbox`.
-To release the environment, call `close_sandbox`. If publication fails, call
-`publish_sandbox_artifacts` to retry without rerunning Python.
+`close_sandbox` retries pending publication before releasing the environment.
+With the default required-publication policy, a storage failure leaves the session
+open and returns an error. To retry publication without closing the session or
+rerunning Python, call `publish_sandbox_artifacts`.
+
+Capability shutdown also retries publication, but still attempts to release all
+environments if storage fails. Required publication failures raise a cleanup error.
 
 Pass `usage_limits` to `saber.query()` to share a model budget between the main
 agent and the analysis agent. For non-SQL inputs, set

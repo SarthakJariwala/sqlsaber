@@ -32,7 +32,10 @@ class Sandbox(SqlSaberCapability):
             prepare=prepare_analysis,
         )
         self._toolset.add_function(
-            self.tool.close_session, name="close_sandbox", takes_ctx=True
+            self.tool.close_session,
+            name="close_sandbox",
+            takes_ctx=True,
+            sequential=True,
         )
         self._toolset.add_function(
             self.tool.publish_artifacts,

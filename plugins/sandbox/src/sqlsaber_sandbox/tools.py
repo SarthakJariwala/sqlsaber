@@ -6,7 +6,7 @@ from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 import logging
-from typing import Any
+from typing import Any, cast
 
 from pydantic_ai import RunContext, ToolReturn
 from pydantic_ai.exceptions import UsageLimitExceeded
@@ -17,7 +17,12 @@ from sqlsaber.artifact_resolution import (
     ResolvedArtifactPublication,
     artifact_context_from_run,
 )
-from sqlsaber.artifacts import ArtifactPublication, artifact_publication_from_metadata
+from sqlsaber.artifacts import (
+    ArtifactContext,
+    ArtifactPublication,
+    ArtifactPublicationError,
+    artifact_publication_from_metadata,
+)
 from sqlsaber.capabilities.plugins import PluginContext
 from sqlsaber.render import blocks as b
 from sqlsaber.run_usage import current_usage_limits
@@ -75,6 +80,7 @@ class AnalyzeSandboxTool(Tool):
         self.sessions: dict[str, tuple[str, SandboxSession]] = {}
         self.results: dict[str, AnalysisResult] = {}
         self.publications: dict[str, ArtifactPublication] = {}
+        self._artifact_contexts: dict[str, ArtifactContext] = {}
         self._displays: OrderedDict[str, tuple[bytes, ...]] = OrderedDict()
         self._resolved: Mapping[str, ResolvedArtifactPublication] = {}
 
@@ -182,13 +188,18 @@ class AnalyzeSandboxTool(Tool):
                 }
             )
 
-    async def _publish(self, ctx: RunContext, result: AnalysisResult) -> ToolReturn:
+    async def _publish(
+        self, ctx: RunContext | ArtifactContext, result: AnalysisResult
+    ) -> ToolReturn:
+        context = artifact_context_from_run(ctx)
+        self._artifact_contexts[result.session_id] = context
+        session = self.sessions[result.session_id][1]
         metadata: dict[str, Any] = {}
         value: dict[str, Any] = {
             "session_id": result.session_id,
             "analysis_id": result.analysis_id,
             "answer": result.answer,
-            "session_state": "ready",
+            "session_state": "closed" if session.closed else "ready",
             "publication_state": "not_configured",
         }
         if self.context.artifact_store is not None:
@@ -198,7 +209,7 @@ class AnalyzeSandboxTool(Tool):
                     publication = await publish_analysis(
                         result,
                         store=self.context.artifact_store,
-                        context=artifact_context_from_run(ctx),
+                        context=context,
                     )
                     self.publications[result.analysis_id] = publication
                 metadata.update(publication.to_metadata())
@@ -226,12 +237,22 @@ class AnalyzeSandboxTool(Tool):
             self.results[session_id] = result
         return await self._publish(ctx, result)
 
-    async def close_session(self, ctx: RunContext, session_id: str) -> dict[str, str]:
-        """Release a sandbox session. Already published files remain available."""
+    async def close_session(self, ctx: RunContext, session_id: str) -> ToolReturn:
+        """Publish completed artifacts and release a sandbox session.
+
+        Required publication failure leaves the session open for a retry.
+        """
         session = self._session(ctx, session_id)
+        returned = ToolReturn(return_value={"session_id": session_id})
+        result = self.results.get(session_id)
+        if result is not None:
+            returned = await self._publish(ctx, result)
+        value = cast(dict[str, Any], returned.return_value)
+        if "error" in value:
+            return returned
         await session.close()
-        self.results.pop(session_id, None)
-        return {"session_id": session_id, "session_state": "closed"}
+        value["session_state"] = "closed"
+        return returned
 
     def set_resolved_artifact_publications(
         self, publications: Mapping[str, ResolvedArtifactPublication]
@@ -294,13 +315,30 @@ class AnalyzeSandboxTool(Tool):
 
     async def close(self) -> None:
         errors = []
+        pending_publication = False
         for _, session in self.sessions.values():
             try:
-                await session.close()
+                result = self.results.get(session.id)
+                if result is not None:
+                    returned = await self._publish(
+                        self._artifact_contexts[session.id], result
+                    )
+                    value = cast(dict[str, Any], returned.return_value)
+                    pending_publication |= value["publication_state"] == "failed"
+                    if "error" in value:
+                        raise ArtifactPublicationError(value["error"])
             except Exception as exc:
                 errors.append(exc)
-        self.results.clear()
+            finally:
+                # Shutdown must release compute even when artifact storage fails.
+                try:
+                    await session.close()
+                except Exception as exc:
+                    errors.append(exc)
         self._displays.clear()
-        self.publications.clear()
+        if not pending_publication and not errors:
+            self.results.clear()
+            self.publications.clear()
+            self._artifact_contexts.clear()
         if errors:
             raise ExceptionGroup("Sandbox cleanup failed", errors)

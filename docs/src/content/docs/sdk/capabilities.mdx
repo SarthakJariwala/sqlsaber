@@ -254,9 +254,18 @@ options = SQLSaberOptions(
 
 The main agent receives these tools:
 
-- `analyze_in_sandbox` accepts a goal and returns an answer, session ID, and artifact references. Passing `session_id` continues that analysis.
-- `close_sandbox` releases a session's environment.
-- `publish_sandbox_artifacts` retries publication of the latest snapshot without rerunning code.
+- `analyze_in_sandbox` accepts a goal and automatically publishes completed artifacts to the configured `ArtifactStore`. It returns an answer, session ID, and artifact references. Passing `session_id` continues that analysis.
+- `close_sandbox` retries pending publication before releasing the session's environment. It returns the artifact references without duplicating an existing publication.
+- `publish_sandbox_artifacts` retries publication without rerunning code or closing the session. Normal analysis does not need this separate call.
+
+With the default `artifact_failure_mode="required"`, `close_sandbox` returns an
+error without closing the session if publication fails. In `best_effort` mode,
+the session closes, but its downloaded snapshot remains available for a
+publication retry during the same runtime.
+
+Capability shutdown also retries pending publication. It attempts to close every
+environment even if storage fails, and raises a cleanup error for required
+publication failures. Unpublished snapshots remain in memory, not durable storage.
 
 `analyze_in_sandbox` replaces `run_python` and accepts a goal rather than Python
 code. The analysis agent keeps its code iterations in a separate conversation.

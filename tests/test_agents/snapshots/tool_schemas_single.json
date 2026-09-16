@@ -141,7 +141,7 @@
     }
   },
   {
-    "description": "Release a sandbox session. Already published files remain available.",
+    "description": "Publish completed artifacts and release a sandbox session.\n\nRequired publication failure leaves the session open for a retry.",
     "name": "close_sandbox",
     "parameters_json_schema": {
       "additionalProperties": false,

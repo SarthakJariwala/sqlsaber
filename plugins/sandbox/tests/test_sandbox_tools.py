@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from pydantic_ai import Agent, RunContext
@@ -13,6 +14,7 @@ from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from sqlsaber.artifacts import ArtifactPublicationError, InMemoryArtifactStore
 from sqlsaber.run_usage import bind_usage_limits
 from sqlsaber_sandbox.capability import Sandbox
 from sqlsaber_sandbox.config import SandboxConfig
@@ -73,6 +75,7 @@ async def test_managed_tool_accepts_goal_not_code_and_attachment_schema_is_condi
     assert "goal" in plain_schema and "code" not in plain_schema
     assert "attachment_refs" not in plain_schema
     assert "attachment_refs" in attached_schema
+    assert plain_tools["close_sandbox"].tool_def.sequential is True
 
 
 async def test_cross_conversation_session_id_is_rejected_before_workspace_lookup(
@@ -184,6 +187,160 @@ async def test_publication_failure_retains_result_and_retry_does_not_analyze(
     assert first.return_value["publication_state"] == "failed"
     assert second.return_value["publication_state"] == "published"
     assert calls == 1 and tool.results[session.id] is result
+
+
+async def test_close_retries_publication_before_release_without_duplicate_bundles(
+    monkeypatch,
+) -> None:
+    events = []
+
+    class Store(InMemoryArtifactStore):
+        async def publish(self, bundle, *, context):
+            events.append("publish")
+            if len(events) == 1:
+                raise RuntimeError("storage unavailable")
+            return await super().publish(bundle, context=context)
+
+    tool = AnalyzeSandboxTool(_context(object(), store=Store()), SandboxConfig())
+    result = _result()
+    session = SimpleNamespace(
+        id=result.session_id,
+        lost=False,
+        closed=False,
+        analyze=AsyncMock(return_value=result),
+        snapshot=AsyncMock(side_effect=AssertionError("must reuse downloaded bytes")),
+    )
+
+    async def close():
+        events.append("close")
+        session.closed = True
+
+    session.close = AsyncMock(side_effect=close)
+    tool.sessions[session.id] = ("c1", session)
+    monkeypatch.setattr(
+        "sqlsaber_sandbox.tools.build_workspace_from_history",
+        AsyncMock(return_value=None),
+    )
+    analyzed = await tool.execute(_ctx(), "goal", session_id=session.id)
+    assert analyzed.return_value["publication_state"] == "failed"
+
+    closed = await tool.close_session(_ctx(), session.id)
+    assert events == ["publish", "publish", "close"]
+    assert closed.return_value["publication_state"] == "published"
+    assert closed.return_value["session_state"] == "closed"
+    assert closed.return_value["artifacts"][0]["name"] == "analysis.ipynb"
+    assert "artifact_publication" in closed.metadata
+
+    repeated = await tool.close_session(_ctx(), session.id)
+    assert repeated.metadata == closed.metadata
+    assert events.count("publish") == 2
+    session.analyze.assert_awaited_once()
+    session.snapshot.assert_not_awaited()
+
+
+@pytest.mark.parametrize("failure_mode", ["required", "best_effort"])
+async def test_close_preserves_failed_publication_for_retry(failure_mode) -> None:
+    store = InMemoryArtifactStore()
+    publish = AsyncMock(side_effect=RuntimeError("private storage details"))
+    context = _context(object(), store=SimpleNamespace(publish=publish))
+    context.artifact_failure_mode = failure_mode
+    tool = AnalyzeSandboxTool(context, SandboxConfig())
+    result = _result()
+    session = SimpleNamespace(id=result.session_id, closed=False)
+
+    async def close():
+        session.closed = True
+
+    session.close = AsyncMock(side_effect=close)
+    tool.sessions[session.id] = ("c1", session)
+    tool.results[session.id] = result
+
+    returned = await tool.close_session(_ctx(), session.id)
+    assert tool.results[session.id] is result
+    assert returned.return_value["publication_state"] == "failed"
+    assert "private storage details" not in str(returned.return_value)
+    assert "private storage details" not in str(returned.metadata)
+    if failure_mode == "required":
+        session.close.assert_not_awaited()
+        assert returned.return_value["session_state"] == "ready"
+        assert "error" in returned.return_value
+    else:
+        session.close.assert_awaited_once()
+        assert returned.return_value["session_state"] == "closed"
+        assert "artifact_error" in returned.metadata
+
+    context.artifact_store = store
+    retried = await tool.publish_artifacts(_ctx(), session.id)
+    assert retried.return_value["publication_state"] == "published"
+    assert retried.return_value["session_state"] == (
+        "ready" if failure_mode == "required" else "closed"
+    )
+
+
+@pytest.mark.parametrize(
+    "failure_mode, recovers",
+    [("required", True), ("required", False), ("best_effort", False)],
+)
+async def test_capability_shutdown_retries_with_original_scope_and_releases_resources(
+    failure_mode,
+    recovers,
+) -> None:
+    contexts = []
+
+    class Store(InMemoryArtifactStore):
+        async def publish(self, bundle, *, context):
+            contexts.append(context)
+            if len(contexts) == 1 or not recovers:
+                raise RuntimeError("storage unavailable")
+            return await super().publish(bundle, context=context)
+
+    context = _context(object(), store=Store())
+    context.artifact_failure_mode = failure_mode
+    capability = Sandbox(context)
+    tool = capability.tool
+    result = _result()
+    session = SimpleNamespace(id=result.session_id, closed=False)
+
+    async def close():
+        session.closed = True
+
+    session.close = AsyncMock(side_effect=close)
+    unused = SimpleNamespace(id="ss_unused", close=AsyncMock())
+    tool.sessions[session.id] = ("c1", session)
+    tool.sessions[unused.id] = ("c2", unused)
+    tool.results[session.id] = result
+    ctx = _ctx()
+    ctx.metadata = {"tenant": "owner"}
+    await tool._publish(ctx, result)
+
+    if failure_mode == "required" and not recovers:
+        with pytest.raises(ExceptionGroup, match="Sandbox cleanup failed") as error:
+            await capability.close()
+        assert len(error.value.exceptions) == 1
+        assert isinstance(error.value.exceptions[0], ArtifactPublicationError)
+    else:
+        await capability.close()
+
+    assert len(contexts) == 2
+    assert contexts[1] == contexts[0]
+    assert contexts[1].conversation_id == "c1"
+    assert contexts[1].metadata == {"tenant": "owner"}
+    session.close.assert_awaited_once()
+    unused.close.assert_awaited_once()
+    if not recovers:
+        assert tool.results[session.id] is result
+        context.artifact_store = InMemoryArtifactStore()
+        await capability.close()
+    assert not tool.results
+
+
+async def test_close_without_a_completed_analysis_does_not_start_a_sandbox() -> None:
+    tool = AnalyzeSandboxTool(_context(object(), store=object()), SandboxConfig())
+    session = SimpleNamespace(id="ss_unused", close=AsyncMock(), snapshot=AsyncMock())
+    tool.sessions[session.id] = ("c1", session)
+    await tool.close_session(_ctx(), session.id)
+    session.close.assert_awaited_once()
+    session.snapshot.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
