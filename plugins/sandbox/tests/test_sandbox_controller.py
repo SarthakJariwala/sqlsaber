@@ -19,6 +19,10 @@ from sqlsaber_sandbox.config import SandboxConfig
 from sqlsaber_sandbox.execution import KernelExecution, SandboxError
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Runs the sandbox's POSIX shell and executable scripts on the host",
+)
 @pytest.mark.parametrize(
     "packages, install_exit",
     [("compatible", 0), ("missing", 0), ("incompatible", 0), ("missing", 42)],
@@ -103,6 +107,8 @@ exec(sys.argv[2])
 
 @pytest.fixture
 async def controller():
+    if sys.platform == "win32":
+        pytest.skip("Runs the Linux sandbox's IPC kernel on the host")
     # Jupyter IPC paths must fit the Unix socket path length, regardless of
     # pytest's checkout path or parameterized test name.
     with tempfile.TemporaryDirectory(prefix="ss-test-") as directory:
@@ -111,15 +117,17 @@ async def controller():
         instance = Controller(
             root, asdict(SandboxConfig(cell_seconds=2, max_output_chars=80))
         )
-        await instance.start()
         try:
+            await instance.start()
             yield instance
         finally:
             if instance.active is not None:
                 instance.active.cancel()
                 await asyncio.gather(instance.active, return_exceptions=True)
-            instance.client.stop_channels()
-            await instance.manager.shutdown_kernel(now=True)
+            if hasattr(instance, "client"):
+                instance.client.stop_channels()
+            if hasattr(instance, "manager"):
+                await instance.manager.shutdown_kernel(now=True)
 
 
 async def run_cell(controller, code, execution_id):
