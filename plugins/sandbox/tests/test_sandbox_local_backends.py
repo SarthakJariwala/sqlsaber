@@ -370,12 +370,24 @@ class _ExecHandle:
             await self.released.wait()
         return 0, True
 
-    async def kill(self) -> None:
-        if self.kill_failures:
-            self.kill_failures -= 1
-            raise RuntimeError("temporary kill failure")
-        self.killed = True
-        self.released.set()
+    def kill(self) -> asyncio.Future[None]:
+        # The native PyO3 SDK returns a pending Future, not a coroutine.
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+
+        def finish() -> None:
+            if future.cancelled():
+                return
+            if self.kill_failures:
+                self.kill_failures -= 1
+                future.set_exception(RuntimeError("temporary kill failure"))
+            else:
+                self.killed = True
+                self.released.set()
+                future.set_result(None)
+
+        loop.call_soon(finish)
+        return future
 
 
 class _FakeSandbox:
@@ -539,6 +551,7 @@ async def test_microsandbox_controller_survives_exec_and_binary_transfer(
     assert sandbox.controller.killed is False
     assert backend._controller_drain is not None
     assert not backend._controller_drain.done()
+    drain = backend._controller_drain
 
     result = await backend.execute("exit 7", timeout=4.5)
     assert result.stdout == "out\x00"
@@ -558,6 +571,9 @@ async def test_microsandbox_controller_survives_exec_and_binary_transfer(
     await backend.close()
     assert sandbox.controller.killed is True
     assert sandbox.destroyed is True
+    assert drain.done()
+    assert backend._controller_handle is None
+    assert backend._controller_drain is None
 
 
 async def test_microsandbox_failed_destroy_can_be_retried(

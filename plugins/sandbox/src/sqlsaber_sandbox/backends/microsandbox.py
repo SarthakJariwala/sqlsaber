@@ -249,7 +249,8 @@ async def _drain_controller(handle: Any) -> bool:
 async def _kill_handle(handle: Any | None, *, timeout: float = 5.0) -> bool:
     if handle is None:
         return True
-    task = asyncio.create_task(handle.kill())
+    # Native SDK methods return asyncio Futures rather than coroutines.
+    task = asyncio.ensure_future(handle.kill())
     try:
         await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
     except BaseException:
