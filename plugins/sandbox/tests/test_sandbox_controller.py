@@ -1,0 +1,227 @@
+"""Execute the actual controller against a local IPython kernel, without cloud."""
+
+import asyncio
+from dataclasses import asdict
+import hashlib
+import json
+from pathlib import Path
+import tempfile
+from types import SimpleNamespace
+
+import pytest
+
+from sqlsaber_sandbox._controller import Controller
+from sqlsaber_sandbox.config import SandboxConfig
+from sqlsaber_sandbox.execution import KernelExecution, SandboxError
+
+
+@pytest.fixture
+async def controller():
+    # Jupyter IPC paths must fit the Unix socket path length, regardless of
+    # pytest's checkout path or parameterized test name.
+    with tempfile.TemporaryDirectory(prefix="ss-test-") as directory:
+        root = Path(directory)
+        (root / "run").mkdir()
+        instance = Controller(
+            root, asdict(SandboxConfig(cell_seconds=2, max_output_chars=80))
+        )
+        await instance.start()
+        try:
+            yield instance
+        finally:
+            if instance.active is not None:
+                instance.active.cancel()
+                await asyncio.gather(instance.active, return_exceptions=True)
+            instance.client.stop_channels()
+            await instance.manager.shutdown_kernel(now=True)
+
+
+async def run_cell(controller, code, execution_id):
+    await controller.dispatch(
+        {"operation": "execute", "code": code, "execution_id": execution_id}
+    )
+    async with asyncio.timeout(10):
+        while True:
+            result = await controller.dispatch(
+                {"operation": "status", "execution_id": execution_id}
+            )
+            if result["status"] != "running":
+                assert "outputs" not in result
+                return json.loads(
+                    (controller.root / "results" / f"{execution_id}.json").read_bytes()
+                )
+            await asyncio.sleep(0.01)
+
+
+async def test_incremental_execution_error_and_output_drain(controller):
+    assert (await run_cell(controller, "values=[3,8]", "a"))["status"] == "ok"
+    failed = await run_cell(
+        controller, "values.append(13)\nraise ValueError('expected')", "b"
+    )
+    assert failed["status"] == "error"
+    assert failed["outputs"][0]["ename"] == "ValueError"
+    result = await run_cell(
+        controller, "import asyncio\nawait asyncio.sleep(.001)\nsum(values)", "c"
+    )
+    assert result["outputs"][-1]["data"]["text/plain"] == "24"
+    huge = await run_cell(controller, "print('x'*100000)", "d")
+    assert huge["truncated"]
+    assert sum(len(output.get("text", "")) for output in huge["outputs"]) == 80
+    assert (await run_cell(controller, "assert len(values)==3", "e"))["status"] == "ok"
+    # Same ID never applies the mutation a second time.
+    await controller.dispatch(
+        {
+            "operation": "execute",
+            "code": "values.append(13)\nraise ValueError('expected')",
+            "execution_id": "b",
+        }
+    )
+    assert (await run_cell(controller, "assert values == [3,8,13]", "f"))[
+        "status"
+    ] == "ok"
+    with pytest.raises(ValueError, match="different code"):
+        await controller.dispatch(
+            {"operation": "execute", "code": "values=[]", "execution_id": "b"}
+        )
+
+
+async def test_timeout_interrupt_preserves_partial_namespace(controller):
+    controller.config["cell_seconds"] = 0.2
+    result = await run_cell(controller, "value=41\nwhile True: pass", "loop")
+    assert result["status"] == "interrupted"
+    assert not controller.lost
+    controller.config["cell_seconds"] = 2
+    assert (await run_cell(controller, "value+1", "after"))["outputs"][-1]["data"][
+        "text/plain"
+    ] == "42"
+
+
+async def test_kernel_death_is_detected_without_cell_timeout(controller):
+    controller.config["cell_seconds"] = None
+    with pytest.raises(ValueError, match="lost"):
+        await run_cell(controller, "import os; os._exit(7)", "death")
+    assert controller.lost
+
+
+async def test_artifacts_are_snapshotted_and_symlinks_rejected(controller):
+    path = controller.root / "run" / "weights.bin"
+    data = b"\x00\xff\x80original"
+    path.write_bytes(data)
+    snapshot = controller.export()
+    path.write_bytes(b"changed")
+    descriptor = snapshot["files"][0]
+    assert descriptor["sha256"] == hashlib.sha256(data).hexdigest()
+    assert (
+        controller.root / "exports" / snapshot["export_id"] / "weights.bin"
+    ).read_bytes() == data
+    (controller.root / "run" / "link").symlink_to(controller.root / "kernel.json")
+    with pytest.raises(ValueError, match="regular"):
+        controller.export()
+
+
+async def test_cleanup_failure_can_be_retried():
+    from unittest.mock import AsyncMock
+
+    execution = KernelExecution(SandboxConfig())
+    sandbox = SimpleNamespace(
+        close=AsyncMock(side_effect=[RuntimeError("temporary"), None])
+    )
+    execution.backend = sandbox
+    with pytest.raises(RuntimeError):
+        await execution.close()
+    assert execution.backend is sandbox
+    await execution.close()
+    assert sandbox.close.await_count == 2
+
+
+async def test_unknown_dispatch_is_not_replayed():
+    from unittest.mock import AsyncMock
+
+    execution = KernelExecution(SandboxConfig())
+    execution.request = AsyncMock(
+        side_effect=[SandboxError("lost acknowledgement"), {"status": "unknown"}]
+    )
+    with pytest.raises(SandboxError, match="not replayed"):
+        await execution.execute("side_effect()", "a")
+    assert [call.args[0] for call in execution.request.call_args_list] == [
+        "execute",
+        "status",
+    ]
+    assert execution.lost
+
+
+async def test_cancel_unknown_outcome_closes_instead_of_continuing():
+    from unittest.mock import AsyncMock
+
+    execution = KernelExecution(SandboxConfig())
+    execution.request = AsyncMock(side_effect=[{}, {"status": "unknown"}])
+    execution.close = AsyncMock()
+    await execution._interrupt_and_settle("a")
+    assert execution.lost
+    execution.close.assert_awaited_once()
+
+
+async def test_many_displays_are_bounded_and_next_cell_is_drained(controller):
+    controller.config["cell_seconds"] = 10
+    result = await run_cell(
+        controller,
+        "from IPython.display import display\nfor i in range(300): display('x')",
+        "flood",
+    )
+    assert result["truncated"]
+    assert len(result["outputs"]) <= 80
+    assert (await run_cell(controller, "6*7", "next"))["outputs"][-1]["data"][
+        "text/plain"
+    ] == "42"
+
+
+def test_image_retention_budget_is_cumulative(tmp_path):
+    import base64
+
+    controller = Controller(
+        tmp_path, asdict(SandboxConfig(max_image_bytes=9, max_history_image_bytes=12))
+    )
+    records = [{"outputs": [], "chars": 0, "truncated": False} for _ in range(2)]
+    message = {
+        "header": {"msg_type": "display_data"},
+        "content": {"data": {"image/png": base64.b64encode(b"123456789").decode()}},
+    }
+    for record in records:
+        controller.output(record, message)
+    assert len(records[0]["outputs"]) == 1
+    assert not records[1]["outputs"] and records[1]["truncated"]
+
+
+async def test_cancelled_open_waits_for_allocated_handle_and_deletes_it():
+    from unittest.mock import AsyncMock
+
+    allocated, respond = asyncio.Event(), asyncio.Event()
+    resource = None
+
+    async def open_backend(config):
+        nonlocal resource
+        allocated.set()
+        await respond.wait()
+        resource = "allocated-provider-id"
+
+    async def close_backend():
+        nonlocal resource
+        assert resource == "allocated-provider-id"
+        resource = None
+
+    backend = SimpleNamespace(
+        open=AsyncMock(side_effect=open_backend),
+        close=AsyncMock(side_effect=close_backend),
+    )
+    execution = KernelExecution(SandboxConfig(), backend)
+    opening = asyncio.create_task(execution.open())
+    await allocated.wait()
+    opening.cancel()
+    await asyncio.sleep(0)
+    assert not opening.done()
+    respond.set()
+    with pytest.raises(asyncio.CancelledError):
+        await opening
+    assert resource is None
+    backend.open.assert_awaited_once()
+    backend.close.assert_awaited_once()
