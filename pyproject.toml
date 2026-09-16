@@ -29,8 +29,11 @@ dev = [
     "pytest-asyncio>=1.0.0",
     "sqlsaber-notebook[daytona,modal]",
     "microsandbox>=0.6.6,<0.7; (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and platform_machine == 'x86_64') or (sys_platform == 'linux' and platform_machine == 'aarch64') or (sys_platform == 'win32' and platform_machine == 'AMD64') or (sys_platform == 'win32' and platform_machine == 'ARM64')",
-    "sqlsaber-sandbox",
+    "sqlsaber-sandbox[e2b,modal,daytona,sprites]",
     "sqlsaber-viz",
+    "jupyter-client>=8,<9",
+    "ipykernel>=6,<8",
+    "matplotlib>=3,<4",
 ]
 
 [tool.uv.sources]

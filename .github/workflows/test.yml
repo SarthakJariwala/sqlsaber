@@ -17,6 +17,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -38,4 +39,4 @@ jobs:
         run: uvx ty check src/
 
       - name: Run tests
-        run: uv run python -m pytest
+        run: uv run python -u -m pytest -v

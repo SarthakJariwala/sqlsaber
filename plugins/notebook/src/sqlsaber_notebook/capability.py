@@ -378,6 +378,10 @@ class Notebook(SqlSaberCapability):
     def get_toolset(self) -> FunctionToolset[Any]:
         return self._toolset
 
+    def update_context(self, context: PluginContext) -> None:
+        """Use refreshed managed-agent settings for future analyses."""
+        self.tool._context = context
+
     async def close(self) -> None:
         await self.tool.close()
 

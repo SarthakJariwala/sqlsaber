@@ -112,6 +112,97 @@
     }
   },
   {
+    "description": "Delegate a goal with SQL results and host-authorized attachments.",
+    "name": "analyze_in_sandbox",
+    "parameters_json_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "attachment_refs": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Opaque references authorized by the application's resolver."
+        },
+        "files": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SQL result keys. Omission adds recent results only for new sessions."
+        },
+        "goal": {
+          "description": "Analysis to perform; code iteration stays inside the subagent.",
+          "type": "string"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Existing session to continue, or omit to start an independent one."
+        }
+      },
+      "required": [
+        "goal"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Publish completed artifacts and release a sandbox session.\n\nRequired publication failure leaves the session open for a retry.",
+    "name": "close_sandbox",
+    "parameters_json_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Publish the latest completed snapshot without executing Python again.",
+    "name": "publish_sandbox_artifacts",
+    "parameters_json_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "description": "<summary>Generate a visualization spec for SQL results.</summary>\n<returns>\n<description>JSON string containing the visualization spec.</description>\n</returns>",
     "name": "viz",
     "parameters_json_schema": {

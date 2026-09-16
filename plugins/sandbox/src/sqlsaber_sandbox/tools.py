@@ -1,245 +1,344 @@
-"""Sandboxed Python execution tools."""
+"""Goal-based managed sandbox tools and artifact presentation."""
 
-import base64
-import os
-import re
-import shlex
-import tempfile
-from typing import Iterable
+from __future__ import annotations
 
-from pydantic_ai import RunContext
+from collections import OrderedDict
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
+import logging
+from typing import Any, cast
 
-from sqlsaber.query_result_resolution import (
-    find_query_result_reference,
-    query_result_context_from_run,
-    resolve_query_result,
+from pydantic_ai import RunContext, ToolReturn
+from pydantic_ai.exceptions import UsageLimitExceeded
+from pydantic_ai.tools import ToolDefinition
+from pydantic_ai.usage import UsageLimits
+
+from sqlsaber.artifact_resolution import (
+    ResolvedArtifactPublication,
+    artifact_context_from_run,
 )
-from sqlsaber.query_results import (
-    QueryResultStore,
-    QueryResultUnavailable,
+from sqlsaber.artifacts import (
+    ArtifactContext,
+    ArtifactPublication,
+    ArtifactPublicationError,
+    artifact_publication_from_metadata,
 )
+from sqlsaber.capabilities.plugins import PluginContext
+from sqlsaber.render import blocks as b
+from sqlsaber.run_usage import current_usage_limits
 from sqlsaber.tools.base import Tool
 from sqlsaber.tools.display import (
-    DisplayMetadata,
-    ExecutingConfig,
-    FieldMappings,
-    ResultConfig,
     ToolDisplaySpec,
+    ExecutingConfig,
+    ResultConfig,
+    FieldMappings,
 )
-from sqlsaber.utils.json_utils import json_dumps
+from sqlsaber.tools.renderer import ToolRenderContext
+from sqlsaber.utils.text_input import sanitize_terminal_text
 
-PROVIDER_ENV_REQUIREMENTS: dict[str, tuple[str, ...]] = {
-    "daytona": ("DAYTONA_API_KEY",),
-    "e2b": ("E2B_API_KEY",),
-    "sprites": ("SPRITES_TOKEN",),
-    "hopx": ("HOPX_API_KEY",),
-    "modal": ("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"),
-    "cloudflare": ("CLOUDFLARE_SANDBOX_BASE_URL", "CLOUDFLARE_API_TOKEN"),
-}
+from .config import SandboxConfig
+from .execution import SandboxError
+from .publication import publish_analysis
+from .result import AnalysisResult
+from .session import SandboxSession
+from .workspace import build_workspace_from_history
 
-DEFAULT_TIMEOUT_SECONDS = 120
-MAX_TIMEOUT_SECONDS = 600
-MAX_CODE_CHARS = 20000
-MAX_REQUIREMENTS = 10
-MAX_REQUIREMENT_CHARS = 200
-TOOL_OUTPUT_FILE_PATTERN = re.compile(r"^result_[A-Za-z0-9._-]+\.json$")
+logger = logging.getLogger(__name__)
 
 
-def _has_env_values(names: Iterable[str]) -> bool:
-    return all(os.getenv(name) for name in names)
+async def prepare_analysis(
+    ctx: RunContext, definition: ToolDefinition
+) -> ToolDefinition:
+    """Serialize budgeted delegations, not independent unbudgeted analyses.
 
-
-def _modal_config_available() -> bool:
-    config_path = os.getenv("MODAL_CONFIG_PATH")
-    modal_config = (
-        os.path.expanduser(config_path)
-        if config_path
-        else os.path.expanduser("~/.modal.toml")
+    A per-batch barrier prevents two children from admitting requests against
+    the same finite remaining budget. No lock is held during unbudgeted work.
+    """
+    limits = current_usage_limits()
+    finite = limits is not None and (
+        limits.request_limit is not None or limits.tool_calls_limit is not None
     )
-    return os.path.isfile(modal_config)
+    return replace(definition, sequential=finite)
 
 
-def sandbox_providers_available() -> bool:
-    """Return True when at least one sandbox provider is configured."""
-
-    for env_names in PROVIDER_ENV_REQUIREMENTS.values():
-        if _has_env_values(env_names):
-            return True
-
-    if _modal_config_available():
-        return True
-
-    return False
-
-
-def _build_python_command(code: str) -> str:
-    encoded = base64.b64encode(code.encode("utf-8")).decode("ascii")
-    return (
-        'python -c "import base64; '
-        f"code=base64.b64decode('{encoded}').decode('utf-8'); "
-        "exec(compile(code, '<sandbox>', 'exec'))\""
-    )
-
-
-class RunPythonTool(Tool):
-    """Run Python code in a sandboxed environment."""
-
+class AnalyzeSandboxTool(Tool):
     requires_ctx = True
-
-    def __init__(self, query_result_store: QueryResultStore) -> None:
-        super().__init__()
-        self.query_result_store = query_result_store
-
     display_spec = ToolDisplaySpec(
         executing=ExecutingConfig(
-            message="Running Python in sandbox",
-            icon="🐍",
-            show_args=["requirements", "timeout_seconds"],
+            message="Analyzing in persistent sandbox", show_args=["goal", "session_id"]
         ),
         result=ResultConfig(
             format="panel",
-            title="Python Output",
-            fields=FieldMappings(output="stdout", error="stderr", success="success"),
+            title="Sandbox analysis",
+            fields=FieldMappings(output="answer"),
         ),
-        metadata=DisplayMetadata(display_name="Run Python"),
     )
+
+    def __init__(self, context: PluginContext, config: SandboxConfig):
+        self.context = context
+        self.config = config
+        self.sessions: dict[str, tuple[str, SandboxSession]] = {}
+        self.results: dict[str, AnalysisResult] = {}
+        self.publications: dict[str, ArtifactPublication] = {}
+        self._artifact_contexts: dict[str, ArtifactContext] = {}
+        self._displays: OrderedDict[str, tuple[bytes, ...]] = OrderedDict()
+        self._resolved: Mapping[str, ResolvedArtifactPublication] = {}
 
     @property
     def name(self) -> str:
-        return "run_python"
+        return "analyze_in_sandbox"
+
+    def _session(self, ctx: RunContext, session_id: str) -> SandboxSession:
+        entry = self.sessions.get(session_id)
+        if entry is None or entry[0] != ctx.conversation_id:
+            raise ValueError("Sandbox session is unavailable in this conversation")
+        return entry[1]
 
     async def execute(
         self,
         ctx: RunContext,
-        code: str,
-        requirements: list[str] | None = None,
-        file: str | None = None,
-        timeout_seconds: int | None = None,
-    ) -> str:
-        """Execute Python code inside a remote sandbox.
-
-        Notes:
-            - To use a SQL result file, you MUST pass `file` parameter.
-              The file is uploaded to `/tmp/<file>` inside the sandbox.
-            - Only stdout/stderr is returned. Use `print(...)` (or write to stdout)
-              to see output.
+        goal: str,
+        files: list[str] | None = None,
+        session_id: str | None = None,
+    ) -> ToolReturn:
+        """Delegate a goal to a persistent sandbox analyst.
 
         Args:
-            code: Python code to execute.
-            requirements: Optional pip requirements to install before execution.
-            file: Optional file key from a previous tool output to upload.
-                When provided, the file is uploaded to `/tmp/<file>`.
-            timeout_seconds: Optional timeout for sandbox execution (seconds).
+            goal: Analysis to perform. The subagent writes and iterates on code.
+            files: SQL result keys. Omit for recent results on a new session;
+                omission adds no files on continuation. An empty list selects none.
+            session_id: Omit to create an independent analysis session; provide a
+                previous ID to reuse its variables, files, and analyst history.
         """
+        return await self.execute_with_attachments(ctx, goal, files, session_id)
 
-        if not sandbox_providers_available():
-            return json_dumps(
-                {
-                    "error": (
-                        "No sandbox provider configured. Set at least one provider API "
-                        "key (e.g., E2B_API_KEY, DAYTONA_API_KEY, SPRITES_TOKEN, "
-                        "HOPX_API_KEY, MODAL_TOKEN_ID/MODAL_TOKEN_SECRET, or "
-                        "CLOUDFLARE_SANDBOX_BASE_URL/CLOUDFLARE_API_TOKEN)."
+    async def execute_with_attachments(
+        self,
+        ctx: RunContext,
+        goal: str,
+        files: list[str] | None = None,
+        session_id: str | None = None,
+        attachment_refs: list[str] | None = None,
+    ) -> ToolReturn:
+        """Delegate a goal with SQL results and host-authorized attachments.
+
+        Args:
+            goal: Analysis to perform; code iteration stays inside the subagent.
+            files: SQL result keys. Omission adds recent results only for new sessions.
+            session_id: Existing session to continue, or omit to start an independent one.
+            attachment_refs: Opaque references authorized by the application's resolver.
+        """
+        limits = current_usage_limits()
+        if limits is not None and limits.tool_calls_limit is not None:
+            if ctx.usage.tool_calls >= limits.tool_calls_limit:
+                raise UsageLimitExceeded(
+                    "No tool budget remains for sandbox delegation"
+                )
+            limits = replace(limits, tool_calls_limit=limits.tool_calls_limit - 1)
+        session = None
+        try:
+            if not goal.strip():
+                raise ValueError("Analysis goal cannot be empty")
+            if session_id is not None:
+                session = self._session(ctx, session_id)
+            workspace = await build_workspace_from_history(
+                ctx,
+                only=[] if session_id is not None and files is None else files,
+                attachment_refs=attachment_refs,
+                query_result_store=self.context.query_result_store,
+                workspace_input_resolver=self.context.workspace_input_resolver,
+                limits=self.config.workspace,
+            )
+            if session is None:
+                if not ctx.conversation_id:
+                    raise ValueError(
+                        "A conversation identity is required for managed sandbox sessions"
                     )
+                _, model, provider = self.context.resolve_subagent_model(
+                    "sandbox", tool_name=self.name
+                )
+                session = SandboxSession(
+                    model=model, model_provider=provider, config=self.config
+                )
+                self.sessions[session.id] = (ctx.conversation_id, session)
+            result = await session.analyze(
+                goal,
+                workspace=workspace,
+                usage_limits=limits or UsageLimits(request_limit=None),
+                parent_usage=ctx.usage,
+            )
+            self.results[session.id] = result
+            images = tuple(
+                item.data for item in result.files if item.media_type == "image/png"
+            )
+            self._displays[ctx.tool_call_id or ""] = images
+            while len(self._displays) > 2:
+                self._displays.popitem(last=False)
+            return await self._publish(ctx, result)
+        except (ValueError, SandboxError, TimeoutError) as exc:
+            return ToolReturn(
+                return_value={
+                    "error": str(exc),
+                    "session_id": session.id if session is not None else session_id,
+                    "session_state": "lost"
+                    if session is not None and session.lost
+                    else "ready"
+                    if session is not None and not session.closed
+                    else "unavailable",
                 }
             )
 
-        if not code or not code.strip():
-            return json_dumps({"error": "No Python code provided."})
-
-        if len(code) > MAX_CODE_CHARS:
-            return json_dumps(
-                {"error": f"Python code too large (max {MAX_CODE_CHARS} characters)."}
-            )
-
-        cleaned_requirements = [
-            req.strip() for req in (requirements or []) if req.strip()
-        ]
-        if len(cleaned_requirements) > MAX_REQUIREMENTS:
-            return json_dumps(
-                {"error": (f"Too many requirements (max {MAX_REQUIREMENTS}).")}
-            )
-
-        if any(len(req) > MAX_REQUIREMENT_CHARS for req in cleaned_requirements):
-            return json_dumps({"error": ("Requirement entry too long.")})
-
-        timeout_value = timeout_seconds or DEFAULT_TIMEOUT_SECONDS
-        if timeout_value < 1:
-            timeout_value = 1
-        if timeout_value > MAX_TIMEOUT_SECONDS:
-            timeout_value = MAX_TIMEOUT_SECONDS
-
-        try:
-            from sandboxes import Sandbox
-
-            async with Sandbox.create(timeout=timeout_value) as sandbox:
-                remote_data_path = None
-                if file:
-                    if not TOOL_OUTPUT_FILE_PATTERN.match(file):
-                        return json_dumps(
-                            {
-                                "error": "Invalid data file key format.",
-                            }
-                        )
-                    try:
-                        reference = find_query_result_reference(ctx.messages, file)
-                        if reference is None:
-                            raise QueryResultUnavailable()
-                        resolved = await resolve_query_result(
-                            reference,
-                            store=self.query_result_store,
-                            context=query_result_context_from_run(ctx),
-                        )
-                    except QueryResultUnavailable:
-                        return json_dumps(
-                            {"error": "Complete SQL result is unavailable."}
-                        )
-                    remote_data_path = f"/tmp/{file}"
-                    temp_path = None
-                    try:
-                        with tempfile.NamedTemporaryFile(
-                            mode="wb",
-                            suffix=".json",
-                            delete=False,
-                        ) as temp_file:
-                            temp_file.write(resolved.data)
-                            temp_path = temp_file.name
-                        await sandbox.upload(temp_path, remote_data_path)
-                    finally:
-                        if temp_path:
-                            try:
-                                os.unlink(temp_path)
-                            except OSError:
-                                pass
-
-                if cleaned_requirements:
-                    install_command = (
-                        "python -m pip install --quiet --disable-pip-version-check "
-                        "--no-input "
-                        + " ".join(shlex.quote(req) for req in cleaned_requirements)
+    async def _publish(
+        self, ctx: RunContext | ArtifactContext, result: AnalysisResult
+    ) -> ToolReturn:
+        context = artifact_context_from_run(ctx)
+        self._artifact_contexts[result.session_id] = context
+        session = self.sessions[result.session_id][1]
+        metadata: dict[str, Any] = {}
+        value: dict[str, Any] = {
+            "session_id": result.session_id,
+            "analysis_id": result.analysis_id,
+            "answer": result.answer,
+            "session_state": "closed" if session.closed else "ready",
+            "publication_state": "not_configured",
+        }
+        if self.context.artifact_store is not None:
+            try:
+                publication = self.publications.get(result.analysis_id)
+                if publication is None:
+                    publication = await publish_analysis(
+                        result,
+                        store=self.context.artifact_store,
+                        context=context,
                     )
-                    install_result = await sandbox.execute(install_command)
-                    if install_result.exit_code != 0:
-                        return json_dumps(
-                            {
-                                "error": "Failed to install requirements.",
-                                "exit_code": install_result.exit_code,
-                                "stdout": install_result.stdout,
-                                "stderr": install_result.stderr,
-                            }
-                        )
-
-                command = _build_python_command(code)
-                result = await sandbox.execute(command)
-
-                return json_dumps(
-                    {
-                        "success": result.success,
-                        "exit_code": result.exit_code,
-                        "stdout": result.stdout,
-                        "stderr": result.stderr,
-                        "data_path": remote_data_path,
-                    }
+                    self.publications[result.analysis_id] = publication
+                metadata.update(publication.to_metadata())
+                value["publication_state"] = "published"
+                value["artifacts"] = [item.to_dict() for item in publication.artifacts]
+            except Exception:
+                logger.exception("Sandbox artifact publication failed")
+                error = "Analysis completed, but artifacts could not be published. Retry publication without rerunning the analysis."
+                value.update(
+                    publication_state="failed",
+                    artifact_failure_mode=self.context.artifact_failure_mode,
                 )
-        except Exception as exc:  # pragma: no cover - defensive catch-all
-            return json_dumps({"error": f"Python sandbox execution failed: {exc}"})
+                if self.context.artifact_failure_mode == "required":
+                    value["error"] = error
+                else:
+                    metadata["artifact_error"] = error
+        return ToolReturn(return_value=value, metadata=metadata)
+
+    async def publish_artifacts(self, ctx: RunContext, session_id: str) -> ToolReturn:
+        """Publish the latest completed snapshot without executing Python again."""
+        session = self._session(ctx, session_id)
+        result = self.results.get(session_id)
+        if result is None:
+            result = await session.snapshot()
+            self.results[session_id] = result
+        return await self._publish(ctx, result)
+
+    async def close_session(self, ctx: RunContext, session_id: str) -> ToolReturn:
+        """Publish completed artifacts and release a sandbox session.
+
+        Required publication failure leaves the session open for a retry.
+        """
+        session = self._session(ctx, session_id)
+        returned = ToolReturn(return_value={"session_id": session_id})
+        result = self.results.get(session_id)
+        if result is not None:
+            returned = await self._publish(ctx, result)
+        value = cast(dict[str, Any], returned.return_value)
+        if "error" in value:
+            return returned
+        await session.close()
+        value["session_state"] = "closed"
+        return returned
+
+    def set_resolved_artifact_publications(
+        self, publications: Mapping[str, ResolvedArtifactPublication]
+    ) -> None:
+        self._resolved = publications
+
+    def render_result(
+        self, result: object, *, context: ToolRenderContext | None = None
+    ) -> Sequence[b.Block] | None:
+        ctx = context or ToolRenderContext()
+        images = self._displays.pop(ctx.tool_call_id or "", ())
+        reference = artifact_publication_from_metadata(ctx.metadata)
+        if not images and reference is not None:
+            publication = self._resolved.get(reference.id)
+            if publication is not None:
+                images = tuple(
+                    item.data
+                    for item in publication.artifacts
+                    if item.descriptor.media_type == "image/png"
+                )
+        if not isinstance(result, Mapping):
+            return None
+        children: list[b.Block] = []
+        if result.get("answer"):
+            children.append(b.md(sanitize_terminal_text(str(result["answer"]))))
+        if result.get("error"):
+            children.append(b.error(sanitize_terminal_text(str(result["error"]))))
+        children.append(
+            b.key_values(
+                {
+                    "Session": sanitize_terminal_text(
+                        str(result.get("session_id", "unavailable"))
+                    ),
+                    "State": sanitize_terminal_text(
+                        str(result.get("session_state", "unavailable"))
+                    ),
+                    "Artifacts": sanitize_terminal_text(
+                        str(result.get("publication_state", "not published"))
+                    ),
+                }
+            )
+        )
+        if result.get("artifacts"):
+            children.append(
+                b.table(
+                    [
+                        {
+                            "File": sanitize_terminal_text(str(item["name"])),
+                            "Bytes": item["size"],
+                        }
+                        for item in result["artifacts"]
+                    ]
+                )
+            )
+        children.extend(
+            b.image(image, "image/png", filename=f"plot_{index}.png")
+            for index, image in enumerate(images)
+        )
+        return (b.panel(children, title="Sandbox analysis"),)
+
+    async def close(self) -> None:
+        errors = []
+        pending_publication = False
+        for _, session in self.sessions.values():
+            try:
+                result = self.results.get(session.id)
+                if result is not None:
+                    returned = await self._publish(
+                        self._artifact_contexts[session.id], result
+                    )
+                    value = cast(dict[str, Any], returned.return_value)
+                    pending_publication |= value["publication_state"] == "failed"
+                    if "error" in value:
+                        raise ArtifactPublicationError(value["error"])
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                # Shutdown must release compute even when artifact storage fails.
+                try:
+                    await session.close()
+                except Exception as exc:
+                    errors.append(exc)
+        self._displays.clear()
+        if not pending_publication and not errors:
+            self.results.clear()
+            self.publications.clear()
+            self._artifact_contexts.clear()
+        if errors:
+            raise ExceptionGroup("Sandbox cleanup failed", errors)

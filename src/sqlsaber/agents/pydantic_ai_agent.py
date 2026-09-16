@@ -114,6 +114,7 @@ class SQLSaberAgent:
         )
 
         self.capabilities: list[AbstractCapability[Any]] = []
+        self._plugin_capabilities: list[AbstractCapability[Any]] | None = None
         self._tools: dict[str, Tool] = {}
         self._closed = False
         self.agent = self._build_agent()
@@ -142,6 +143,25 @@ class SQLSaberAgent:
         model = build_model(model_name, api_key)
 
         include_guidance = self.system_prompt_override is None
+        context = PluginContext(
+            registry=self.registry,
+            knowledge_manager=self.knowledge_manager,
+            allow_dangerous=self.allow_dangerous,
+            tool_overrides=self._tool_overides,
+            config=self.config,
+            main_model_name=model_name,
+            query_result_store=self.query_result_store,
+            main_api_key=api_key,
+            artifact_store=self._artifact_store,
+            artifact_failure_mode=self._artifact_failure_mode,
+            workspace_input_resolver=self._workspace_input_resolver,
+        )
+        plugin_capabilities = self._plugin_capabilities
+        if plugin_capabilities is None:
+            plugin_capabilities = resolve_capability_specs(
+                self._capability_specs, context
+            )
+
         capabilities: list[AbstractCapability[Any]] = [
             Knowledge(
                 knowledge_manager=self.knowledge_manager,
@@ -156,32 +176,13 @@ class SQLSaberAgent:
                 query_result_store=self.query_result_store,
             ),
         ]
-        if self._capability_specs:
-            capabilities.extend(
-                resolve_capability_specs(
-                    self._capability_specs,
-                    PluginContext(
-                        registry=self.registry,
-                        knowledge_manager=self.knowledge_manager,
-                        allow_dangerous=self.allow_dangerous,
-                        tool_overrides=self._tool_overides,
-                        config=self.config,
-                        main_model_name=model_name,
-                        query_result_store=self.query_result_store,
-                        main_api_key=api_key,
-                        artifact_store=self._artifact_store,
-                        artifact_failure_mode=self._artifact_failure_mode,
-                        workspace_input_resolver=self._workspace_input_resolver,
-                    ),
-                )
-            )
+        capabilities.extend(plugin_capabilities)
         capabilities.append(ProcessHistory(compact_legacy_query_result_history))
         if self.thinking_enabled:
             capabilities.append(
                 Thinking(effort=UNIFIED_EFFORT_MAP[self.thinking_level])
             )
-        self.capabilities = capabilities
-        self._tools = {
+        tools = {
             name: tool
             for capability in capabilities
             if isinstance(capability, SqlSaberCapability)
@@ -193,13 +194,21 @@ class SQLSaberAgent:
             if provider == "anthropic"
             else None
         )
-        return Agent(
+        agent = Agent(
             model,
             name="sqlsaber",
             instructions=self.system_prompt_override or PERSONA,
             model_settings=model_settings,
             capabilities=capabilities,
         )
+        if self._plugin_capabilities is not None:
+            for capability in plugin_capabilities:
+                if isinstance(capability, SqlSaberCapability):
+                    capability.update_context(context)
+        self._plugin_capabilities = plugin_capabilities
+        self.capabilities = capabilities
+        self._tools = tools
+        return agent
 
     def system_prompt_text(self) -> str:
         """Return the combined managed-agent instructions as plain text."""
@@ -214,10 +223,16 @@ class SQLSaberAgent:
 
     def set_thinking(self, enabled: bool, level: ThinkingLevel | None = None) -> None:
         """Update thinking settings and rebuild the agent."""
+        previous = (self.thinking_enabled, self.thinking_level)
         self.thinking_enabled = enabled
         if level is not None:
             self.thinking_level = level
-        self.agent = self._build_agent()
+        try:
+            agent = self._build_agent()
+        except Exception:
+            self.thinking_enabled, self.thinking_level = previous
+            raise
+        self.agent = agent
 
     def reload_model_settings(self) -> None:
         """Apply saved model settings without replacing conversation resources."""
