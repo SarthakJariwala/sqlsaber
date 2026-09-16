@@ -6,8 +6,18 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = ["sqlsaber>=0.69.0", "cased-sandboxes>=0.5.0"]
 
+[project.optional-dependencies]
+e2b = ["e2b>=2.46,<3"]
+modal = ["modal>=1.4,<2"]
+daytona = ["daytona>=0.143,<1"]
+microsandbox = ["microsandbox>=0.6.6,<0.7"]
+sprites = ["sprites-py>=0.7,<0.8"]
+
 [project.entry-points."sqlsaber.capabilities"]
 sandbox = "sqlsaber_sandbox:capability"
+
+[tool.uv.sources]
+sqlsaber = { path = "../..", editable = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -17,4 +27,4 @@ build-backend = "hatchling.build"
 packages = ["src/sqlsaber_sandbox"]
 
 [dependency-groups]
-dev = ["pytest>=9.0.2", "pytest-asyncio>=0.25.0"]
+dev = ["pytest>=9.0.2", "pytest-asyncio>=0.25.0", "jupyter-client>=8,<9", "ipykernel>=6,<8", "matplotlib>=3,<4"]
