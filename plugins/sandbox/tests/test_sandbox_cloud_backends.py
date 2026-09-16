@@ -15,6 +15,11 @@ from sqlsaber_sandbox.backends import modal as modal_backend
 from sqlsaber_sandbox.backends.base import CommandResult, SandboxError
 from sqlsaber_sandbox.config import SandboxConfig
 
+SCIPY_IMAGE = (
+    "quay.io/jupyter/scipy-notebook@sha256:"
+    "e6e8baae46b5e62bbc26910169082639a6fd96f90e9f6fc52e0c0389df92d35c"
+)
+
 
 class AioMethod:
     def __init__(self, function: Any) -> None:
@@ -178,12 +183,12 @@ async def test_modal_native_mapping_execution_transfer_and_controller_lifetime(
     )
 
     assert captured["lookup"] == ("sqlsaber-sandbox", True)
-    assert captured["default_python"] == "3.12"
+    assert captured["registry_image"] == SCIPY_IMAGE
     argv, options = captured["create"]
     assert argv == ("sleep", "infinity")
     assert options == {
         "app": "app",
-        "image": "default-image",
+        "image": f"registry:{SCIPY_IMAGE}",
         "timeout": 86_400,
         "cpu": 2.5,
         "memory": 4096,
@@ -450,8 +455,8 @@ async def test_daytona_native_mapping_execution_transfer_and_controller_session(
     sandbox = client.sandbox
     assert params is not None
     assert sandbox is not None
-    assert FakeDaytonaImage.versions == ["3.12"]
-    assert params.image == "python:3.12"
+    assert FakeDaytonaImage.versions == []
+    assert params.image == SCIPY_IMAGE
     assert params.language == "python"
     assert params.name.startswith("sqlsaber-sandbox-")
     assert params.labels == {

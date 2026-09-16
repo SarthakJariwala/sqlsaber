@@ -93,7 +93,8 @@ async def test_docker_uses_default_image_when_unconfigured(
     await backend.open(SandboxConfig(provider="docker"))
     create = next(argv for argv in calls if argv[1] == "create")
     assert create[-4:] == (
-        "python:3.12-slim",
+        "quay.io/jupyter/scipy-notebook@sha256:"
+        "e6e8baae46b5e62bbc26910169082639a6fd96f90e9f6fc52e0c0389df92d35c",
         "python",
         "-c",
         "import time; time.sleep(2147483647)",
@@ -503,7 +504,10 @@ async def test_microsandbox_uses_default_image_when_unconfigured(
     sdk, backend = await _open_microsandbox(
         monkeypatch, SandboxConfig(provider="microsandbox")
     )
-    assert sdk.Sandbox.create_kwargs["image"] == "python:3.12-slim"
+    assert sdk.Sandbox.create_kwargs["image"] == (
+        "quay.io/jupyter/scipy-notebook@sha256:"
+        "e6e8baae46b5e62bbc26910169082639a6fd96f90e9f6fc52e0c0389df92d35c"
+    )
     await backend.close()
 
 

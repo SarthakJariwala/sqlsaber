@@ -5,14 +5,100 @@ from dataclasses import asdict
 import hashlib
 import json
 from pathlib import Path
+import shlex
+import sys
 import tempfile
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 from sqlsaber_sandbox._controller import Controller
+from sqlsaber_sandbox.backends.base import CommandResult
 from sqlsaber_sandbox.config import SandboxConfig
 from sqlsaber_sandbox.execution import KernelExecution, SandboxError
+
+
+@pytest.mark.parametrize(
+    "packages, install_exit",
+    [("compatible", 0), ("missing", 0), ("incompatible", 0), ("missing", 42)],
+)
+async def test_kernel_bootstrap_reuses_image_packages_and_interpreter(
+    tmp_path, monkeypatch, packages, install_exit
+):
+    python = tmp_path / "runtime bin" / "python"
+    python.parent.mkdir()
+    installs = tmp_path / "installs.json"
+    python.write_text(
+        f"""#!{sys.executable}
+import json
+import sys
+from pathlib import Path
+if sys.argv[1:3] == ['-m', 'pip']:
+    Path({str(installs)!r}).write_text(json.dumps(sys.argv[1:]))
+    sys.exit({install_exit})
+if {packages == "missing"}:
+    raise ModuleNotFoundError('ipykernel')
+if {packages == "incompatible"}:
+    import ipykernel, jupyter_client, matplotlib
+    import importlib.metadata
+    original = importlib.metadata.version
+    importlib.metadata.version = lambda name: '9.0.0' if name == 'jupyter-client' else original(name)
+exec(sys.argv[2])
+"""
+    )
+    python.chmod(0o755)
+    monkeypatch.setenv("PATH", str(python.parent))
+    monkeypatch.setenv("PYTHONOPTIMIZE", "1")
+    controller_calls = []
+
+    async def execute(command, *, timeout):
+        if command.startswith("mkdir"):
+            return CommandResult("", "", 0)
+        if command.startswith("if [ -x /opt/conda/bin/python ]"):
+            return CommandResult(str(python) + "\n", "", 0)
+        if "controller.py call" in command:
+            controller_calls.append(shlex.split(command))
+            return CommandResult('{"epoch":"one","result":{}}', "", 0)
+        # Execute the real bootstrap shell logic. The Python wrapper records pip
+        # calls instead of accessing a package index or changing this environment.
+        process = await asyncio.create_subprocess_shell(
+            command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout)
+        return CommandResult(stdout.decode(), stderr.decode(), process.returncode)
+
+    backend = SimpleNamespace(
+        open=AsyncMock(),
+        execute=execute,
+        upload=AsyncMock(),
+        start_controller=AsyncMock(),
+        close=AsyncMock(),
+    )
+    execution = KernelExecution(SandboxConfig(), backend)
+    if install_exit:
+        with pytest.raises(SandboxError, match="Sandbox command failed"):
+            await execution.open()
+        backend.start_controller.assert_not_awaited()
+        backend.close.assert_awaited_once()
+    else:
+        await execution.open()
+        assert installs.exists() is (packages != "compatible")
+        assert backend.start_controller.call_args.args[0][0] == str(python)
+        assert controller_calls[0][0] == str(python)
+        await execution.close()
+    if packages != "compatible":
+        assert json.loads(installs.read_text()) == [
+            "-m",
+            "pip",
+            "install",
+            "--quiet",
+            "--disable-pip-version-check",
+            "--no-input",
+            "jupyter-client>=8,<9",
+            "ipykernel>=6,<8",
+            "matplotlib>=3,<4",
+        ]
 
 
 @pytest.fixture

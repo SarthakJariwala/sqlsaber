@@ -9,6 +9,10 @@ from dataclasses import dataclass, fields
 from .result import Workspace, WorkspaceFile, validate_workspace_file_name
 
 MIB = 1024 * 1024
+DEFAULT_SANDBOX_IMAGE = (
+    "quay.io/jupyter/scipy-notebook@sha256:"
+    "e6e8baae46b5e62bbc26910169082639a6fd96f90e9f6fc52e0c0389df92d35c"
+)
 
 
 def _positive_integer(name: str, value: object) -> None:

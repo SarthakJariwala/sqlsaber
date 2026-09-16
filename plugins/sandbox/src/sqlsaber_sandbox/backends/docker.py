@@ -10,7 +10,7 @@ import shutil
 from typing import Any
 import uuid
 
-from ..config import SandboxConfig
+from ..config import DEFAULT_SANDBOX_IMAGE, SandboxConfig
 from .base import CommandResult, SandboxError
 
 
@@ -73,7 +73,7 @@ class DockerBackend:
             create_argv.extend(("--gpus", config.gpu))
         create_argv.extend(
             (
-                config.image or "python:3.12-slim",
+                config.image or DEFAULT_SANDBOX_IMAGE,
                 "python",
                 "-c",
                 "import time; time.sleep(2147483647)",

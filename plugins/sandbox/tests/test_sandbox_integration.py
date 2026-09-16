@@ -42,6 +42,13 @@ async def test_live_persistence_ml_and_artifacts(tmp_path):
         "import json, numpy as np\nfrom pathlib import Path\nx=np.array(json.loads(Path('../inputs/x.json').read_text()))\ny=np.array(json.loads(Path('../inputs/y.json').read_text()))\nweights=np.linalg.lstsq(np.column_stack([x, np.ones(len(x))]),y,rcond=None)[0]\ncounter=1\nweights.tolist()",
         "counter += 1\nassert counter == 2\nassert abs(weights @ [10,1] - 32) < 1e-9\nnp.savez('weights.npz', weights=weights)\nPath('binary.bin').write_bytes(bytes([0,255,13,128,42]))\nimport matplotlib.pyplot as plt\nplt.plot(x,y)\nplt.show()",
     ]
+    if config.provider in {"docker", "microsandbox", "modal", "daytona"}:
+        cells[0] += (
+            "\nfrom scipy.linalg import lstsq"
+            "\nfrom sklearn.linear_model import LinearRegression"
+            "\nassert np.allclose(lstsq(np.column_stack([x, np.ones(len(x))]), y)[0], [3, 2])"
+            "\nassert abs(LinearRegression().fit(x.reshape(-1, 1), y).predict([[10]])[0] - 32) < 1e-9"
+        )
     calls = 0
 
     def analyst(messages, info):

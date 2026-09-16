@@ -297,8 +297,15 @@ One immutable `SandboxConfig` applies to each session or capability. The main
 agent cannot change its provider, resources, or file limits through tool arguments.
 
 `image` accepts a registry image for Docker, microsandbox, Modal, and Daytona.
-Docker and microsandbox default to `python:3.12-slim`. Modal and Daytona default
-to Python 3.12. For E2B, `image` is a template ID. Sprites does not accept custom images.
+These providers default to `DEFAULT_SANDBOX_IMAGE`, a digest-pinned
+`quay.io/jupyter/scipy-notebook` image with NumPy, pandas, SciPy, scikit-learn,
+Matplotlib, and the Jupyter kernel packages. For E2B, `image` is a template ID.
+Sprites does not accept custom images.
+
+Startup uses `/opt/conda/bin/python` when present, or resolves `python` from
+`PATH`. Compatible kernel packages are reused without running pip. If packages
+are missing or incompatible, startup installs them once in that session.
+Follow-up calls reuse the same environment.
 
 `cpu_cores` and `memory_mb` set CPU and memory resources. Microsandbox and Sprites
 require whole CPU counts. Daytona requires whole CPU counts and memory in multiples

@@ -11,11 +11,10 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from ..config import SandboxConfig
+from ..config import DEFAULT_SANDBOX_IMAGE, SandboxConfig
 from .base import CommandResult, SandboxError
 
 _APP_NAME = "sqlsaber-sandbox"
-_PYTHON_VERSION = "3.12"
 _MODAL_PLATFORM_TIMEOUT_SECONDS = 24 * 60 * 60
 
 
@@ -39,11 +38,7 @@ class ModalBackend:
         modal = _load_modal()
         try:
             app = await modal.App.lookup.aio(_APP_NAME, create_if_missing=True)
-            image = (
-                modal.Image.from_registry(config.image)
-                if config.image is not None
-                else modal.Image.debian_slim(python_version=_PYTHON_VERSION)
-            )
+            image = modal.Image.from_registry(config.image or DEFAULT_SANDBOX_IMAGE)
             options: dict[str, Any] = {
                 "app": app,
                 "image": image,

@@ -13,10 +13,9 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from ..config import SandboxConfig
+from ..config import DEFAULT_SANDBOX_IMAGE, SandboxConfig
 from .base import CommandResult, SandboxError
 
-_PYTHON_VERSION = "3.12"
 _DELETE_TIMEOUT_SECONDS = 60.0
 _DELETE_POLL_SECONDS = 0.25
 
@@ -48,13 +47,8 @@ class DaytonaBackend:
         self._transport_seconds = float(config.transport_seconds)
         try:
             self._client = sdk.AsyncDaytona()
-            image = (
-                config.image
-                if config.image is not None
-                else sdk.Image.debian_slim(_PYTHON_VERSION)
-            )
             params = sdk.CreateSandboxFromImageParams(
-                image=image,
+                image=config.image or DEFAULT_SANDBOX_IMAGE,
                 language="python",
                 name=self._sandbox_name,
                 labels={"application": "sqlsaber", "purpose": "sandbox-analysis"},

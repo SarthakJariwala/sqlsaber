@@ -12,7 +12,7 @@ from collections.abc import Coroutine, Sequence
 from typing import Any
 import uuid
 
-from ..config import SandboxConfig
+from ..config import DEFAULT_SANDBOX_IMAGE, SandboxConfig
 from .base import CommandResult, SandboxError
 
 
@@ -48,7 +48,7 @@ class MicrosandboxBackend:
         self._config = config
         self._name = f"sqlsaber-sandbox-{uuid.uuid4().hex}"
         kwargs: dict[str, Any] = {
-            "image": config.image or "python:3.12-slim",
+            "image": config.image or DEFAULT_SANDBOX_IMAGE,
             "network": sdk.Network.allow_all(),
             "security": sdk.SecurityProfile.RESTRICTED,
             "ephemeral": True,

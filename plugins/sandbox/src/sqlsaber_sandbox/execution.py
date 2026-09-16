@@ -17,6 +17,12 @@ from .backends import SandboxBackend, SandboxError, SessionLost, create_backend
 from .config import SandboxConfig
 from .result import ArtifactRef, CellResult, Workspace
 
+_KERNEL_REQUIREMENTS = (
+    "jupyter-client>=8,<9",
+    "ipykernel>=6,<8",
+    "matplotlib>=3,<4",
+)
+
 
 class KernelExecution:
     def __init__(self, config: SandboxConfig, backend: SandboxBackend | None = None):
@@ -26,6 +32,7 @@ class KernelExecution:
         self.epoch: str | None = None
         self.lost = False
         self.settled: CellResult | None = None
+        self._python = "python"
         self._opening: asyncio.Task[None] | None = None
         self._closing: asyncio.Task[None] | None = None
 
@@ -59,9 +66,26 @@ class KernelExecution:
                 await self.command(
                     f"mkdir -p {self.root}/inputs {self.root}/run; chmod 700 {self.root}"
                 )
+                # Jupyter images keep their scientific stack in Conda. Login
+                # shells and provider execs need not preserve the image's PATH.
+                self._python = (
+                    await self.command(
+                        "if [ -x /opt/conda/bin/python ]; then "
+                        "echo /opt/conda/bin/python; else command -v python; fi"
+                    )
+                ).strip()
+                python = shlex.quote(self._python)
+                check = (
+                    "import sys, ipykernel, jupyter_client, matplotlib; "
+                    "from importlib.metadata import version; "
+                    "from packaging.requirements import Requirement; "
+                    f"requirements = map(Requirement, {_KERNEL_REQUIREMENTS!r}); "
+                    "sys.exit(not all(version(req.name) in req.specifier for req in requirements))"
+                )
                 await self.command(
-                    "python -m pip install --quiet --disable-pip-version-check --no-input "
-                    "'jupyter-client>=8,<9' 'ipykernel>=6,<8' 'matplotlib>=3,<4'",
+                    f"{python} -c {shlex.quote(check)} >/dev/null 2>&1 || "
+                    f"{python} -m pip install --quiet --disable-pip-version-check --no-input "
+                    + shlex.join(_KERNEL_REQUIREMENTS),
                     timeout=self.config.open_seconds,
                 )
                 await self.upload(
@@ -73,7 +97,7 @@ class KernelExecution:
                 )
                 await self.backend.start_controller(
                     [
-                        "python",
+                        self._python,
                         f"{self.root}/controller.py",
                         "serve",
                         self.root,
@@ -114,7 +138,8 @@ class KernelExecution:
             json.dumps({"operation": operation, **arguments}).encode()
         ).decode()
         raw = await self.command(
-            f"python {self.root}/controller.py call {self.root} {shlex.quote(encoded)}"
+            f"{shlex.quote(self._python)} {self.root}/controller.py call "
+            f"{self.root} {shlex.quote(encoded)}"
         )
         try:
             response = json.loads(raw)
