@@ -13,6 +13,19 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.78.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.77.0...sqlsaber-v0.78.0) (2026-09-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **sandbox:** run_python is replaced by analyze_in_sandbox, close_sandbox, and publish_sandbox_artifacts. Sandbox construction is lazy; provider validation happens on first use.
+
+### Features
+
+* persist plugin-owned CLI settings ([#285](https://github.com/SarthakJariwala/sqlsaber/issues/285)) ([11b35fe](https://github.com/SarthakJariwala/sqlsaber/commit/11b35feade47549534117a71e9ecb5fc8d93296a))
+* **sandbox:** add persistent analysis sessions and native backends ([#282](https://github.com/SarthakJariwala/sqlsaber/issues/282)) ([bf4b2ea](https://github.com/SarthakJariwala/sqlsaber/commit/bf4b2eaad1ab037d8daf398448230c5e69767a49))
+* Unify notebook capability and API configuration ([#279](https://github.com/SarthakJariwala/sqlsaber/issues/279)) ([2090fac](https://github.com/SarthakJariwala/sqlsaber/commit/2090fac7ad4a915e3b955edc87e0c3456962bfc9))
+
 ## [0.77.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.76.0...sqlsaber-v0.77.0) (2026-09-14)
 
 

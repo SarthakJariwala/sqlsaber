@@ -7,6 +7,18 @@
 - add an opt-in local Microsandbox microVM execution backend while retaining Docker as the default
 - add an opt-in Daytona notebook backend pinned to the deployed legacy SDK contract
 
+## [0.9.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-notebook-v0.8.0...sqlsaber-notebook-v0.9.0) (2026-09-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **sandbox:** run_python is replaced by analyze_in_sandbox, close_sandbox, and publish_sandbox_artifacts. Sandbox construction is lazy; provider validation happens on first use.
+
+### Features
+
+* persist plugin-owned CLI settings ([#285](https://github.com/SarthakJariwala/sqlsaber/issues/285)) ([11b35fe](https://github.com/SarthakJariwala/sqlsaber/commit/11b35feade47549534117a71e9ecb5fc8d93296a))
+* **sandbox:** add persistent analysis sessions and native backends ([#282](https://github.com/SarthakJariwala/sqlsaber/issues/282)) ([bf4b2ea](https://github.com/SarthakJariwala/sqlsaber/commit/bf4b2eaad1ab037d8daf398448230c5e69767a49))
+
 ## [0.8.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-notebook-v0.7.0...sqlsaber-notebook-v0.8.0) (2026-09-15)
 
 
