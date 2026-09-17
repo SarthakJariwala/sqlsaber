@@ -30,11 +30,12 @@ async def hydrate_query_result_contents(
     messages: list[ModelMessage],
     *,
     store: QueryResultStore,
-) -> tuple[dict[str, str], set[str]]:
-    """Preload canonical JSON by tool-call ID without mutating message history."""
-    hydrated: dict[str, str] = {}
-    unavailable: set[str] = set()
+) -> tuple[dict[tuple[str, str], str], set[tuple[str, str]]]:
+    """Preload canonical JSON by tool name and call ID without mutating history."""
+    hydrated: dict[tuple[str, str], str] = {}
+    unavailable: set[tuple[str, str]] = set()
     for reference in query_result_references_from_messages(messages):
+        key = (reference.tool_name, reference.tool_call_id)
         try:
             resolved = await resolve_query_result(
                 reference,
@@ -42,10 +43,10 @@ async def hydrate_query_result_contents(
                 context=QueryResultContext(),
             )
         except QueryResultUnavailable:
-            unavailable.add(reference.tool_call_id)
+            unavailable.add(key)
             continue
         try:
-            hydrated[reference.tool_call_id] = resolved.data.decode("utf-8")
+            hydrated[key] = resolved.data.decode("utf-8")
         except UnicodeDecodeError:
-            unavailable.add(reference.tool_call_id)
+            unavailable.add(key)
     return hydrated, unavailable

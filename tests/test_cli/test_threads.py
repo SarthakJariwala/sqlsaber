@@ -571,9 +571,9 @@ class TestThreadsCLI:
             ),
         ]
         kwargs = (
-            {"hydrated_results": {"csv-call": json.dumps(complete)}}
+            {"hydrated_results": {("execute_sql", "csv-call"): json.dumps(complete)}}
             if hydrated
-            else {"unavailable_results": {"csv-call"}}
+            else {"unavailable_results": {("execute_sql", "csv-call")}}
         )
         actual = render_thread_html(sample_threads[0], messages, **kwargs)
         messages[1].parts[0].content = json.dumps(preview)
@@ -588,6 +588,95 @@ class TestThreadsCLI:
         html = render_thread_html(thread, [])
 
         assert "No messages in this thread" in html
+
+    @pytest.mark.parametrize("missing", [None, "execute_sql", "execute_flux"])
+    async def test_replay_isolates_results_with_shared_call_id(
+        self, sample_threads, capture_surface, missing
+    ):
+        from sqlsaber.cli.query_results import hydrate_query_result_contents
+        from sqlsaber.query_results import (
+            InMemoryQueryResultStore,
+            QueryResultContext,
+            QueryResultData,
+            descriptor_for_data,
+            new_query_result_id,
+        )
+        from sqlsaber.render import blocks as b
+
+        store = InMemoryQueryResultStore()
+        messages = [
+            ModelRequest(parts=[UserPromptPart("Compare query results")]),
+            ModelResponse(
+                parts=[
+                    ToolCallPart("execute_sql", {"query": "select sql_value"}, "same"),
+                    ToolCallPart("execute_flux", {"query": "flux query"}, "same"),
+                ]
+            ),
+        ]
+        expected = {}
+        for name in ("execute_sql", "execute_flux"):
+            full = json.dumps(
+                {"success": True, "results": [{"value": f"{name}_complete"}]}
+            )
+            preview = json.dumps({"preview_rows": [{"value": f"{name}_preview"}]})
+            descriptor = descriptor_for_data(
+                full.encode(),
+                result_id=new_query_result_id(),
+                file=f"result_{name}.json",
+                row_count=1,
+                columns=("value",),
+            )
+            if name != missing:
+                await store.put(
+                    QueryResultData(full.encode()),
+                    descriptor=descriptor,
+                    context=QueryResultContext(),
+                )
+            expected[name] = preview if name == missing else full
+            messages.append(
+                ModelRequest(
+                    parts=[
+                        ToolReturnPart(
+                            name,
+                            preview,
+                            "same",
+                            metadata={"query_result": descriptor.to_dict()},
+                        )
+                    ]
+                )
+            )
+
+        hydrated, unavailable = await hydrate_query_result_contents(
+            messages, store=store
+        )
+        with patch(
+            "sqlsaber.tools.renderer.ToolRenderer.result",
+            side_effect=lambda name, content, **kwargs: (b.md(f"{name}: {content}"),),
+        ) as result:
+            _render_transcript(
+                capture_surface,
+                messages,
+                hydrated_results=hydrated,
+                unavailable_results=unavailable,
+            )
+        assert [call.args for call in result.call_args_list] == list(expected.items())
+        rendered = md_of(capture_surface.blocks)
+        assert rendered.count("Complete query result unavailable") == bool(missing)
+
+        html = render_thread_html(
+            sample_threads[0],
+            messages,
+            hydrated_results=hydrated,
+            unavailable_results=unavailable,
+        )
+        sections = html.split('<details class="tool" open>')[1:]
+        assert len(sections) == 2
+        for name, section in zip(expected, sections, strict=True):
+            section = section.split("</details>", 1)[0]
+            suffix = "preview" if name == missing else "complete"
+            assert f"{name}_{suffix}" in section
+            assert ("Complete query result unavailable" in section) == (name == missing)
+        assert "select sql_value" in sections[0]
 
     def test_render_thread_html_escapes_content(self, sample_threads):
         """Test render_thread_html properly escapes HTML content in user input."""

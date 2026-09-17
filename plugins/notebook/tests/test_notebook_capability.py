@@ -615,7 +615,7 @@ async def test_workspace_rejects_invalid_requested_keys() -> None:
     )
     assert [item.name for item in workspace.files] == ["result_different.json"]
 
-    with pytest.raises(ValueError, match="Invalid SQL result file key"):
+    with pytest.raises(ValueError, match="Invalid query result file key"):
         await build_workspace_from_history(
             _ctx(messages),
             only=["../secret.json"],

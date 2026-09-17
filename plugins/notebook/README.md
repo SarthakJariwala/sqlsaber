@@ -18,10 +18,12 @@ Implemented components:
 - the standalone `sqlsaber-notebook` CLI.
 
 The `saber` CLI loads `analyze_data` when `sqlsaber-notebook` is installed.
-That tool uses prior successful SQL results for calculations, statistics,
+That tool uses prior successful query results for calculations, statistics,
 transformations, and plots.
 Bounded executed notebooks and plot previews appear in the terminal before the main
 agent's text response. Notebook bytes and images are not sent to the parent model.
+Descriptor-bearing results from any query tool are eligible for `files` and automatic selection. Legacy inline results are supported only for `execute_sql`. The manifest records the originating tool in `source` and sets `sql` only for SQL queries.
+
 An embedded `SQLSaber` session includes `analyze_data` only when the notebook factory
 is listed in `SQLSaberOptions.capabilities`.
 Managed SDK applications persist the notebook, plots, and generated files through
@@ -79,7 +81,7 @@ export DAYTONA_API_URL=https://your-daytona.example/api
 SQLSABER_NOTEBOOK_BACKEND=daytona saber
 ```
 
-SQL query results and selected local files are uploaded to the configured Daytona
+Query results and selected local files are uploaded to the configured Daytona
 service. SQLsaber derives a minimal `USER root` control image from the exact configured
 `SQLSABER_NOTEBOOK_IMAGE` parent, protects inputs as root, and executes notebooks as
 `jovyan`. The sandbox requests blocked outbound networking and ephemeral deletion.
@@ -164,9 +166,9 @@ conversation, tool-call, and application metadata context and returns ordered
 expired, cross-tenant, or out-of-history references; SQLsaber validates filenames,
 collisions, immutable bytes, MIME/provenance metadata, and aggregate limits before
 starting a notebook. When no resolver is configured, `attachment_refs` is omitted
-from the tool schema and existing SQL-only behavior is unchanged.
+from the tool schema and query-result selection is unchanged.
 
-SQL result files are staged first in their selected order, followed by resolver
+Query result files are staged first in their selected order, followed by resolver
 outputs in resolver order. By default, the combined workspace allows 50 files,
 100 MiB per file, and 250 MiB total. Filenames are capped at 255 UTF-8 bytes.
 `manifest.json` is reserved, has a separate default 1-MiB limit, and records each
@@ -223,7 +225,7 @@ and `SQLSABER_NOTEBOOK_IMAGE`, then library defaults. Empty selectors are errors
 `backend` can also be an application-supplied `NotebookBackend` instance.
 
 Workspace budgets exclude `manifest.json`; SQLsaber adds its allowance when staging
-inputs. `workspace.default_results` controls how many recent SQL results are considered
+inputs. `workspace.default_results` controls how many recent query results are considered
 when `files` is omitted, defaulting to 20. Automatic selection stops at the file-count
 or combined-byte budget. Explicit selections fail rather than being partially admitted.
 An individual file above `max_file_bytes` is always an error.

@@ -115,7 +115,7 @@
     }
   },
   {
-    "description": "Hand a data-analysis goal to a notebook subagent.\n\nUse this after running SQL when the answer requires multi-step calculations,\nstatistical analysis, data transformations, or plots.",
+    "description": "Hand a data-analysis goal to a notebook subagent.\n\nUse this after running a query when the answer requires multi-step calculations,\nstatistical analysis, data transformations, or plots.",
     "name": "analyze_data",
     "parameters_json_schema": {
       "additionalProperties": false,
@@ -133,7 +133,7 @@
             }
           ],
           "default": null,
-          "description": "Optional execute_sql result keys to analyze. When omitted, the\nnewest bounded successful query results are included."
+          "description": "Optional query result file keys to analyze. When omitted, the\nnewest bounded successful query results are included."
         },
         "goal": {
           "description": "The question to answer and analysis to perform.",

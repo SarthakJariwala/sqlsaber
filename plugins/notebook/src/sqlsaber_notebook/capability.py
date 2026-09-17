@@ -121,12 +121,12 @@ class AnalyzeDataTool(Tool):
     ) -> ToolReturn | str:
         """Hand a data-analysis goal to a notebook subagent.
 
-        Use this after running SQL when the answer requires multi-step calculations,
+        Use this after running a query when the answer requires multi-step calculations,
         statistical analysis, data transformations, or plots.
 
         Args:
             goal: The question to answer and analysis to perform.
-            files: Optional execute_sql result keys to analyze. When omitted, the
+            files: Optional query result file keys to analyze. When omitted, the
                 newest bounded successful query results are included.
         """
 
@@ -146,7 +146,7 @@ class AnalyzeDataTool(Tool):
 
         Args:
             goal: The question to answer and analysis to perform.
-            files: Optional execute_sql result keys to analyze. When omitted, the
+            files: Optional query result file keys to analyze. When omitted, the
                 newest bounded successful query results are included.
             attachment_refs: Optional opaque, application-authorized input references.
                 These are resolved by the configured host adapter, never as paths or
@@ -411,7 +411,7 @@ async def build_workspace_from_history(
     workspace_input_resolver: WorkspaceInputResolver | None = None,
     limits: WorkspaceLimits = DEFAULT_NOTEBOOK_CONFIG.workspace,
 ) -> Workspace:
-    """Build one bounded workspace from SQL results and authorized inputs."""
+    """Build one bounded workspace from query results and authorized inputs."""
 
     requested = _normalize_requested_files(only)
     if requested is not None and len(requested) > limits.max_files:
@@ -442,12 +442,12 @@ async def build_workspace_from_history(
                 references.append(reference)
         if missing:
             raise ValueError(
-                "Requested SQL result files were not found: " + ", ".join(missing)
+                "Requested query result files were not found: " + ", ".join(missing)
             )
 
     if not references and not resolved_inputs:
         raise ValueError(
-            "No successful row-returning execute_sql results are available to analyze"
+            "No successful row-returning query results are available to analyze"
         )
 
     selected: list[tuple[str, bytes, ManifestEntry]] = []
@@ -469,7 +469,7 @@ async def build_workspace_from_history(
             )
         except QueryResultUnavailable as exc:
             raise ValueError(
-                f"Complete SQL result is unavailable: {reference.file}"
+                f"Complete query result is unavailable: {reference.file}"
             ) from exc
         if len(resolved.data) > limits.max_file_bytes:
             raise NotebookLimitExceeded(
@@ -489,14 +489,20 @@ async def build_workspace_from_history(
             (
                 reference.file,
                 resolved.data,
-                ManifestEntry(file=reference.file, sql=reference.query),
+                ManifestEntry(
+                    file=reference.file,
+                    sql=reference.query
+                    if reference.tool_name == "execute_sql"
+                    else None,
+                    source=reference.tool_name,
+                ),
             )
         )
         total_bytes += len(resolved.data)
 
     if references and not selected and not resolved_inputs:
         raise ValueError(
-            "No complete execute_sql results fit within the notebook workspace limits"
+            "No complete query results fit within the notebook workspace limits"
         )
 
     files = tuple(NotebookInput(key, data) for key, data, _ in selected) + tuple(
@@ -613,12 +619,12 @@ def _normalize_requested_files(files: list[str] | None) -> list[str] | None:
     seen: set[str] = set()
     for key in files:
         if not isinstance(key, str) or not _RESULT_FILE_PATTERN.fullmatch(key):
-            raise ValueError(f"Invalid SQL result file key: {key!r}")
+            raise ValueError(f"Invalid query result file key: {key!r}")
         if key not in seen:
             normalized.append(key)
             seen.add(key)
     if not normalized:
-        raise ValueError("files must contain at least one SQL result key")
+        raise ValueError("files must contain at least one query result key")
     return normalized
 
 

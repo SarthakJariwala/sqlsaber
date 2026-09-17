@@ -41,8 +41,8 @@ class PreparedThreadResume:
     saber: SQLSaber
     thread_id: str
     history: list[ModelMessage]
-    hydrated_results: dict[str, str]
-    unavailable_results: set[str]
+    hydrated_results: dict[tuple[str, str], str]
+    unavailable_results: set[tuple[str, str]]
     unavailable_artifacts: set[str]
     resolved_artifacts: dict[str, ResolvedArtifactPublication]
     storage: ThreadStorage
@@ -73,8 +73,8 @@ def _render_transcript(
     all_msgs: list[ModelMessage],
     last_n: int | None = None,
     *,
-    hydrated_results: dict[str, str] | None = None,
-    unavailable_results: set[str] | None = None,
+    hydrated_results: dict[tuple[str, str], str] | None = None,
+    unavailable_results: set[tuple[str, str]] | None = None,
     unavailable_artifacts: set[str] | None = None,
     resolved_artifacts: Mapping[str, ResolvedArtifactPublication] | None = None,
     display_registry: Mapping[str, Tool] | None = None,
@@ -162,9 +162,10 @@ def _render_transcript(
             elif kind in ("tool-return", "builtin-tool-return"):
                 name = getattr(part, "tool_name", "tool")
                 tool_call_id = getattr(part, "tool_call_id", None)
+                result_key = (name, tool_call_id or "")
                 content = getattr(part, "content", None)
-                if hydrated_results and tool_call_id in hydrated_results:
-                    content = hydrated_results[tool_call_id]
+                if hydrated_results and result_key in hydrated_results:
+                    content = hydrated_results[result_key]
                 result_blocks = renderer.result(
                     name,
                     content,
@@ -177,7 +178,7 @@ def _render_transcript(
                 )
                 if result_blocks:
                     surface.emit(*result_blocks)
-                if unavailable_results and tool_call_id in unavailable_results:
+                if unavailable_results and result_key in unavailable_results:
                     surface.emit(
                         b.warn("Complete query result unavailable; showing preview.")
                     )

@@ -1,5 +1,3 @@
-"""Resolve complete SQL results from message-scoped, model-facing references."""
-
 from __future__ import annotations
 
 import hashlib
@@ -30,6 +28,7 @@ class QueryResultReference:
     descriptor: StoredQueryResult | None
     query: str | None = None
     legacy_data: bytes | None = None
+    tool_name: str = "execute_sql"
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,36 +90,38 @@ def _payload_as_dict(content: object) -> dict[str, Any] | None:
 def query_result_references_from_messages(
     messages: Sequence[ModelMessage],
 ) -> list[QueryResultReference]:
-    """Scan execute_sql returns in execution order and pair them to SQL calls."""
+    """Scan retained results and legacy SQL returns in execution order."""
 
-    queries: dict[str, str] = {}
+    queries: dict[tuple[str, str], str] = {}
     for message in messages:
         for part in getattr(message, "parts", ()):
-            if (
-                getattr(part, "part_kind", "") not in ("tool-call", "builtin-tool-call")
-                or getattr(part, "tool_name", "") != "execute_sql"
-            ):
+            if getattr(part, "part_kind", "") not in ("tool-call", "builtin-tool-call"):
                 continue
             call_id = getattr(part, "tool_call_id", None)
             if not isinstance(call_id, str) or not call_id:
                 continue
+            tool_name = getattr(part, "tool_name", "")
+            if not isinstance(tool_name, str) or not tool_name:
+                continue
             query = _args_as_dict(part).get("query")
             if isinstance(query, str) and query.strip():
-                queries[call_id] = query
+                queries[(call_id, tool_name)] = query
 
     references: list[QueryResultReference] = []
     seen_ids: set[str] = set()
     seen_legacy_calls: set[str] = set()
     for message in messages:
         for part in getattr(message, "parts", ()):
-            if (
-                getattr(part, "part_kind", "")
-                not in ("tool-return", "builtin-tool-return")
-                or getattr(part, "tool_name", "") != "execute_sql"
+            if getattr(part, "part_kind", "") not in (
+                "tool-return",
+                "builtin-tool-return",
             ):
                 continue
             call_id = getattr(part, "tool_call_id", None)
             if not isinstance(call_id, str) or not call_id:
+                continue
+            tool_name = getattr(part, "tool_name", "")
+            if not isinstance(tool_name, str) or not tool_name:
                 continue
             metadata = getattr(part, "metadata", None)
             descriptor = query_result_from_metadata(metadata)
@@ -135,11 +136,14 @@ def query_result_references_from_messages(
                         tool_call_id=call_id,
                         file=descriptor.file,
                         descriptor=descriptor,
-                        query=queries.get(call_id),
+                        query=queries.get((call_id, tool_name)),
+                        tool_name=tool_name,
                     )
                 )
                 continue
 
+            if tool_name != "execute_sql":
+                continue
             payload = _payload_as_dict(getattr(part, "content", None))
             if (
                 payload is None
@@ -161,7 +165,7 @@ def query_result_references_from_messages(
                     tool_call_id=call_id,
                     file=file,
                     descriptor=None,
-                    query=queries.get(call_id),
+                    query=queries.get((call_id, tool_name)),
                     legacy_data=data,
                 )
             )
