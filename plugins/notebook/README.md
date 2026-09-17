@@ -9,6 +9,7 @@ Implemented components:
 - explicit local microVM execution through the optional `microsandbox` extra,
 - explicit remote Modal Sandbox execution through the optional `modal` extra,
 - explicit remote Daytona execution through the pinned `daytona` extra,
+- explicit remote E2B execution through the optional `e2b` extra,
 - fresh-kernel transactional notebook sessions,
 - bounded notebook/image rendering and history collapse,
 - `list_workspace` and `edit_cell` analyst tools,
@@ -89,6 +90,39 @@ Daytona 0.143.0 has no hard age-based TTL: its 24-hour setting is inactivity-bas
 Deployments requiring a strict maximum resource age must run a label-based reaper for
 sandboxes labeled `application=sqlsaber,purpose=notebook`.
 
+E2B is an opt-in remote backend:
+
+```bash
+uv tool install --with 'sqlsaber-notebook[e2b]' sqlsaber
+export E2B_API_KEY=...
+SQLSABER_NOTEBOOK_BACKEND=e2b saber
+```
+
+Query results and selected files are uploaded to E2B. SQLsaber builds a cached
+E2B template from `SQLSABER_NOTEBOOK_IMAGE` (the default pinned Jupyter image
+when unset), with a root control process and unprivileged `jovyan` notebook
+execution. The image must provide `/usr/bin/python3`, `/usr/sbin/runuser`, and
+`/opt/conda/bin/jupyter` with nbconvert and a Python kernel. The first cold build
+may take several minutes. Template names include a hash of the image and resource
+settings; templates remain in your E2B account for reuse and contain no query data.
+CPU cores round up to whole cores and memory is allocated in MiB at build time.
+
+Inputs are root-owned and read-only to the notebook. Guest internet access is
+disabled, and generated artifacts are validated and frozen before download.
+Each sandbox has a **one-hour lifetime**, including time between notebook runs,
+and is killed on close or interrupted execution. This provider lifetime applies
+even when the whole-notebook timeout is disabled. Template builds and sandbox
+runtime may incur E2B charges. PID limits are not enforced by this adapter.
+
+Run the opt-in live contract test with credentials to verify execution, fresh
+kernels, read-only inputs, HTTP egress denial, artifact downloads, session
+publication, and sandbox termination:
+
+```bash
+SQLSABER_RUN_E2B_INTEGRATION=1 env -u FORCE_COLOR uv run pytest \
+  plugins/notebook/tests/test_notebook_e2b_integration.py -q -s
+```
+
 ### Saved notebook settings
 
 `saber plugins` edits persistent notebook settings declared by this plugin: the
@@ -97,8 +131,8 @@ notebook` lists them). Saved values apply when `saber` loads `analyze_data` and
 when `sqlsaber-notebook` runs standalone. Environment variables override saved
 values, which override plugin defaults.
 
-Daytona and Modal credentials entered there live in the OS keyring as
-`daytona.api_key`, `modal.token_id`, and `modal.token_secret` — never in the
+Daytona, Modal, and E2B credentials entered there live in the OS keyring as
+`daytona.api_key`, `modal.token_id`, `modal.token_secret`, and `e2b.api_key` — never in the
 settings file — and are passed directly to the provider SDK client without
 mutating environment variables. Modal tokens are saved as a pair. With no saved
 credentials, Modal uses its native `modal setup` login and Daytona reads its own
@@ -116,6 +150,7 @@ Backend isolation differs by provider:
 | Microsandbox | Local microVM | Disabled | Whole CPU / MiB | Process rlimit | 24-hour max duration |
 | Modal | Remote | Blocked | Fractional CPU / MiB | Not exposed | 24-hour platform lifetime |
 | Daytona | Remote | Provider block requested | Whole CPU / GiB | Not exposed | Ephemeral 24-hour inactivity stop; no hard TTL |
+| E2B | Remote | Blocked by provider firewall | Whole CPU / MiB (template build) | Not exposed | One-hour sandbox lifetime |
 
 Daytona image derivation can make the first cold start slower. Network denial, root
 input ownership, and deletion are verified by credentialed tests, but do not assume

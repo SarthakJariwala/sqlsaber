@@ -4150,7 +4150,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
-    { name = "sqlsaber-notebook", extra = ["daytona", "modal"] },
+    { name = "sqlsaber-notebook", extra = ["daytona", "e2b", "modal"] },
     { name = "sqlsaber-sandbox", extra = ["daytona", "e2b", "modal", "sprites"] },
     { name = "sqlsaber-viz" },
 ]
@@ -4183,7 +4183,7 @@ dev = [
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", specifier = ">=1.0.0" },
     { name = "ruff", specifier = ">=0.12.0" },
-    { name = "sqlsaber-notebook", extras = ["daytona", "modal"], editable = "plugins/notebook" },
+    { name = "sqlsaber-notebook", extras = ["daytona", "e2b", "modal"], editable = "plugins/notebook" },
     { name = "sqlsaber-sandbox", extras = ["e2b", "modal", "daytona", "sprites"], editable = "plugins/sandbox" },
     { name = "sqlsaber-viz", editable = "plugins/viz" },
 ]
@@ -4202,6 +4202,9 @@ dependencies = [
 daytona = [
     { name = "daytona" },
 ]
+e2b = [
+    { name = "e2b" },
+]
 modal = [
     { name = "modal" },
 ]
@@ -4209,17 +4212,19 @@ modal = [
 [package.metadata]
 requires-dist = [
     { name = "daytona", marker = "extra == 'daytona'", specifier = "==0.143.0" },
+    { name = "e2b", marker = "extra == 'e2b'", specifier = ">=2.49,<3" },
     { name = "microsandbox", marker = "extra == 'microsandbox'", specifier = ">=0.6.6,<0.7" },
     { name = "modal", marker = "extra == 'modal'", specifier = ">=1.4,<2" },
     { name = "nbformat", specifier = ">=5.10,<6" },
     { name = "pillow", specifier = ">=11,<13" },
     { name = "sqlsaber", editable = "." },
 ]
-provides-extras = ["daytona", "microsandbox", "modal"]
+provides-extras = ["daytona", "e2b", "microsandbox", "modal"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "daytona", specifier = "==0.143.0" },
+    { name = "e2b", specifier = ">=2.49,<3" },
     { name = "microsandbox", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'ARM64' and sys_platform == 'win32')", specifier = ">=0.6.6,<0.7" },
     { name = "modal", specifier = ">=1.4,<2" },
     { name = "pytest", specifier = ">=9.0.2" },
