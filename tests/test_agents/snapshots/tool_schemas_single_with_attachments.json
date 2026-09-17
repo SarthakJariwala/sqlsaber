@@ -98,7 +98,7 @@
             }
           ],
           "default": null,
-          "description": "Optional execute_sql result keys to analyze. When omitted, the\nnewest bounded successful query results are included."
+          "description": "Optional query result file keys to analyze. When omitted, the\nnewest bounded successful query results are included."
         },
         "goal": {
           "description": "The question to answer and analysis to perform.",

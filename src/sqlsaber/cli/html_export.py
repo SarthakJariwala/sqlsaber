@@ -130,8 +130,8 @@ def render_thread_html(
     thread: Thread,
     all_msgs: list[ModelMessage],
     *,
-    hydrated_results: dict[str, str] | None = None,
-    unavailable_results: set[str] | None = None,
+    hydrated_results: dict[tuple[str, str], str] | None = None,
+    unavailable_results: set[tuple[str, str]] | None = None,
 ) -> str:
     """Generate a standalone HTML document for a thread transcript."""
     title = thread.title or f"SQLsaber thread {thread.id}"
@@ -630,7 +630,7 @@ def render_thread_html(
 """
         )
 
-        tool_calls: dict[str, dict[str, str]] = {}
+        tool_calls: dict[tuple[str, str], dict[str, str]] = {}
         for i in range(start_idx + 1, end_idx):
             msg = all_msgs[i]
             for part in getattr(msg, "parts", []):
@@ -653,7 +653,7 @@ def render_thread_html(
                         sql_query = None
                         if tool_name == "execute_sql":
                             sql_query = args_dict.get("sql") or args_dict.get("query")
-                        tool_calls[call_id] = {
+                        tool_calls[(tool_name, call_id)] = {
                             "name": tool_name,
                             "sql": sql_query or "",
                         }
@@ -674,9 +674,10 @@ def render_thread_html(
                 elif kind in ("tool-return", "builtin-tool-return"):
                     tool_name = str(getattr(part, "tool_name", "tool"))
                     call_id = getattr(part, "tool_call_id", None)
+                    result_key = (tool_name, call_id or "")
                     content = getattr(part, "content", None)
-                    if hydrated_results and call_id in hydrated_results:
-                        content = hydrated_results[call_id]
+                    if hydrated_results and result_key in hydrated_results:
+                        content = hydrated_results[result_key]
                     if isinstance(content, (dict, list)):
                         content_str = json.dumps(content, ensure_ascii=False, indent=2)
                     elif isinstance(content, str):
@@ -687,7 +688,7 @@ def render_thread_html(
                         )
 
                     sql_query = (
-                        tool_calls.get(call_id, {}).get("sql") if call_id else None
+                        tool_calls.get(result_key, {}).get("sql") if call_id else None
                     )
 
                     tool_args = {"sql": sql_query} if sql_query else None
@@ -702,7 +703,7 @@ def render_thread_html(
                     result_html += _render_artifact_links(
                         getattr(part, "metadata", None)
                     )
-                    if unavailable_results and call_id in unavailable_results:
+                    if unavailable_results and result_key in unavailable_results:
                         result_html += (
                             '<p class="sql-error">Complete query result unavailable; '
                             "showing preview.</p>"
