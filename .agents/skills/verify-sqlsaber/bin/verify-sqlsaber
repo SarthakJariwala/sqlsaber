@@ -698,6 +698,11 @@ def path_value(run_id: str, name: str) -> None:
         / "config"
         / "sqlsaber"
         / "theme.json",
+        "plugin-config": state_dir(run_id)
+        / "home"
+        / "config"
+        / "sqlsaber"
+        / "plugin_config.json",
         "knowledge-db": state_dir(run_id)
         / "home"
         / "data"
@@ -782,6 +787,7 @@ def build_parser() -> argparse.ArgumentParser:
             "auth-config",
             "model-config",
             "theme-config",
+            "plugin-config",
             "knowledge-db",
             "threads-db",
             "log",

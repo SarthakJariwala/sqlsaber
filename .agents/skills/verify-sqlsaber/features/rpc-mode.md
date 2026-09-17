@@ -37,7 +37,8 @@ Preconditions:
 ## Gotchas
 
 - `echo "show users" | saber` is a one-shot question, not RPC. RPC is the `rpc` subcommand.
-- Construction can prompt for an API key via `getpass`. RPC disables that; a missing key is a `startup` JSON error.
+- Construction can prompt for an API key via `getpass`. RPC replaces `getpass` so that path raises `EOFError` instead of blocking. A missing key is not a `startup` JSON error; idle `ready` still emits for an ad hoc file. The first `prompt` is what needs a working credential.
+- After `shutdown` aborts an in-flight prompt, protocol events (`agent_end` `aborted`, `shutdown` success) are the proof. The process may then exit nonzero from a Python shutdown race on stdin; do not treat that crash as missing abort events, and do not paper over it as expected success.
 - `verify-sqlsaber run` cannot feed stdin itself. A batch `printf | saber rpc` also sends EOF, so it does not prove the keep-open path.
 - `BufferedReader.read(n)` on stdin waits for `n` bytes or EOF. The process must use a single raw read (`read1`) or an interactive client hangs after `ready`.
 - Default thinking follows the saved model config. `--no-thinking` is the same flag pair as the root command.
