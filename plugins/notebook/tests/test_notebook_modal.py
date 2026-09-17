@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Awaitable, Callable
 from types import SimpleNamespace
 from typing import Any
@@ -76,6 +77,65 @@ class FakeSandbox:
 
         self.exec = AioMethod(execute)
         self.terminate = AioMethod(terminate)
+
+
+async def test_modal_open_uses_token_credentials_without_environ_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sandbox = FakeSandbox()
+    captured: dict[str, Any] = {}
+    client_sentinel = object()
+
+    async def from_credentials(token_id: str, token_secret: str) -> object:
+        captured["credentials"] = (token_id, token_secret)
+        return client_sentinel
+
+    async def lookup(
+        name: str,
+        *,
+        create_if_missing: bool,
+        client: object | None = None,
+    ) -> object:
+        captured["lookup_client"] = client
+        return object()
+
+    async def create(*argv: str, **kwargs: Any) -> FakeSandbox:
+        captured["create_client"] = kwargs.get("client")
+        return sandbox
+
+    fake_modal = SimpleNamespace(
+        App=SimpleNamespace(lookup=AioMethod(lookup)),
+        Client=SimpleNamespace(from_credentials=AioMethod(from_credentials)),
+        Image=SimpleNamespace(from_registry=lambda image: f"image:{image}"),
+        Sandbox=SimpleNamespace(create=AioMethod(create)),
+    )
+    monkeypatch.setattr(modal_backend, "_load_modal", lambda: fake_modal)
+    monkeypatch.delenv("MODAL_TOKEN_ID", raising=False)
+    monkeypatch.delenv("MODAL_TOKEN_SECRET", raising=False)
+    environ_before = dict(os.environ)
+
+    backend = modal_backend.ModalNotebookBackend(
+        token_id="ak-token",
+        token_secret="as-secret",
+    )
+    environment = await backend.open(
+        [NotebookInput("data.json", b"{}")],
+        image="registry/image@sha256:digest",
+        limits=ExecutionLimits(),
+    )
+
+    assert captured["credentials"] == ("ak-token", "as-secret")
+    assert captured["lookup_client"] is client_sentinel
+    assert captured["create_client"] is client_sentinel
+    assert dict(os.environ) == environ_before
+    await environment.close()
+
+
+def test_modal_backend_requires_complete_token_pair() -> None:
+    with pytest.raises(ValueError, match="token_id and token_secret together"):
+        modal_backend.ModalNotebookBackend(token_id="ak-token")
+    with pytest.raises(ValueError, match="token_id and token_secret together"):
+        modal_backend.ModalNotebookBackend(token_secret="as-secret")
 
 
 async def test_modal_open_uses_direct_image_blocked_network_and_non_root_preflight(

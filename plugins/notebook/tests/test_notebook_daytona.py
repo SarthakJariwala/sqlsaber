@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import shlex
 from pathlib import Path
 from types import SimpleNamespace
@@ -67,6 +68,11 @@ class FakeResources:
 
 
 class FakeCreateParams:
+    def __init__(self, **kwargs: Any) -> None:
+        self.__dict__.update(kwargs)
+
+
+class FakeDaytonaConfig:
     def __init__(self, **kwargs: Any) -> None:
         self.__dict__.update(kwargs)
 
@@ -260,6 +266,7 @@ def fake_sdk() -> Any:
         clients=[],
         create_error=None,
         CreateSandboxFromImageParams=FakeCreateParams,
+        DaytonaConfig=FakeDaytonaConfig,
         Image=FakeImageFactory,
         Resources=FakeResources,
         DaytonaError=DaytonaError,
@@ -327,6 +334,63 @@ def test_incompatible_sdk_symbols_are_rejected(
     monkeypatch.setattr(daytona_backend, "version", lambda name: "0.143.0")
     with pytest.raises(NotebookBackendUnavailable, match="missing: AsyncDaytona"):
         daytona_backend._load_daytona()
+
+
+async def test_open_binds_explicit_credentials_without_environ_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sdk = fake_sdk()
+    captured: dict[str, Any] = {}
+
+    def client_factory(config: Any) -> FakeClient:
+        captured["config"] = config
+        return FakeClient(sdk)
+
+    sdk.AsyncDaytona = client_factory
+    monkeypatch.setattr(daytona_backend, "_load_daytona", lambda: sdk)
+    monkeypatch.delenv("DAYTONA_API_KEY", raising=False)
+    environ_before = dict(os.environ)
+
+    backend = daytona_backend.DaytonaNotebookBackend(
+        api_key="key-123",
+        api_url="https://daytona.example/api",
+    )
+    environment = await backend.open(
+        [NotebookInput("data.json", b"{}")],
+        image="registry/image@sha256:digest",
+        limits=ExecutionLimits(),
+    )
+
+    config = captured["config"]
+    assert isinstance(config, FakeDaytonaConfig)
+    assert config.api_key == "key-123"
+    assert config.api_url == "https://daytona.example/api"
+    assert dict(os.environ) == environ_before
+    await environment.close()
+
+
+async def test_open_without_credentials_uses_default_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sdk = fake_sdk()
+    calls: list[tuple[Any, ...]] = []
+    default_factory = sdk.AsyncDaytona
+
+    def client_factory(*args: Any) -> FakeClient:
+        calls.append(args)
+        return default_factory()
+
+    sdk.AsyncDaytona = client_factory
+    monkeypatch.setattr(daytona_backend, "_load_daytona", lambda: sdk)
+
+    environment = await daytona_backend.DaytonaNotebookBackend().open(
+        [NotebookInput("data.json", b"{}")],
+        image="registry/image@sha256:digest",
+        limits=ExecutionLimits(),
+    )
+
+    assert calls == [()]
+    await environment.close()
 
 
 async def test_open_uses_root_wrapper_blocked_network_and_immutable_staging(

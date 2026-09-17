@@ -20,7 +20,8 @@ class _DiscardBytes:
 class SpritesBackend:
     """One Sprite with an owned, continuously drained controller command."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, token: str | None = None) -> None:
+        self._token = token
         self._client: Any | None = None
         self._sprite: Any | None = None
         self._name: str | None = None
@@ -52,7 +53,7 @@ class SpritesBackend:
                 "Sprites support requires the sandbox extra (install the 'sprites-py' package)"
             ) from exc
 
-        token = os.getenv("SPRITES_TOKEN")
+        token = self._token or os.getenv("SPRITES_TOKEN")
         if not token:
             raise RuntimeError("SPRITES_TOKEN is required to use the Sprites backend")
         client = AsyncSpritesClient(token=token, timeout=config.transport_seconds)

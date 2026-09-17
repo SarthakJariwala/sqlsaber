@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from inspect import signature
+import os
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
@@ -81,6 +82,28 @@ async def test_e2b_uses_explicit_lifetime_binary_io_and_background_handle(
 
     await backend.close()
     sandbox.kill.assert_awaited_once_with()
+
+
+async def test_e2b_passes_injected_api_key_without_mutating_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from e2b import AsyncSandbox
+
+    monkeypatch.delenv("E2B_API_KEY", raising=False)
+    sandbox = FakeE2BSandbox()
+    create = AsyncMock(return_value=sandbox)
+    monkeypatch.setattr(AsyncSandbox, "create", create)
+
+    backend = E2BBackend(api_key="saved-e2b-key")
+    await backend.open(SandboxConfig(provider="e2b"))
+
+    create.assert_awaited_once_with(
+        template=None,
+        timeout=3_600,
+        api_key="saved-e2b-key",
+    )
+    assert "E2B_API_KEY" not in os.environ
+    await backend.close()
 
 
 @pytest.mark.parametrize(
@@ -201,6 +224,22 @@ def install_fake_sprites_client(
     monkeypatch.setenv("SPRITES_TOKEN", "test-token")
     monkeypatch.setattr(sprites, "AsyncSpritesClient", create_client)
     return created_with
+
+
+async def test_sprites_passes_injected_token_without_requiring_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sprite = FakeSprite()
+    client = FakeSpritesClient(sprite)
+    created_with = install_fake_sprites_client(monkeypatch, client)
+    monkeypatch.delenv("SPRITES_TOKEN")
+
+    backend = SpritesBackend(token="saved-sprites-token")
+    await backend.open(SandboxConfig(provider="sprites", transport_seconds=11))
+
+    assert created_with == [("saved-sprites-token", 11)]
+    assert "SPRITES_TOKEN" not in os.environ
+    await backend.close()
 
 
 async def test_sprites_uses_native_resources_commands_and_binary_files(
@@ -330,12 +369,14 @@ async def test_sprites_partial_open_and_client_close_are_retryable(
 
 def test_installed_sdk_signatures_cover_the_adapter_calls() -> None:
     from e2b import AsyncSandbox
+    from e2b.connection_config import ApiParams
     from e2b.sandbox_async.commands.command import Commands
     from e2b.sandbox_async.filesystem.filesystem import Filesystem
     from sprites import AsyncSpritesClient
     from sprites.async_sprite import AsyncSprite
 
     assert {"template", "timeout"} <= signature(AsyncSandbox.create).parameters.keys()
+    assert "api_key" in ApiParams.__annotations__
     assert {"background", "timeout"} <= signature(Commands.run).parameters.keys()
     assert "format" in signature(Filesystem.read).parameters
     assert {"config", "name"} <= signature(

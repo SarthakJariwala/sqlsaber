@@ -15,7 +15,8 @@ _HOBBY_LIFETIME_SECONDS = 3_600
 class E2BBackend:
     """An E2B sandbox whose lifetime and background controller are owned here."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, api_key: str | None = None) -> None:
+        self._api_key = api_key
         self._sandbox: Any | None = None
         self._controller: Any | None = None
 
@@ -40,10 +41,10 @@ class E2BBackend:
         # An explicit lifetime avoids E2B's implicit 300-second default. E2B
         # documents 3,600 seconds as the maximum available on Hobby plans.
         lifetime = config.max_lifetime_seconds or _HOBBY_LIFETIME_SECONDS
-        self._sandbox = await AsyncSandbox.create(
-            template=config.image,
-            timeout=lifetime,
-        )
+        options: dict[str, Any] = {"template": config.image, "timeout": lifetime}
+        if self._api_key is not None:
+            options["api_key"] = self._api_key
+        self._sandbox = await AsyncSandbox.create(**options)
 
     def _require_sandbox(self) -> Any:
         if self._sandbox is None:

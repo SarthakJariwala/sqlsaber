@@ -27,6 +27,9 @@ notebook = "sqlsaber_notebook.capability:capability"
 [project.entry-points."sqlsaber.display_tools"]
 notebook = "sqlsaber_notebook.capability:display_tools"
 
+[project.entry-points."sqlsaber.plugin_settings"]
+notebook = "sqlsaber_notebook.settings:settings"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

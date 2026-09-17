@@ -84,6 +84,23 @@ class ModalNotebookBackend(NotebookBackend):
 
     name = "modal"
 
+    def __init__(
+        self,
+        *,
+        token_id: str | None = None,
+        token_secret: str | None = None,
+    ) -> None:
+        """Optionally bind a CLI-resolved token pair to this backend.
+
+        Unset tokens keep the SDK's native login and environment behavior,
+        and the process environment is never mutated.
+        """
+
+        if (token_id is None) != (token_secret is None):
+            raise ValueError("Modal requires token_id and token_secret together")
+        self._token_id = token_id
+        self._token_secret = token_secret
+
     def available(self) -> bool:
         return importlib.util.find_spec("modal") is not None
 
@@ -98,9 +115,16 @@ class ModalNotebookBackend(NotebookBackend):
         modal = _load_modal()
         try:
             async with asyncio.timeout(limits.open_seconds):
+                client_kwargs: dict[str, Any] = {}
+                if self._token_id is not None and self._token_secret is not None:
+                    client_kwargs["client"] = await modal.Client.from_credentials.aio(
+                        self._token_id,
+                        self._token_secret,
+                    )
                 app = await modal.App.lookup.aio(
                     _APP_NAME,
                     create_if_missing=True,
+                    **client_kwargs,
                 )
                 runtime_image = modal.Image.from_registry(image)
                 sandbox = await modal.Sandbox.create.aio(
@@ -112,6 +136,7 @@ class ModalNotebookBackend(NotebookBackend):
                     cpu=limits.cpu_cores,
                     memory=limits.memory_mb,
                     timeout=_MODAL_PLATFORM_TIMEOUT_SECONDS,
+                    **client_kwargs,
                 )
         except TimeoutError as exc:
             raise NotebookExecutionTimeout(

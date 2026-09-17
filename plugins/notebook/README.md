@@ -87,6 +87,25 @@ Daytona 0.143.0 has no hard age-based TTL: its 24-hour setting is inactivity-bas
 Deployments requiring a strict maximum resource age must run a label-based reaper for
 sandboxes labeled `application=sqlsaber,purpose=notebook`.
 
+### Saved notebook settings
+
+`saber plugins` edits persistent notebook settings declared by this plugin: the
+backend, image, and advanced resource and workspace budgets (`saber plugins show
+notebook` lists them). Saved values apply when `saber` loads `analyze_data` and
+when `sqlsaber-notebook` runs standalone. Environment variables override saved
+values, which override plugin defaults.
+
+Daytona and Modal credentials entered there live in the OS keyring as
+`daytona.api_key`, `modal.token_id`, and `modal.token_secret` — never in the
+settings file — and are passed directly to the provider SDK client without
+mutating environment variables. Modal tokens are saved as a pair. With no saved
+credentials, Modal uses its native `modal setup` login and Daytona reads its own
+environment, unchanged from previous releases. Selecting a remote backend
+surfaces the plugin's upload and cost notice.
+
+Embedded SDK usage (`SQLSaberOptions`, `analyze()`) never reads these saved
+settings; hosts configure `NotebookConfig` explicitly.
+
 Backend isolation differs by provider:
 
 | Backend | Location | Guest network | CPU/memory units | PID limit | Abandonment cleanup |
@@ -288,6 +307,12 @@ uv run sqlsaber-notebook \
 Standalone mode writes the explicit `--output` notebook and, when needed, a sibling
 `<output-stem>_artifacts` directory. It does not use SQLsaber conversation storage
 or its user-data artifact directory.
+
+The standalone CLI shares the notebook settings saved with `saber plugins`,
+including keyring credentials. The backend comes from the explicit `--backend`
+flag, then `SQLSABER_NOTEBOOK_BACKEND`, then saved settings, then the docker
+default. The plugin's enabled flag only governs automatic loading into `saber`;
+a disabled plugin still runs standalone.
 
 Remote backends are never selected as automatic fallbacks. Select one explicitly
 because local files will be uploaded to that provider:

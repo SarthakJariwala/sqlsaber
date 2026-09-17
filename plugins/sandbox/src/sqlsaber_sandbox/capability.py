@@ -1,6 +1,6 @@
 """Sandboxed Python capability plugin."""
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, Self, cast
 
 from pydantic_ai.toolsets import FunctionToolset
@@ -8,6 +8,7 @@ from sqlsaber.capabilities.base import SqlSaberCapability
 from sqlsaber.capabilities.plugins import PluginContext
 from sqlsaber.tools.base import Tool
 
+from .backends import SandboxBackend
 from .config import DEFAULT_SANDBOX_CONFIG, SandboxConfig
 from .tools import AnalyzeSandboxTool, prepare_analysis
 
@@ -19,9 +20,13 @@ class Sandbox(SqlSaberCapability):
     description = "Delegate analysis to a persistent Python sandbox subagent."
 
     def __init__(
-        self, context: PluginContext, *, config: SandboxConfig = DEFAULT_SANDBOX_CONFIG
+        self,
+        context: PluginContext,
+        *,
+        config: SandboxConfig = DEFAULT_SANDBOX_CONFIG,
+        backend_factory: Callable[[], SandboxBackend] | None = None,
     ) -> None:
-        self.tool = AnalyzeSandboxTool(context, config)
+        self.tool = AnalyzeSandboxTool(context, config, backend_factory=backend_factory)
         self._toolset = FunctionToolset[Any](id=self.id)
         self._toolset.add_function(
             self.tool.execute_with_attachments
@@ -67,9 +72,10 @@ def capability(
     context: PluginContext,
     *,
     config: SandboxConfig = DEFAULT_SANDBOX_CONFIG,
+    backend_factory: Callable[[], SandboxBackend] | None = None,
 ) -> Sandbox:
     """Construct lazily; provider validation happens on the first analysis."""
-    return Sandbox(context, config=config)
+    return Sandbox(context, config=config, backend_factory=backend_factory)
 
 
 def display_tools() -> Mapping[str, Tool]:

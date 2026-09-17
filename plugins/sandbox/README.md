@@ -4,12 +4,27 @@
 Give the analysis agent a goal and input files. It runs code and returns findings,
 plots, and generated files.
 
-To use E2B from the CLI, set `E2B_API_KEY` and install the plugin:
+## Configure the CLI
+
+Install the plugin with the extra for your provider. This example installs E2B:
 
 ```bash
 uv tool install --with 'sqlsaber-sandbox[e2b]' sqlsaber
-SQLSABER_SANDBOX_PROVIDER=e2b saber
+saber plugins setup sandbox
 ```
+
+The setup command requires an explicit provider. SQLsaber does not select a cloud
+provider from the credentials it finds. The command stores secrets in the OS
+credential store and saves non-secret settings separately.
+
+`E2B_API_KEY`, `DAYTONA_API_KEY`, `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, and
+`SPRITES_TOKEN` override saved credentials. `DAYTONA_API_URL` overrides the saved
+Daytona endpoint. You can also set `SQLSABER_SANDBOX_PROVIDER` to select the
+provider for the current process.
+
+For Modal, leave both token fields blank to use Modal's native authentication.
+Run `modal token new` first if Modal is not configured. Remote providers receive
+the query results and files selected for analysis, and provider charges may apply.
 
 ## Start an SDK session
 
