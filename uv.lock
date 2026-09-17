@@ -4190,7 +4190,7 @@ dev = [
 
 [[package]]
 name = "sqlsaber-notebook"
-version = "0.8.0"
+version = "0.9.0"
 source = { editable = "plugins/notebook" }
 dependencies = [
     { name = "nbformat" },
