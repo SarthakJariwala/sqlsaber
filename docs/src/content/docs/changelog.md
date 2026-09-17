@@ -13,6 +13,14 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.78.1](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.78.0...sqlsaber-v0.78.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* apply Ruff formatting to RPC retention call ([#286](https://github.com/SarthakJariwala/sqlsaber/issues/286)) ([085ef91](https://github.com/SarthakJariwala/sqlsaber/commit/085ef91369e2ed799f954f6f4f1515dc7c4d6c2e))
+* **results:** resolve retained results from non-SQL tools ([#288](https://github.com/SarthakJariwala/sqlsaber/issues/288)) ([5178816](https://github.com/SarthakJariwala/sqlsaber/commit/517881684cca7f8b5a37aa0f354ac81ebd01707c))
+
 ## [0.78.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.77.0...sqlsaber-v0.78.0) (2026-09-17)
 
 
