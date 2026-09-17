@@ -21,7 +21,15 @@ _MODAL_PLATFORM_TIMEOUT_SECONDS = 24 * 60 * 60
 class ModalBackend:
     """Own a Modal Sandbox and its long-running controller process."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self, *, token_id: str | None = None, token_secret: str | None = None
+    ) -> None:
+        if (token_id is None) != (token_secret is None):
+            raise ValueError(
+                "Modal token ID and token secret must be configured together"
+            )
+        self._token_id = token_id
+        self._token_secret = token_secret
         self._sandbox: Any | None = None
         self._controller_process: Any | None = None
         self._controller_tasks: tuple[asyncio.Task[Any], ...] = ()
@@ -37,7 +45,14 @@ class ModalBackend:
 
         modal = _load_modal()
         try:
-            app = await modal.App.lookup.aio(_APP_NAME, create_if_missing=True)
+            lookup_options: dict[str, Any] = {"create_if_missing": True}
+            client = None
+            if self._token_id is not None and self._token_secret is not None:
+                client = await modal.Client.from_credentials.aio(
+                    self._token_id, self._token_secret
+                )
+                lookup_options["client"] = client
+            app = await modal.App.lookup.aio(_APP_NAME, **lookup_options)
             image = modal.Image.from_registry(config.image or DEFAULT_SANDBOX_IMAGE)
             options: dict[str, Any] = {
                 "app": app,
@@ -47,6 +62,8 @@ class ModalBackend:
                 "memory": config.memory_mb,
                 "gpu": config.gpu,
             }
+            if client is not None:
+                options["client"] = client
             # The session owns idle expiry, including time spent awaiting its
             # analyst. Provider inactivity is not equivalent to session idle.
             self._sandbox = await modal.Sandbox.create.aio(

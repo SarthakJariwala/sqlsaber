@@ -104,7 +104,10 @@ async def test_cross_conversation_session_id_is_rejected_before_workspace_lookup
 
 async def test_same_config_is_passed_to_new_session(monkeypatch) -> None:
     config = SandboxConfig(max_output_chars=123)
-    tool = AnalyzeSandboxTool(_context(object()), config)
+    backend = object()
+    tool = AnalyzeSandboxTool(
+        _context(object()), config, backend_factory=lambda: backend
+    )
     captured: dict[str, Any] = {}
 
     class Session:
@@ -128,6 +131,7 @@ async def test_same_config_is_passed_to_new_session(monkeypatch) -> None:
     )
     await tool.execute(_ctx(), "goal")
     assert captured["config"] is config
+    assert captured["backend"] is backend
 
 
 async def test_context_refresh_keeps_existing_sessions() -> None:

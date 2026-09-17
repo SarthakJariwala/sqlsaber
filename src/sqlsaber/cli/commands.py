@@ -88,20 +88,23 @@ async def _create_cli_saber(
     storage = ThreadStorage()
     artifact_store = cli_artifact_store()
     query_result_store = cli_query_result_store()
-    options = cli_sqlsaber_options(
-        database=selected_database,
-        thinking_enabled=thinking,
-        allow_dangerous=allow_dangerous,
-        csv_tool_results=csv_tool_results,
-        system_prompt=system_prompt,
-        thread_manager=(
-            ThreadManager(storage=storage)
-            if thread is None and persist_thread
-            else None
-        ),
-        artifact_store=artifact_store,
-        query_result_store=query_result_store,
-    )
+    try:
+        options = cli_sqlsaber_options(
+            database=selected_database,
+            thinking_enabled=thinking,
+            allow_dangerous=allow_dangerous,
+            csv_tool_results=csv_tool_results,
+            system_prompt=system_prompt,
+            thread_manager=(
+                ThreadManager(storage=storage)
+                if thread is None and persist_thread
+                else None
+            ),
+            artifact_store=artifact_store,
+            query_result_store=query_result_store,
+        )
+    except (ValueError, OSError) as exc:
+        raise CLIError(str(exc)) from None
     try:
         saber = (
             await SQLSaber.resume(thread, options=options, storage=storage)
@@ -171,6 +174,7 @@ _LAZY_SUBCOMMANDS: tuple[tuple[str, str, str], ...] = (
         "Manage database-specific knowledge entries",
     ),
     ("sqlsaber.cli.models:models_app", "models", "Select and manage models"),
+    ("sqlsaber.cli.plugins:plugins_app", "plugins", "Configure installed plugins"),
     ("sqlsaber.cli.theme:theme_app", "theme", "Manage theme settings"),
     ("sqlsaber.cli.threads:threads_app", "threads", "Manage SQLsaber threads"),
     (

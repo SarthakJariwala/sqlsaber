@@ -39,10 +39,28 @@ def resolve_provider(provider: str | None) -> str:
     return configured[0]
 
 
-def create_backend(provider: str | None) -> SandboxBackend:
+def create_backend(
+    provider: str | None,
+    *,
+    e2b_api_key: str | None = None,
+    daytona_api_key: str | None = None,
+    daytona_api_url: str | None = None,
+    modal_token_id: str | None = None,
+    modal_token_secret: str | None = None,
+    sprites_token: str | None = None,
+) -> SandboxBackend:
     name = resolve_provider(provider)
     module = import_module(f"{__name__}.{name}")
-    return getattr(module, _BACKENDS[name])()
+    backend = getattr(module, _BACKENDS[name])
+    if name == "e2b":
+        return backend(api_key=e2b_api_key)
+    if name == "daytona":
+        return backend(api_key=daytona_api_key, api_url=daytona_api_url)
+    if name == "modal":
+        return backend(token_id=modal_token_id, token_secret=modal_token_secret)
+    if name == "sprites":
+        return backend(token=sprites_token)
+    return backend()
 
 
 __all__ = [

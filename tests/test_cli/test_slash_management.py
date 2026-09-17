@@ -30,6 +30,13 @@ from sqlsaber.render import bind_cli_surfaces, blocks as b
 from sqlsaber.render.markdown_text import md_of
 
 EXPECTED_MANAGEMENT_PATHS = {
+    ("plugins", "list"),
+    ("plugins", "show"),
+    ("plugins", "setup"),
+    ("plugins", "set"),
+    ("plugins", "unset"),
+    ("plugins", "enable"),
+    ("plugins", "disable"),
     ("auth", "setup"),
     ("auth", "status"),
     ("auth", "reset"),
@@ -124,7 +131,7 @@ async def test_model_commands_update_live_session_and_footer(tmp_path, monkeypat
 
 def test_registry_has_exact_management_parity() -> None:
     assert management_paths() == EXPECTED_MANAGEMENT_PATHS
-    assert len(management_paths()) == 27
+    assert len(management_paths()) == 34
 
 
 def test_palette_projects_every_management_command_from_registry() -> None:

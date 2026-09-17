@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 import logging
 from typing import Any, cast
@@ -36,6 +36,7 @@ from sqlsaber.tools.display import (
 from sqlsaber.tools.renderer import ToolRenderContext
 from sqlsaber.utils.text_input import sanitize_terminal_text
 
+from .backends import SandboxBackend
 from .config import SandboxConfig
 from .execution import SandboxError
 from .publication import publish_analysis
@@ -74,9 +75,16 @@ class AnalyzeSandboxTool(Tool):
         ),
     )
 
-    def __init__(self, context: PluginContext, config: SandboxConfig):
+    def __init__(
+        self,
+        context: PluginContext,
+        config: SandboxConfig,
+        *,
+        backend_factory: Callable[[], SandboxBackend] | None = None,
+    ):
         self.context = context
         self.config = config
+        self._backend_factory = backend_factory
         self.sessions: dict[str, tuple[str, SandboxSession]] = {}
         self.results: dict[str, AnalysisResult] = {}
         self.publications: dict[str, ArtifactPublication] = {}
@@ -158,7 +166,14 @@ class AnalyzeSandboxTool(Tool):
                     "sandbox", tool_name=self.name
                 )
                 session = SandboxSession(
-                    model=model, model_provider=provider, config=self.config
+                    model=model,
+                    model_provider=provider,
+                    config=self.config,
+                    backend=(
+                        self._backend_factory()
+                        if self._backend_factory is not None
+                        else None
+                    ),
                 )
                 self.sessions[session.id] = (ctx.conversation_id, session)
             result = await session.analyze(

@@ -9,15 +9,16 @@ import os
 import sys
 from pathlib import Path
 
-from ._shared import (
-    MAX_WORKSPACE_FILE_BYTES,
-    MAX_WORKSPACE_FILES,
-    MAX_WORKSPACE_TOTAL_BYTES,
-)
+from sqlsaber.plugin_settings import SettingValue
+
 from .analyst import analyze, supports_notebook_images
+from .config import DEFAULT_NOTEBOOK_CONFIG, NotebookConfig, WorkspaceLimits
 from .execution import NotebookExecutionError, NotebookInput
 from .execution.base import validate_artifact_path
 from .result import ArtifactRef, ManifestEntry, Workspace
+from .settings import BACKEND_CHOICES, build_notebook_config, settings
+
+_PLUGIN_NAME = "notebook"
 
 
 async def _main_async(
@@ -25,11 +26,11 @@ async def _main_async(
     goal: str,
     paths: list[Path],
     model: str,
-    backend: str,
+    config: NotebookConfig,
     output: Path,
     overwrite: bool,
 ) -> None:
-    workspace = await _workspace_from_local_paths(paths)
+    workspace = await _workspace_from_local_paths(paths, limits=config.workspace)
     provider = _provider_from_model(model)
     if output.exists() and not overwrite:
         raise ValueError(f"Output already exists: {output}")
@@ -42,7 +43,7 @@ async def _main_async(
         workspace,
         model=model,
         model_provider=provider,
-        backend=backend,
+        config=config,
         include_snapshot_images=supports_notebook_images(model, provider),
     )
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -74,8 +75,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--backend",
-        choices=("docker", "microsandbox", "modal", "daytona"),
-        default=os.getenv("SQLSABER_NOTEBOOK_BACKEND", "docker"),
+        choices=BACKEND_CHOICES,
+        default=None,
+        help=(
+            "Execution backend; defaults to SQLSABER_NOTEBOOK_BACKEND, then "
+            "settings saved with the saber CLI, then docker"
+        ),
     )
     parser.add_argument("--output", type=Path, default=Path("analysis.ipynb"))
     parser.add_argument("--overwrite", action="store_true")
@@ -83,12 +88,13 @@ def main() -> None:
     if not args.model:
         parser.error("--model or SQLSABER_NOTEBOOK_MODEL is required")
     try:
+        config = _notebook_config(args.backend)
         asyncio.run(
             _main_async(
                 goal=args.goal,
                 paths=args.paths,
                 model=args.model,
-                backend=args.backend,
+                config=config,
                 output=args.output,
                 overwrite=args.overwrite,
             )
@@ -97,13 +103,36 @@ def main() -> None:
         parser.exit(2, f"sqlsaber-notebook: error: {exc}\n")
 
 
-async def _workspace_from_local_paths(paths: list[Path]) -> Workspace:
+def _notebook_config(explicit_backend: str | None) -> NotebookConfig:
+    """Resolve the notebook settings saved and shared with the saber CLI.
+
+    Standalone runs are explicit invocations, so the plugin's enabled flag,
+    which only governs automatic loading into saber, is ignored. Precedence is
+    the explicit --backend flag, then environment variables, then saved
+    settings, then plugin defaults.
+    """
+
+    from sqlsaber.config.plugins import PluginConfigStore, resolve_settings
+
+    overrides: dict[str, SettingValue] | None = None
+    if explicit_backend is not None:
+        overrides = {"backend": explicit_backend}
+    saved = PluginConfigStore().get(_PLUGIN_NAME).settings
+    resolved = resolve_settings(_PLUGIN_NAME, settings, saved, overrides=overrides)
+    return build_notebook_config(resolved.values, resolved.secrets)
+
+
+async def _workspace_from_local_paths(
+    paths: list[Path],
+    *,
+    limits: WorkspaceLimits = DEFAULT_NOTEBOOK_CONFIG.workspace,
+) -> Workspace:
     files: list[NotebookInput] = []
     manifest: list[ManifestEntry] = []
     names: set[str] = set()
     total = 0
-    if len(paths) > MAX_WORKSPACE_FILES:
-        raise ValueError(f"Too many input files; maximum is {MAX_WORKSPACE_FILES}")
+    if len(paths) > limits.max_files:
+        raise ValueError(f"Too many input files; maximum is {limits.max_files}")
     for path in paths:
         if not path.is_file():
             raise ValueError(f"Input is not a regular file: {path}")
@@ -111,11 +140,11 @@ async def _workspace_from_local_paths(paths: list[Path]) -> Workspace:
         if name in names or name == "manifest.json":
             raise ValueError(f"Duplicate or reserved input filename: {name}")
         size = path.stat().st_size
-        if size > MAX_WORKSPACE_FILE_BYTES:
-            raise ValueError(f"Input exceeds {MAX_WORKSPACE_FILE_BYTES} bytes: {path}")
+        if size > limits.max_file_bytes:
+            raise ValueError(f"Input exceeds {limits.max_file_bytes} bytes: {path}")
         total += size
-        if total > MAX_WORKSPACE_TOTAL_BYTES:
-            raise ValueError(f"Inputs exceed {MAX_WORKSPACE_TOTAL_BYTES} total bytes")
+        if total > limits.max_total_bytes:
+            raise ValueError(f"Inputs exceed {limits.max_total_bytes} total bytes")
         data = await asyncio.to_thread(path.read_bytes)
         files.append(NotebookInput(name, data))
         manifest.append(ManifestEntry(name, source="local file"))

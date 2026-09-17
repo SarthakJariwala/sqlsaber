@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import os
 import shlex
 from types import SimpleNamespace
 from typing import Any
@@ -136,8 +137,20 @@ def fake_modal_sdk(
 ) -> tuple[Any, dict[str, Any]]:
     captured: dict[str, Any] = {}
 
-    async def lookup(name: str, *, create_if_missing: bool) -> object:
+    class FakeModalClient:
+        pass
+
+    async def from_credentials(token_id: str, token_secret: str) -> FakeModalClient:
+        captured["credentials"] = (token_id, token_secret)
+        client = FakeModalClient()
+        captured["client"] = client
+        return client
+
+    async def lookup(
+        name: str, *, create_if_missing: bool, client: object | None = None
+    ) -> object:
         captured["lookup"] = (name, create_if_missing)
+        captured["lookup_client"] = client
         return "app"
 
     async def create(*argv: str, **kwargs: Any) -> FakeModalSandbox:
@@ -156,6 +169,7 @@ def fake_modal_sdk(
 
     sdk = SimpleNamespace(
         App=SimpleNamespace(lookup=AioMethod(lookup)),
+        Client=SimpleNamespace(from_credentials=AioMethod(from_credentials)),
         Image=SimpleNamespace(
             debian_slim=debian_slim,
             from_registry=from_registry,
@@ -243,6 +257,31 @@ async def test_modal_custom_image_lifetime_and_retryable_close(
     assert backend._sandbox is None
 
 
+async def test_modal_passes_explicit_client_to_lookup_and_create(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MODAL_TOKEN_ID", "unchanged-native-id")
+    monkeypatch.setenv("MODAL_TOKEN_SECRET", "unchanged-native-secret")
+    sandbox = FakeModalSandbox()
+    sdk, captured = fake_modal_sdk(sandbox)
+    monkeypatch.setattr(modal_backend, "_load_modal", lambda: sdk)
+    backend = modal_backend.ModalBackend(
+        token_id="saved-modal-id",
+        token_secret="saved-modal-secret",
+    )
+
+    await backend.open(cloud_config())
+
+    client = captured["client"]
+    assert captured["credentials"] == ("saved-modal-id", "saved-modal-secret")
+    assert captured["lookup"] == ("sqlsaber-sandbox", True)
+    assert captured["lookup_client"] is client
+    assert captured["create"][1]["client"] is client
+    assert os.environ["MODAL_TOKEN_ID"] == "unchanged-native-id"
+    assert os.environ["MODAL_TOKEN_SECRET"] == "unchanged-native-secret"
+    await backend.close()
+
+
 async def test_modal_rejects_unsupported_lifetime_before_loading_sdk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -293,6 +332,11 @@ class FakeDaytonaResources:
 
 
 class FakeDaytonaParams:
+    def __init__(self, **values: Any) -> None:
+        self.__dict__.update(values)
+
+
+class FakeDaytonaConfig:
     def __init__(self, **values: Any) -> None:
         self.__dict__.update(values)
 
@@ -423,15 +467,22 @@ def fake_daytona_sdk() -> Any:
     FakeDaytonaImage.versions = []
     sdk = SimpleNamespace(
         clients=[],
+        configs=[],
         create_error=None,
         AsyncDaytona=None,
         CreateSandboxFromImageParams=FakeDaytonaParams,
+        DaytonaConfig=FakeDaytonaConfig,
         Image=FakeDaytonaImage,
         Resources=FakeDaytonaResources,
         SessionExecuteRequest=FakeSessionRequest,
         DaytonaNotFoundError=DaytonaNotFoundError,
     )
-    sdk.AsyncDaytona = lambda: FakeDaytonaClient(sdk)
+
+    def create_client(config: FakeDaytonaConfig | None = None) -> FakeDaytonaClient:
+        sdk.configs.append(config)
+        return FakeDaytonaClient(sdk)
+
+    sdk.AsyncDaytona = create_client
     return sdk
 
 
@@ -469,6 +520,7 @@ async def test_daytona_native_mapping_execution_transfer_and_controller_session(
     assert params.auto_stop_interval == 0
     assert params.ephemeral is True
     assert client.create_timeout == 17
+    assert sdk.configs == [None]
 
     result = await backend.execute("printf mixed", timeout=3.1)
     assert result == CommandResult(
@@ -517,6 +569,28 @@ async def test_daytona_custom_image_disables_hidden_idle_default(
     assert client.params.image == "python:custom"
     assert client.params.auto_stop_interval == 0
     assert FakeDaytonaImage.versions == []
+    await backend.close()
+
+
+async def test_daytona_passes_injected_key_and_endpoint_to_client_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DAYTONA_API_KEY", raising=False)
+    monkeypatch.delenv("DAYTONA_API_URL", raising=False)
+    sdk = fake_daytona_sdk()
+    monkeypatch.setattr(daytona_backend, "_load_daytona", lambda: sdk)
+    backend = daytona_backend.DaytonaBackend(
+        api_key="saved-daytona-key",
+        api_url="https://daytona.example/api",
+    )
+
+    await backend.open(cloud_config())
+
+    assert len(sdk.configs) == 1
+    assert sdk.configs[0].api_key == "saved-daytona-key"
+    assert sdk.configs[0].api_url == "https://daytona.example/api"
+    assert "DAYTONA_API_KEY" not in os.environ
+    assert "DAYTONA_API_URL" not in os.environ
     await backend.close()
 
 
@@ -595,6 +669,9 @@ def test_installed_cloud_sdk_signatures_cover_the_native_calls() -> None:
     modal_create = inspect.signature(modal.Sandbox.create.aio).parameters
     assert {"timeout", "idle_timeout", "cpu", "memory", "gpu"} <= modal_create.keys()
     assert hasattr(modal.App.lookup, "aio")
+    assert hasattr(modal.Client.from_credentials, "aio")
+    assert "client" in inspect.signature(modal.App.lookup.aio).parameters
+    assert "client" in modal_create
 
     from modal.sandbox_fs import SandboxFilesystem
 
@@ -606,6 +683,9 @@ def test_installed_cloud_sdk_signatures_cover_the_native_calls() -> None:
     assert {"image", "resources", "auto_stop_interval", "ephemeral"} <= (
         create_fields.keys()
     )
+    assert {"api_key", "api_url"} <= inspect.signature(
+        daytona.DaytonaConfig
+    ).parameters.keys()
     assert "ttl_minutes" not in create_fields
     assert {"cpu", "memory", "gpu"} <= inspect.signature(
         daytona.Resources

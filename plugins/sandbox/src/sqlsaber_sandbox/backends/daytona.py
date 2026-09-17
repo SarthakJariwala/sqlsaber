@@ -23,7 +23,11 @@ _DELETE_POLL_SECONDS = 0.25
 class DaytonaBackend:
     """Own a Daytona client, Sandbox, and retained controller session."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self, *, api_key: str | None = None, api_url: str | None = None
+    ) -> None:
+        self._api_key = api_key
+        self._api_url = api_url
         self._sdk: Any | None = None
         self._client: Any | None = None
         self._sandbox: Any | None = None
@@ -46,7 +50,19 @@ class DaytonaBackend:
         self._sandbox_name = f"sqlsaber-sandbox-{uuid.uuid4().hex}"
         self._transport_seconds = float(config.transport_seconds)
         try:
-            self._client = sdk.AsyncDaytona()
+            client_options = {
+                name: value
+                for name, value in (
+                    ("api_key", self._api_key),
+                    ("api_url", self._api_url),
+                )
+                if value is not None
+            }
+            self._client = (
+                sdk.AsyncDaytona(sdk.DaytonaConfig(**client_options))
+                if client_options
+                else sdk.AsyncDaytona()
+            )
             params = sdk.CreateSandboxFromImageParams(
                 image=config.image or DEFAULT_SANDBOX_IMAGE,
                 language="python",
@@ -281,6 +297,7 @@ def _load_daytona() -> Any:
     required = (
         "AsyncDaytona",
         "CreateSandboxFromImageParams",
+        "DaytonaConfig",
         "Image",
         "Resources",
         "SessionExecuteRequest",

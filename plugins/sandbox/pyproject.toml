@@ -19,6 +19,9 @@ sandbox = "sqlsaber_sandbox.capability:capability"
 [project.entry-points."sqlsaber.display_tools"]
 sandbox = "sqlsaber_sandbox.capability:display_tools"
 
+[project.entry-points."sqlsaber.plugin_settings"]
+sandbox = "sqlsaber_sandbox.settings:settings"
+
 [tool.uv.sources]
 sqlsaber = { path = "../..", editable = true }
 

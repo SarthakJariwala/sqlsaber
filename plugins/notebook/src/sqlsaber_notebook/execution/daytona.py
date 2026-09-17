@@ -304,6 +304,21 @@ class DaytonaNotebookBackend(NotebookBackend):
 
     name = "daytona"
 
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        api_url: str | None = None,
+    ) -> None:
+        """Optionally bind CLI-resolved credentials to this backend.
+
+        Unset values keep the SDK's native environment configuration, and the
+        process environment is never mutated.
+        """
+
+        self._api_key = api_key
+        self._api_url = api_url
+
     def available(self) -> bool:
         return importlib.util.find_spec("daytona") is not None
 
@@ -322,7 +337,12 @@ class DaytonaNotebookBackend(NotebookBackend):
         client: Any | None = None
         sandbox: Any | None = None
         try:
-            client = sdk.AsyncDaytona()
+            if self._api_key is None and self._api_url is None:
+                client = sdk.AsyncDaytona()
+            else:
+                client = sdk.AsyncDaytona(
+                    sdk.DaytonaConfig(api_key=self._api_key, api_url=self._api_url)
+                )
             runtime_image = sdk.Image.base(image).dockerfile_commands(
                 ["USER root", "WORKDIR /home/jovyan"]
             )
@@ -1412,6 +1432,7 @@ def _load_daytona() -> Any:
     required = (
         "AsyncDaytona",
         "CreateSandboxFromImageParams",
+        "DaytonaConfig",
         "Image",
         "Resources",
         "DaytonaError",
