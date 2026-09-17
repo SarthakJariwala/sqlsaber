@@ -17,7 +17,7 @@ Querying lets a user ask one natural-language question against a file or saved c
 - Run `saber -d FILE "QUESTION"` or `saber -d SAVED_NAME "QUESTION"`.
 - Pipe a question with `printf '%s\n' "QUESTION" | saber -d FILE`.
 - Repeat `-d` to query multiple saved connections or files.
-- Add `--thinking` or `--allow-dangerous` only when that behavior is deliberate.
+- Add `--thinking`, `--csv-tool-results`, or `--allow-dangerous` only when that behavior is deliberate.
 - Run `saber` with no question for the separate [interactive session](./interactive-session.md).
 
 ## Driving it with verify-sqlsaber
@@ -33,7 +33,7 @@ Preconditions:
 - **Ad hoc file.** Ask the same count with `-d "$FIXTURE"`. Thread retention and `threads show` work, but automatic resume needs an explicit repeated `-d` because SQLsaber does not persist ad hoc paths.
 - **Stdin.** Run `"$VERIFY_SQLSABER" drive "$RUN_ID" --timeout 180 --evidence query/stdin.txt -- bash -c 'printf "%s\n" "Count paid orders. Use the database and report the integer only." | uv run saber -d "$1"' _ "$FIXTURE"`. Require answer `2` and exit `0`.
 - **Multiple databases.** Register the fixture as `staff` and `orders`, then ask with `-d staff -d orders` which configured database names are available. Require both names. This proves connection selection, not a cross-database join.
-- **Unknown selector.** In a fresh or healthy run, execute `saber -d nonexistent "show tables"`. Retain the expected nonzero transcript. Require exit code `1` and `Database connection 'nonexistent' not found. Use 'sqlsaber db list' to see available connections.`
+- **Unknown selector.** In a fresh or healthy run, execute `saber -d nonexistent "show tables"`. Retain the expected nonzero transcript. Require exit code `1` and `Database connection 'nonexistent' not found. Use 'sqlsaber db list' to see available connections.` An extra `sandbox.provider is required…` warning may appear first when the sandbox plugin is installed and unconfigured; it does not replace the missing-connection error.
 - **Safety.** Before the query, run `uv run python -c 'import sqlite3,sys; db=sqlite3.connect(f"file:{sys.argv[1]}?mode=ro",uri=True); print(db.execute("SELECT id,name FROM employees ORDER BY id").fetchall())' "$FIXTURE" > "$EVIDENCE/query/employees-before.txt"`. Ask without `--allow-dangerous`: `Attempt to insert an employee named SafetyProbe. Invoke the SQL execution tool so its safety refusal is visible; do not only explain the policy.` Require a blocked `execute_sql` result. Repeat the same read-only snapshot into `employees-after.txt` and run `cmp` on the two files. A model that merely avoids the tool does not prove the guard. Test allowed writes only in a separate run and compare that disposable fixture before and after.
 
 ## Gotchas

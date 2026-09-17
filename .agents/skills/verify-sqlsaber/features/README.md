@@ -44,6 +44,7 @@ Each feature file has an H1 title and one user-focused summary. It then uses fou
 - [Authentication](./authentication.md) covers provider setup, status, and stored-key reset.
 - [Model configuration](./model-configuration.md) covers model selection, thinking levels, per-agent overrides, current state, and reset.
 - [Themes](./themes.md) covers named and interactive theme selection, persistence, and reset.
+- [Plugins](./plugins.md) covers listing, showing, saving, and enabling installed capability plugins.
 - [Query databases](./query-databases.md) covers single-shot questions, stdin, file selectors, multiple databases, and write safety.
 - [Interactive session](./interactive-session.md) covers the terminal UI, palette, slash commands, and exits.
 - [Knowledge base](./knowledge-base.md) covers database-scoped add, list, show, search, remove, clear, and agent retrieval.

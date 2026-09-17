@@ -27,7 +27,7 @@ Preconditions:
 - `FIXTURE=$("$VERIFY_SQLSABER" path "$RUN_ID" fixture)` points to the seeded SQLite file.
 - The isolated run has no saved connection named `verification` or `secondary`.
 
-- **Non-interactive add.** Run `"$VERIFY_SQLSABER" drive "$RUN_ID" --evidence database-connections/add.txt -- uv run saber db add verification --type sqlite --database "$FIXTURE" --description "verification fixture" --no-interactive`. Output confirms the add and says `verification` became the default.
+- **Non-interactive add.** Run `"$VERIFY_SQLSABER" drive "$RUN_ID" --evidence database-connections/add.txt -- uv run saber db add verification --type sqlite --database "$FIXTURE" --description "verification fixture" --no-interactive`. Output confirms the add and prints `Set 'verification' as default database`.
 - **List and default test.** Capture `saber db list`, then `saber db test` without a name. The table contains `verification`, `sqlite`, the fixture path, and a default marker. The test says `Connection to 'verification' successful`.
 - **Exclusions.** Set `temp,audit`, add `archive`, remove `temp`, and capture `saber db list`; it shows `audit, archive`. Clear exclusions and confirm the list is blank. This covers `--set`, `--add`, `--remove`, and `--clear` without an interactive editor.
 - **Default selection.** Add `secondary` against the same fixture, set it as default, and capture a list where only `secondary` is marked. Remove `secondary --yes`; a final list contains `verification` and marks it as default.

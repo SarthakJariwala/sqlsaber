@@ -1,6 +1,6 @@
 ---
 name: verify-sqlsaber
-description: Launch and verify SQLsaber through its CLI and terminal UI. Use it to prove command startup, database setup, natural-language queries, knowledge entries, threads, and other user-visible terminal behavior.
+description: Launch and verify SQLsaber through its CLI and terminal UI. Use it to prove command startup, database setup, plugins, natural-language queries, knowledge entries, threads, and other user-visible terminal behavior.
 ---
 
 # Verify SQLsaber
@@ -53,6 +53,7 @@ Resolve scratch paths through the helper rather than guessing platform-specific 
 FIXTURE=$("$VERIFY_SQLSABER" path "$RUN_ID" fixture)
 EVIDENCE=$("$VERIFY_SQLSABER" path "$RUN_ID" evidence)
 DB_CONFIG=$("$VERIFY_SQLSABER" path "$RUN_ID" database-config)
+PLUGIN_CONFIG=$("$VERIFY_SQLSABER" path "$RUN_ID" plugin-config)
 ```
 
 Drive a command in its own 120 by 40 PTY and save a readable transcript:
@@ -118,7 +119,7 @@ mkdir -p "$EVIDENCE/database-connections"
 cp "$DB_CONFIG" "$EVIDENCE/database-connections/database_config.json"
 ```
 
-For knowledge and thread state, use the paths returned by `path knowledge-db` and `path threads-db`. Query copied SQLite files in read-only mode. Do not edit them.
+For knowledge and thread state, use the paths returned by `path knowledge-db` and `path threads-db`. Query copied SQLite files in read-only mode. Do not edit them. For plugin settings, copy `path plugin-config`.
 
 Natural-language proof needs a real configured provider and the seeded database. Capture the question, generated SQL/tool output, visible answer, exit code, and the saved thread from `saber threads list` or `show`. Model test doubles do not prove the CLI. Mocks are acceptable only at an existing production plugin or provider boundary, and the proof must name that boundary.
 
@@ -148,7 +149,7 @@ verify-sqlsaber launch RUN_ID
 verify-sqlsaber doctor RUN_ID
 verify-sqlsaber drive RUN_ID --evidence RELATIVE_PATH [--timeout SECONDS] [--input TEXT [--input-delay SECONDS] | --input-sequence JSON] -- COMMAND...
 verify-sqlsaber run RUN_ID --evidence RELATIVE_PATH [--timeout SECONDS] -- COMMAND...
-verify-sqlsaber path RUN_ID {state,evidence,fixture,database-config,auth-config,model-config,theme-config,knowledge-db,threads-db,log}
+verify-sqlsaber path RUN_ID {state,evidence,fixture,database-config,auth-config,model-config,theme-config,plugin-config,knowledge-db,threads-db,log}
 verify-sqlsaber cleanup RUN_ID
 ```
 

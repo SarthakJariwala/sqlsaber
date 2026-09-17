@@ -10,7 +10,8 @@ Conversation threads let a user find saved query sessions, read complete transcr
 - `threads-resume` reopens a thread in the terminal UI or continues it with root `--thread`.
 - `threads-export` writes an HTML transcript whose core text is embedded in the file.
 - `threads-prune-preview` reports eligible old threads without deleting them.
-- `threads-prune-delete` deletes eligible old threads after confirmation; completed sessions also remove threads older than 30 days.
+- `threads-prune-delete` deletes eligible old threads after confirmation.
+- `threads-auto-retention` deletes threads whose last activity is older than 30 days when a query persists a thread. Opening and closing the TUI without saving a run does not prune threads.
 
 ## How to get to it (user POV)
 
@@ -35,7 +36,7 @@ Preconditions:
 - **HTML export.** Export to `$("$VERIFY_SQLSABER" path "$RUN_ID" evidence)/threads/thread.html`. Require the thread ID and visible transcript text in the saved file.
 - **Prune preview.** This needs at least one thread older than the selected age. Copy the thread database and record full IDs plus the eligible count, then run `"$VERIFY_SQLSABER" drive "$RUN_ID" --evidence threads/prune-dry-run.txt -- uv run saber threads prune --days 1 --dry-run`. Require its count to match the eligible rows. Capture another list and database copy; every ID and count remains unchanged. A store with no eligible row proves only that the command starts, not dry-run safety.
 - **Prune deletion.** In a separate isolated run with a genuinely old thread, preview first, then run the same command with `--yes`. Require the eligible ID to disappear from both `threads list` and a copied database while newer IDs remain. Do not edit timestamps to manufacture eligibility. If no old thread exists, record the age prerequisite as unreachable.
-- **Automatic retention.** With a thread older than 30 days, complete any query session and require that old ID to disappear while recent IDs remain. This entry needs both an old thread and a working provider credential.
+- **Automatic retention.** With a thread older than 30 days, complete a query that persists a run and require that old ID to disappear while recent IDs remain. Idle TUI open/exit is not enough. This entry needs both an old thread and a working provider credential.
 - **Persisted proof.** Copy `THREADS_DB=$("$VERIFY_SQLSABER" path "$RUN_ID" threads-db)` into evidence before cleanup, then run `uv run python - "$EVIDENCE/threads/threads.db"` with `sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)`. Record full IDs, database names, creation times, and message presence; they must match list and show.
 
 ## Gotchas

@@ -35,6 +35,6 @@ Preconditions:
 
 - `--thinking-level` applies only to the main model.
 - Model IDs must use a supported `PROVIDER:MODEL` prefix, but saving one does not prove the provider accepts it. `xai:grok-4.6` is valid; `grok:grok-4.6` is not (pydantic-ai's live prefix is `xai`, not the deprecated `grok:`). `groq:` remains Groq.
-- `models list` calls `https://models.dev/api.json`; current and set are local.
+- `models list` calls `https://models.dev/api.json`. Direct `set PROVIDER:MODEL` and `current` are local. Bare `saber models set` (no model id) opens the interactive catalog and also fetches that URL.
 - `main`, `handoff`, `viz`, and `notebook` are the accepted agent names.
 - Fresh config uses `openai:gpt-5.6-sol` with thinking enabled at medium. `models reset` writes that same model id and leaves thinking as stored. Assert the model identifier in `models current` and in the file from `path model-config`.
