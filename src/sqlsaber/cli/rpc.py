@@ -225,6 +225,4 @@ async def _main(
                     and artifact_store is not None
                     and query_result_store is not None
                 ):
-                    await run_cli_retention(
-                        storage, artifact_store, query_result_store
-                    )
+                    await run_cli_retention(storage, artifact_store, query_result_store)
