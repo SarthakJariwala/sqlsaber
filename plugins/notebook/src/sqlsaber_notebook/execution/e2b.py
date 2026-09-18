@@ -150,15 +150,18 @@ class E2BNotebookBackend:
         identity = hashlib.sha256(
             f"v1:{image}:{cpu}:{limits.memory_mb}".encode()
         ).hexdigest()[:24]
+        template = f"sqlsaber-notebook-{identity}"
         try:
             async with asyncio.timeout(limits.image_prepare_seconds):
-                build = await AsyncTemplate.build(
-                    AsyncTemplate().from_image(image).set_user("root"),
-                    name=f"sqlsaber-notebook-{identity}",
-                    cpu_count=cpu,
-                    memory_mb=limits.memory_mb,
-                    **options,
-                )
+                if not await AsyncTemplate.exists(template, **options):
+                    build = await AsyncTemplate.build(
+                        AsyncTemplate().from_image(image).set_user("root"),
+                        name=template,
+                        cpu_count=cpu,
+                        memory_mb=limits.memory_mb,
+                        **options,
+                    )
+                    template = build.template_id
         except (TimeoutError, TimeoutException) as exc:
             raise NotebookExecutionTimeout(
                 "E2B template preparation timed out",
@@ -167,7 +170,7 @@ class E2BNotebookBackend:
             ) from exc
         except Exception as exc:
             raise NotebookImageError(
-                "Could not build E2B notebook template; check E2B_API_KEY and image access",
+                "Could not prepare E2B notebook template; check E2B_API_KEY and image access",
                 backend=self.name,
                 phase="image-prepare",
                 diagnostics=bound_log(str(exc), limits.max_log_chars),
@@ -175,7 +178,7 @@ class E2BNotebookBackend:
         try:
             async with asyncio.timeout(limits.open_seconds):
                 sandbox = await AsyncSandbox.create(
-                    template=build.template_id,
+                    template=template,
                     timeout=_LIFETIME_SECONDS,
                     allow_internet_access=False,
                     **options,

@@ -105,6 +105,12 @@ execution. The image must provide `/usr/bin/python3`, `/usr/sbin/runuser`, and
 `/opt/conda/bin/jupyter` with nbconvert and a Python kernel. The first cold build
 may take several minutes. Template names include a hash of the image and resource
 settings; templates remain in your E2B account for reuse and contain no query data.
+Before building, SQLsaber checks for that template using your E2B credentials.
+Existing templates are reused without a build request; missing templates are
+built automatically. Lookup errors fail rather than triggering a rebuild.
+Pin custom images by digest: changes behind an unchanged image tag do not refresh
+an existing template. Changing the image reference or resource settings selects
+a different template.
 CPU cores round up to whole cores and memory is allocated in MiB at build time.
 
 Inputs are root-owned and read-only to the notebook. Guest internet access is

@@ -39,6 +39,7 @@ def sdk(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     template = MagicMock()
     template.return_value.from_image.return_value.set_user.return_value = "definition"
     template.build = build
+    template.exists = AsyncMock(return_value=False)
     monkeypatch.setattr(e2b, "AsyncTemplate", template)
     monkeypatch.setattr(e2b.AsyncSandbox, "create", create)
     return SimpleNamespace(
@@ -59,6 +60,9 @@ async def test_open_preserves_image_resources_credentials_and_isolation(sdk) -> 
     assert sdk.build.call_args.kwargs["cpu_count"] == 3
     assert sdk.build.call_args.kwargs["memory_mb"] == 4096
     assert sdk.build.call_args.kwargs["api_key"] == "test-key"
+    sdk.template.exists.assert_awaited_once_with(
+        sdk.build.call_args.kwargs["name"], api_key="test-key"
+    )
     sdk.create.assert_awaited_once_with(
         template="built-template",
         timeout=3600,
@@ -81,7 +85,57 @@ async def test_input_validation_precedes_remote_resources(sdk) -> None:
             [NotebookInput("../escape", b"x")], image="image", limits=ExecutionLimits()
         )
     sdk.build.assert_not_awaited()
+    sdk.template.exists.assert_not_awaited()
     sdk.create.assert_not_awaited()
+
+
+async def test_existing_template_skips_build_with_bound_credentials(sdk) -> None:
+    sdk.template.exists.return_value = True
+    env = await E2BNotebookBackend(api_key="customer-key").open(
+        [], image="image", limits=ExecutionLimits()
+    )
+    reference = sdk.template.exists.call_args.args[0]
+    assert reference.startswith("sqlsaber-notebook-")
+    sdk.template.exists.assert_awaited_once_with(reference, api_key="customer-key")
+    sdk.build.assert_not_awaited()
+    sdk.template.assert_not_called()
+    assert sdk.create.call_args.kwargs["template"] == reference
+    assert sdk.create.call_args.kwargs["api_key"] == "customer-key"
+    await env.close()
+
+
+@pytest.mark.parametrize("failure", [RuntimeError("lookup failed"), TimeoutError()])
+async def test_lookup_failure_does_not_build_or_create(sdk, failure) -> None:
+    sdk.template.exists.side_effect = failure
+    error = (
+        NotebookExecutionTimeout
+        if isinstance(failure, TimeoutError)
+        else NotebookImageError
+    )
+    with pytest.raises(error):
+        await E2BNotebookBackend().open([], image="image", limits=ExecutionLimits())
+    sdk.build.assert_not_awaited()
+    sdk.create.assert_not_awaited()
+
+
+async def test_template_reference_tracks_image_and_effective_resources(sdk) -> None:
+    sdk.template.exists.return_value = True
+    references = []
+    for image, cpu, memory in [
+        ("image-a", 2, 4096),
+        ("image-a", 2, 4096),
+        ("image-b", 2, 4096),
+        ("image-a", 3, 4096),
+        ("image-a", 2, 8192),
+    ]:
+        env = await E2BNotebookBackend().open(
+            [], image=image, limits=ExecutionLimits(cpu_cores=cpu, memory_mb=memory)
+        )
+        references.append(sdk.template.exists.call_args.args[0])
+        await env.close()
+    assert references[0] == references[1]
+    assert len(set(references)) == 4
+    sdk.build.assert_not_awaited()
 
 
 async def test_open_upload_failure_cleans_up(sdk) -> None:

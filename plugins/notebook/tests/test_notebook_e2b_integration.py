@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shlex
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -31,9 +32,14 @@ pytestmark = [
 ]
 
 
-async def test_live_e2b_notebook_contract_and_termination() -> None:
-    from e2b import AsyncSandbox
+async def test_live_e2b_notebook_contract_and_termination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from e2b import AsyncSandbox, AsyncTemplate
 
+    # Observe real SDK calls without replacing their network behavior.
+    build = AsyncMock(wraps=AsyncTemplate.build)
+    monkeypatch.setattr(AsyncTemplate, "build", build)
     backend = E2BNotebookBackend()
     environment = await backend.open(
         [NotebookInput("data.json", b'{"values":[1,2,3]}')],
@@ -110,3 +116,21 @@ async def test_live_e2b_notebook_contract_and_termination() -> None:
         await environment.close()
     assert not await sandbox.is_running()
     print("E2B sandbox is_running=False after close (verified with provider)")
+    previous_builds = build.await_count
+    reused = await E2BNotebookBackend().open(
+        [NotebookInput("data.json", b'{"values":[1,2,3]}')],
+        image=DEFAULT_NOTEBOOK_IMAGE,
+        limits=ExecutionLimits(),
+    )
+    try:
+        assert build.await_count == previous_builds
+        result = await reused.execute(
+            contract_notebook(), cell_timeout=120, command_timeout=600
+        )
+        assert_contract_result(result.notebook, expected_uid=1000)
+        print(
+            f"New environment reused template: 0 additional builds (first open: {previous_builds})"
+        )
+    finally:
+        await reused.close()
+    assert not await reused.sandbox.is_running()
