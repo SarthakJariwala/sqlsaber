@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.8.0...sqlsaber-viz-v0.9.0) (2026-09-18)
+
+
+### Features
+
+* support ChatGPT subscriptions through native Codex provider ([#293](https://github.com/SarthakJariwala/sqlsaber/issues/293)) ([d7e951e](https://github.com/SarthakJariwala/sqlsaber/commit/d7e951e550af5c96148397cd252b6c9437d681ed))
+
 ## [0.8.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.7.0...sqlsaber-viz-v0.8.0) (2026-09-14)
 
 
