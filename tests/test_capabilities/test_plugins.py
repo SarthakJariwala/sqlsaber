@@ -117,8 +117,10 @@ def test_plugin_context_resolves_subagent_precedence(monkeypatch) -> None:
     context = _context()
 
     inherited = context.resolve_subagent_model(INHERIT, tool="analyze_data")
-    assert inherited is context.main
     assert inherited.model_name == "anthropic:claude-main"
+    assert inherited.provider == context.main.provider
+    assert inherited.api_key == context.main.api_key
+    assert inherited.model is not context.main.model
 
     pinned = context.resolve_subagent_model(
         pin("openai:gpt-notebook"), tool="analyze_data"

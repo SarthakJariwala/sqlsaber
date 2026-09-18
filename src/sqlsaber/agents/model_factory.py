@@ -169,4 +169,8 @@ def resolve_nested_model(
             str(choice.id),
             api_key_override=choice.api_key,
         )
-    return main
+    return resolve_model(
+        auth,
+        main.model_name,
+        api_key_override=main.api_key,
+    )
