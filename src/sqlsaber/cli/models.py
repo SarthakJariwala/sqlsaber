@@ -65,6 +65,10 @@ _RECOMMENDATION_SPECS: Mapping[str, _RecommendationSpec] = {
     "xai": "grok-4.6",
 }
 
+_CATALOG_SOURCE_BY_PROVIDER: Mapping[str, str] = MappingProxyType(
+    {"openai-codex": "openai"}
+)
+
 
 def _build_recommendation_registry(
     specs: Mapping[str, _RecommendationSpec],
@@ -111,7 +115,7 @@ class ModelManager:
 
     DEFAULT_MODEL: str = ModelConfigManager.DEFAULT_MODEL
     MODELS_API_URL: str = "https://models.dev/api.json"
-    SUPPORTED_PROVIDERS: Sequence[str] = providers.api_key_keys()
+    SUPPORTED_PROVIDERS: Sequence[str] = providers.all_keys()
     _RECOMMENDED_MODEL_IDS: Mapping[str, str] = _build_recommendation_registry(
         _RECOMMENDATION_SPECS,
         product_default=ModelConfigManager.DEFAULT_MODEL,
@@ -142,7 +146,8 @@ class ModelManager:
                 results: list[FetchedModel] = []
 
                 for provider in selected_providers:
-                    prov_data = data.get(provider, {})
+                    catalog_source = _CATALOG_SOURCE_BY_PROVIDER.get(provider, provider)
+                    prov_data = data.get(catalog_source, {})
                     models_obj = (
                         prov_data.get("models") or prov_data.get("Models") or {}
                     )

@@ -51,6 +51,7 @@ async def test_choose_model_labels_qualified_recommendation_and_returns_it_on_ca
     assert selected == "openai:gpt-5.6-sol"
     assert prompter.choices[0].title == "GPT-5.6 Sol (Recommended)"
     assert prompter.choices[0].value == "openai:gpt-5.6-sol"
+    assert all(choice.description is None for choice in prompter.choices)
     assert all("GPT-5 (Recommended)" not in choice.title for choice in prompter.choices)
 
 
@@ -68,3 +69,23 @@ async def test_choose_model_labels_xai_grok_4_6_recommendation():
     assert selected == "xai:grok-4.6"
     assert prompter.choices[0].title == "Grok 4.6 (Recommended)"
     assert prompter.choices[0].value == "xai:grok-4.6"
+
+
+@pytest.mark.asyncio
+async def test_unrestricted_picker_distinguishes_shared_catalog_models():
+    prompter = CancelPrompter()
+    models = [
+        _model("openai:gpt-5.6-sol", "openai", "GPT-5.6 Sol"),
+        _model("openai-codex:gpt-5.6-sol", "openai-codex", "GPT-5.6 Sol"),
+    ]
+
+    await choose_model(prompter, models)
+
+    assert [choice.title for choice in prompter.choices] == [
+        "GPT-5.6 Sol ($1/$2 per 1M tokens)",
+        "GPT-5.6 Sol ($1/$2 per 1M tokens)",
+    ]
+    assert [choice.description for choice in prompter.choices] == [
+        "openai:gpt-5.6-sol",
+        "openai-codex:gpt-5.6-sol",
+    ]
