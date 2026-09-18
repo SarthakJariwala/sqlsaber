@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-sandbox-v0.6.0...sqlsaber-sandbox-v0.7.0) (2026-09-18)
+
+
+### Features
+
+* support ChatGPT subscriptions through native Codex provider ([#293](https://github.com/SarthakJariwala/sqlsaber/issues/293)) ([d7e951e](https://github.com/SarthakJariwala/sqlsaber/commit/d7e951e550af5c96148397cd252b6c9437d681ed))
+
 ## [0.6.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-sandbox-v0.5.0...sqlsaber-sandbox-v0.6.0) (2026-09-17)
 
 
