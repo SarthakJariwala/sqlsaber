@@ -240,6 +240,9 @@ def migrate_legacy_plugin_models(
     for name in installed_plugins():
         if name == CoreAgent.HANDOFF.value:
             continue
+        legacy = manager.get_subagent_model(name)
+        if not legacy:
+            continue
         declaration = load_plugin_settings(name)
         if declaration is None:
             continue
@@ -247,9 +250,6 @@ def migrate_legacy_plugin_models(
         if len(model_fields) != 1:
             continue
         setting = model_fields[0]
-        legacy = manager.get_subagent_model(name)
-        if not legacy:
-            continue
         saved = store.get(name)
         settings = dict(saved.settings)
         if setting.name not in settings:

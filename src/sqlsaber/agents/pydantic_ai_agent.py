@@ -227,7 +227,7 @@ class SQLSaberAgent:
         return agent
 
     def resolve_core_agent_model(self, agent: CoreAgent) -> ResolvedModel:
-        """Resolve a core nested agent through the path plugins use."""
+        """Resolve a core nested agent."""
         choice = parse_nested_model(self.config.model.get_subagent_model(agent.value))
         return resolve_nested_model(
             choice,

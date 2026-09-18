@@ -1,9 +1,4 @@
-"""Which model a nested SQLSaber agent uses.
-
-A nested agent either inherits the parent agent's model or is pinned to one.
-Plugin settings declarations import this module at CLI startup, so it may
-import only the standard library and ``sqlsaber.config.providers``.
-"""
+"""Which model a nested SQLSaber agent uses."""
 
 from __future__ import annotations
 

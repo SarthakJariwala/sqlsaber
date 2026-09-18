@@ -142,7 +142,7 @@ class SandboxConfig:
             _positive_integer(name, getattr(self, name))
 
     def controller_config(self) -> dict[str, object]:
-        """Budgets the guest kernel enforces. Host model pins stay on the host."""
+        """Budgets the guest kernel enforces."""
         payload = asdict(self)
         del payload["model"]
         return payload

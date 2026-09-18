@@ -10,11 +10,7 @@ from sqlsaber.nested_model import Pinned, pin
 
 @dataclass(frozen=True, slots=True)
 class ModelOverides:
-    """Model and credential overrides for a tool.
-
-    Prefer ``pin("provider:model")`` for new code. This type remains accepted
-    as ``tool_overrides`` input.
-    """
+    """Model and credential overrides for a tool."""
 
     model_name: str | None = None
     api_key: str | None = None

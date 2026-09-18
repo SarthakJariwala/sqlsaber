@@ -160,11 +160,7 @@ def resolve_nested_model(
     main: ResolvedModel,
     auth: ModelAuth,
 ) -> ResolvedModel:
-    """Turn a configured nested-model choice into a usable child model.
-
-    ``INHERIT`` reuses the parent's already-built handle and credential.
-    A pin never inherits the main API key.
-    """
+    """Turn a configured nested-model choice into a usable child model."""
     from sqlsaber.nested_model import Pinned
 
     if isinstance(choice, Pinned):

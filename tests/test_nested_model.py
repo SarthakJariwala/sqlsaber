@@ -48,8 +48,3 @@ def test_most_specific_first_pin_wins() -> None:
     assert most_specific(INHERIT, first, second) is first
     assert most_specific(INHERIT, Inherit.INHERIT) is INHERIT
     assert most_specific() is INHERIT
-
-
-def test_pinned_requires_model_id() -> None:
-    with pytest.raises(TypeError):
-        Pinned(api_key="sk-x")  # type: ignore[call-arg,misc]

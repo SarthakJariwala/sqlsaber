@@ -16,7 +16,7 @@ from sqlsaber.config.api_keys import APIKeyManager
 
 
 class CoreAgent(StrEnum):
-    """Nested agents core owns. Plugins own theirs."""
+    """Nested agents core owns."""
 
     HANDOFF = "handoff"
 

@@ -1,4 +1,4 @@
-"""Side-effect-free CLI settings declaration for the visualization plugin."""
+"""CLI settings declaration for the visualization plugin."""
 
 from __future__ import annotations
 

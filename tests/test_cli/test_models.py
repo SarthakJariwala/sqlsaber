@@ -1,4 +1,4 @@
-"""Core models CLI no longer owns plugin nested-model names."""
+"""models CLI --agent accepts main and handoff."""
 
 from __future__ import annotations
 

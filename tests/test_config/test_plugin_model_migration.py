@@ -51,3 +51,22 @@ def test_migrate_legacy_plugin_models_adopts_plugin_keys_once(
     assert migrate_legacy_plugin_models(store, models=models) == ("notebook",)
     assert store.get("notebook").settings == {"model": "anthropic:claude-haiku-4-5"}
     assert models.get_subagent_model("notebook") is None
+
+
+def test_migrate_does_not_load_settings_without_a_legacy_key(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(
+        "platformdirs.user_config_dir", lambda *args, **kwargs: str(tmp_path)
+    )
+    monkeypatch.setattr(
+        "sqlsaber.config.plugins.installed_plugins",
+        lambda: {"notebook": SimpleNamespace()},
+    )
+
+    def boom(name: str) -> None:
+        raise AssertionError(f"should not load settings for {name}")
+
+    monkeypatch.setattr("sqlsaber.config.plugins.load_plugin_settings", boom)
+    models = ModelConfigManager()
+    assert migrate_legacy_plugin_models(PluginConfigStore(), models=models) == ()

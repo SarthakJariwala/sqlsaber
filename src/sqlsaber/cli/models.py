@@ -236,18 +236,13 @@ def _normalize_agent(agent: str) -> str:
     normalized = agent.strip().lower()
     if normalized in AGENT_CHOICES:
         return normalized
-    try:
-        from sqlsaber.config.plugins import installed_plugins
+    from sqlsaber.config.plugins import installed_plugins
 
-        if normalized in installed_plugins():
-            raise ValueError(
-                f"{normalized} is a plugin. Set its model with:\n"
-                f"  saber plugins setup {normalized} --set model=PROVIDER:MODEL"
-            )
-    except ValueError:
-        raise
-    except Exception:
-        pass
+    if normalized in installed_plugins():
+        raise ValueError(
+            f"{normalized} is a plugin. Set its model with:\n"
+            f"  saber plugins setup {normalized} --set model=PROVIDER:MODEL"
+        )
     options = ", ".join(AGENT_CHOICES)
     raise ValueError(f"Invalid agent '{agent}'. Choose from: {options}.")
 

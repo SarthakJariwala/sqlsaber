@@ -93,8 +93,8 @@ class SpecAgent:
         )
 
         message_history = None
-
-        for attempt in range(MAX_RETRIES + 1):
+        remaining = MAX_RETRIES
+        while True:
             result = await self.agent.run(prompt, message_history=message_history)
             output = str(result.output).strip()
 
@@ -102,11 +102,12 @@ class SpecAgent:
                 parsed = _parse_json(output)
                 return VizSpec.model_validate(parsed)
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
-                if attempt == MAX_RETRIES:
+                if remaining == 0:
                     raise
+                remaining -= 1
                 logger.debug(
                     "Spec validation failed (attempt %d/%d): %s",
-                    attempt + 1,
+                    MAX_RETRIES - remaining,
                     MAX_RETRIES + 1,
                     exc,
                 )
@@ -115,8 +116,6 @@ class SpecAgent:
                     f"The spec you returned failed validation:\n{exc}\n\n"
                     "Fix the JSON and return ONLY the corrected spec."
                 )
-
-        raise RuntimeError("Exhausted retries without raising")
 
     def _build_prompt(
         self,
