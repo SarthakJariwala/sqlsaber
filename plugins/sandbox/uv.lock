@@ -4165,7 +4165,7 @@ dev = [
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", specifier = ">=1.0.0" },
     { name = "ruff", specifier = ">=0.12.0" },
-    { name = "sqlsaber-notebook", extras = ["daytona", "modal"], editable = "../notebook" },
+    { name = "sqlsaber-notebook", extras = ["daytona", "e2b", "modal"], editable = "../notebook" },
     { name = "sqlsaber-sandbox", extras = ["e2b", "modal", "daytona", "sprites"], editable = "." },
     { name = "sqlsaber-viz", editable = "../viz" },
 ]
