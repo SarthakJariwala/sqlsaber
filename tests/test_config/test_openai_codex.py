@@ -100,6 +100,46 @@ def test_unreadable_credentials_hide_path_and_retain_cause(
     assert isinstance(exc_info.value.__cause__, OSError)
 
 
+def test_credential_metadata_errors_hide_path_and_retain_cause(
+    tmp_path, monkeypatch
+) -> None:
+    path = tmp_path / "openai_codex_credentials.json"
+
+    def fail_lstat(self: Path) -> os.stat_result:
+        del self
+        raise PermissionError("raw failure at /private/credential/path")
+
+    monkeypatch.setattr(Path, "lstat", fail_lstat)
+
+    with pytest.raises(OpenAICodexAuthError) as exc_info:
+        OpenAICodexCredentialStore(path).preflight()
+
+    assert str(exc_info.value) == (
+        "Could not read SQLsaber OpenAI Codex credentials. Run "
+        "`saber auth setup openai-codex` again."
+    )
+    assert str(path) not in str(exc_info.value)
+    assert "/private/credential/path" not in str(exc_info.value)
+    assert isinstance(exc_info.value.__cause__, PermissionError)
+
+
+def test_invalid_utf8_credentials_are_reported_as_malformed(tmp_path) -> None:
+    path = tmp_path / "openai_codex_credentials.json"
+    path.write_bytes(b"\xff")
+    if os.name != "nt":
+        path.chmod(0o600)
+
+    with pytest.raises(OpenAICodexAuthError) as exc_info:
+        OpenAICodexCredentialStore(path).preflight()
+
+    assert str(exc_info.value) == (
+        "Malformed SQLsaber OpenAI Codex credentials. Run "
+        "`saber auth setup openai-codex` again."
+    )
+    assert str(path) not in str(exc_info.value)
+    assert isinstance(exc_info.value.__cause__, UnicodeDecodeError)
+
+
 def test_non_regular_credential_path_names_the_required_repair(tmp_path) -> None:
     path = tmp_path / "openai_codex_credentials.json"
     path.mkdir()

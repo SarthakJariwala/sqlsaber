@@ -71,15 +71,15 @@ class OpenAICodexCredentialStore(PreflightOpenAICodexCredentialSource):
         self._load()
 
     def _load(self) -> OpenAICodexCredentials:
-        self._check_private_file()
         try:
+            self._check_private_file()
             data = json.loads(self.path.read_text())
         except FileNotFoundError:
             raise OpenAICodexAuthError(
                 "No SQLsaber OpenAI Codex credentials were found. Run "
                 "`saber auth setup openai-codex`."
             ) from None
-        except json.JSONDecodeError as exc:
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise self._malformed() from exc
         except OSError as exc:
             raise OpenAICodexAuthError(
