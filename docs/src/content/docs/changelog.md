@@ -13,6 +13,25 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.79.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.78.1...sqlsaber-v0.79.0) (2026-09-18)
+
+
+### Features
+
+* **notebook:** Add E2B backend for notebook execution ([#292](https://github.com/SarthakJariwala/sqlsaber/issues/292)) ([0330071](https://github.com/SarthakJariwala/sqlsaber/commit/033007191b8d28538e01266cbe940ccf50ba7d75))
+* support ChatGPT subscriptions through native Codex provider ([#293](https://github.com/SarthakJariwala/sqlsaber/issues/293)) ([d7e951e](https://github.com/SarthakJariwala/sqlsaber/commit/d7e951e550af5c96148397cd252b6c9437d681ed))
+
+
+### Bug Fixes
+
+* **codex:** hide credential internals and expose models ([#298](https://github.com/SarthakJariwala/sqlsaber/issues/298)) ([fef4ea4](https://github.com/SarthakJariwala/sqlsaber/commit/fef4ea48d0c0d5458254a8a7e84dfc2672cb9b08))
+
+
+### Documentation
+
+* **auth:** explain ChatGPT subscription setup ([#297](https://github.com/SarthakJariwala/sqlsaber/issues/297)) ([7344a75](https://github.com/SarthakJariwala/sqlsaber/commit/7344a75214dba8822c304dbdd1ac331a49d8dc0f))
+* update verify-sqlsaber skill for plugins CLI ([#289](https://github.com/SarthakJariwala/sqlsaber/issues/289)) ([d3d514f](https://github.com/SarthakJariwala/sqlsaber/commit/d3d514fb0f1b1bbe42c8d550214524b8e9997934))
+
 ## [0.78.1](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.78.0...sqlsaber-v0.78.1) (2026-09-17)
 
 
