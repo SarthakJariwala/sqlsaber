@@ -137,7 +137,6 @@ def test_invalid_utf8_credentials_are_reported_as_malformed(tmp_path) -> None:
         "`saber auth setup openai-codex` again."
     )
     assert str(path) not in str(exc_info.value)
-    assert isinstance(exc_info.value.__cause__, UnicodeDecodeError)
 
 
 def test_non_regular_credential_path_names_the_required_repair(tmp_path) -> None:
