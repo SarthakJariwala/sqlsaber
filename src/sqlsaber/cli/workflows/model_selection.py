@@ -67,7 +67,13 @@ async def choose_model(
                 else f" ({desc_short})"
             )
 
-        choices.append(Choice(choice_text, value=model["id"]))
+        choices.append(
+            Choice(
+                choice_text,
+                value=model["id"],
+                description=model["id"] if restrict_provider is None else None,
+            )
+        )
 
     if recommended_index > 0:
         choices.insert(0, choices.pop(recommended_index))

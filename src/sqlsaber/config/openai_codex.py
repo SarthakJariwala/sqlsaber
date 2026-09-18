@@ -71,18 +71,20 @@ class OpenAICodexCredentialStore(PreflightOpenAICodexCredentialSource):
         self._load()
 
     def _load(self) -> OpenAICodexCredentials:
-        self._check_private_file()
         try:
+            self._check_private_file()
             data = json.loads(self.path.read_text())
         except FileNotFoundError:
             raise OpenAICodexAuthError(
                 "No SQLsaber OpenAI Codex credentials were found. Run "
                 "`saber auth setup openai-codex`."
             ) from None
-        except (OSError, json.JSONDecodeError) as exc:
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise self._malformed() from exc
+        except OSError as exc:
             raise OpenAICodexAuthError(
-                f"Could not read SQLsaber OpenAI Codex credentials at "
-                f"`{self.path}`: {exc}. Run `saber auth setup openai-codex` again."
+                "Could not read SQLsaber OpenAI Codex credentials. Run "
+                "`saber auth setup openai-codex` again."
             ) from exc
         return self._parse(data)
 
@@ -144,8 +146,8 @@ class OpenAICodexCredentialStore(PreflightOpenAICodexCredentialSource):
             return
         if stat.S_ISLNK(file_stat.st_mode) or not stat.S_ISREG(file_stat.st_mode):
             raise OpenAICodexAuthError(
-                f"Refusing to read OpenAI Codex credentials from non-regular file "
-                f"`{self.path}`."
+                f"OpenAI Codex credential path `{self.path}` is not a regular file. "
+                "Move or remove it, then run `saber auth setup openai-codex` again."
             )
         if os.name != "nt":
             if stat.S_IMODE(file_stat.st_mode) & 0o077:
@@ -156,7 +158,8 @@ class OpenAICodexCredentialStore(PreflightOpenAICodexCredentialSource):
             if hasattr(os, "getuid") and file_stat.st_uid != os.getuid():
                 raise OpenAICodexAuthError(
                     f"OpenAI Codex credentials at `{self.path}` are not owned by "
-                    "the current user."
+                    "the current user. Change their ownership to the current user "
+                    "and retry."
                 )
 
     def _parse(self, data: object) -> OpenAICodexCredentials:
@@ -172,6 +175,6 @@ class OpenAICodexCredentialStore(PreflightOpenAICodexCredentialSource):
 
     def _malformed(self) -> OpenAICodexAuthError:
         return OpenAICodexAuthError(
-            f"Malformed SQLsaber OpenAI Codex credentials at `{self.path}`. "
-            "Run `saber auth setup openai-codex` again."
+            "Malformed SQLsaber OpenAI Codex credentials. Run "
+            "`saber auth setup openai-codex` again."
         )
