@@ -377,10 +377,22 @@ def capability(context: PluginContext):
 ```
 
 `PluginContext` supplies the database registry, knowledge manager, dangerous-mode
-flag, normalized tool model overrides, the session auth and main model, the
-required shared `QueryResultStore`, and the optional application-owned artifact
+flag, normalized `Pinned` tool overrides, session `auth` and main `ResolvedModel`,
+the required shared `QueryResultStore`, and the optional application-owned artifact
 store. A factory may return one capability or a sequence of capabilities. Managed
 `SQLSaber` invokes the factories you list.
 It does not scan installed entry points. On a host agent that already has a
 `PluginContext`, construct the plugin classes you want, such as `Notebook(context)`
 and `Visualization(context)`.
+
+<Aside type="caution" title="PluginContext nested-model fields">
+`PluginContext` no longer has `config`, `main_model_name`, or `main_api_key`.
+Read `context.auth` and `context.main`. Resolve a nested model with
+`context.resolve_subagent_model(configured, tool=TOOL_NAME)`. Pass `INHERIT` or
+`pin("provider:model")` as `configured`. The old resolver took an agent name
+such as `"notebook"` and returned `(model_name, model, provider)`. It now
+returns a `ResolvedModel`. A pin never reuses the main API key.
+`Config.in_memory(subagent_models=...)` accepts only `handoff`. Put plugin
+models on the capability config, such as
+`NotebookConfig(model=pin("openai:gpt-5-mini"))`.
+</Aside>
