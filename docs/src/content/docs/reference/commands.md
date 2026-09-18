@@ -109,9 +109,11 @@ saber auth setup
 saber auth setup openai-codex
 ```
 
+This command configures authentication but does not change the configured model.
+
 ### `saber auth status`
 
-Show which providers are configured, and whether each key came from an environment variable or the keychain.
+Show which providers are configured, whether each API key came from an environment variable or the keychain, and the OpenAI Codex connection state.
 
 ```bash
 saber auth status
@@ -130,6 +132,8 @@ saber auth reset openai-codex --yes
 ```
 
 Pass the provider for automation. `--yes` skips confirmation. Without `--yes`, the command prompts only when attached to an interactive terminal.
+
+This command removes credentials but does not change the configured model.
 
 ---
 
