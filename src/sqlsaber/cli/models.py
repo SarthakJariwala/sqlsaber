@@ -57,6 +57,7 @@ type _RecommendationSpec = str | _RecommendationSource
 _RECOMMENDATION_SPECS: Mapping[str, _RecommendationSpec] = {
     "anthropic": "claude-opus-5",
     "openai": _RecommendationSource.PRODUCT_DEFAULT,
+    "openai-codex": "gpt-5.6-sol",
     "google": "gemini-2.5-pro",
     "groq": "llama-3-3-70b-versatile",
     "mistral": "mistral-large-latest",
@@ -110,7 +111,7 @@ class ModelManager:
 
     DEFAULT_MODEL: str = ModelConfigManager.DEFAULT_MODEL
     MODELS_API_URL: str = "https://models.dev/api.json"
-    SUPPORTED_PROVIDERS: Sequence[str] = providers.all_keys()
+    SUPPORTED_PROVIDERS: Sequence[str] = providers.api_key_keys()
     _RECOMMENDED_MODEL_IDS: Mapping[str, str] = _build_recommendation_registry(
         _RECOMMENDATION_SPECS,
         product_default=ModelConfigManager.DEFAULT_MODEL,

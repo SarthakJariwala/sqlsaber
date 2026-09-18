@@ -2,7 +2,7 @@
 
 import pytest
 
-from sqlsaber.cli.commands import app
+from sqlsaber.cli.commands import CLIError, _create_cli_saber, app
 
 
 class TestCLICommands:
@@ -146,6 +146,46 @@ class TestCLICommands:
         assert captured.out == ""
         assert "Database connection 'nonexistent' not found" in captured.err
         assert "sqlsaber db list" in captured.err
+
+    @pytest.mark.asyncio
+    async def test_codex_auth_error_is_reported_without_database_error_wrapper(
+        self, monkeypatch
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        import sqlsaber
+        from sqlsaber.cli import artifacts, query_results, session
+        from sqlsaber.config.openai_codex import OpenAICodexAuthError
+        from sqlsaber import threads
+
+        message = (
+            "No SQLsaber OpenAI Codex credentials were found. Run "
+            "`saber auth setup openai-codex`."
+        )
+
+        class MissingCodexCredentialsSQLSaber:
+            def __init__(self, *, options) -> None:
+                del options
+                raise OpenAICodexAuthError(message)
+
+        monkeypatch.setattr(sqlsaber, "SQLSaber", MissingCodexCredentialsSQLSaber)
+        monkeypatch.setattr(threads, "ThreadStorage", lambda: object())
+        monkeypatch.setattr(artifacts, "cli_artifact_store", object)
+        monkeypatch.setattr(query_results, "cli_query_result_store", object)
+        monkeypatch.setattr(session, "cli_sqlsaber_options", lambda **_: object())
+
+        with pytest.raises(CLIError) as exc_info:
+            await _create_cli_saber(
+                selected_database="verification",
+                thinking=None,
+                allow_dangerous=False,
+                system_prompt=None,
+                thread=None,
+                log=MagicMock(),
+                persist_thread=False,
+            )
+
+        assert str(exc_info.value) == message
 
     def test_subcommands_registered(self, capsys):
         """Test that all subcommands are properly registered."""

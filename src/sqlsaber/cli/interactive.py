@@ -378,7 +378,7 @@ class InteractiveSession:
         return DANGEROUS_MODE_FOOTER_LABEL if self.saber.info.dangerous_mode else None
 
     def _usage_footer_text(self) -> str:
-        from sqlsaber.cli.usage import SessionUsage, format_cost_usd, format_tokens
+        from sqlsaber.cli.usage import SessionUsage, format_session_cost, format_tokens
 
         usage: UsageMeter | None = getattr(self, "usage", None)
         session_usage = usage.session if usage is not None else SessionUsage()
@@ -386,7 +386,7 @@ class InteractiveSession:
             f"Usage: ↑{format_tokens(session_usage.total_input_tokens)} "
             f"↓{format_tokens(session_usage.total_output_tokens)} | "
             f"Ctx: {format_tokens(session_usage.current_context_tokens)} | "
-            f"Cost: {format_cost_usd(session_usage.total_cost_usd)}"
+            f"Cost: {format_session_cost(session_usage)}"
         )
 
     def _refresh_footer(self) -> None:

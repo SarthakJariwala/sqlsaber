@@ -8,6 +8,7 @@ from sqlsaber.cli.models import ModelManager
 from sqlsaber.config.settings import ModelConfigManager
 
 CURRENT_QUALIFIED_RECS = {
+    "openai-codex": "openai-codex:gpt-5.6-sol",
     "google": "google:gemini-2.5-pro",
     "groq": "groq:llama-3-3-70b-versatile",
     "mistral": "mistral:mistral-large-latest",
@@ -112,6 +113,9 @@ async def test_select_model_empty_fetch_uses_qualified_recommendation(monkeypatc
     monkeypatch.setattr(ModelManager, "fetch_available_models", empty_fetch)
 
     assert await select_model_for_provider("openai") == ModelConfigManager.DEFAULT_MODEL
+    assert await select_model_for_provider("openai-codex") == (
+        "openai-codex:gpt-5.6-sol"
+    )
     assert await select_model_for_provider("anthropic") == "anthropic:claude-opus-5"
     assert await select_model_for_provider("huggingface") == ModelManager.DEFAULT_MODEL
     assert await select_model_for_provider("xai") == "xai:grok-4.6"
@@ -129,6 +133,9 @@ async def test_select_model_fetch_exception_uses_qualified_recommendation(
     monkeypatch.setattr(ModelManager, "fetch_available_models", boom)
 
     assert await select_model_for_provider("openai") == ModelConfigManager.DEFAULT_MODEL
+    assert await select_model_for_provider("openai-codex") == (
+        "openai-codex:gpt-5.6-sol"
+    )
     assert await select_model_for_provider("anthropic") == "anthropic:claude-opus-5"
     assert await select_model_for_provider("huggingface") == ModelManager.DEFAULT_MODEL
     assert await select_model_for_provider("xai") == "xai:grok-4.6"

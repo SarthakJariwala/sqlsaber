@@ -1,8 +1,8 @@
 """Authentication configuration management for SQLSaber.
 
-This module currently tracks whether the user has run the interactive auth setup.
-SQLSaber authenticates to providers via API keys (environment variables or OS
-keyring storage).
+This module tracks whether the user has run an authentication setup flow.
+SQLSaber authenticates with provider API keys or OpenAI Codex subscription
+credentials.
 """
 
 import json
@@ -20,6 +20,7 @@ class AuthMethod(Enum):
     """Authentication methods available in SQLSaber."""
 
     API_KEY = "api_key"
+    OPENAI_CODEX = "openai_codex"
 
 
 class AuthConfigManager:

@@ -191,6 +191,16 @@ class TestConfig:
         with pytest.raises(ValueError, match="Anthropic API key not found"):
             config.validate()
 
+    def test_validate_openai_codex_does_not_request_api_key(self, config):
+        config.model_name = "openai-codex:gpt-5.6-sol"
+        config.auth._api_key_manager.get_api_key.side_effect = AssertionError(
+            "Codex subscription auth must not request an API key"
+        )
+
+        config.validate()
+
+        assert config.api_key is None
+
     def test_in_memory_config_avoids_platformdirs(self, monkeypatch):
         """Config.in_memory should not touch filesystem-backed platformdirs paths."""
 

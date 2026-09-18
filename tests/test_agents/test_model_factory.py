@@ -8,9 +8,15 @@ from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.models.openai_codex import OpenAICodexModel
+from pydantic_ai.providers.openai_codex import OpenAICodexCredentials
 from pydantic_ai.models.xai import XaiModel
 
-from sqlsaber.agents.model_factory import UNIFIED_EFFORT_MAP, build_model
+from sqlsaber.agents.model_factory import (
+    UNIFIED_EFFORT_MAP,
+    build_model,
+    resolve_model,
+)
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
 from sqlsaber.config.settings import ThinkingLevel
 from sqlsaber.database.sqlite import SQLiteConnection
@@ -56,6 +62,82 @@ def test_build_model_xai_explicit_key_injects_provider() -> None:
 
 def test_build_model_normalizes_google_alias() -> None:
     assert build_model("google-gla:gemini-test", None) == "google:gemini-test"
+
+
+class FakeCodexCredentialSource:
+    def preflight(self) -> None:
+        pass
+
+    async def load(self) -> OpenAICodexCredentials:
+        return OpenAICodexCredentials(
+            access_token="fake-access",
+            refresh_token="fake-refresh",
+            account_id="fake-account",
+        )
+
+    async def save(self, credentials: OpenAICodexCredentials) -> None:
+        del credentials
+
+
+class NoApiKeyAuth:
+    def get_api_key(self, model_name: str) -> str | None:
+        raise AssertionError(f"API key requested for {model_name}")
+
+    def validate(self, model_name: str) -> None:
+        raise AssertionError(f"API key validation requested for {model_name}")
+
+
+def test_resolve_openai_codex_uses_explicit_subscription_source_without_key_prompt():
+    resolved = resolve_model(
+        NoApiKeyAuth(),
+        "openai-codex:gpt-test",
+        codex_credential_source=FakeCodexCredentialSource(),
+    )
+
+    assert resolved.model_name == "openai-codex:gpt-test"
+    assert resolved.provider == "openai-codex"
+    assert resolved.api_key is None
+    assert isinstance(resolved.model, OpenAICodexModel)
+    assert resolved.model.model_name == "gpt-test"
+    assert resolved.model.system == "openai-codex"
+
+
+def test_resolve_openai_codex_surfaces_missing_credentials_before_model_request():
+    class MissingCredentialSource(FakeCodexCredentialSource):
+        def preflight(self) -> None:
+            raise ValueError(
+                "No SQLsaber OpenAI Codex credentials were found. Run "
+                "`saber auth setup openai-codex`."
+            )
+
+        async def load(self) -> OpenAICodexCredentials:
+            raise AssertionError(
+                "HTTP authentication must not load missing credentials"
+            )
+
+    with pytest.raises(ValueError, match="saber auth setup openai-codex"):
+        resolve_model(
+            NoApiKeyAuth(),
+            "openai-codex:gpt-test",
+            codex_credential_source=MissingCredentialSource(),
+        )
+
+
+def test_build_openai_codex_refuses_implicit_codex_cli_credentials():
+    with pytest.raises(ValueError, match="credential source is required"):
+        build_model("openai-codex:gpt-test", None)
+
+
+def test_resolve_openai_api_path_preserves_explicit_key():
+    resolved = resolve_model(
+        NoApiKeyAuth(),
+        "openai:gpt-test",
+        api_key_override="test-key",
+    )
+
+    assert resolved.provider == "openai"
+    assert resolved.api_key == "test-key"
+    assert isinstance(resolved.model, OpenAIResponsesModel)
 
 
 @pytest.mark.asyncio

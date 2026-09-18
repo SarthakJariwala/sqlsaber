@@ -9,12 +9,15 @@ from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 from pydantic_ai.models.anthropic import AnthropicModelSettings
 from pydantic_ai.usage import UsageLimits
 
-from sqlsaber.agents.model_factory import UNIFIED_EFFORT_MAP, build_model
+from sqlsaber.agents.model_factory import UNIFIED_EFFORT_MAP, resolve_model
 from sqlsaber.artifacts import ArtifactFailureMode, ArtifactStore
 from sqlsaber.capabilities import Knowledge, SqlTools
 from sqlsaber.capabilities.base import SqlSaberCapability
-from sqlsaber.capabilities.plugins import PluginContext, resolve_capability_specs
-from sqlsaber.config import providers
+from sqlsaber.capabilities.plugins import (
+    CapabilitySpec,
+    PluginContext,
+    resolve_capability_specs,
+)
 from sqlsaber.config.settings import Config, ThinkingLevel
 from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
@@ -61,7 +64,7 @@ class SQLSaberAgent:
         csv_tool_results: bool = False,
         system_prompt: str | None = None,
         tool_overides: ToolOveridesInput | None = None,
-        capabilities: Sequence[Any] = (),
+        capabilities: Sequence[CapabilitySpec] = (),
         artifact_store: ArtifactStore | None = None,
         artifact_failure_mode: ArtifactFailureMode = "required",
         query_result_store: QueryResultStore | None = None,
@@ -135,12 +138,11 @@ class SQLSaberAgent:
             )
 
         model_name = self._model_name_override or self.config.model.name
-        if not (self._model_name_override and self._api_key_override):
-            self.config.auth.validate(model_name)
-
-        provider = providers.provider_from_model(model_name) or ""
-        api_key = self._api_key_override or self.config.auth.get_api_key(model_name)
-        model = build_model(model_name, api_key)
+        resolved = resolve_model(
+            self.config.auth,
+            model_name,
+            api_key_override=self._api_key_override,
+        )
 
         include_guidance = self.system_prompt_override is None
         context = PluginContext(
@@ -151,7 +153,7 @@ class SQLSaberAgent:
             config=self.config,
             main_model_name=model_name,
             query_result_store=self.query_result_store,
-            main_api_key=api_key,
+            main_api_key=resolved.api_key,
             artifact_store=self._artifact_store,
             artifact_failure_mode=self._artifact_failure_mode,
             workspace_input_resolver=self._workspace_input_resolver,
@@ -191,11 +193,11 @@ class SQLSaberAgent:
 
         model_settings = (
             AnthropicModelSettings(anthropic_cache=True)
-            if provider == "anthropic"
+            if resolved.provider == "anthropic"
             else None
         )
         agent = Agent(
-            model,
+            resolved.model,
             name="sqlsaber",
             instructions=self.system_prompt_override or PERSONA,
             model_settings=model_settings,

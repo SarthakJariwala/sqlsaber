@@ -23,6 +23,7 @@ def test_all_keys_contains_expected_providers():
 
 def test_env_var_name_mapping():
     assert providers.env_var_name("openai") == "OPENAI_API_KEY"
+    assert providers.env_var_name("openai-codex") is None
     assert providers.env_var_name("anthropic") == "ANTHROPIC_API_KEY"
     assert providers.env_var_name("xai") == "XAI_API_KEY"
     assert providers.env_var_name("unknown") == "AI_API_KEY"
@@ -51,6 +52,7 @@ def test_supported_provider_dependencies_are_installed(
     [
         ("anthropic:claude-3", "anthropic"),
         ("openai:gpt-4o", "openai"),
+        ("openai-codex:gpt-5.6-sol", "openai-codex"),
         ("google:gemini-1.5-pro", "google"),
         ("google-gla:gemini-1.5-pro", "google"),
         ("mistral:large", "mistral"),
@@ -72,3 +74,10 @@ def test_xai_is_distinct_from_groq():
     assert providers.env_var_name("xai") == "XAI_API_KEY"
     assert providers.env_var_name("groq") == "GROQ_API_KEY"
     assert "grok" not in providers.all_keys()
+
+
+def test_openai_api_and_codex_subscription_use_distinct_auth_kinds():
+    assert providers.auth_kind("openai") is providers.AuthKind.API_KEY
+    assert providers.auth_kind("openai-codex") is providers.AuthKind.OPENAI_CODEX
+    assert "openai-codex" in providers.all_keys()
+    assert "openai-codex" not in providers.api_key_keys()

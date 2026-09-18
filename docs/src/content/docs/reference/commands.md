@@ -102,10 +102,11 @@ Authentication for AI providers.
 
 ### `saber auth setup`
 
-Save an API key.
+Configure an API key or connect a ChatGPT subscription.
 
 ```bash
 saber auth setup
+saber auth setup openai-codex
 ```
 
 ### `saber auth status`
@@ -125,6 +126,7 @@ saber auth reset
 
 # Non-interactive
 saber auth reset openai --yes
+saber auth reset openai-codex --yes
 ```
 
 Pass the provider for automation. `--yes` skips confirmation. Without `--yes`, the command prompts only when attached to an interactive terminal.

@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypeGuard
 
 if TYPE_CHECKING:
     from sqlsaber import SQLSaberOptions
+    from sqlsaber.capabilities.plugins import CapabilityFactory, PluginContext
+
+
+def _is_capability_factory(
+    value: object,
+) -> TypeGuard[Callable[[PluginContext], object]]:
+    return callable(value)
 
 
 def cli_sqlsaber_options(**kwargs: Any) -> SQLSaberOptions:
@@ -17,7 +25,7 @@ def cli_sqlsaber_options(**kwargs: Any) -> SQLSaberOptions:
     return SQLSaberOptions(**kwargs)
 
 
-def configured_capabilities() -> tuple[object, ...]:
+def configured_capabilities() -> tuple[CapabilityFactory, ...]:
     from sqlsaber.capabilities.plugins import CapabilityFactory
     from sqlsaber.cli.output import err
     from sqlsaber.config.plugins import (
@@ -30,7 +38,7 @@ def configured_capabilities() -> tuple[object, ...]:
     from sqlsaber.render import blocks as b
 
     store = PluginConfigStore()
-    factories: list[object] = []
+    factories: list[CapabilityFactory] = []
     for name, entry_point in sorted(installed_plugins().items()):
         saved = store.get(name)
         if not saved.enabled:
@@ -51,7 +59,7 @@ def configured_capabilities() -> tuple[object, ...]:
             except Exception:
                 err(b.warn(f"Could not load plugin '{name}'. Check its installation."))
                 continue
-        if not callable(factory):
+        if not _is_capability_factory(factory):
             raise ValueError(f"Plugin '{name}' did not return a capability factory")
         factories.append(CapabilityFactory(name, factory))
     return tuple(factories)

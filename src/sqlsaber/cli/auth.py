@@ -1,5 +1,7 @@
 """Authentication CLI commands."""
 
+from __future__ import annotations
+
 import asyncio
 import os
 import sys
@@ -13,7 +15,7 @@ from sqlsaber.cli.output import fail, fail_usage, out
 from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
-from sqlsaber.config.auth import AuthConfigManager
+from sqlsaber.config.auth import AuthConfigManager, AuthMethod
 from sqlsaber.config.logging import get_logger
 from sqlsaber.render import blocks as b
 
@@ -23,18 +25,42 @@ logger = get_logger(__name__)
 auth_app = cyclopts.App(
     name="auth",
     help="Manage authentication configuration",
-    help_epilogue=("Examples:\n\nsaber auth status\n\nsaber auth reset openai --yes"),
+    help_epilogue=(
+        "Examples:\n\n"
+        "saber auth status\n\n"
+        "saber auth setup openai-codex\n\n"
+        "saber auth reset openai --yes"
+    ),
 )
 
 
-@auth_app.command(help_epilogue="Example:\n\nsaber auth setup")
-def setup():
-    """Configure authentication for SQLsaber (API keys).
+@auth_app.command(
+    help_epilogue=("Examples:\n\nsaber auth setup\n\nsaber auth setup openai-codex")
+)
+def setup(
+    provider: Annotated[
+        str | None,
+        cyclopts.Parameter(help="Provider to configure (omit to select interactively)"),
+    ] = None,
+) -> None:
+    """Configure authentication for SQLsaber.
 
-    Example:
+    Examples:
         saber auth setup
+        saber auth setup openai-codex
     """
     from sqlsaber.cli.workflows.auth_setup import setup_auth
+
+    if provider is not None:
+        canonical_provider = providers.canonical(provider.strip().lower())
+        if canonical_provider is None:
+            choices = ", ".join(providers.all_keys())
+            fail_usage(
+                f"unsupported provider '{provider}'.\n"
+                f"  Choose from: {choices}\n"
+                "  Example: saber auth setup openai-codex"
+            )
+        provider = canonical_provider
 
     out(b.md("**SQLsaber Authentication Setup**"))
 
@@ -45,6 +71,7 @@ def setup():
             prompter=prompter,
             auth_manager=config_manager,
             api_key_manager=api_key_manager,
+            provider=provider,
         )
 
     logger.info("auth.setup.start")
@@ -69,37 +96,101 @@ def status():
 
     out(b.md("**Authentication Status**"))
 
-    if auth_method is None:
+    from sqlsaber.config.openai_codex import OpenAICodexCredentialStore
+
+    codex_store = OpenAICodexCredentialStore()
+    codex_configured = codex_store.is_configured()
+    if auth_method is None and not codex_configured:
         out(
             b.warn("No authentication method configured"),
-            b.md("Run `saber auth setup` to configure authentication."),
+            b.md(
+                "Run `saber auth setup` to configure an API key or ChatGPT "
+                "subscription access."
+            ),
         )
         logger.info("auth.status.none_configured")
         return
-
-    out(b.success("API Key authentication configured"))
+    if auth_method is AuthMethod.API_KEY:
+        out(b.success("API Key authentication configured"))
+    elif codex_configured:
+        out(b.success("OpenAI Codex authentication configured"))
 
     api_key_manager = APIKeyManager()
     rows: list[dict[str, str]] = []
-    for provider in providers.all_keys():
+    configured = codex_configured
+    for provider in providers.api_key_keys():
         env_var = api_key_manager.get_env_var_name(provider)
         service = api_key_manager._get_service_name(provider)
         from_env = bool(os.getenv(env_var))
         from_keyring = bool(keyring.get_password(service, provider))
         if from_env:
             state = f"configured via {env_var}"
+            configured = True
         elif from_keyring:
             state = "configured"
+            configured = True
         else:
             state = "not configured"
         rows.append({"provider": provider, "status": state})
+
+    rows.append(
+        {
+            "provider": "openai-codex",
+            "status": "connected" if codex_configured else "not connected",
+        }
+    )
     out(
         b.table(
             rows,
             columns=(b.Column("provider", "Provider"), b.Column("status", "Status")),
         )
     )
+    if codex_configured:
+        out(
+            b.md(f"OpenAI Codex credentials: `{codex_store.path}`", role="muted"),
+            b.md(
+                "Token refresh is serialized within one process. Concurrent SQLsaber "
+                "processes can race while rotating credentials.",
+                role="muted",
+            ),
+        )
+    if not configured:
+        out(
+            b.warn("No authentication credentials configured"),
+            b.md(
+                "Run `saber auth setup` to configure an API key or ChatGPT "
+                "subscription access."
+            ),
+        )
+        logger.info("auth.status.none_configured")
     logger.info("auth.status.complete", method=str(auth_method))
+
+
+def _remove_openai_codex_credentials(
+    *,
+    yes: bool,
+) -> bool:
+    from sqlsaber.config.openai_codex import OpenAICodexCredentialStore
+
+    store = OpenAICodexCredentialStore()
+    if not store.is_configured():
+        out(b.warn("No stored OpenAI Codex credentials found. Nothing to reset."))
+        return False
+    confirmed = confirm_action(
+        yes=yes,
+        prompt="Remove SQLsaber's stored OpenAI Codex credentials?",
+        non_interactive_command="saber auth reset openai-codex --yes",
+    )
+    if not confirmed:
+        out(b.warn("Reset cancelled."))
+        return False
+    try:
+        store.delete()
+    except OSError as exc:
+        fail(f"could not remove OpenAI Codex credentials: {exc}")
+    if config_manager.get_auth_method() is AuthMethod.OPENAI_CODEX:
+        config_manager.clear_auth_method()
+    return True
 
 
 @auth_app.command(
@@ -115,7 +206,7 @@ def reset(
         cyclopts.Parameter(["--yes"], help="Skip confirmation prompt"),
     ] = False,
 ):
-    """Reset stored API key credentials for a selected provider.
+    """Reset stored credentials for a selected provider.
 
     Examples:
         saber auth reset
@@ -150,6 +241,11 @@ def reset(
             "  Example: saber auth reset openai --yes"
         )
     provider = canonical_provider
+
+    if providers.auth_kind(provider) is providers.AuthKind.OPENAI_CODEX:
+        if _remove_openai_codex_credentials(yes=yes):
+            out(b.success("Reset complete."))
+        return
 
     api_key_manager = APIKeyManager()
     service = api_key_manager._get_service_name(provider)

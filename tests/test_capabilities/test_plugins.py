@@ -4,6 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 from pydantic_ai.capabilities import Capability
+from pydantic_ai.models.openai_codex import OpenAICodexModel
+from pydantic_ai.providers.openai_codex import OpenAICodexCredentials
 
 from sqlsaber.capabilities import plugins
 from sqlsaber.capabilities.plugins import (
@@ -18,6 +20,21 @@ from sqlsaber.database.sqlite import SQLiteConnection
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.overrides import ModelOverides
 from sqlsaber.query_results import InMemoryQueryResultStore
+
+
+class FakeCodexCredentialStore:
+    def preflight(self) -> None:
+        pass
+
+    async def load(self) -> OpenAICodexCredentials:
+        return OpenAICodexCredentials(
+            access_token="fake-access",
+            refresh_token="fake-refresh",
+            account_id="fake-account",
+        )
+
+    async def save(self, credentials: OpenAICodexCredentials) -> None:
+        del credentials
 
 
 def _context() -> PluginContext:
@@ -119,6 +136,22 @@ def test_plugin_context_tool_override_wins(monkeypatch) -> None:
     assert model_name == "openai:gpt-test"
     assert model.model_name == "gpt-test"
     assert provider == "openai"
+
+
+def test_plugin_context_resolves_codex_subagent_without_api_key(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(
+        "sqlsaber.config.openai_codex.OpenAICodexCredentialStore",
+        FakeCodexCredentialStore,
+    )
+    context = _context()
+    context.config.model.set_subagent_model("notebook", "openai-codex:gpt-test")
+
+    model_name, model, provider = context.resolve_subagent_model("notebook")
+
+    assert model_name == "openai-codex:gpt-test"
+    assert isinstance(model, OpenAICodexModel)
+    assert provider == "openai-codex"
 
 
 def test_discover_capabilities_isolates_broken_plugin(monkeypatch) -> None:

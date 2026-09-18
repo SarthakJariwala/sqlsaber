@@ -71,7 +71,10 @@ class APIKeyManager:
     def get_env_var_name(self, provider: str) -> str:
         """Get the expected environment variable name for a provider."""
         key = providers.canonical(provider) or provider
-        return providers.env_var_name(key)
+        env_var = providers.env_var_name(key)
+        if env_var is None:
+            raise ValueError(f"{provider} does not use API-key authentication")
+        return env_var
 
     def _get_service_name(self, provider: str) -> str:
         """Get the keyring service name for a provider."""

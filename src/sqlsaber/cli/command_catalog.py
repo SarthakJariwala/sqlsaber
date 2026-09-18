@@ -161,7 +161,12 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
         "/plugins disable NAME",
         takes_arguments=True,
     ),
-    _management(("auth", "setup"), "Configure API-key authentication.", "/auth setup"),
+    _management(
+        ("auth", "setup"),
+        "Configure provider authentication.",
+        "/auth setup [PROVIDER]",
+        takes_arguments=True,
+    ),
     _management(("auth", "status"), "Show authentication status.", "/auth status"),
     _management(
         ("auth", "reset"),

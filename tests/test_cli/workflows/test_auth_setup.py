@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from sqlsaber.cli.workflows.auth_setup import select_provider, setup_auth
+from sqlsaber.config.auth import AuthMethod
 
 
 class DummyPrompter:
@@ -110,6 +111,44 @@ async def test_setup_auth_uses_bound_secret_prompt_for_new_key(
     api_key_manager.store_api_key.assert_called_once_with("openai", "secret-key")
 
 
+@pytest.mark.asyncio
+async def test_setup_auth_connects_openai_codex_from_provider_selector() -> None:
+    prompter = DummyPrompter(selects=["openai-codex"])
+    auth_manager = MagicMock()
+    api_key_manager = MagicMock()
+    openai_codex_setup = AsyncMock(return_value=True)
+
+    result = await setup_auth(
+        prompter=prompter,
+        auth_manager=auth_manager,
+        api_key_manager=api_key_manager,
+        openai_codex_setup=openai_codex_setup,
+    )
+
+    assert result == (True, "openai-codex")
+    openai_codex_setup.assert_awaited_once_with()
+    auth_manager.set_auth_method.assert_called_once_with(AuthMethod.OPENAI_CODEX)
+    api_key_manager.get_configured_api_key.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_setup_auth_accepts_explicit_openai_codex_provider() -> None:
+    prompter = DummyPrompter()
+    auth_manager = MagicMock()
+    openai_codex_setup = AsyncMock(return_value=True)
+
+    result = await setup_auth(
+        prompter=prompter,
+        auth_manager=auth_manager,
+        api_key_manager=MagicMock(),
+        provider="openai-codex",
+        openai_codex_setup=openai_codex_setup,
+    )
+
+    assert result == (True, "openai-codex")
+    openai_codex_setup.assert_awaited_once_with()
+
+
 def test_default_provider_is_openai():
     from sqlsaber.cli.workflows.auth_setup import DEFAULT_PROVIDER
     from sqlsaber.config.providers import provider_from_model
@@ -156,10 +195,12 @@ async def test_select_provider_without_override_passes_openai_default():
             use_jk_keys: bool = True,
         ) -> Any:
             captured["default"] = default
+            captured["choices"] = choices
             return "openai"
 
     result = await select_provider(CapturePrompter())
     assert captured["default"] == "openai"
+    assert "openai-codex" in captured["choices"]
     assert result == "openai"
 
 
