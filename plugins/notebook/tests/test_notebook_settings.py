@@ -92,6 +92,19 @@ def test_build_config_defaults_match_plugin_defaults() -> None:
     assert config.memory_mb == DEFAULT_NOTEBOOK_CONFIG.memory_mb
     assert config.workspace == DEFAULT_NOTEBOOK_CONFIG.workspace
     assert config.cell_seconds == DEFAULT_NOTEBOOK_CONFIG.cell_seconds
+    assert config.model is DEFAULT_NOTEBOOK_CONFIG.model
+
+
+def test_build_config_pins_nested_model() -> None:
+    from sqlsaber.nested_model import INHERIT, pin
+
+    assert build_notebook_config({}, {}).model is INHERIT
+    assert build_notebook_config({"model": "openai:gpt-5-mini"}, {}).model == pin(
+        "openai:gpt-5-mini"
+    )
+    assert settings.field("model").kind == "model"
+    with pytest.raises(ValueError, match="PROVIDER:MODEL"):
+        settings.field("model").parse("gpt-5-mini")
 
 
 def test_build_config_applies_values_and_null_timers() -> None:

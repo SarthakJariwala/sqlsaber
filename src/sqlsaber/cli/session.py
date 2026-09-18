@@ -33,11 +33,21 @@ def configured_capabilities() -> tuple[CapabilityFactory, ...]:
         PluginSetupRequired,
         installed_plugins,
         load_plugin_settings,
+        migrate_legacy_plugin_models,
         resolve_settings,
     )
     from sqlsaber.render import blocks as b
 
     store = PluginConfigStore()
+    adopted = migrate_legacy_plugin_models(store)
+    for name in adopted:
+        err(
+            b.md(
+                f"Moved saved {name} model into plugin settings. "
+                f"Run: saber plugins show {name}",
+                role="muted",
+            )
+        )
     factories: list[CapabilityFactory] = []
     for name, entry_point in sorted(installed_plugins().items()):
         saved = store.get(name)

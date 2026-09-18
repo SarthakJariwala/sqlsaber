@@ -7,6 +7,8 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from sqlsaber.nested_model import INHERIT, pin
+
 from sqlsaber_sandbox.config import MIB, SandboxConfig, WorkspaceLimits
 from sqlsaber_sandbox.result import Workspace, WorkspaceFile
 
@@ -31,10 +33,21 @@ def test_sandbox_config_defaults_match_the_public_contract() -> None:
         max_output_chars=16_000,
         max_image_bytes=4 * MIB,
         max_history_image_bytes=24 * MIB,
+        model=INHERIT,
     )
     assert not hasattr(config, "max_iterations")
     assert not hasattr(config, "max_model_requests")
     assert not hasattr(config, "max_source_chars")
+
+
+def test_controller_config_omits_model_and_is_json_serializable() -> None:
+    payload = SandboxConfig().controller_config()
+    assert "model" not in payload
+    json.dumps(payload)
+
+    pinned = SandboxConfig(model=pin("openai:gpt-5-mini")).controller_config()
+    assert "model" not in pinned
+    json.dumps(pinned)
 
 
 @pytest.mark.parametrize(

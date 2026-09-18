@@ -6,7 +6,6 @@ import asyncio
 import base64
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import asdict
 import json
 import time
 from typing import Any, Self
@@ -403,6 +402,6 @@ async def list_workspace(ctx: RunContext[SandboxSession]) -> str:
         {
             "inputs": json.loads(ctx.deps._workspace.manifest_bytes()),
             "generated": await ctx.deps._execution.request("workspace"),
-            "config": asdict(ctx.deps.config),
+            "config": ctx.deps.config.controller_config(),
         }
     )

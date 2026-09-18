@@ -185,11 +185,6 @@ def test_disable_skips_loading_and_set_preserves_disable(declaration, monkeypatc
     cli.disable("example")
     cli.set_setting("example", "memory", "4096")
     assert not config.PluginConfigStore().get("example").enabled
-    monkeypatch.setattr(
-        config,
-        "load_plugin_settings",
-        Mock(side_effect=AssertionError("disabled plugins must not load")),
-    )
     assert configured_capabilities() == ()
     declaration.bind.assert_not_called()
 

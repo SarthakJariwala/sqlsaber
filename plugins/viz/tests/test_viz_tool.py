@@ -2,19 +2,27 @@
 
 import json
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
 import sqlsaber_viz.tools as tools
-from sqlsaber.overrides import ModelOverides
-from sqlsaber.render.blocks import Ansi
 from sqlsaber.query_results import InMemoryQueryResultStore
+from sqlsaber.render.blocks import Ansi
+from sqlsaber_viz.config import VizConfig
 from sqlsaber_viz.spec import VizSpec
 from sqlsaber_viz.tools import VizTool
 
 
-def _tool() -> VizTool:
-    return VizTool(InMemoryQueryResultStore())
+def _tool(**context_fields: Any) -> VizTool:
+    fields = {
+        "query_result_store": InMemoryQueryResultStore(),
+        "resolve_subagent_model": lambda configured, *, tool: SimpleNamespace(
+            model="inherited-model"
+        ),
+    }
+    fields.update(context_fields)
+    return VizTool(cast(Any, SimpleNamespace(**fields)))
 
 
 def _make_ctx(
@@ -30,12 +38,10 @@ def _make_ctx(
 
 
 class DummyAgent:
-    last_model_name: str | None = None
-    last_api_key: str | None = None
+    last_model: object = None
 
-    def __init__(self, model_name: str | None = None, api_key: str | None = None):
-        type(self).last_model_name = model_name
-        type(self).last_api_key = api_key
+    def __init__(self, model):
+        type(self).last_model = model
 
     async def generate_spec(
         self,
@@ -83,10 +89,11 @@ async def test_viz_tool_execute_adds_bar_defaults(
     transforms = parsed.get("transform", [])
     assert any("sort" in t for t in transforms)
     assert any("limit" in t for t in transforms)
+    assert DummyAgent.last_model == "inherited-model"
 
 
-def test_viz_tool_requires_query_result_store() -> None:
-    with pytest.raises(TypeError, match="query_result_store"):
+def test_viz_tool_requires_context() -> None:
+    with pytest.raises(TypeError, match="context"):
         VizTool()
 
 
@@ -124,7 +131,7 @@ def test_viz_tool_render_result(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_viz_tool_uses_capability_model_overide(
+async def test_viz_tool_uses_resolved_nested_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(tools, "_get_spec_agent_cls", lambda: DummyAgent)
@@ -137,14 +144,15 @@ async def test_viz_tool_uses_capability_model_overide(
         ],
     }
     ctx = _make_ctx(payload, "call-2")
-    tool = _tool()
-    tool.model_overide = ModelOverides(
-        model_name="openai:gpt-5-mini", api_key="override-api-key"
+    tool = _tool(
+        resolve_subagent_model=lambda configured, *, tool: SimpleNamespace(
+            model="pinned-handle"
+        )
     )
+    tool.config = VizConfig()
 
     result = await tool.execute(ctx, request="show values", file="result_call-2.json")
 
     parsed = json.loads(result)
     assert parsed["chart"]["type"] == "bar"
-    assert DummyAgent.last_model_name == "openai:gpt-5-mini"
-    assert DummyAgent.last_api_key == "override-api-key"
+    assert DummyAgent.last_model == "pinned-handle"

@@ -122,6 +122,7 @@ That is the same retrieve path as `SQLSaber.get_query_result()`, without the man
 `SqlTools`, then pass that context to the plugins:
 
 ```python
+from sqlsaber.agents.model_factory import resolve_model
 from sqlsaber.artifacts import InMemoryArtifactStore
 from sqlsaber.capabilities.plugins import PluginContext
 from sqlsaber.config.settings import Config
@@ -130,13 +131,18 @@ from sqlsaber_notebook.capability import Notebook
 from sqlsaber_sandbox import Sandbox
 from sqlsaber_viz import Visualization
 
+settings = Config.in_memory(
+    model_name="anthropic:claude-sonnet-4-6",
+    api_keys={"anthropic": "test-key"},
+)
+main = resolve_model(settings.auth, settings.model.name)
 context = PluginContext(
     registry=sql.registry,
     knowledge_manager=KnowledgeManager(),
     allow_dangerous=False,
     tool_overrides={},
-    config=Config.default(),
-    main_model_name="anthropic:claude-sonnet-4-6",
+    auth=settings.auth,
+    main=main,
     query_result_store=store,
     artifact_store=InMemoryArtifactStore(),
 )

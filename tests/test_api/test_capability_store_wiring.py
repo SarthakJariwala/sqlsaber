@@ -11,6 +11,7 @@ from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolRetu
 from pydantic_ai.models.function import FunctionModel
 
 from sqlsaber import InMemoryQueryResultStore, SQLSaber, SQLSaberOptions, SqlTools
+from sqlsaber.agents.model_factory import resolve_model
 from sqlsaber.capabilities.plugins import PluginContext
 from sqlsaber.config.settings import Config
 from sqlsaber.knowledge.manager import KnowledgeManager
@@ -61,7 +62,7 @@ async def test_sqlsaber_factories_share_the_session_store() -> None:
         )
         assert sql.query_result_store is store
         assert notebook.tool._context.query_result_store is store
-        assert viz.tool.query_result_store is store
+        assert viz.tool.context.query_result_store is store
     finally:
         await saber.close()
 
@@ -72,16 +73,16 @@ async def test_host_agent_sqltools_and_viz_share_store_and_all_rows(tmp_path) ->
     _wide_customers(database)
     store = InMemoryQueryResultStore()
     sql = SqlTools(database=str(database), query_result_store=store)
+    settings = _settings()
     viz = Visualization(
         PluginContext(
             registry=sql.registry,
             knowledge_manager=KnowledgeManager(),
             allow_dangerous=False,
             tool_overrides={},
-            config=_settings(),
-            main_model_name="anthropic:claude-3-5-sonnet",
+            auth=settings.auth,
+            main=resolve_model(settings.auth, "anthropic:claude-3-5-sonnet"),
             query_result_store=store,
-            main_api_key="test-key",
         )
     )
 
@@ -118,7 +119,7 @@ async def test_host_agent_sqltools_and_viz_share_store_and_all_rows(tmp_path) ->
         assert preview["results_truncated"] is True
         assert len(preview.get("preview_rows") or []) < 250
         references = query_result_references_from_messages(result.new_messages())
-        loaded = await viz.tool.query_result_store.get(
+        loaded = await viz.tool.context.query_result_store.get(
             references[0].descriptor.id,
             context=QueryResultContext(),
         )
@@ -126,6 +127,6 @@ async def test_host_agent_sqltools_and_viz_share_store_and_all_rows(tmp_path) ->
         assert len(rows) == 250
         assert rows[0]["name"].startswith("customer-000-")
         assert rows[-1]["name"].startswith("customer-249-")
-        assert viz.tool.query_result_store is sql.query_result_store
+        assert viz.tool.context.query_result_store is sql.query_result_store
     finally:
         await sql.close()

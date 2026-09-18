@@ -167,7 +167,7 @@ Backends never fall back automatically after selection or failure.
 Configure a dedicated analyst model with:
 
 ```bash
-saber models set --agent notebook
+saber plugins setup notebook --set model=openai:gpt-5-mini --yes
 ```
 
 For a web backend, list the notebook factory in `SQLSaberOptions.capabilities`.
@@ -223,7 +223,7 @@ Pass the same immutable `NotebookConfig` to a configured capability factory or t
 ```python
 from functools import partial
 
-from sqlsaber import SQLSaberOptions
+from sqlsaber import SQLSaberOptions, pin
 from sqlsaber_notebook import NotebookConfig, WorkspaceLimits
 from sqlsaber_notebook.capability import capability as notebook
 
@@ -243,6 +243,7 @@ config = NotebookConfig(
     cell_seconds=3_600,
     max_artifact_bytes=512 * MiB,
     max_total_artifact_bytes=GiB,
+    model=pin("openai:gpt-5-mini"),
 )
 
 options = SQLSaberOptions(

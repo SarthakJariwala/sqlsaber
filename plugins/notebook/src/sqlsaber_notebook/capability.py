@@ -45,7 +45,12 @@ from sqlsaber.workspace_inputs import (
 )
 
 from .analyst import analyze, supports_notebook_images
-from .config import DEFAULT_NOTEBOOK_CONFIG, NotebookConfig, WorkspaceLimits
+from .config import (
+    ANALYZE_DATA,
+    DEFAULT_NOTEBOOK_CONFIG,
+    NotebookConfig,
+    WorkspaceLimits,
+)
 from .execution import (
     NotebookBackend,
     NotebookExecutionError,
@@ -111,7 +116,7 @@ class AnalyzeDataTool(Tool):
 
     @property
     def name(self) -> str:
-        return "analyze_data"
+        return ANALYZE_DATA
 
     async def execute(
         self,
@@ -177,9 +182,9 @@ class AnalyzeDataTool(Tool):
                 workspace_input_resolver=self._context.workspace_input_resolver,
                 limits=self._config.workspace,
             )
-            model_name, model, provider = self._context.resolve_subagent_model(
-                "notebook",
-                tool_name=self.name,
+            child = self._context.resolve_subagent_model(
+                self._config.model,
+                tool=self.name,
             )
             backend = (
                 self._config.backend
@@ -190,12 +195,14 @@ class AnalyzeDataTool(Tool):
             result = await analyze(
                 goal,
                 workspace,
-                model=model,
-                model_provider=provider,
+                model=child.model,
+                model_provider=child.provider,
                 backend=backend,
                 image=resolve_notebook_image(self._config.image),
                 config=self._config,
-                include_snapshot_images=supports_notebook_images(model_name, provider),
+                include_snapshot_images=supports_notebook_images(
+                    child.model_name, child.provider
+                ),
                 collect_files=store is not None,
                 usage_limits=_nested_usage_limits(),
                 parent_usage=ctx.usage,
@@ -208,7 +215,7 @@ class AnalyzeDataTool(Tool):
             )
             metadata: dict[str, object] = {
                 "backend": backend.name,
-                "model": model_name,
+                "model": child.model_name,
                 "provenance": result.provenance,
                 "files": [item.name for item in workspace.files],
             }
@@ -389,7 +396,7 @@ class Notebook(SqlSaberCapability):
 def display_tools() -> Mapping[str, Tool]:
     """Return storage-independent notebook renderers for transcript replay."""
 
-    return {"analyze_data": AnalyzeDataTool(cast(PluginContext, object()))}
+    return {ANALYZE_DATA: AnalyzeDataTool(cast(PluginContext, object()))}
 
 
 def capability(

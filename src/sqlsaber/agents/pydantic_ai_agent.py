@@ -9,7 +9,12 @@ from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 from pydantic_ai.models.anthropic import AnthropicModelSettings
 from pydantic_ai.usage import UsageLimits
 
-from sqlsaber.agents.model_factory import UNIFIED_EFFORT_MAP, resolve_model
+from sqlsaber.agents.model_factory import (
+    UNIFIED_EFFORT_MAP,
+    ResolvedModel,
+    resolve_model,
+    resolve_nested_model,
+)
 from sqlsaber.artifacts import ArtifactFailureMode, ArtifactStore
 from sqlsaber.capabilities import Knowledge, SqlTools
 from sqlsaber.capabilities.base import SqlSaberCapability
@@ -18,11 +23,12 @@ from sqlsaber.capabilities.plugins import (
     PluginContext,
     resolve_capability_specs,
 )
-from sqlsaber.config.settings import Config, ThinkingLevel
+from sqlsaber.config.settings import Config, CoreAgent, ThinkingLevel
 from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.knowledge.manager import KnowledgeManager
+from sqlsaber.nested_model import parse_nested_model
 from sqlsaber.overrides import ToolOveridesInput, normalize_tool_overides
 from sqlsaber.prompts.persona import PERSONA
 from sqlsaber.query_result_resolution import compact_legacy_query_result_history
@@ -145,15 +151,15 @@ class SQLSaberAgent:
         )
 
         include_guidance = self.system_prompt_override is None
+        self._main = resolved
         context = PluginContext(
             registry=self.registry,
             knowledge_manager=self.knowledge_manager,
             allow_dangerous=self.allow_dangerous,
             tool_overrides=self._tool_overides,
-            config=self.config,
-            main_model_name=model_name,
+            auth=self.config.auth,
+            main=resolved,
             query_result_store=self.query_result_store,
-            main_api_key=resolved.api_key,
             artifact_store=self._artifact_store,
             artifact_failure_mode=self._artifact_failure_mode,
             workspace_input_resolver=self._workspace_input_resolver,
@@ -190,6 +196,14 @@ class SQLSaberAgent:
             if isinstance(capability, SqlSaberCapability)
             for name, tool in capability.display_specs.items()
         }
+        unknown_overrides = sorted(set(self._tool_overides) - set(tools))
+        if unknown_overrides:
+            from sqlsaber.config.logging import get_logger
+
+            get_logger(__name__).warning(
+                "tool_overrides keys are not loaded tools: %s",
+                ", ".join(unknown_overrides),
+            )
 
         model_settings = (
             AnthropicModelSettings(anthropic_cache=True)
@@ -211,6 +225,15 @@ class SQLSaberAgent:
         self.capabilities = capabilities
         self._tools = tools
         return agent
+
+    def resolve_core_agent_model(self, agent: CoreAgent) -> ResolvedModel:
+        """Resolve a core nested agent through the path plugins use."""
+        choice = parse_nested_model(self.config.model.get_subagent_model(agent.value))
+        return resolve_nested_model(
+            choice,
+            main=self._main,
+            auth=self.config.auth,
+        )
 
     def system_prompt_text(self) -> str:
         """Return the combined managed-agent instructions as plain text."""

@@ -329,6 +329,9 @@ async def test_handoff_uses_sdk_owned_history(monkeypatch) -> None:
         return _RunResult(output="answer", created_messages=created, history=created)
 
     class FakeHandoffAgent:
+        def __init__(self, model=None) -> None:
+            del model
+
         async def generate_draft(
             self,
             message_history: list[ModelMessage],

@@ -20,6 +20,7 @@ from sqlsaber.config.settings import ThinkingLevel
 if TYPE_CHECKING:
     from pydantic_ai.providers.openai_codex import OpenAICodexCredentialSource
     from sqlsaber.config.openai_codex import PreflightOpenAICodexCredentialSource
+    from sqlsaber.nested_model import NestedModel
 
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
@@ -151,3 +152,25 @@ def resolve_model(
         provider=provider,
         api_key=api_key,
     )
+
+
+def resolve_nested_model(
+    choice: NestedModel,
+    *,
+    main: ResolvedModel,
+    auth: ModelAuth,
+) -> ResolvedModel:
+    """Turn a configured nested-model choice into a usable child model.
+
+    ``INHERIT`` reuses the parent's already-built handle and credential.
+    A pin never inherits the main API key.
+    """
+    from sqlsaber.nested_model import Pinned
+
+    if isinstance(choice, Pinned):
+        return resolve_model(
+            auth,
+            str(choice.id),
+            api_key_override=choice.api_key,
+        )
+    return main

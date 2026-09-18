@@ -155,11 +155,14 @@ def test_settings_reuse_runtime_defaults_and_validation() -> None:
     capability = factory(SimpleNamespace(workspace_input_resolver=None))
     config = capability.tool.config
 
+    from sqlsaber.nested_model import INHERIT
+
     assert config.open_seconds == 180
     assert config.transport_seconds == 30
     assert config.cell_seconds == 600
     assert config.workspace.max_files == 50
     assert config.workspace.max_total_bytes == 250 * MIB
+    assert config.model is INHERIT
     assert capability.tool._backend_factory is None
 
     with pytest.raises(ValueError, match="open_seconds"):

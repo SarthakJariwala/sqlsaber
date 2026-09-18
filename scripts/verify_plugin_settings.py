@@ -66,11 +66,19 @@ def main() -> None:
         run("setup", "notebook", "--set", "backend=docker", "--set", "memory_mb=3072")
         output = run("show", "notebook")
         assert "3072" in output and "saved" in output
+        assert "unset (uses main model)" in output.replace("\\_", "_")
+        run("setup", "viz", "--set", "model=openai:gpt-5-mini")
+        output = run("show", "viz")
+        assert "openai:gpt-5-mini" in output
+        run("unset", "viz", "model")
+        output = run("show", "viz")
+        assert "uses main model" in output.replace("\\_", "_")
         saved = json.loads(path.read_text())
         assert saved["plugins"]["notebook"]["settings"] == {
             "backend": "docker",
             "memory_mb": 3072,
         }
+        assert "model" not in saved["plugins"].get("viz", {}).get("settings", {})
         before = path.read_bytes()
         output = run("set", "notebook", "memory_mb", "-1", code=2)
         assert "positive" in output and path.read_bytes() == before

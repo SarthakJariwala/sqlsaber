@@ -1,0 +1,55 @@
+"""NestedModel parse, pin, inherit, and precedence fold."""
+
+from __future__ import annotations
+
+import pytest
+
+from sqlsaber.config.providers import all_keys
+from sqlsaber.nested_model import (
+    INHERIT,
+    Inherit,
+    ModelId,
+    Pinned,
+    most_specific,
+    parse_model_id,
+    parse_nested_model,
+    pin,
+)
+
+
+def test_parse_model_id_canonicalizes_google_alias() -> None:
+    parsed = parse_model_id("google-gla:gemini-2.5-pro")
+    assert parsed == ModelId(provider="google", model="gemini-2.5-pro")
+    assert str(parsed) == "google:gemini-2.5-pro"
+
+
+def test_parse_model_id_rejects_bare_id() -> None:
+    with pytest.raises(ValueError, match="PROVIDER:MODEL") as exc:
+        parse_model_id("gpt-5-mini")
+    for key in all_keys():
+        assert key in str(exc.value)
+
+
+def test_parse_nested_model_blank_is_inherit() -> None:
+    assert parse_nested_model(None) is INHERIT
+    assert parse_nested_model("") is INHERIT
+    assert parse_nested_model("  ") is INHERIT
+    assert isinstance(parse_nested_model("openai:gpt-5-mini"), Pinned)
+
+
+def test_pin_rejects_codex_api_key() -> None:
+    with pytest.raises(ValueError, match="do not accept API keys"):
+        pin("openai-codex:gpt-5.6-sol", api_key="sk-test")
+
+
+def test_most_specific_first_pin_wins() -> None:
+    first = pin("openai:gpt-5-mini")
+    second = pin("anthropic:claude-haiku-4-5")
+    assert most_specific(INHERIT, first, second) is first
+    assert most_specific(INHERIT, Inherit.INHERIT) is INHERIT
+    assert most_specific() is INHERIT
+
+
+def test_pinned_requires_model_id() -> None:
+    with pytest.raises(TypeError):
+        Pinned(api_key="sk-x")  # type: ignore[call-arg,misc]

@@ -44,24 +44,15 @@ COLUMNS = [
 
 
 def _make_run_result(output: str, messages: list | None = None) -> SimpleNamespace:
-    """Build a minimal stand-in for a pydantic-ai AgentRunResult."""
     return SimpleNamespace(
         output=output,
         all_messages=lambda: messages or [],
     )
 
 
-def _patch_agent(monkeypatch: pytest.MonkeyPatch, agent: SpecAgent) -> None:
-    """Prevent SpecAgent.__init__ from building a real pydantic-ai agent."""
-
-
 async def _make_spec_agent(monkeypatch: pytest.MonkeyPatch) -> SpecAgent:
-    """Create a SpecAgent with a stubbed-out internal agent."""
-    # Bypass __init__ which calls _build_agent (needs real config/provider)
+    del monkeypatch
     obj = object.__new__(SpecAgent)
-    obj.config = None  # type: ignore[assignment]
-    obj._model_name_override = None
-    obj._api_key_override = None
     obj.agent = AsyncMock()
     return obj
 

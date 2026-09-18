@@ -58,20 +58,24 @@ saber models set openai:gpt-5 --thinking-level medium
 saber models set openai-codex:gpt-5.6-sol
 ```
 
-## Override a subagent model
+## Override a nested model
 
-Set a model for handoff, viz, or notebook without changing the main model:
+Handoff stays on the models command:
 
 ```bash
 saber models set --agent handoff
-saber models set --agent viz
-saber models set --agent notebook
-
-# Direct, non-interactive override
 saber models set openai:gpt-5 --agent handoff
 ```
 
-If no override is set, the subagent uses the main model.
+Plugin nested models live in plugin settings:
+
+```bash
+saber plugins setup viz --set model=openai:gpt-5-mini --yes
+saber plugins setup notebook --set model=openai:gpt-5-mini --yes
+saber plugins unset notebook model --yes
+```
+
+If no override is set, the nested agent uses the main model. `saber models current` lists handoff and points at `saber plugins list`.
 
 ## Reset to the default
 

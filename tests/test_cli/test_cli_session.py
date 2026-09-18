@@ -42,7 +42,7 @@ async def test_cli_session_loads_installed_plugins_on_the_session_store() -> Non
         )
         assert sql.query_result_store is store
         assert notebook.tool._context.query_result_store is store
-        assert viz.tool.query_result_store is store
+        assert viz.tool.context.query_result_store is store
         assert "analyze_data" in saber.agent._tools
         assert "viz" in saber.agent._tools
     finally:

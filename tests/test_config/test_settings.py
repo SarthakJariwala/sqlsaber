@@ -224,18 +224,21 @@ class TestConfig:
         assert config.model.thinking_level == ThinkingLevel.HIGH
         assert config.api_key == "test-api-key"
 
-    def test_in_memory_config_accepts_notebook_subagent(self):
+    def test_in_memory_config_accepts_handoff_and_rejects_plugin_keys(self):
         config = Config.in_memory(
             model_name="openai:gpt-5-mini",
-            subagent_models={
-                "notebook": "anthropic:claude-sonnet",
-                "unknown": "openai:gpt-unknown",
-            },
+            subagent_models={"handoff": "openai:gpt-5-mini"},
         )
+        assert config.model.get_subagent_models() == {"handoff": "openai:gpt-5-mini"}
 
-        assert config.model.get_subagent_models() == {
-            "notebook": "anthropic:claude-sonnet"
-        }
+        with pytest.raises(ValueError, match="capability configuration"):
+            Config.in_memory(
+                model_name="openai:gpt-5-mini",
+                subagent_models={
+                    "notebook": "anthropic:claude-sonnet",
+                    "unknown": "openai:gpt-unknown",
+                },
+            )
 
     def test_in_memory_config_validate_errors_without_api_key(self, monkeypatch):
         """In-memory config should fail validation when no API key is provided."""

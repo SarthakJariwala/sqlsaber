@@ -7,24 +7,27 @@ import { Aside } from "@astrojs/starlight/components";
 
 ## Per-tool model overrides
 
-Run a specific internal tool, such as visualization or summarization, on a different model than the main agent. Use `tool_overrides`, mapping a tool name to a `ModelOverides`:
+Run a nested tool on a different model than the main agent. Session `tool_overrides` win over the plugin's configured model. Keys are tool names (`viz`, `analyze_data`, `analyze_in_sandbox`), not plugin names.
 
 ```python
-from sqlsaber import SQLSaber, SQLSaberOptions, ModelOverides
+from functools import partial
+
+from sqlsaber import SQLSaber, SQLSaberOptions, pin
+from sqlsaber_notebook import NotebookConfig, capability as notebook
 
 options = SQLSaberOptions(
     database="sqlite:///my.db",
     model_name="anthropic:claude-sonnet-4-5-20250929",
+    capabilities=[
+        partial(notebook, config=NotebookConfig(model=pin("openai:gpt-5-mini"))),
+    ],
     tool_overrides={
-        "viz": ModelOverides(
-            model_name="openai:gpt-5-mini",
-            api_key="sk-...",
-        ),
+        "analyze_data": pin("anthropic:claude-haiku-4-5", api_key="sk-..."),
     },
 )
 ```
 
-A plain dict also works:
+`ModelOverides(model_name=..., api_key=...)` and a plain dict still work as `tool_overrides` values.
 
 ```python
 tool_overrides={"viz": {"model_name": "openai:gpt-5-mini"}}

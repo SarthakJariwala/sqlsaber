@@ -10,7 +10,13 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from functools import partial
 
-from sqlsaber.plugin_settings import PluginSettings, Setting, SettingsValues
+from sqlsaber.plugin_settings import (
+    PluginSettings,
+    Setting,
+    SettingsValues,
+    configured_model,
+    model_setting,
+)
 
 from .config import DEFAULT_NOTEBOOK_CONFIG, NotebookConfig, WorkspaceLimits
 from .execution import DEFAULT_NOTEBOOK_BACKEND, NotebookBackend
@@ -49,6 +55,7 @@ _FIELDS = (
             "digest. Unset uses the default Jupyter scipy-notebook digest."
         ),
     ),
+    model_setting(label="Analyst model"),
     Setting(
         name="e2b_api_key",
         label="E2B API key",
@@ -310,6 +317,7 @@ def build_notebook_config(
         ),
         memory_mb=_integer(values, "memory_mb", _DEFAULTS.memory_mb),
         cpu_cores=_number(values, "cpu_cores", _DEFAULTS.cpu_cores),
+        model=configured_model(values),
     )
 
 

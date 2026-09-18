@@ -97,8 +97,9 @@ class TestSQLSaberAgentDeps:
         assert captured["usage_limits"] is None
         assert captured["bound_usage_limits"] is None
         viz = agent._tools["viz"]
-        assert viz.model_overide.model_name == "openai:gpt-5-mini"
-        assert viz.model_overide.api_key == "override-api-key"
+        override = viz.context.tool_overrides["viz"]
+        assert str(override.id) == "openai:gpt-5-mini"
+        assert override.api_key == "override-api-key"
 
 
 class _ClosingCapability(SqlSaberCapability):
@@ -141,7 +142,7 @@ class TestSQLSaberAgentLifecycle:
 
         assert created == [plugin]
         assert plugin in agent.capabilities
-        assert [context.main_model_name for context in plugin.contexts] == [
+        assert [context.main.model_name for context in plugin.contexts] == [
             "anthropic:claude-3-5-sonnet",
             "anthropic:claude-3-5-sonnet",
             "anthropic:claude-3-5-haiku",

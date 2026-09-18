@@ -15,7 +15,7 @@ from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config import providers
 from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import (
-    SUBAGENT_KEYS,
+    CoreAgent,
     Config,
     ModelConfigManager,
     ThinkingLevel,
@@ -30,11 +30,12 @@ models_app = cyclopts.App(
     help_epilogue=(
         "Examples:\n\n"
         "saber models current\n\n"
-        "saber models set openai:gpt-5 --thinking-level medium"
+        "saber models set openai:gpt-5 --thinking-level medium\n\n"
+        "Plugin nested models: saber plugins setup viz --set model=openai:gpt-5-mini"
     ),
 )
 
-AGENT_CHOICES: tuple[str, ...] = ("main", *SUBAGENT_KEYS)
+AGENT_CHOICES: tuple[str, ...] = ("main", CoreAgent.HANDOFF.value)
 
 
 class FetchedModel(TypedDict):
@@ -233,10 +234,22 @@ model_manager = ModelManager()
 
 def _normalize_agent(agent: str) -> str:
     normalized = agent.strip().lower()
-    if normalized not in AGENT_CHOICES:
-        options = ", ".join(AGENT_CHOICES)
-        raise ValueError(f"Invalid agent '{agent}'. Choose from: {options}.")
-    return normalized
+    if normalized in AGENT_CHOICES:
+        return normalized
+    try:
+        from sqlsaber.config.plugins import installed_plugins
+
+        if normalized in installed_plugins():
+            raise ValueError(
+                f"{normalized} is a plugin. Set its model with:\n"
+                f"  saber plugins setup {normalized} --set model=PROVIDER:MODEL"
+            )
+    except ValueError:
+        raise
+    except Exception:
+        pass
+    options = ", ".join(AGENT_CHOICES)
+    raise ValueError(f"Invalid agent '{agent}'. Choose from: {options}.")
 
 
 @models_app.command(name="list", help_epilogue="Example:\n\nsaber models list")
@@ -386,7 +399,7 @@ def set_model_command(
         str,
         cyclopts.Parameter(
             ["--agent"],
-            help="Target agent (main, handoff, viz, notebook)",
+            help="Target agent (main, handoff)",
         ),
     ] = "main",
     thinking_level: Annotated[
@@ -534,7 +547,7 @@ def current_model(
         str | None,
         cyclopts.Parameter(
             ["--agent"],
-            help="Show model for agent (main, handoff, viz, notebook)",
+            help="Show model for agent (main, handoff)",
         ),
     ] = None,
 ) -> None:
@@ -587,10 +600,10 @@ def current_model(
         pairs.append(("Thinking", f"enabled ({thinking_level.value})"))
     else:
         pairs.append(("Thinking", "disabled"))
-    out(b.key_values(pairs, caption="Subagent overrides"))
+    out(b.key_values(pairs, caption="Core agent overrides"))
     override_rows = []
     subagents = config.model.get_subagent_models()
-    for subagent in SUBAGENT_KEYS:
+    for subagent in (CoreAgent.HANDOFF.value,):
         override = subagents.get(subagent)
         override_rows.append(
             {
@@ -602,12 +615,13 @@ def current_model(
         b.table(
             override_rows,
             columns=(
-                b.Column("subagent", "Subagent"),
+                b.Column("subagent", "Agent"),
                 b.Column("model", "Model"),
             ),
             max_rows=1000,
         )
     )
+    out(b.md("Plugin agent models: saber plugins list", role="muted"))
 
     logger.info(
         "models.current",
@@ -629,7 +643,7 @@ def reset_model_command(
         str,
         cyclopts.Parameter(
             ["--agent"],
-            help="Reset model for agent (main, handoff, viz, notebook)",
+            help="Reset model for agent (main, handoff)",
         ),
     ] = "main",
     yes: Annotated[

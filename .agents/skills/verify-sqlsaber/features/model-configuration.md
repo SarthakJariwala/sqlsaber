@@ -4,11 +4,11 @@ Model commands let a user inspect and select the main model, control its thinkin
 
 ## Sub-features
 
-- `models-current` shows the effective main model, thinking state, and subagent overrides.
+- `models-current` shows the effective main model, thinking state, and the handoff override.
 - `models-set-main` saves a provider-prefixed main model and optional thinking level.
-- `models-set-agent` saves an override for `handoff`, `viz`, or `notebook`.
+- `models-set-agent` saves an override for `handoff`. Plugin nested models use `saber plugins setup NAME --set model=PROVIDER:MODEL`.
 - `models-list` fetches the current supported catalog from models.dev.
-- `models-reset` writes the command's built-in main-model reset target or clears one subagent override.
+- `models-reset` writes the command's built-in main-model reset target or clears the handoff override.
 
 ## How to get to it (user POV)
 
@@ -24,9 +24,9 @@ Preconditions:
 - Doctor reports `HEALTHY`.
 - Model configuration does not require a provider key. A later query does.
 
-- **Initial state.** Capture `saber models current`. A fresh home prints `openai:gpt-5.6-sol`, `Thinking: enabled (medium)`, and rows for `handoff`, `viz`, and `notebook`.
+- **Initial state.** Capture `saber models current`. A fresh home prints `openai:gpt-5.6-sol`, `Thinking: enabled (medium)`, a `handoff` row, and a pointer to `saber plugins list`. It does not list `viz` or `notebook` as models-command agents.
 - **Main selection.** Set `openai:gpt-5 --thinking-level off`, capture `models current --agent main`, and require the model plus `Thinking: disabled`. `saber models set xai:grok-4.6` is accepted (no catalog rejection). That is the recommended xAI id; it does not change the product default `openai:gpt-5.6-sol`.
-- **Subagent override.** Set `openai:gpt-5-mini --agent handoff`, then capture `models current --agent handoff`. It shows the override and main model. Reset the override with `--yes` and confirm it uses main again.
+- **Handoff override.** Set `openai:gpt-5-mini --agent handoff`, then capture `models current --agent handoff`. It shows the override and main model. Reset the override with `--yes` and confirm it uses main again. `saber models set openai:gpt-5-mini --agent viz` is a usage error that names `saber plugins setup viz`.
 - **Main reset.** Run `models reset --yes`, then capture current state. It shows `openai:gpt-5.6-sol`, the reset target printed by the command.
 - **Persisted proof.** Copy the file from `path model-config` before reset and after reset. The JSON matches each `models current` read-back.
 - **Remote catalog.** When network access is available, run `models list` with a short explicit timeout. Require `Available Models` and provider-prefixed IDs. Require a current marker only when the configured model appears in the returned catalog. A network failure makes only this entry unreachable.
@@ -36,5 +36,5 @@ Preconditions:
 - `--thinking-level` applies only to the main model.
 - Model IDs must use a supported `PROVIDER:MODEL` prefix, but saving one does not prove the provider accepts it. `xai:grok-4.6` is valid; `grok:grok-4.6` is not (pydantic-ai's live prefix is `xai`, not the deprecated `grok:`). `groq:` remains Groq.
 - `models list` calls `https://models.dev/api.json`. Direct `set PROVIDER:MODEL` and `current` are local. Bare `saber models set` (no model id) opens the interactive catalog and also fetches that URL.
-- `main`, `handoff`, `viz`, and `notebook` are the accepted agent names.
+- `main` and `handoff` are the accepted `--agent` names. Plugin names redirect to `saber plugins setup NAME`.
 - Fresh config uses `openai:gpt-5.6-sol` with thinking enabled at medium. `models reset` writes that same model id and leaves thinking as stored. Assert the model identifier in `models current` and in the file from `path model-config`.

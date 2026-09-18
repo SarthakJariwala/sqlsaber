@@ -2,7 +2,6 @@
 
 import asyncio
 import base64
-from dataclasses import asdict
 import hashlib
 import json
 from pathlib import Path
@@ -60,7 +59,7 @@ async def test_bridge_startup_ping_is_quiet_until_socket_is_ready(stale_socket):
             b"ConnectionRefusedError" if stale_socket else b"FileNotFoundError"
         ) in stderr
 
-        controller = Controller(root, asdict(SandboxConfig()))
+        controller = Controller(root, SandboxConfig().controller_config())
         async with await asyncio.start_unix_server(controller.connection, path=path):
             code, stdout, stderr = await call("ping")
             assert code == 0 and not stderr
@@ -178,7 +177,8 @@ async def controller():
         root = Path(directory)
         (root / "run").mkdir()
         instance = Controller(
-            root, asdict(SandboxConfig(cell_seconds=2, max_output_chars=80))
+            root,
+            SandboxConfig(cell_seconds=2, max_output_chars=80).controller_config(),
         )
         try:
             await instance.start()
@@ -336,7 +336,10 @@ def test_image_retention_budget_is_cumulative(tmp_path):
     import base64
 
     controller = Controller(
-        tmp_path, asdict(SandboxConfig(max_image_bytes=9, max_history_image_bytes=12))
+        tmp_path,
+        SandboxConfig(
+            max_image_bytes=9, max_history_image_bytes=12
+        ).controller_config(),
     )
     records = [{"outputs": [], "chars": 0, "truncated": False} for _ in range(2)]
     message = {

@@ -8,6 +8,7 @@ from sqlsaber.capabilities.base import SqlSaberCapability
 from sqlsaber.capabilities.plugins import PluginContext
 from sqlsaber.tools.base import Tool
 
+from .config import DEFAULT_VIZ_CONFIG, VizConfig
 from .tools import VizTool
 
 
@@ -17,9 +18,13 @@ class Visualization(SqlSaberCapability):
     id = "viz"
     description = "Generate a chart from the result of an SQL query."
 
-    def __init__(self, context: PluginContext) -> None:
-        self.tool = VizTool(context.query_result_store)
-        self.tool.model_overide = context.tool_overrides.get(self.tool.name)
+    def __init__(
+        self,
+        context: PluginContext,
+        *,
+        config: VizConfig = DEFAULT_VIZ_CONFIG,
+    ) -> None:
+        self.tool = VizTool(context, config)
         self._toolset = FunctionToolset[Any](id=self.id)
         self._toolset.add_function(
             self.tool.execute,
@@ -34,7 +39,14 @@ class Visualization(SqlSaberCapability):
     def get_toolset(self) -> FunctionToolset[Any]:
         return self._toolset
 
+    def update_context(self, context: PluginContext) -> None:
+        self.tool.context = context
 
-def capability(context: PluginContext) -> Visualization:
+
+def capability(
+    context: PluginContext,
+    *,
+    config: VizConfig = DEFAULT_VIZ_CONFIG,
+) -> Visualization:
     """Create the visualization capability for a managed SQLSaber agent."""
-    return Visualization(context)
+    return Visualization(context, config=config)

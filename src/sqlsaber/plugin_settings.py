@@ -12,8 +12,11 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
+from sqlsaber.nested_model import NestedModel, parse_model_id, parse_nested_model
+
 type SettingValue = str | int | float | bool | None
 type SettingsValues = Mapping[str, SettingValue]
+MODEL_FIELD = "model"
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +31,7 @@ class Setting:
 
     name: str
     label: str
-    kind: Literal["text", "integer", "number", "boolean", "secret"] = "text"
+    kind: Literal["text", "integer", "number", "boolean", "secret", "model"] = "text"
     default: SettingValue = None
     choices: tuple[str, ...] = ()
     env: str | None = None
@@ -50,6 +53,12 @@ class Setting:
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{self.name} must be nonempty text")
             parsed: SettingValue = value.strip()
+        elif self.kind == "model":
+            if not isinstance(value, str) or not value.strip():
+                if self.required:
+                    raise ValueError(f"{self.name} is required")
+                return None
+            parsed = str(parse_model_id(value))
         elif self.kind == "boolean":
             if isinstance(value, bool):
                 parsed = value
@@ -97,9 +106,44 @@ class PluginSettings:
         names = [field.name for field in self.fields]
         if len(names) != len(set(names)):
             raise ValueError("Plugin settings contain duplicate field names")
+        model_fields = [field.name for field in self.fields if field.kind == "model"]
+        if len(model_fields) > 1:
+            raise ValueError("Plugin settings may declare at most one model field")
 
     def field(self, name: str) -> Setting:
         for field in self.fields:
             if field.name == name:
                 return field
         raise ValueError(f"Unknown setting '{name}'. Use 'saber plugins show NAME'.")
+
+
+def model_setting(
+    *,
+    label: str = "Nested model",
+    env: str | None = None,
+    advanced: bool = False,
+    help: str = (
+        "Provider-prefixed model for this plugin's nested agent. "
+        "Unset inherits the main model."
+    ),
+) -> Setting:
+    """Declare this plugin's nested-model field."""
+    return Setting(
+        name=MODEL_FIELD,
+        label=label,
+        kind="model",
+        env=env,
+        advanced=advanced,
+        help=help,
+    )
+
+
+def configured_model(
+    values: SettingsValues,
+    name: str = MODEL_FIELD,
+) -> NestedModel:
+    """Read a ``kind='model'`` field inside ``bind`` as a domain value."""
+    raw = values.get(name)
+    if raw is None:
+        return parse_nested_model(None)
+    return parse_nested_model(str(raw))

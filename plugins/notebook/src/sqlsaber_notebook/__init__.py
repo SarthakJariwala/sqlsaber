@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .config import NotebookConfig, WorkspaceLimits
+from .config import ANALYZE_DATA, NotebookConfig, WorkspaceLimits
 from .execution import (
     DEFAULT_NOTEBOOK_BACKEND,
     DEFAULT_NOTEBOOK_IMAGE,
@@ -72,6 +72,7 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "ANALYZE_DATA",
     "AnalysisResult",
     "ArtifactInfo",
     "ArtifactRef",

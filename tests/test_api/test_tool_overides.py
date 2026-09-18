@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlsaber import ModelOverides, SQLSaber, SQLSaberOptions
+from sqlsaber import ModelOverides, SQLSaber, SQLSaberOptions, pin
 
 
 @pytest.mark.asyncio
@@ -27,8 +27,9 @@ async def test_api_tool_overides_are_normalized(temp_dir, monkeypatch):
     )
 
     try:
-        assert saber.agent._tool_overides["viz"].model_name == "openai:gpt-5-mini"
-        assert saber.agent._tool_overides["viz"].api_key == "sk-test"
+        assert saber.agent._tool_overides["viz"] == pin(
+            "openai:gpt-5-mini", api_key="sk-test"
+        )
     finally:
         await saber.close()
 

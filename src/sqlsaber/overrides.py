@@ -5,27 +5,33 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from sqlsaber.nested_model import Pinned, pin
+
 
 @dataclass(frozen=True, slots=True)
 class ModelOverides:
-    """Model and credential overrides for a tool."""
+    """Model and credential overrides for a tool.
+
+    Prefer ``pin("provider:model")`` for new code. This type remains accepted
+    as ``tool_overrides`` input.
+    """
 
     model_name: str | None = None
     api_key: str | None = None
 
 
-type ModelOverideInput = ModelOverides | Mapping[str, str | None]
+type ModelOverideInput = Pinned | str | ModelOverides | Mapping[str, str | None]
 type ToolOveridesInput = Mapping[str, ModelOverideInput | None]
 
 
 def normalize_tool_overides(
     tool_overides: ToolOveridesInput | None,
-) -> dict[str, ModelOverides]:
-    """Normalize user-provided tool override inputs."""
+) -> dict[str, Pinned]:
+    """Normalize user-provided tool override inputs to pinned models."""
     if not tool_overides:
         return {}
 
-    normalized: dict[str, ModelOverides] = {}
+    normalized: dict[str, Pinned] = {}
     for raw_tool_name, raw_override in tool_overides.items():
         tool_name = _normalize_tool_name(raw_tool_name)
         override = normalize_model_overide(raw_override)
@@ -37,10 +43,14 @@ def normalize_tool_overides(
 
 def normalize_model_overide(
     value: ModelOverideInput | None,
-) -> ModelOverides | None:
-    """Normalize a model override mapping or dataclass."""
+) -> Pinned | None:
+    """Normalize a model override into a pin, or None when the entry is empty."""
     if value is None:
         return None
+    if isinstance(value, Pinned):
+        return value
+    if isinstance(value, str):
+        return pin(value)
 
     model_name: str | None
     api_key: str | None
@@ -54,7 +64,7 @@ def normalize_model_overide(
         api_key = _normalize_optional_text(value.get("api_key"))
     else:
         raise TypeError(
-            "Tool override value must be a ModelOverides instance or mapping."
+            "Tool override value must be a pin, model id, ModelOverides, or mapping."
         )
 
     if api_key and not model_name:
@@ -62,10 +72,10 @@ def normalize_model_overide(
             "api_key override requires model_name so provider can be determined."
         )
 
-    if model_name is None and api_key is None:
+    if model_name is None:
         return None
 
-    return ModelOverides(model_name=model_name, api_key=api_key)
+    return pin(model_name, api_key=api_key)
 
 
 def _validate_override_keys(value: Mapping[str, str | None]) -> None:

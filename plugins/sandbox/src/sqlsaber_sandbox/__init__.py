@@ -4,7 +4,12 @@ from typing import Any
 
 from .backends import CommandResult, SandboxBackend, SandboxError, SessionLost
 from .capability import Sandbox, capability
-from .config import DEFAULT_SANDBOX_IMAGE, SandboxConfig, WorkspaceLimits
+from .config import (
+    ANALYZE_IN_SANDBOX,
+    DEFAULT_SANDBOX_IMAGE,
+    SandboxConfig,
+    WorkspaceLimits,
+)
 from .result import AnalysisResult, ArtifactRef, CellResult, Workspace, WorkspaceFile
 
 _LAZY_EXPORTS = {
@@ -25,6 +30,7 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "ANALYZE_IN_SANDBOX",
     "Sandbox",
     "SandboxConfig",
     "DEFAULT_SANDBOX_IMAGE",

@@ -6,6 +6,8 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
 
+from sqlsaber.nested_model import INHERIT, NestedModel
+
 from .execution import (
     ExecutionLimits,
     NotebookBackend,
@@ -15,6 +17,7 @@ from .execution import (
 from .execution.base import MIB, validate_inputs
 
 _EXECUTION_DEFAULTS = ExecutionLimits()
+ANALYZE_DATA = "analyze_data"
 
 
 def _positive_integer(name: str, value: object) -> None:
@@ -86,11 +89,12 @@ class NotebookConfig:
     max_artifact_bytes: int = _EXECUTION_DEFAULTS.max_artifact_bytes
     max_total_artifact_bytes: int = _EXECUTION_DEFAULTS.max_total_artifact_bytes
     max_log_chars: int = _EXECUTION_DEFAULTS.max_log_chars
+    model: NestedModel = INHERIT
 
     def __post_init__(self) -> None:
         for item in fields(self):
             value = getattr(self, item.name)
-            if item.name in {"workspace", "backend", "image", "cpu_cores"}:
+            if item.name in {"workspace", "backend", "image", "cpu_cores", "model"}:
                 continue
             if item.name in {"cell_seconds", "command_seconds"} and value is None:
                 continue
