@@ -12,7 +12,7 @@ Configure credentials so SQLsaber can call an AI provider.
 | Provider | Environment variable | Notes |
 | -------- | -------------------- | ----- |
 | Anthropic | `ANTHROPIC_API_KEY` | |
-| OpenAI | `OPENAI_API_KEY` | Fresh installs default to `openai:gpt-5.6-sol` |
+| OpenAI | `OPENAI_API_KEY` | Uses Platform API billing |
 | OpenAI Codex | Browser authentication | Uses a ChatGPT subscription |
 | Google | `GOOGLE_API_KEY` | |
 | Groq | `GROQ_API_KEY` | |
@@ -25,6 +25,10 @@ Configure credentials so SQLsaber can call an AI provider.
   SQLsaber stores API keys in your operating system credentials store. It
   stores OpenAI Codex subscription credentials in SQLsaber's private app data.
 </Aside>
+
+`openai:` and `openai-codex:` are separate providers. An OpenAI API key does
+not authenticate an `openai-codex:` model. A ChatGPT subscription does not
+authenticate an `openai:` model.
 
 ## Configure a provider
 
@@ -42,12 +46,35 @@ The default model is `openai:gpt-5.6-sol`. Save an OpenAI key for a fresh instal
 
 To save an Anthropic key, run `saber auth setup`, choose Anthropic, and paste a key from the [Anthropic Console](https://console.anthropic.com/). Use the same steps for the other providers.
 
-To use a ChatGPT subscription, choose OpenAI Codex. SQLsaber opens the native
-browser authentication flow. You can also select it directly:
+## Use a ChatGPT subscription
+
+1. Start browser authentication:
 
 ```bash
 saber auth setup openai-codex
 ```
+
+2. Complete the OpenAI Codex sign-in in your browser.
+
+3. Select the subscription-backed model:
+
+```bash
+saber models set openai-codex:gpt-5.6-sol
+```
+
+4. Check the saved authentication and model:
+
+```bash
+saber auth status
+saber models current --agent main
+```
+
+`saber auth setup` configures authentication but does not change the configured model.
+First-launch onboarding performs both steps when you choose OpenAI Codex.
+
+SQLsaber stores its own OpenAI Codex credentials. It does not reuse a Codex CLI
+login. SQLsaber currently supports browser authentication, not device-code
+authentication.
 
 ## Check saved providers
 
@@ -70,6 +97,9 @@ saber auth reset openai-codex --yes
 ```
 
 If you pass a provider, SQLsaber does not ask which one to reset. Destructive commands require confirmation in a terminal, or `--yes` in automation.
+
+Resetting credentials does not change the configured model. Select another
+model before your next query if you reset `openai-codex`.
 
 ## Use more than one provider
 

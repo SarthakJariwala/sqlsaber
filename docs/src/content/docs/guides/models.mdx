@@ -11,12 +11,18 @@ Pick the model SQLsaber uses for queries.
 
 SQLsaber uses `openai:gpt-5.6-sol` when no model is configured. `saber models reset` writes that same identifier.
 
+The provider prefix selects the authentication route:
+
+- `openai:gpt-5.6-sol` uses `OPENAI_API_KEY` and Platform API billing.
+- `openai-codex:gpt-5.6-sol` uses [ChatGPT subscription authentication](/guides/authentication/#use-a-chatgpt-subscription).
+
 ## Recommended models
 
 These models produce strong SQL in practice:
 
 - `anthropic:claude-opus-5`
 - `openai:gpt-5.6-sol`
+- `openai-codex:gpt-5.6-sol`
 - `google:gemini-2.5-pro`
 - `xai:grok-4.6`
 
@@ -49,6 +55,7 @@ For scripts and coding agents, set the model and thinking level without fetching
 
 ```bash
 saber models set openai:gpt-5 --thinking-level medium
+saber models set openai-codex:gpt-5.6-sol
 ```
 
 ## Override a subagent model
