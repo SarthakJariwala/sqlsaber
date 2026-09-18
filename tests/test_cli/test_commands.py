@@ -76,6 +76,7 @@ class TestCLICommands:
                 None if interactive else "Show tables",
                 csv_tool_results=csv_tool_results,
             )
+        assert create.await_args is not None
         assert create.await_args.kwargs["csv_tool_results"] is csv_tool_results
 
     def test_interactive_immediate_exit_does_not_construct_sqlsaber(
@@ -166,7 +167,10 @@ class TestCLICommands:
         class MissingCodexCredentialsSQLSaber:
             def __init__(self, *, options) -> None:
                 del options
-                raise OpenAICodexAuthError(message)
+                try:
+                    raise OSError("raw failure at /private/credential/path")
+                except OSError as exc:
+                    raise OpenAICodexAuthError(message) from exc
 
         monkeypatch.setattr(sqlsaber, "SQLSaber", MissingCodexCredentialsSQLSaber)
         monkeypatch.setattr(threads, "ThreadStorage", lambda: object())
@@ -186,6 +190,9 @@ class TestCLICommands:
             )
 
         assert str(exc_info.value) == message
+        assert isinstance(exc_info.value.__cause__, OpenAICodexAuthError)
+        assert isinstance(exc_info.value.__cause__.__cause__, OSError)
+        assert "/private/credential/path" not in str(exc_info.value)
 
     def test_subcommands_registered(self, capsys):
         """Test that all subcommands are properly registered."""

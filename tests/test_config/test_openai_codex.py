@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 import stat
 
 import pytest
@@ -44,10 +45,17 @@ async def test_store_round_trips_and_rotates_credentials_atomically(tmp_path) ->
 
 @pytest.mark.asyncio
 async def test_missing_credentials_name_the_setup_command(tmp_path) -> None:
-    store = OpenAICodexCredentialStore(tmp_path / "missing.json")
+    path = tmp_path / "missing.json"
+    store = OpenAICodexCredentialStore(path)
 
-    with pytest.raises(OpenAICodexAuthError, match="saber auth setup openai-codex"):
+    with pytest.raises(OpenAICodexAuthError) as exc_info:
         await store.load()
+
+    assert str(exc_info.value) == (
+        "No SQLsaber OpenAI Codex credentials were found. Run "
+        "`saber auth setup openai-codex`."
+    )
+    assert str(path) not in str(exc_info.value)
 
 
 def test_preflight_rejects_malformed_credentials_before_model_request(tmp_path) -> None:
@@ -56,8 +64,53 @@ def test_preflight_rejects_malformed_credentials_before_model_request(tmp_path) 
     if os.name != "nt":
         path.chmod(0o600)
 
-    with pytest.raises(OpenAICodexAuthError, match="Malformed.*setup openai-codex"):
+    with pytest.raises(OpenAICodexAuthError) as exc_info:
         OpenAICodexCredentialStore(path).preflight()
+
+    assert str(exc_info.value) == (
+        "Malformed SQLsaber OpenAI Codex credentials. Run "
+        "`saber auth setup openai-codex` again."
+    )
+    assert str(path) not in str(exc_info.value)
+
+
+def test_unreadable_credentials_hide_path_and_retain_cause(
+    tmp_path, monkeypatch
+) -> None:
+    path = tmp_path / "openai_codex_credentials.json"
+    path.write_text("{}")
+    if os.name != "nt":
+        path.chmod(0o600)
+
+    def fail_read_text(self: Path, *args, **kwargs) -> str:
+        del self, args, kwargs
+        raise OSError("raw failure at /private/credential/path")
+
+    monkeypatch.setattr(Path, "read_text", fail_read_text)
+
+    with pytest.raises(OpenAICodexAuthError) as exc_info:
+        OpenAICodexCredentialStore(path).preflight()
+
+    assert str(exc_info.value) == (
+        "Could not read SQLsaber OpenAI Codex credentials. Run "
+        "`saber auth setup openai-codex` again."
+    )
+    assert str(path) not in str(exc_info.value)
+    assert "/private/credential/path" not in str(exc_info.value)
+    assert isinstance(exc_info.value.__cause__, OSError)
+
+
+def test_non_regular_credential_path_names_the_required_repair(tmp_path) -> None:
+    path = tmp_path / "openai_codex_credentials.json"
+    path.mkdir()
+
+    with pytest.raises(OpenAICodexAuthError) as exc_info:
+        OpenAICodexCredentialStore(path).preflight()
+
+    assert str(exc_info.value) == (
+        f"OpenAI Codex credential path `{path}` is not a regular file. "
+        "Move or remove it, then run `saber auth setup openai-codex` again."
+    )
 
 
 @pytest.mark.asyncio
@@ -76,8 +129,13 @@ async def test_store_rejects_credentials_readable_by_other_users(tmp_path) -> No
     )
     path.chmod(0o644)
 
-    with pytest.raises(OpenAICodexAuthError, match="chmod 600"):
+    with pytest.raises(OpenAICodexAuthError) as exc_info:
         await OpenAICodexCredentialStore(path).load()
+
+    assert str(exc_info.value) == (
+        f"OpenAI Codex credentials at `{path}` are readable by other users. "
+        f"Run `chmod 600 {path}` and retry."
+    )
 
 
 @pytest.mark.asyncio

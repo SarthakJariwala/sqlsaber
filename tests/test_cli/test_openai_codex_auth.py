@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -38,10 +39,11 @@ class FakeStore:
     def __init__(self, events: list[str]) -> None:
         self.events = events
         self.saved: OpenAICodexCredentials | None = None
+        self.path = Path("/private/sqlsaber/openai_codex_credentials.json")
 
-    async def save(self, value: OpenAICodexCredentials) -> None:
+    async def save(self, credentials: OpenAICodexCredentials) -> None:
         self.events.append("credentials-saved")
-        self.saved = value
+        self.saved = credentials
 
 
 @pytest.mark.asyncio
@@ -83,7 +85,7 @@ def configure_paths(monkeypatch, tmp_path) -> Callable[[], OpenAICodexCredential
     return OpenAICodexCredentialStore
 
 
-def test_status_reports_sqlsaber_codex_credentials_and_refresh_limit(
+def test_status_reports_codex_connection_without_storage_details(
     monkeypatch, tmp_path, capsys
 ) -> None:
     store_factory = configure_paths(monkeypatch, tmp_path)
@@ -92,10 +94,63 @@ def test_status_reports_sqlsaber_codex_credentials_and_refresh_limit(
     auth_cli.status()
 
     output = capsys.readouterr().out
+    assert "OpenAI Codex authentication configured" in output
     assert "openai-codex" in output
     assert "connected" in output
-    assert str(store_factory().path) in output
-    assert "concurrent sqlsaber processes" in output.casefold()
+    assert str(store_factory().path) not in output
+    assert "credentials:" not in output.casefold()
+    assert "token refresh" not in output.casefold()
+    assert "concurrent sqlsaber processes" not in output.casefold()
+
+
+@pytest.mark.asyncio
+async def test_codex_setup_success_hides_storage_and_refresh_details(
+    monkeypatch, capsys
+) -> None:
+    store = FakeStore([])
+    monkeypatch.setattr(
+        "sqlsaber.config.openai_codex.OpenAICodexCredentialStore", lambda: store
+    )
+    monkeypatch.setattr(
+        "pydantic_ai.providers.openai_codex.OpenAICodexOAuthFlow",
+        lambda: FakeFlow(store.events),
+    )
+    monkeypatch.setattr("webbrowser.open", lambda _: True)
+
+    assert await auth_setup.configure_openai_codex() is True
+
+    output = capsys.readouterr().out
+    assert "OpenAI Codex authentication configured successfully!" in output
+    assert str(store.path) not in output
+    assert "credentials:" not in output.casefold()
+    assert "token refresh" not in output.casefold()
+    assert "concurrent sqlsaber processes" not in output.casefold()
+
+
+@pytest.mark.asyncio
+async def test_codex_setup_wraps_storage_errors(monkeypatch, capsys) -> None:
+    class FailingStore(FakeStore):
+        async def save(self, credentials: OpenAICodexCredentials) -> None:
+            del credentials
+            raise OSError("raw failure at /private/credential/path")
+
+    store = FailingStore([])
+    monkeypatch.setattr(
+        "sqlsaber.config.openai_codex.OpenAICodexCredentialStore", lambda: store
+    )
+    monkeypatch.setattr(
+        "pydantic_ai.providers.openai_codex.OpenAICodexOAuthFlow",
+        lambda: FakeFlow(store.events),
+    )
+    monkeypatch.setattr("webbrowser.open", lambda _: True)
+
+    assert await auth_setup.configure_openai_codex() is False
+
+    error = capsys.readouterr().err
+    assert "OpenAI Codex authentication failed." in error
+    assert "Run `saber auth setup openai-codex` to try again." in error
+    assert "raw failure" not in error
+    assert "/private/credential/path" not in error
 
 
 def test_setup_accepts_explicit_openai_codex_provider(capsys) -> None:
@@ -105,6 +160,7 @@ def test_setup_accepts_explicit_openai_codex_provider(capsys) -> None:
         auth_cli.setup("OPENAI-CODEX")
 
     assert "SQLsaber Authentication Setup" in capsys.readouterr().out
+    assert setup_auth.await_args is not None
     assert setup_auth.await_args.kwargs["provider"] == "openai-codex"
 
 
@@ -133,6 +189,33 @@ def test_reset_removes_only_sqlsaber_codex_credentials(
 
     assert store.is_configured() is False
     assert "Reset complete" in capsys.readouterr().out
+
+
+def test_reset_wraps_credential_delete_errors(monkeypatch, tmp_path, capsys) -> None:
+    configure_paths(monkeypatch, tmp_path)
+
+    class FailingStore:
+        def is_configured(self) -> bool:
+            return True
+
+        def delete(self) -> bool:
+            raise OSError("raw failure at /private/credential/path")
+
+    monkeypatch.setattr(
+        "sqlsaber.config.openai_codex.OpenAICodexCredentialStore", FailingStore
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        auth_cli.reset("openai-codex", yes=True)
+
+    assert exc_info.value.code == 1
+    error = capsys.readouterr().err
+    assert (
+        "could not remove OpenAI Codex credentials. Check file permissions and retry."
+        in error
+    )
+    assert "raw failure" not in error
+    assert "/private/credential/path" not in error
 
 
 def test_auth_help_exposes_setup_and_reset_without_login_or_logout(capsys) -> None:

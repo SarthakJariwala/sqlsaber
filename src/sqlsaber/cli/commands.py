@@ -144,7 +144,7 @@ async def _create_cli_saber(
         ) from None
     except OpenAICodexAuthError as exc:
         log.error("model.auth.error", provider="openai-codex", error=str(exc))
-        raise CLIError(str(exc)) from None
+        raise CLIError(str(exc)) from exc
     except DatabaseResolutionError as exc:
         log.error("db.resolve.error", error=str(exc))
         raise CLIError(str(exc)) from None

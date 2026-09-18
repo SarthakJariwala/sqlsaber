@@ -13,9 +13,11 @@ from sqlsaber.cli.output import err, out
 from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
 from sqlsaber.config.auth import AuthConfigManager, AuthMethod
+from sqlsaber.config.logging import get_logger
 from sqlsaber.render import blocks as b
 
 DEFAULT_PROVIDER: Final[str] = "openai"
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from pydantic_ai.providers.openai_codex import OpenAICodexCredentials
@@ -94,23 +96,16 @@ async def configure_openai_codex() -> bool:
         )
         return False
     except Exception as exc:
+        logger.exception("auth.setup.openai_codex_failed", error=str(exc))
         err(
             b.error(
-                f"OpenAI Codex authentication failed: {exc}\n"
+                "OpenAI Codex authentication failed.\n"
                 "Run `saber auth setup openai-codex` to try again."
             )
         )
         return False
 
-    out(
-        b.success("OpenAI Codex authentication configured successfully!"),
-        b.md(f"Credentials: `{store.path}`", role="muted"),
-        b.md(
-            "Token refresh is serialized within one SQLsaber process. Concurrent "
-            "SQLsaber processes can race while rotating credentials.",
-            role="muted",
-        ),
-    )
+    out(b.success("OpenAI Codex authentication configured successfully!"))
     return True
 
 

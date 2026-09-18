@@ -145,15 +145,6 @@ def status():
             columns=(b.Column("provider", "Provider"), b.Column("status", "Status")),
         )
     )
-    if codex_configured:
-        out(
-            b.md(f"OpenAI Codex credentials: `{codex_store.path}`", role="muted"),
-            b.md(
-                "Token refresh is serialized within one process. Concurrent SQLsaber "
-                "processes can race while rotating credentials.",
-                role="muted",
-            ),
-        )
     if not configured:
         out(
             b.warn("No authentication credentials configured"),
@@ -187,7 +178,11 @@ def _remove_openai_codex_credentials(
     try:
         store.delete()
     except OSError as exc:
-        fail(f"could not remove OpenAI Codex credentials: {exc}")
+        logger.exception("auth.reset.openai_codex_remove_failed", error=str(exc))
+        fail(
+            "could not remove OpenAI Codex credentials. "
+            "Check file permissions and retry."
+        )
     if config_manager.get_auth_method() is AuthMethod.OPENAI_CODEX:
         config_manager.clear_auth_method()
     return True
