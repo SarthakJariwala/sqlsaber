@@ -76,13 +76,13 @@ class OpenAICodexCredentialStore(PreflightOpenAICodexCredentialSource):
             data = json.loads(self.path.read_text())
         except FileNotFoundError:
             raise OpenAICodexAuthError(
-                "No SQLsaber OpenAI Codex login was found. Run "
-                "`saber auth login openai-codex`."
+                "No SQLsaber OpenAI Codex credentials were found. Run "
+                "`saber auth setup openai-codex`."
             ) from None
         except (OSError, json.JSONDecodeError) as exc:
             raise OpenAICodexAuthError(
                 f"Could not read SQLsaber OpenAI Codex credentials at "
-                f"`{self.path}`: {exc}. Run `saber auth login openai-codex` again."
+                f"`{self.path}`: {exc}. Run `saber auth setup openai-codex` again."
             ) from exc
         return self._parse(data)
 
@@ -173,5 +173,5 @@ class OpenAICodexCredentialStore(PreflightOpenAICodexCredentialSource):
     def _malformed(self) -> OpenAICodexAuthError:
         return OpenAICodexAuthError(
             f"Malformed SQLsaber OpenAI Codex credentials at `{self.path}`. "
-            "Run `saber auth login openai-codex` again."
+            "Run `saber auth setup openai-codex` again."
         )

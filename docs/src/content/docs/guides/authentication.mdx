@@ -1,11 +1,11 @@
 ---
 title: Authentication
-description: Save API keys for Anthropic, OpenAI, Google, Groq, xAI, and other providers. SQLsaber stores credentials in the OS keychain.
+description: Configure provider API keys or connect a ChatGPT subscription through browser authentication.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-Save an API key so SQLsaber can call an AI provider.
+Configure credentials so SQLsaber can call an AI provider.
 
 ## Providers
 
@@ -13,6 +13,7 @@ Save an API key so SQLsaber can call an AI provider.
 | -------- | -------------------- | ----- |
 | Anthropic | `ANTHROPIC_API_KEY` | |
 | OpenAI | `OPENAI_API_KEY` | Fresh installs default to `openai:gpt-5.6-sol` |
+| OpenAI Codex | Browser authentication | Uses a ChatGPT subscription |
 | Google | `GOOGLE_API_KEY` | |
 | Groq | `GROQ_API_KEY` | |
 | Mistral | `MISTRAL_API_KEY` | |
@@ -21,10 +22,11 @@ Save an API key so SQLsaber can call an AI provider.
 | xAI | `XAI_API_KEY` | Recommended model `xai:grok-4.6` |
 
 <Aside type="note">
-  SQLsaber stores API keys in your operating system credentials store.
+  SQLsaber stores API keys in your operating system credentials store. It
+  stores OpenAI Codex subscription credentials in SQLsaber's private app data.
 </Aside>
 
-## Save a key
+## Configure a provider
 
 ```bash
 saber auth setup
@@ -33,12 +35,19 @@ saber auth setup
 This command:
 
 1. Lets you choose an AI provider
-2. Asks for an API key, or reuses a matching environment variable
-3. Stores the key in the credentials store
+2. Starts browser authentication for OpenAI Codex, or configures an API key for other providers
+3. Stores the resulting credentials
 
 The default model is `openai:gpt-5.6-sol`. Save an OpenAI key for a fresh install, or run `saber models set` after you save a different provider.
 
 To save an Anthropic key, run `saber auth setup`, choose Anthropic, and paste a key from the [Anthropic Console](https://console.anthropic.com/). Use the same steps for the other providers.
+
+To use a ChatGPT subscription, choose OpenAI Codex. SQLsaber opens the native
+browser authentication flow. You can also select it directly:
+
+```bash
+saber auth setup openai-codex
+```
 
 ## Check saved providers
 
@@ -46,22 +55,25 @@ To save an Anthropic key, run `saber auth setup`, choose Anthropic, and paste a 
 saber auth status
 ```
 
-The output lists configured providers and whether each key came from an environment variable or the keychain.
+The output lists configured providers, API-key sources, and the OpenAI Codex connection state.
 
-## Remove a saved key
+## Remove stored credentials
 
 ```bash
 saber auth reset
 
 # Non-interactive
 saber auth reset openai --yes
+
+# Disconnect OpenAI Codex
+saber auth reset openai-codex --yes
 ```
 
 If you pass a provider, SQLsaber does not ask which one to reset. Destructive commands require confirmation in a terminal, or `--yes` in automation.
 
 ## Use more than one provider
 
-Save keys for several providers, then switch models with `saber models set`. Each provider's key is stored on its own.
+Configure several providers, then switch models with `saber models set`. SQLsaber stores each provider's credentials separately.
 
 ## Set a key in the environment
 

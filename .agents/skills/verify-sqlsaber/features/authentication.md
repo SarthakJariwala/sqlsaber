@@ -1,6 +1,6 @@
 # Authentication
 
-Authentication commands let a user configure provider API keys, inspect which providers are available through environment variables or stored credentials, and remove a stored key.
+Authentication commands let a user configure provider API keys or OpenAI Codex browser authentication, inspect credential state, and remove stored credentials.
 
 ## Sub-features
 
@@ -22,9 +22,11 @@ Preconditions:
 - Never type a real API key into a transcript.
 
 - **Fresh status.** Capture `saber auth status`. A fresh run prints `Authentication Status`, says no method is configured, and points to `saber auth setup`.
-- **Provider list.** `saber auth setup` offers registered keys including `xai` (xAI Grok, `XAI_API_KEY`) and `groq` (Groq). They are different vendors. `grok` is not a live prefix.
+- **Provider list.** `saber auth setup` offers registered providers including `openai-codex`, `xai` (xAI Grok, `XAI_API_KEY`), and `groq` (Groq). They are different vendors. `grok` is not a live prefix.
 - **Environment status.** If `OPENAI_API_KEY` is present, run `"$VERIFY_SQLSABER" drive "$RUN_ID" --timeout 30 --input-sequence '[[3, "\r"]]' --evidence authentication/setup-openai.txt -- uv run saber auth setup`. Enter with zero down-arrows selects `openai`. Output includes `Existing authentication found for openai: OPENAI_API_KEY environment variable` and `Openai API key configured successfully!`. Then capture `saber auth status`. It prints `API Key authentication configured` and `configured via OPENAI_API_KEY` without the secret. When `XAI_API_KEY` is absent, the `xai` row is `not configured`. `path auth-config` is `{"auth_method": "api_key"}`.
 - **Reset without stored credentials.** Run `"$VERIFY_SQLSABER" drive "$RUN_ID" --evidence authentication/reset-empty.txt -- uv run saber auth reset openai --yes`. With the null keyring it exits `0` and says no stored credentials were found. This proves the no-op route, not credential deletion.
+- **OpenAI Codex reset without stored credentials.** Run `"$VERIFY_SQLSABER" drive "$RUN_ID" --evidence authentication/reset-openai-codex-empty.txt -- uv run saber auth reset openai-codex --yes`. It exits `0` and reports that no stored OpenAI Codex credentials were found. This does not start browser authentication.
+- **Unified command discovery.** `saber auth --help` lists `setup`, `status`, and `reset`. It does not list `login` or `logout`.
 - **Typed-key setup.** Cancel at the provider or key prompt and retain the transcript. Key storage and the corresponding destructive reset are `verified-unreachable` in this harness because the null backend blocks any persistent keyring. Their concrete prerequisite is a disposable credential store with a seeded test key; never use the operator's OS keyring.
 
 ## Gotchas
@@ -32,6 +34,7 @@ Preconditions:
 - Environment variables take precedence over keyring values.
 - Status reports provider availability only after an authentication method has been configured.
 - `auth reset` never changes environment variables.
+- OpenAI Codex setup starts browser authentication. Do not drive it without an isolated fake OAuth source.
 - Without an explicit provider, reset opens an interactive selector and fails usage when stdin is not a terminal.
 - The verification harness uses a null keyring to protect the operator's credentials. Do not weaken that isolation to make setup pass.
 - `xai` is xAI Grok (`XAI_API_KEY`). `groq` is Groq (`GROQ_API_KEY`). Doctor reports present credential names without values; a missing `XAI_API_KEY` is not a live-query proof.

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic_ai.providers.openai_codex import OpenAICodexCredentials
 
 from sqlsaber.cli import auth as auth_cli
+from sqlsaber.cli.workflows import auth_setup
 from sqlsaber.config.auth import AuthConfigManager
 from sqlsaber.config.openai_codex import OpenAICodexCredentialStore
 
@@ -43,7 +45,7 @@ class FakeStore:
 
 
 @pytest.mark.asyncio
-async def test_login_starts_callback_before_opening_browser_and_saves_result() -> None:
+async def test_oauth_starts_callback_before_opening_browser_and_saves_result() -> None:
     events: list[str] = []
     store = FakeStore(events)
 
@@ -52,7 +54,7 @@ async def test_login_starts_callback_before_opening_browser_and_saves_result() -
         events.append("browser-opened")
         return True
 
-    await auth_cli._login_openai_codex(
+    await auth_setup.authenticate_openai_codex(
         store=store,
         flow=FakeFlow(events),
         open_browser=open_browser,
@@ -81,7 +83,7 @@ def configure_paths(monkeypatch, tmp_path) -> Callable[[], OpenAICodexCredential
     return OpenAICodexCredentialStore
 
 
-def test_status_reports_sqlsaber_codex_login_and_refresh_limit(
+def test_status_reports_sqlsaber_codex_credentials_and_refresh_limit(
     monkeypatch, tmp_path, capsys
 ) -> None:
     store_factory = configure_paths(monkeypatch, tmp_path)
@@ -96,7 +98,17 @@ def test_status_reports_sqlsaber_codex_login_and_refresh_limit(
     assert "concurrent sqlsaber processes" in output.casefold()
 
 
-def test_fresh_status_points_to_api_key_setup_and_codex_login(
+def test_setup_accepts_explicit_openai_codex_provider(capsys) -> None:
+    setup_auth = AsyncMock(return_value=(True, "openai-codex"))
+
+    with patch.object(auth_setup, "setup_auth", setup_auth):
+        auth_cli.setup("OPENAI-CODEX")
+
+    assert "SQLsaber Authentication Setup" in capsys.readouterr().out
+    assert setup_auth.await_args.kwargs["provider"] == "openai-codex"
+
+
+def test_fresh_status_points_to_unified_auth_setup(
     monkeypatch, tmp_path, capsys
 ) -> None:
     configure_paths(monkeypatch, tmp_path)
@@ -106,27 +118,32 @@ def test_fresh_status_points_to_api_key_setup_and_codex_login(
     output = capsys.readouterr().out
     assert "No authentication method configured" in output
     assert "saber auth setup" in output
-    assert "saber auth login openai-codex" in output
+    assert "login" not in output.casefold()
+    assert "logout" not in output.casefold()
 
 
-def test_logout_removes_only_sqlsaber_codex_credentials(
+def test_reset_removes_only_sqlsaber_codex_credentials(
     monkeypatch, tmp_path, capsys
 ) -> None:
     store_factory = configure_paths(monkeypatch, tmp_path)
     store = store_factory()
     asyncio.run(store.save(credentials()))
 
-    auth_cli.logout("openai-codex", yes=True)
+    auth_cli.reset("openai-codex", yes=True)
 
     assert store.is_configured() is False
-    assert "Logged out of OpenAI Codex" in capsys.readouterr().out
+    assert "Reset complete" in capsys.readouterr().out
 
 
-def test_login_rejects_api_key_provider_before_starting_oauth(capsys) -> None:
+def test_auth_help_exposes_setup_and_reset_without_login_or_logout(capsys) -> None:
+    from sqlsaber.cli.commands import app
+
     with pytest.raises(SystemExit) as exc_info:
-        auth_cli.login("openai")
+        app(["auth", "--help"])
 
-    assert exc_info.value.code == 2
-    error = capsys.readouterr().err
-    assert "only the openai-codex provider" in error
-    assert "saber auth login openai-codex" in error
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out.casefold()
+    assert "setup" in output
+    assert "reset" in output
+    assert "login" not in output
+    assert "logout" not in output

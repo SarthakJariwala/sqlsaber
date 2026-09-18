@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import suppress
 import os
 import sys
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Annotated, Protocol
+from typing import Annotated
 
 import cyclopts
 import keyring
@@ -24,139 +22,45 @@ from sqlsaber.render import blocks as b
 config_manager = AuthConfigManager()
 logger = get_logger(__name__)
 
-if TYPE_CHECKING:
-    from pydantic_ai.providers.openai_codex import OpenAICodexCredentials
-
-
-class _CodexCredentialWriter(Protocol):
-    async def save(self, credentials: OpenAICodexCredentials) -> None: ...
-
-
-class _CodexLoginFlow(Protocol):
-    def authorization_url(self) -> str: ...
-    async def exchange_code_from_callback(self) -> OpenAICodexCredentials: ...
-
-
 auth_app = cyclopts.App(
     name="auth",
     help="Manage authentication configuration",
     help_epilogue=(
         "Examples:\n\n"
         "saber auth status\n\n"
-        "saber auth login openai-codex\n\n"
+        "saber auth setup openai-codex\n\n"
         "saber auth reset openai --yes"
     ),
 )
 
 
-async def _login_openai_codex(
-    *,
-    store: _CodexCredentialWriter,
-    flow: _CodexLoginFlow,
-    open_browser: Callable[[str], bool],
-    timeout_seconds: float = 600,
-) -> None:
-    """Run the browser callback flow and persist its returned credentials."""
-
-    callback = asyncio.create_task(flow.exchange_code_from_callback())
-    try:
-        await asyncio.sleep(0)
-        if callback.done():
-            credentials = await callback
-        else:
-            open_browser(flow.authorization_url())
-            async with asyncio.timeout(timeout_seconds):
-                credentials = await callback
-        await store.save(credentials)
-    finally:
-        if not callback.done():
-            callback.cancel()
-            with suppress(asyncio.CancelledError):
-                await callback
-
-
-def _canonical_codex_provider(provider: str) -> str:
-    canonical = providers.canonical(provider.strip().lower())
-    if (
-        canonical is None
-        or providers.auth_kind(canonical) is not providers.AuthKind.OPENAI_CODEX
-    ):
-        raise ValueError(
-            "only the openai-codex provider supports browser login and logout"
-        )
-    return canonical
-
-
-@auth_app.command(help_epilogue="Example:\n\nsaber auth login openai-codex")
-def login(
+@auth_app.command(
+    help_epilogue=("Examples:\n\nsaber auth setup\n\nsaber auth setup openai-codex")
+)
+def setup(
     provider: Annotated[
-        str,
-        cyclopts.Parameter(help="Subscription provider to authenticate"),
-    ] = "openai-codex",
+        str | None,
+        cyclopts.Parameter(help="Provider to configure (omit to select interactively)"),
+    ] = None,
 ) -> None:
-    """Sign in to OpenAI Codex with browser OAuth."""
+    """Configure authentication for SQLsaber.
 
-    try:
-        provider = _canonical_codex_provider(provider)
-    except ValueError as exc:
-        fail_usage(f"{exc}.\n  Example: saber auth login openai-codex")
-
-    import webbrowser
-
-    from pydantic_ai.providers.openai_codex import OpenAICodexOAuthFlow
-
-    from sqlsaber.config.openai_codex import OpenAICodexCredentialStore
-
-    store = OpenAICodexCredentialStore()
-    flow = OpenAICodexOAuthFlow()
-    out(b.md("**OpenAI Codex Login**"))
-
-    def open_browser(url: str) -> bool:
-        out(
-            b.md("Complete sign-in in your browser."),
-            b.md(f"If the browser does not open, visit: {url}"),
-        )
-        return webbrowser.open(url)
-
-    try:
-        asyncio.run(
-            _login_openai_codex(
-                store=store,
-                flow=flow,
-                open_browser=open_browser,
-            )
-        )
-    except TimeoutError:
-        fail(
-            "OpenAI Codex login timed out after 10 minutes. Run "
-            "`saber auth login openai-codex` to try again."
-        )
-    except Exception as exc:
-        fail(
-            f"OpenAI Codex login failed: {exc}\n"
-            "  Run `saber auth login openai-codex` to try again."
-        )
-
-    config_manager.set_auth_method(AuthMethod.OPENAI_CODEX)
-    out(
-        b.success("OpenAI Codex login saved for SQLsaber."),
-        b.md(f"Credentials: `{store.path}`", role="muted"),
-        b.md(
-            "Token refresh is serialized within one SQLsaber process. Concurrent "
-            "SQLsaber processes can race while rotating credentials.",
-            role="muted",
-        ),
-    )
-
-
-@auth_app.command(help_epilogue="Example:\n\nsaber auth setup")
-def setup():
-    """Configure authentication for SQLsaber (API keys).
-
-    Example:
+    Examples:
         saber auth setup
+        saber auth setup openai-codex
     """
     from sqlsaber.cli.workflows.auth_setup import setup_auth
+
+    if provider is not None:
+        canonical_provider = providers.canonical(provider.strip().lower())
+        if canonical_provider is None:
+            choices = ", ".join(providers.all_keys())
+            fail_usage(
+                f"unsupported provider '{provider}'.\n"
+                f"  Choose from: {choices}\n"
+                "  Example: saber auth setup openai-codex"
+            )
+        provider = canonical_provider
 
     out(b.md("**SQLsaber Authentication Setup**"))
 
@@ -167,6 +71,7 @@ def setup():
             prompter=prompter,
             auth_manager=config_manager,
             api_key_manager=api_key_manager,
+            provider=provider,
         )
 
     logger.info("auth.setup.start")
@@ -199,8 +104,8 @@ def status():
         out(
             b.warn("No authentication method configured"),
             b.md(
-                "Run `saber auth setup` for an API key or "
-                "`saber auth login openai-codex` for subscription access."
+                "Run `saber auth setup` to configure an API key or ChatGPT "
+                "subscription access."
             ),
         )
         logger.info("auth.status.none_configured")
@@ -253,8 +158,8 @@ def status():
         out(
             b.warn("No authentication credentials configured"),
             b.md(
-                "Run `saber auth setup` for an API key or "
-                "`saber auth login openai-codex` for subscription access."
+                "Run `saber auth setup` to configure an API key or ChatGPT "
+                "subscription access."
             ),
         )
         logger.info("auth.status.none_configured")
@@ -264,21 +169,20 @@ def status():
 def _remove_openai_codex_credentials(
     *,
     yes: bool,
-    non_interactive_command: str,
 ) -> bool:
     from sqlsaber.config.openai_codex import OpenAICodexCredentialStore
 
     store = OpenAICodexCredentialStore()
     if not store.is_configured():
-        out(b.warn("No SQLsaber OpenAI Codex login found. Nothing to remove."))
+        out(b.warn("No stored OpenAI Codex credentials found. Nothing to reset."))
         return False
     confirmed = confirm_action(
         yes=yes,
-        prompt="Remove SQLsaber's stored OpenAI Codex login?",
-        non_interactive_command=non_interactive_command,
+        prompt="Remove SQLsaber's stored OpenAI Codex credentials?",
+        non_interactive_command="saber auth reset openai-codex --yes",
     )
     if not confirmed:
-        out(b.warn("Logout cancelled."))
+        out(b.warn("Reset cancelled."))
         return False
     try:
         store.delete()
@@ -287,38 +191,6 @@ def _remove_openai_codex_credentials(
     if config_manager.get_auth_method() is AuthMethod.OPENAI_CODEX:
         config_manager.clear_auth_method()
     return True
-
-
-@auth_app.command(
-    help_epilogue=(
-        "Examples:\n\n"
-        "saber auth logout openai-codex\n\n"
-        "saber auth logout openai-codex --yes"
-    )
-)
-def logout(
-    provider: Annotated[
-        str,
-        cyclopts.Parameter(help="Subscription provider to disconnect"),
-    ] = "openai-codex",
-    yes: Annotated[
-        bool,
-        cyclopts.Parameter(["--yes"], help="Skip confirmation prompt"),
-    ] = False,
-) -> None:
-    """Remove SQLsaber's stored OpenAI Codex login."""
-
-    try:
-        provider = _canonical_codex_provider(provider)
-    except ValueError as exc:
-        fail_usage(f"{exc}.\n  Example: saber auth logout openai-codex --yes")
-
-    out(b.md("**OpenAI Codex Logout**"))
-    if _remove_openai_codex_credentials(
-        yes=yes,
-        non_interactive_command=f"saber auth logout {provider} --yes",
-    ):
-        out(b.success("Logged out of OpenAI Codex for SQLsaber."))
 
 
 @auth_app.command(
@@ -334,7 +206,7 @@ def reset(
         cyclopts.Parameter(["--yes"], help="Skip confirmation prompt"),
     ] = False,
 ):
-    """Reset stored API key credentials for a selected provider.
+    """Reset stored credentials for a selected provider.
 
     Examples:
         saber auth reset
@@ -371,10 +243,7 @@ def reset(
     provider = canonical_provider
 
     if providers.auth_kind(provider) is providers.AuthKind.OPENAI_CODEX:
-        if _remove_openai_codex_credentials(
-            yes=yes,
-            non_interactive_command=f"saber auth reset {provider} --yes",
-        ):
+        if _remove_openai_codex_credentials(yes=yes):
             out(b.success("Reset complete."))
         return
 

@@ -18,8 +18,7 @@ from sqlsaber.config.settings import ThinkingLevel
     "command",
     [
         [],
-        ["auth", "login"],
-        ["auth", "logout"],
+        ["auth", "setup"],
         ["auth", "reset"],
         ["db", "add"],
         ["db", "remove"],
@@ -44,7 +43,6 @@ def test_affected_help_includes_examples(command, capsys):
 @pytest.mark.parametrize(
     "command",
     [
-        ["auth", "logout"],
         ["auth", "reset"],
         ["db", "remove"],
         ["knowledge", "remove"],

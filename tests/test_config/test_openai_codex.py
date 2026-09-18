@@ -43,10 +43,10 @@ async def test_store_round_trips_and_rotates_credentials_atomically(tmp_path) ->
 
 
 @pytest.mark.asyncio
-async def test_missing_credentials_name_the_login_command(tmp_path) -> None:
+async def test_missing_credentials_name_the_setup_command(tmp_path) -> None:
     store = OpenAICodexCredentialStore(tmp_path / "missing.json")
 
-    with pytest.raises(OpenAICodexAuthError, match="saber auth login openai-codex"):
+    with pytest.raises(OpenAICodexAuthError, match="saber auth setup openai-codex"):
         await store.load()
 
 
@@ -56,7 +56,7 @@ def test_preflight_rejects_malformed_credentials_before_model_request(tmp_path) 
     if os.name != "nt":
         path.chmod(0o600)
 
-    with pytest.raises(OpenAICodexAuthError, match="Malformed.*login openai-codex"):
+    with pytest.raises(OpenAICodexAuthError, match="Malformed.*setup openai-codex"):
         OpenAICodexCredentialStore(path).preflight()
 
 

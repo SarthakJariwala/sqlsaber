@@ -102,12 +102,12 @@ def test_resolve_openai_codex_uses_explicit_subscription_source_without_key_prom
     assert resolved.model.system == "openai-codex"
 
 
-def test_resolve_openai_codex_surfaces_missing_login_before_model_request():
-    class MissingLoginSource(FakeCodexCredentialSource):
+def test_resolve_openai_codex_surfaces_missing_credentials_before_model_request():
+    class MissingCredentialSource(FakeCodexCredentialSource):
         def preflight(self) -> None:
             raise ValueError(
-                "No SQLsaber OpenAI Codex login was found. Run "
-                "`saber auth login openai-codex`."
+                "No SQLsaber OpenAI Codex credentials were found. Run "
+                "`saber auth setup openai-codex`."
             )
 
         async def load(self) -> OpenAICodexCredentials:
@@ -115,11 +115,11 @@ def test_resolve_openai_codex_surfaces_missing_login_before_model_request():
                 "HTTP authentication must not load missing credentials"
             )
 
-    with pytest.raises(ValueError, match="saber auth login openai-codex"):
+    with pytest.raises(ValueError, match="saber auth setup openai-codex"):
         resolve_model(
             NoApiKeyAuth(),
             "openai-codex:gpt-test",
-            codex_credential_source=MissingLoginSource(),
+            codex_credential_source=MissingCredentialSource(),
         )
 
 

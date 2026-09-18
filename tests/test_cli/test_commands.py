@@ -148,7 +148,7 @@ class TestCLICommands:
         assert "sqlsaber db list" in captured.err
 
     @pytest.mark.asyncio
-    async def test_codex_login_error_is_reported_without_database_error_wrapper(
+    async def test_codex_auth_error_is_reported_without_database_error_wrapper(
         self, monkeypatch
     ) -> None:
         from unittest.mock import MagicMock
@@ -159,16 +159,16 @@ class TestCLICommands:
         from sqlsaber import threads
 
         message = (
-            "No SQLsaber OpenAI Codex login was found. Run "
-            "`saber auth login openai-codex`."
+            "No SQLsaber OpenAI Codex credentials were found. Run "
+            "`saber auth setup openai-codex`."
         )
 
-        class MissingCodexLoginSQLSaber:
+        class MissingCodexCredentialsSQLSaber:
             def __init__(self, *, options) -> None:
                 del options
                 raise OpenAICodexAuthError(message)
 
-        monkeypatch.setattr(sqlsaber, "SQLSaber", MissingCodexLoginSQLSaber)
+        monkeypatch.setattr(sqlsaber, "SQLSaber", MissingCodexCredentialsSQLSaber)
         monkeypatch.setattr(threads, "ThreadStorage", lambda: object())
         monkeypatch.setattr(artifacts, "cli_artifact_store", object)
         monkeypatch.setattr(query_results, "cli_query_result_store", object)

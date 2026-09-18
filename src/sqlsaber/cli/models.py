@@ -57,6 +57,7 @@ type _RecommendationSpec = str | _RecommendationSource
 _RECOMMENDATION_SPECS: Mapping[str, _RecommendationSpec] = {
     "anthropic": "claude-opus-5",
     "openai": _RecommendationSource.PRODUCT_DEFAULT,
+    "openai-codex": "gpt-5.6-sol",
     "google": "gemini-2.5-pro",
     "groq": "llama-3-3-70b-versatile",
     "mistral": "mistral-large-latest",
