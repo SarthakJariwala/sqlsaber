@@ -7,6 +7,14 @@
 - add an opt-in local Microsandbox microVM execution backend while retaining Docker as the default
 - add an opt-in Daytona notebook backend pinned to the deployed legacy SDK contract
 
+## [0.10.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-notebook-v0.9.1...sqlsaber-notebook-v0.10.0) (2026-09-18)
+
+
+### Features
+
+* **notebook:** Add E2B backend for notebook execution ([#292](https://github.com/SarthakJariwala/sqlsaber/issues/292)) ([0330071](https://github.com/SarthakJariwala/sqlsaber/commit/033007191b8d28538e01266cbe940ccf50ba7d75))
+* support ChatGPT subscriptions through native Codex provider ([#293](https://github.com/SarthakJariwala/sqlsaber/issues/293)) ([d7e951e](https://github.com/SarthakJariwala/sqlsaber/commit/d7e951e550af5c96148397cd252b6c9437d681ed))
+
 ## [0.9.1](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-notebook-v0.9.0...sqlsaber-notebook-v0.9.1) (2026-09-17)
 
 
