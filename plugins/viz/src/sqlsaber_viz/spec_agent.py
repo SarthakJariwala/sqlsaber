@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import ValidationError
 from pydantic_ai import Agent
-from sqlsaber.agents.model_factory import build_model
+from sqlsaber.agents.model_factory import resolve_model
 from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import Config
 
@@ -35,12 +35,13 @@ class SpecAgent:
             or self.config.model.get_subagent_model("viz")
             or self.config.model.name
         )
-        if not (self._model_name_override and self._api_key_override):
-            self.config.auth.validate(model_name)
-
-        api_key = self._api_key_override or self.config.auth.get_api_key(model_name)
+        resolved = resolve_model(
+            self.config.auth,
+            model_name,
+            api_key_override=self._api_key_override,
+        )
         agent = Agent(
-            build_model(model_name, api_key),
+            resolved.model,
             instructions=VIZ_SYSTEM_PROMPT,
         )
         self._register_tools(agent)

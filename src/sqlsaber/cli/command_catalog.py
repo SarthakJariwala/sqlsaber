@@ -162,7 +162,19 @@ COMMAND_SPECS: tuple[CommandSpec, ...] = (
         takes_arguments=True,
     ),
     _management(("auth", "setup"), "Configure API-key authentication.", "/auth setup"),
+    _management(
+        ("auth", "login"),
+        "Sign in to OpenAI Codex with browser OAuth.",
+        "/auth login [PROVIDER]",
+    ),
     _management(("auth", "status"), "Show authentication status.", "/auth status"),
+    _management(
+        ("auth", "logout"),
+        "Remove SQLsaber's stored OpenAI Codex login.",
+        "/auth logout [PROVIDER] [--yes]",
+        options=(_option("--yes", takes_value=False),),
+        takes_arguments=True,
+    ),
     _management(
         ("auth", "reset"),
         "Reset stored credentials for a provider.",

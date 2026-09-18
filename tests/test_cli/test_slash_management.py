@@ -38,7 +38,9 @@ EXPECTED_MANAGEMENT_PATHS = {
     ("plugins", "enable"),
     ("plugins", "disable"),
     ("auth", "setup"),
+    ("auth", "login"),
     ("auth", "status"),
+    ("auth", "logout"),
     ("auth", "reset"),
     ("db", "add"),
     ("db", "list"),
@@ -131,7 +133,7 @@ async def test_model_commands_update_live_session_and_footer(tmp_path, monkeypat
 
 def test_registry_has_exact_management_parity() -> None:
     assert management_paths() == EXPECTED_MANAGEMENT_PATHS
-    assert len(management_paths()) == 34
+    assert len(management_paths()) == 36
 
 
 def test_palette_projects_every_management_command_from_registry() -> None:

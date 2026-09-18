@@ -110,7 +110,7 @@ class ModelManager:
 
     DEFAULT_MODEL: str = ModelConfigManager.DEFAULT_MODEL
     MODELS_API_URL: str = "https://models.dev/api.json"
-    SUPPORTED_PROVIDERS: Sequence[str] = providers.all_keys()
+    SUPPORTED_PROVIDERS: Sequence[str] = providers.api_key_keys()
     _RECOMMENDED_MODEL_IDS: Mapping[str, str] = _build_recommendation_registry(
         _RECOMMENDATION_SPECS,
         product_default=ModelConfigManager.DEFAULT_MODEL,

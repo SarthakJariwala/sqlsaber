@@ -19,8 +19,10 @@ from pydantic_ai.usage import RequestUsage, RunUsage
 
 import sqlsaber.cli.usage as usage_mod
 from sqlsaber.cli.usage import (
+    CostBasis,
     SessionUsage,
     UsageMeter,
+    format_session_cost,
     format_cost_usd,
     session_summary_blocks,
 )
@@ -431,6 +433,26 @@ async def test_meter_marks_cost_unknown_when_model_id_is_missing() -> None:
     assert meter.session.current_context_tokens == 1000
     assert meter.session.total_cost_usd is None
     assert format_cost_usd(meter.session.total_cost_usd) == "n/a"
+
+
+@pytest.mark.asyncio
+async def test_meter_labels_codex_usage_as_subscription_instead_of_api_cost() -> None:
+    meter, _ = _meter("openai-codex:gpt-5.6-sol")
+
+    async def query(
+        prompt: str, /, *, event_stream_handler: Any = None, **kwargs: Any
+    ) -> FakeResult:
+        run = FakeRun(event_stream_handler)
+        run.respond(RequestUsage(input_tokens=1000, output_tokens=100))
+        await run.node()
+        return run.result()
+
+    await meter.metered(query)("go")
+
+    assert meter.session.total_cost_usd is None
+    assert meter.session.cost_basis is CostBasis.SUBSCRIPTION
+    assert format_session_cost(meter.session) == "ChatGPT subscription"
+    assert "Cost: ChatGPT subscription" in md_of(session_summary_blocks(meter.session))
 
 
 @pytest.mark.asyncio

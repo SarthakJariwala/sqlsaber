@@ -99,7 +99,11 @@ class ToolRenderer:
         """
         ctx = context or ToolRenderContext()
         if isinstance(result, str) and isinstance(ctx.metadata, dict):
-            structured = ctx.metadata.get("sqlsaber_structured_result")
+            structured: object = None
+            for key, value in ctx.metadata.items():
+                if key == "sqlsaber_structured_result":
+                    structured = value
+                    break
             if isinstance(structured, dict):
                 try:
                     json.loads(result)

@@ -20,6 +20,7 @@ class AuthMethod(Enum):
     """Authentication methods available in SQLSaber."""
 
     API_KEY = "api_key"
+    OPENAI_CODEX = "openai_codex"
 
 
 class AuthConfigManager:

@@ -5,12 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from importlib.metadata import entry_points
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeGuard
 
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.models import Model
 
-from sqlsaber.config import providers
 from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import Config
 from sqlsaber.database.registry import DatabaseRegistry
@@ -61,19 +60,16 @@ class PluginContext:
         explicit_key = override.api_key if override else None
         use_main_key = override is None and subagent_model is None
         api_key = explicit_key or (self.main_api_key if use_main_key else None)
-        if api_key is None:
-            self.config.auth.validate(model_name)
-            api_key = self.config.auth.get_api_key(model_name)
-
-        provider = providers.provider_from_model(model_name)
-        if provider is None:
-            provider = model_name.partition(":")[0].strip().lower()
-
         # Import lazily to avoid loading the managed-agent package while plugin
         # discovery types themselves are being imported.
-        from sqlsaber.agents.model_factory import build_model
+        from sqlsaber.agents.model_factory import resolve_model
 
-        return model_name, build_model(model_name, api_key), provider
+        resolved = resolve_model(
+            self.config.auth,
+            model_name,
+            api_key_override=api_key,
+        )
+        return model_name, resolved.model, resolved.provider
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +86,12 @@ class CapabilityFactory:
 type CapabilitySpec = (
     AbstractCapability[Any] | CapabilityFactory | Callable[[PluginContext], object]
 )
+
+
+def _is_capability_factory(
+    spec: CapabilitySpec,
+) -> TypeGuard[Callable[[PluginContext], object]]:
+    return callable(spec) and not isinstance(spec, AbstractCapability)
 
 
 def _select_entry_points(group: str) -> Iterable[Any]:
@@ -126,16 +128,16 @@ def _spec_name(spec: object) -> str:
 
 
 def resolve_capability_specs(
-    specs: Sequence[object],
+    specs: Sequence[CapabilitySpec],
     context: PluginContext,
 ) -> list[AbstractCapability[Any]]:
     """Invoke PluginContext factories and pass through capability instances."""
     capabilities: list[AbstractCapability[Any]] = []
     for spec in specs:
-        if isinstance(spec, AbstractCapability):
-            capabilities.append(spec)
-            continue
-        if not callable(spec):
+        if not _is_capability_factory(spec):
+            if isinstance(spec, AbstractCapability):
+                capabilities.append(spec)
+                continue
             logger.warning("Unsupported capability spec: %r", spec)
             continue
         try:

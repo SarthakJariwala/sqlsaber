@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterable, Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol
 
 from pydantic_ai.messages import ModelResponse
@@ -22,6 +23,14 @@ log = get_logger(__name__)
 type EventStreamHandler = Callable[
     [RunContext[Any], AsyncIterable[AgentStreamEvent]], Awaitable[None]
 ]
+
+
+class CostBasis(str, Enum):
+    """Meaning of the session's displayed cost value."""
+
+    ESTIMATE = "estimate"
+    SUBSCRIPTION = "subscription"
+    UNAVAILABLE = "unavailable"
 
 
 class StreamingQuery(Protocol):
@@ -50,6 +59,7 @@ class SessionUsage:
     cache_write_tokens: int = 0
 
     total_cost_usd: float | None = 0.0
+    cost_basis: CostBasis = CostBasis.ESTIMATE
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,15 +69,18 @@ class _PricedResponse:
     cache_read_tokens: int
     cache_write_tokens: int
     cost_usd: float | None
+    cost_basis: CostBasis
 
     @classmethod
     def from_request(cls, usage: RequestUsage, model_id: str | None) -> _PricedResponse:
+        cost_usd = _price(usage, model_id)
         return cls(
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
             cache_read_tokens=usage.cache_read_tokens,
             cache_write_tokens=usage.cache_write_tokens,
-            cost_usd=_price(usage, model_id),
+            cost_usd=cost_usd,
+            cost_basis=_cost_basis(model_id, cost_usd),
         )
 
 
@@ -91,7 +104,13 @@ def _fold(
         requests=base.requests + len(responses),
         tool_calls=base.tool_calls + tool_calls,
     )
+    prior_responses = base.requests
     for response in responses:
+        cost_basis = (
+            response.cost_basis
+            if prior_responses == 0
+            else _merge_cost_basis(folded.cost_basis, response.cost_basis)
+        )
         folded = replace(
             folded,
             total_input_tokens=folded.total_input_tokens + response.input_tokens,
@@ -100,12 +119,28 @@ def _fold(
             cache_write_tokens=folded.cache_write_tokens + response.cache_write_tokens,
             current_context_tokens=response.input_tokens,
             total_cost_usd=_add_cost(folded.total_cost_usd, response.cost_usd),
+            cost_basis=cost_basis,
         )
+        prior_responses += 1
     return folded
+
+
+def _cost_basis(model_id: str | None, cost_usd: float | None) -> CostBasis:
+    if model_id and model_id.partition(":")[0] == "openai-codex":
+        return CostBasis.SUBSCRIPTION
+    if cost_usd is None:
+        return CostBasis.UNAVAILABLE
+    return CostBasis.ESTIMATE
+
+
+def _merge_cost_basis(left: CostBasis, right: CostBasis) -> CostBasis:
+    return left if left is right else CostBasis.UNAVAILABLE
 
 
 def _price(usage: RequestUsage, model_id: str | None) -> float | None:
     if not model_id:
+        return None
+    if model_id.partition(":")[0] == "openai-codex":
         return None
 
     try:
@@ -276,6 +311,14 @@ def format_cost_usd(cost_usd: float | None) -> str:
     return f"${cost_usd:.4f}"
 
 
+def format_session_cost(session_usage: SessionUsage) -> str:
+    """Format cost according to its API, subscription, or unknown basis."""
+
+    if session_usage.cost_basis is CostBasis.SUBSCRIPTION:
+        return "ChatGPT subscription"
+    return format_cost_usd(session_usage.total_cost_usd)
+
+
 def format_tokens(count: int) -> str:
     """Format token count with K/M suffixes for readability."""
     if count >= 1_000_000:
@@ -303,7 +346,7 @@ def session_summary_blocks(session_usage: SessionUsage):
         b.md(
             f"Usage: {format_tokens(session_usage.total_input_tokens)} in / "
             f"{format_tokens(session_usage.total_output_tokens)} out │ "
-            f"Cost: {format_cost_usd(session_usage.total_cost_usd)}",
+            f"Cost: {format_session_cost(session_usage)}",
             role="muted",
         ),
         b.md(

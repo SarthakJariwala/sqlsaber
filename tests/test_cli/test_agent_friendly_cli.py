@@ -18,6 +18,8 @@ from sqlsaber.config.settings import ThinkingLevel
     "command",
     [
         [],
+        ["auth", "login"],
+        ["auth", "logout"],
         ["auth", "reset"],
         ["db", "add"],
         ["db", "remove"],
@@ -42,6 +44,7 @@ def test_affected_help_includes_examples(command, capsys):
 @pytest.mark.parametrize(
     "command",
     [
+        ["auth", "logout"],
         ["auth", "reset"],
         ["db", "remove"],
         ["knowledge", "remove"],
@@ -90,6 +93,22 @@ def test_models_set_accepts_xai_grok_4_6():
         models_cli.set_model_command("xai:grok-4.6")
 
     set_model.assert_called_once_with("xai:grok-4.6")
+
+
+def test_models_set_accepts_openai_codex_without_fetching_or_prompting():
+    with (
+        patch.object(
+            models_cli.model_manager, "set_model", return_value=True
+        ) as set_model,
+        patch.object(
+            models_cli.model_manager,
+            "fetch_available_models",
+            side_effect=AssertionError("direct Codex selection must not fetch"),
+        ),
+    ):
+        models_cli.set_model_command("openai-codex:gpt-5.6-sol")
+
+    set_model.assert_called_once_with("openai-codex:gpt-5.6-sol")
 
 
 def test_models_set_accepts_groq_without_confusing_xai():

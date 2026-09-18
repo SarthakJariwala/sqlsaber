@@ -9,7 +9,7 @@ import json
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
 
-from sqlsaber.agents.model_factory import build_model
+from sqlsaber.agents.model_factory import resolve_model
 from sqlsaber.config.settings import Config
 from sqlsaber.prompts.handoff import HANDOFF_INPUT_INSTRUCTIONS, HANDOFF_SYSTEM_PROMPT
 
@@ -44,12 +44,13 @@ class HandoffAgent:
             or self.config.model.get_subagent_model("handoff")
             or self.config.model.name
         )
-        if not (self._model_name_override and self._api_key_override):
-            self.config.auth.validate(model_name)
-
-        api_key = self._api_key_override or self.config.auth.get_api_key(model_name)
+        resolved = resolve_model(
+            self.config.auth,
+            model_name,
+            api_key_override=self._api_key_override,
+        )
         return Agent(
-            build_model(model_name, api_key),
+            resolved.model,
             instructions=HANDOFF_SYSTEM_PROMPT,
         )
 

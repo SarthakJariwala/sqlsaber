@@ -70,11 +70,15 @@ def _render_tool_result_html(
     # Artifact publications have their own linked HTML below. Forward only the
     # structured SQL result needed to render model-facing CSV without duplicating
     # those publications through ToolRenderer's generic artifact blocks.
-    render_metadata = (
-        {"sqlsaber_structured_result": metadata.get("sqlsaber_structured_result")}
-        if isinstance(metadata, dict)
-        else None
-    )
+    structured_result: object = None
+    if isinstance(metadata, dict):
+        for key, value in metadata.items():
+            if key == "sqlsaber_structured_result":
+                structured_result = value
+                break
+        render_metadata = {"sqlsaber_structured_result": structured_result}
+    else:
+        render_metadata = None
     html = html_of(
         tuple(
             renderer.result(

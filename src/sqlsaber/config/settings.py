@@ -392,7 +392,10 @@ class AuthConfig:
 
         model = model_name or ""
         provider_key = providers.provider_from_model(model)
-        if provider_key in set(providers.all_keys()):
+        if (
+            provider_key is not None
+            and providers.auth_kind(provider_key) is providers.AuthKind.API_KEY
+        ):
             return self._api_key_manager.get_api_key(provider_key)
         return None
 
@@ -406,7 +409,12 @@ class AuthConfig:
 
         model = model_name or ""
         provider_key = providers.provider_from_model(model)
-        env_var = providers.env_var_name(provider_key or "") if provider_key else None
+        if (
+            provider_key is None
+            or providers.auth_kind(provider_key) is not providers.AuthKind.API_KEY
+        ):
+            return
+        env_var = providers.env_var_name(provider_key)
 
         if not env_var:
             return
@@ -440,10 +448,15 @@ class InMemoryAuthConfig:
     def get_api_key(self, model_name: str) -> str | None:
         model = model_name or ""
         provider_key = providers.provider_from_model(model)
-        if provider_key not in set(providers.all_keys()):
+        if (
+            provider_key is None
+            or providers.auth_kind(provider_key) is not providers.AuthKind.API_KEY
+        ):
             return None
 
         env_var = providers.env_var_name(provider_key)
+        if env_var is None:
+            return None
         env_key = os.getenv(env_var)
         if env_key:
             return env_key
@@ -456,7 +469,10 @@ class InMemoryAuthConfig:
     def validate(self, model_name: str) -> None:
         model = model_name or ""
         provider_key = providers.provider_from_model(model)
-        if not provider_key:
+        if (
+            provider_key is None
+            or providers.auth_kind(provider_key) is not providers.AuthKind.API_KEY
+        ):
             return
 
         api_key = self.get_api_key(model_name)

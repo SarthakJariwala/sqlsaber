@@ -82,6 +82,7 @@ async def _create_cli_saber(
         ThreadResumeMetadataError,
     )
     from sqlsaber.database.resolver import DatabaseResolutionError
+    from sqlsaber.config.openai_codex import OpenAICodexAuthError
     from sqlsaber.threads import ThreadStorage
     from sqlsaber.threads.manager import ThreadManager
 
@@ -141,6 +142,9 @@ async def _create_cli_saber(
             f"Invalid thread metadata: {exc.reason}. Retry with: "
             f'saber --thread {thread} --database DATABASE "follow-up question"'
         ) from None
+    except OpenAICodexAuthError as exc:
+        log.error("model.auth.error", provider="openai-codex", error=str(exc))
+        raise CLIError(str(exc)) from None
     except DatabaseResolutionError as exc:
         log.error("db.resolve.error", error=str(exc))
         raise CLIError(str(exc)) from None

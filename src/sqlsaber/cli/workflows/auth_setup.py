@@ -28,7 +28,7 @@ async def select_provider(
     """
 
     provider = await prompter.select(
-        "Select AI provider:", choices=providers.all_keys(), default=default
+        "Select AI provider:", choices=providers.api_key_keys(), default=default
     )
     return provider
 
