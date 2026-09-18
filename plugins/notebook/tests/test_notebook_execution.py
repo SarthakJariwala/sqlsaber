@@ -58,10 +58,11 @@ def test_backend_selection_is_explicit_without_fallback(
 
     assert resolve_notebook_backend("microsandbox").name == "microsandbox"
     assert resolve_notebook_backend("daytona").name == "daytona"
+    assert resolve_notebook_backend(" E2B ").name == "e2b"
 
     with pytest.raises(
         NotebookBackendUnavailable,
-        match="expected 'docker', 'microsandbox', 'modal', or 'daytona'",
+        match="expected 'docker', 'microsandbox', 'modal', 'daytona', or 'e2b'",
     ):
         resolve_notebook_backend("unknown")
 

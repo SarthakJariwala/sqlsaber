@@ -19,6 +19,7 @@ _HEAVY_MODULES = (
     "pydantic_ai",
     "modal",
     "daytona",
+    "e2b",
     "microsandbox",
     "sqlsaber_notebook.capability",
     "sqlsaber_notebook.analyst",

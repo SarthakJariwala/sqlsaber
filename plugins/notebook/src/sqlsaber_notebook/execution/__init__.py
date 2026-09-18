@@ -50,9 +50,13 @@ def resolve_notebook_backend(name: str | None = None) -> NotebookBackend:
         from .daytona import DaytonaNotebookBackend
 
         return DaytonaNotebookBackend()
+    if normalized == "e2b":
+        from .e2b import E2BNotebookBackend
+
+        return E2BNotebookBackend()
     raise NotebookBackendUnavailable(
         f"Unknown notebook backend {selected!r}; expected 'docker', "
-        "'microsandbox', 'modal', or 'daytona'",
+        "'microsandbox', 'modal', 'daytona', or 'e2b'",
         backend=normalized or "unknown",
         phase="configuration",
     )

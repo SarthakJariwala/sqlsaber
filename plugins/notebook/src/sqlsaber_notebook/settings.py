@@ -15,7 +15,7 @@ from sqlsaber.plugin_settings import PluginSettings, Setting, SettingsValues
 from .config import DEFAULT_NOTEBOOK_CONFIG, NotebookConfig, WorkspaceLimits
 from .execution import DEFAULT_NOTEBOOK_BACKEND, NotebookBackend
 
-BACKEND_CHOICES = ("docker", "microsandbox", "modal", "daytona")
+BACKEND_CHOICES = ("docker", "microsandbox", "modal", "daytona", "e2b")
 
 _DEFAULTS = DEFAULT_NOTEBOOK_CONFIG
 _UNSET = object()
@@ -37,7 +37,7 @@ _FIELDS = (
         env="SQLSABER_NOTEBOOK_BACKEND",
         help=(
             "Where analysis notebooks run. docker and microsandbox are local; "
-            "modal and daytona upload workspace files to that provider."
+            "modal, daytona, and e2b upload workspace files to that provider."
         ),
     ),
     Setting(
@@ -48,6 +48,15 @@ _FIELDS = (
             "Container image for notebook execution, preferably pinned by "
             "digest. Unset uses the default Jupyter scipy-notebook digest."
         ),
+    ),
+    Setting(
+        name="e2b_api_key",
+        label="E2B API key",
+        kind="secret",
+        env="E2B_API_KEY",
+        when=_backend_is("e2b"),
+        credential="e2b.api_key",
+        help="Stored in the OS keyring. Unset uses E2B_API_KEY.",
     ),
     Setting(
         name="daytona_api_key",
@@ -233,6 +242,10 @@ def _runtime_backend(
     if secrets is None:
         return name
     selected = name or DEFAULT_NOTEBOOK_BACKEND
+    if selected == "e2b" and (api_key := secrets.get("e2b_api_key")) is not None:
+        from .execution.e2b import E2BNotebookBackend
+
+        return E2BNotebookBackend(api_key=api_key)
     if selected == "daytona":
         api_key = secrets.get("daytona_api_key")
         api_url = _text(values, "daytona_api_url")
@@ -312,6 +325,11 @@ def _bind(values: SettingsValues, secrets: Mapping[str, str]) -> object:
 
 
 _REMOTE_NOTICES = {
+    "e2b": (
+        "E2B notebooks run remotely: workspace files (SQL results and selected "
+        "inputs) are uploaded to E2B. Template builds and sandboxes may incur "
+        "usage charges. Sandboxes have a one-hour lifetime."
+    ),
     "modal": (
         "Modal notebooks run remotely: workspace files (SQL results and "
         "selected inputs) are uploaded to Modal and sandbox runtime may incur "

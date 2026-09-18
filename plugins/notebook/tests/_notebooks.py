@@ -18,8 +18,11 @@ try:
 except OSError:
     print('input_read_only')
 try:
-    socket.create_connection(('1.1.1.1', 80), timeout=1)
-    print('network_open')
+    # Transparent firewalls may accept TCP locally before denying upstream.
+    with socket.create_connection(('1.1.1.1', 80), timeout=3) as connection:
+        connection.sendall(b'GET / HTTP/1.1\\r\\nHost: 1.1.1.1\\r\\nConnection: close\\r\\n\\r\\n')
+        response = connection.recv(1024)
+    print('network_open' if response.startswith(b'HTTP/') else 'network_blocked')
 except OSError:
     print('network_blocked')
 print(f'uid={os.getuid()} sum={sum(values)}')
