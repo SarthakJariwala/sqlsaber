@@ -13,7 +13,7 @@ Fable and opus converged on one shape. A two-branch sum lives on the capability 
 - `PluginSettings.__post_init__` rejects more than one `kind="model"` field.
 - A pin never inherits the main API key.
 - `saber models current` lists handoff only, plus a pointer to `saber plugins list`.
-- `INHERIT` reuses the parent's `ResolvedModel` handle. Rebuild from `main.model_name` and `main.api_key` if a provider model carries per-agent state.
+- `INHERIT` rebuilds from `main.model_name` and `main.api_key`. Sharing the parent `Model` is unsafe: `async with Agent(child.model)` closes the provider HTTP client.
 
 ## Rejects
 
