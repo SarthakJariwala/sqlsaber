@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any, TypeGuard
@@ -12,14 +12,13 @@ from pydantic_ai.capabilities import AbstractCapability
 from sqlsaber.config.logging import get_logger
 from sqlsaber.database.registry import DatabaseRegistry
 from sqlsaber.knowledge.manager import KnowledgeManager
-from sqlsaber.nested_model import INHERIT, NestedModel, most_specific
+from sqlsaber.nested_model import NestedModel
 from sqlsaber.query_results import QueryResultStore
 from sqlsaber.workspace_inputs import WorkspaceInputResolver
 
 if TYPE_CHECKING:
     from sqlsaber.agents.model_factory import ModelAuth, ResolvedModel
     from sqlsaber.artifacts import ArtifactFailureMode, ArtifactStore
-    from sqlsaber.nested_model import Pinned
 
 logger = get_logger(__name__)
 PLUGIN_GROUP = "sqlsaber.capabilities"
@@ -32,7 +31,6 @@ class PluginContext:
     registry: DatabaseRegistry
     knowledge_manager: KnowledgeManager
     allow_dangerous: bool
-    tool_overrides: Mapping[str, Pinned]
     auth: ModelAuth
     main: ResolvedModel
     query_result_store: QueryResultStore
@@ -40,22 +38,16 @@ class PluginContext:
     artifact_failure_mode: ArtifactFailureMode = "required"
     workspace_input_resolver: WorkspaceInputResolver | None = None
 
-    def resolve_subagent_model(
-        self,
-        configured: NestedModel,
-        *,
-        tool: str,
-    ) -> ResolvedModel:
-        """Resolve this capability's nested model for one tool call.
+    def resolve_subagent_model(self, configured: NestedModel) -> ResolvedModel:
+        """Resolve this capability's nested model.
 
-        Precedence is session ``tool_overrides[tool]``, then ``configured``,
-        then the main agent. A pin never inherits the main API key.
+        ``configured`` is the capability config value. Absent or inherit uses
+        the main agent. A pin never reuses the main API key.
         """
         from sqlsaber.agents.model_factory import resolve_nested_model
 
-        override = self.tool_overrides.get(tool, INHERIT)
         return resolve_nested_model(
-            most_specific(override, configured),
+            configured,
             main=self.main,
             auth=self.auth,
         )

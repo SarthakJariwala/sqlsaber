@@ -1,4 +1,4 @@
-"""NestedModel parse, pin, inherit, and precedence fold."""
+"""NestedModel parse, pin, and inherit."""
 
 from __future__ import annotations
 
@@ -7,10 +7,8 @@ import pytest
 from sqlsaber.config.providers import all_keys
 from sqlsaber.nested_model import (
     INHERIT,
-    Inherit,
     ModelId,
     Pinned,
-    most_specific,
     parse_model_id,
     parse_nested_model,
     pin,
@@ -40,11 +38,3 @@ def test_parse_nested_model_blank_is_inherit() -> None:
 def test_pin_rejects_codex_api_key() -> None:
     with pytest.raises(ValueError, match="do not accept API keys"):
         pin("openai-codex:gpt-5.6-sol", api_key="sk-test")
-
-
-def test_most_specific_first_pin_wins() -> None:
-    first = pin("openai:gpt-5-mini")
-    second = pin("anthropic:claude-haiku-4-5")
-    assert most_specific(INHERIT, first, second) is first
-    assert most_specific(INHERIT, Inherit.INHERIT) is INHERIT
-    assert most_specific() is INHERIT

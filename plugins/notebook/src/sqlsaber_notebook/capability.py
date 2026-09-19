@@ -182,10 +182,7 @@ class AnalyzeDataTool(Tool):
                 workspace_input_resolver=self._context.workspace_input_resolver,
                 limits=self._config.workspace,
             )
-            child = self._context.resolve_subagent_model(
-                self._config.model,
-                tool=self.name,
-            )
+            child = self._context.resolve_subagent_model(self._config.model)
             backend = (
                 self._config.backend
                 if isinstance(self._config.backend, NotebookBackend)

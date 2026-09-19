@@ -1,13 +1,13 @@
 ---
 title: Advanced
-description: Per-tool model overrides, custom system prompts, write access, and injectable knowledge and thread managers in the SQLsaber SDK.
+description: Nested plugin models, custom system prompts, write access, and injectable knowledge and thread managers in the SQLsaber SDK.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-## Per-tool model overrides
+## Nested plugin models
 
-Run a nested tool on a different model than the main agent. Session `tool_overrides` win over the plugin's configured model. Keys are tool names (`viz`, `analyze_data`, `analyze_in_sandbox`), not plugin names.
+Pin a nested plugin model on the capability config. That is the same channel the CLI writes through `saber plugins setup`. A pin never reuses the main API key.
 
 ```python
 from functools import partial
@@ -19,24 +19,17 @@ options = SQLSaberOptions(
     database="sqlite:///my.db",
     model_name="anthropic:claude-sonnet-4-5-20250929",
     capabilities=[
-        partial(notebook, config=NotebookConfig(model=pin("openai:gpt-5-mini"))),
+        partial(
+            notebook,
+            config=NotebookConfig(
+                model=pin("openai:gpt-5-mini", api_key="sk-..."),
+            ),
+        ),
     ],
-    tool_overrides={
-        "analyze_data": pin("anthropic:claude-haiku-4-5", api_key="sk-..."),
-    },
 )
 ```
 
-`ModelOverides(model_name=..., api_key=...)` and a plain dict still work as `tool_overrides` values.
-
-```python
-tool_overrides={"viz": {"model_name": "openai:gpt-5-mini"}}
-```
-
-<Aside type="note">
-  An `api_key` override requires a `model_name`, since the provider is derived
-  from the model. Setting `api_key` without `model_name` raises an error.
-</Aside>
+Omit `model`, or pass `INHERIT`, to use the main agent model.
 
 ## Custom system prompt
 

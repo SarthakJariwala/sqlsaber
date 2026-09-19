@@ -79,7 +79,6 @@ async def test_host_agent_sqltools_and_viz_share_store_and_all_rows(tmp_path) ->
             registry=sql.registry,
             knowledge_manager=KnowledgeManager(),
             allow_dangerous=False,
-            tool_overrides={},
             auth=settings.auth,
             main=resolve_model(settings.auth, "anthropic:claude-3-5-sonnet"),
             query_result_store=store,

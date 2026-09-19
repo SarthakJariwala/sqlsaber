@@ -115,7 +115,7 @@ class VizTool(Tool):
         self._last_rows = rows
         self._last_file = file
 
-        child = self.context.resolve_subagent_model(self.config.model, tool=self.name)
+        child = self.context.resolve_subagent_model(self.config.model)
         agent = _get_spec_agent_cls()(child.model)
 
         try:

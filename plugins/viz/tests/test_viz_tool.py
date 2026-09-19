@@ -17,7 +17,7 @@ from sqlsaber_viz.tools import VizTool
 def _tool(**context_fields: Any) -> VizTool:
     fields = {
         "query_result_store": InMemoryQueryResultStore(),
-        "resolve_subagent_model": lambda configured, *, tool: SimpleNamespace(
+        "resolve_subagent_model": lambda configured: SimpleNamespace(
             model="inherited-model"
         ),
     }
@@ -145,9 +145,7 @@ async def test_viz_tool_uses_resolved_nested_model(
     }
     ctx = _make_ctx(payload, "call-2")
     tool = _tool(
-        resolve_subagent_model=lambda configured, *, tool: SimpleNamespace(
-            model="pinned-handle"
-        )
+        resolve_subagent_model=lambda configured: SimpleNamespace(model="pinned-handle")
     )
     tool.config = VizConfig()
 

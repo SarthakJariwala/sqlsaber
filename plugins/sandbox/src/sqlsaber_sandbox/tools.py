@@ -162,9 +162,7 @@ class AnalyzeSandboxTool(Tool):
                     raise ValueError(
                         "A conversation identity is required for managed sandbox sessions"
                     )
-                child = self.context.resolve_subagent_model(
-                    self.config.model, tool=self.name
-                )
+                child = self.context.resolve_subagent_model(self.config.model)
                 session = SandboxSession(
                     model=child.model,
                     model_provider=child.provider,

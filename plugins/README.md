@@ -123,7 +123,7 @@ SDK capability factories do not read saved CLI settings.
 
 ## Porting a legacy tool plugin
 
-The old `sqlsaber.tools` group and global `ToolRegistry` are removed. Keep your existing `Tool.execute` and rendering methods, put the instance in a `FunctionToolset`, expose it through `display_specs`, and change the entry point to `sqlsaber.capabilities`. Model overrides should be read from `context.tool_overrides` during construction rather than `ctx.deps`.
+The old `sqlsaber.tools` group and global `ToolRegistry` are removed. Keep your existing `Tool.execute` and rendering methods, put the instance in a `FunctionToolset`, expose it through `display_specs`, and change the entry point to `sqlsaber.capabilities`. Pin a nested model on the capability config (`NotebookConfig(model=pin(...))`) and resolve it with `context.resolve_subagent_model(config.model)`.
 
 ## Install a plugin locally
 

@@ -20,7 +20,6 @@ from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
 from sqlsaber.database.sqlite import SQLiteConnection
 from sqlsaber.knowledge.manager import KnowledgeManager
 from sqlsaber.nested_model import INHERIT, pin
-from sqlsaber.overrides import normalize_tool_overides
 from sqlsaber.query_results import InMemoryQueryResultStore
 
 
@@ -59,7 +58,6 @@ def _context() -> PluginContext:
         registry=registry,
         knowledge_manager=KnowledgeManager(),
         allow_dangerous=True,
-        tool_overrides=normalize_tool_overides({"viz": pin("openai:gpt-test")}),
         auth=config.auth,
         main=main,
         query_result_store=InMemoryQueryResultStore(),
@@ -86,7 +84,6 @@ def test_discover_capabilities_delivers_plugin_context(monkeypatch) -> None:
     assert [capability.id for capability in discovered] == ["test-plugin"]
     assert received == [context]
     assert received[0].allow_dangerous is True
-    assert str(received[0].tool_overrides["viz"].id) == "openai:gpt-test"
 
 
 def test_discover_capabilities_sorts_entry_points_by_name(monkeypatch) -> None:
@@ -116,29 +113,17 @@ def test_plugin_context_resolves_subagent_precedence(monkeypatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     context = _context()
 
-    inherited = context.resolve_subagent_model(INHERIT, tool="analyze_data")
+    inherited = context.resolve_subagent_model(INHERIT)
     assert inherited.model_name == "anthropic:claude-main"
     assert inherited.provider == context.main.provider
     assert inherited.api_key == context.main.api_key
     assert inherited.model is not context.main.model
 
-    pinned = context.resolve_subagent_model(
-        pin("openai:gpt-notebook"), tool="analyze_data"
-    )
+    pinned = context.resolve_subagent_model(pin("openai:gpt-notebook"))
     assert pinned.model_name == "openai:gpt-notebook"
     assert pinned.provider == "openai"
     assert pinned.api_key == "openai-key"
     assert pinned.api_key != context.main.api_key
-
-
-def test_plugin_context_tool_override_wins(monkeypatch) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    context = _context()
-
-    resolved = context.resolve_subagent_model(pin("openai:gpt-notebook"), tool="viz")
-
-    assert resolved.model_name == "openai:gpt-test"
-    assert resolved.provider == "openai"
 
 
 def test_plugin_context_resolves_codex_subagent_without_api_key(monkeypatch) -> None:
@@ -149,9 +134,7 @@ def test_plugin_context_resolves_codex_subagent_without_api_key(monkeypatch) -> 
     )
     context = _context()
 
-    resolved = context.resolve_subagent_model(
-        pin("openai-codex:gpt-test"), tool="analyze_data"
-    )
+    resolved = context.resolve_subagent_model(pin("openai-codex:gpt-test"))
 
     assert resolved.model_name == "openai-codex:gpt-test"
     assert isinstance(resolved.model, OpenAICodexModel)
@@ -183,7 +166,6 @@ def test_plugin_context_requires_query_result_store() -> None:
             registry=registry,
             knowledge_manager=KnowledgeManager(),
             allow_dangerous=True,
-            tool_overrides={},
             auth=Config.in_memory(
                 model_name="anthropic:claude-main",
                 api_keys={"anthropic": "main-key"},

@@ -89,11 +89,3 @@ def parse_nested_model(value: str | None) -> NestedModel:
     if value is None or not str(value).strip():
         return INHERIT
     return pin(str(value))
-
-
-def most_specific(*layers: NestedModel) -> NestedModel:
-    """Fold configuration layers outermost-first. The first pin wins."""
-    for layer in layers:
-        if isinstance(layer, Pinned):
-            return layer
-    return INHERIT
