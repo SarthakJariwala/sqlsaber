@@ -28,7 +28,9 @@ def _context(model: Any, *, resolver: Any = None, store: Any = None) -> Any:
         workspace_input_resolver=resolver,
         artifact_store=store,
         artifact_failure_mode="required",
-        resolve_subagent_model=lambda *a, **k: ("scripted", model, "test"),
+        resolve_subagent_model=lambda *a, **k: SimpleNamespace(
+            model=model, model_name="scripted", provider="test"
+        ),
     )
 
 

@@ -44,37 +44,25 @@ COLUMNS = [
 
 
 def _make_run_result(output: str, messages: list | None = None) -> SimpleNamespace:
-    """Build a minimal stand-in for a pydantic-ai AgentRunResult."""
     return SimpleNamespace(
         output=output,
         all_messages=lambda: messages or [],
     )
 
 
-def _patch_agent(monkeypatch: pytest.MonkeyPatch, agent: SpecAgent) -> None:
-    """Prevent SpecAgent.__init__ from building a real pydantic-ai agent."""
-
-
-async def _make_spec_agent(monkeypatch: pytest.MonkeyPatch) -> SpecAgent:
-    """Create a SpecAgent with a stubbed-out internal agent."""
-    # Bypass __init__ which calls _build_agent (needs real config/provider)
-    obj = object.__new__(SpecAgent)
-    obj.config = None  # type: ignore[assignment]
-    obj._model_name_override = None
-    obj._api_key_override = None
-    obj.agent = AsyncMock()
-    return obj
+def _make_spec_agent() -> SpecAgent:
+    spec_agent = SpecAgent("test")
+    spec_agent.agent = AsyncMock()
+    return spec_agent
 
 
 # -- Tests ------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_generate_spec_succeeds_first_attempt(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_generate_spec_succeeds_first_attempt() -> None:
     """When the agent returns valid JSON on the first try, no retry occurs."""
-    agent = await _make_spec_agent(monkeypatch)
+    agent = _make_spec_agent()
     agent.agent.run = AsyncMock(
         return_value=_make_run_result(VALID_SPEC_JSON),
     )
@@ -92,12 +80,10 @@ async def test_generate_spec_succeeds_first_attempt(
 
 
 @pytest.mark.asyncio
-async def test_generate_spec_self_corrects_after_invalid_first_attempt(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_generate_spec_self_corrects_after_invalid_first_attempt() -> None:
     """When the first attempt fails validation, the agent retries with error
     feedback and succeeds on the second attempt."""
-    agent = await _make_spec_agent(monkeypatch)
+    agent = _make_spec_agent()
     agent.agent.run = AsyncMock(
         side_effect=[
             _make_run_result(INVALID_SPEC_JSON),
@@ -126,11 +112,9 @@ async def test_generate_spec_self_corrects_after_invalid_first_attempt(
 
 
 @pytest.mark.asyncio
-async def test_generate_spec_self_corrects_bad_json(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_generate_spec_self_corrects_bad_json() -> None:
     """When the agent returns non-JSON on the first try, it retries."""
-    agent = await _make_spec_agent(monkeypatch)
+    agent = _make_spec_agent()
     agent.agent.run = AsyncMock(
         side_effect=[
             _make_run_result("Here is your chart spec: not json"),
@@ -150,11 +134,9 @@ async def test_generate_spec_self_corrects_bad_json(
 
 
 @pytest.mark.asyncio
-async def test_generate_spec_raises_after_all_retries_exhausted(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_generate_spec_raises_after_all_retries_exhausted() -> None:
     """After MAX_RETRIES + 1 attempts all fail, the last error is raised."""
-    agent = await _make_spec_agent(monkeypatch)
+    agent = _make_spec_agent()
     agent.agent.run = AsyncMock(
         return_value=_make_run_result(INVALID_SPEC_JSON),
     )
@@ -172,11 +154,9 @@ async def test_generate_spec_raises_after_all_retries_exhausted(
 
 
 @pytest.mark.asyncio
-async def test_generate_spec_succeeds_on_last_retry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_generate_spec_succeeds_on_last_retry() -> None:
     """The agent can succeed on the very last attempt."""
-    agent = await _make_spec_agent(monkeypatch)
+    agent = _make_spec_agent()
     bad_results = [_make_run_result(INVALID_SPEC_JSON)] * MAX_RETRIES
     agent.agent.run = AsyncMock(
         side_effect=[*bad_results, _make_run_result(VALID_SPEC_JSON)],
@@ -194,12 +174,10 @@ async def test_generate_spec_succeeds_on_last_retry(
 
 
 @pytest.mark.asyncio
-async def test_generate_spec_passes_message_history_on_retry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_generate_spec_passes_message_history_on_retry() -> None:
     """Each retry passes the previous conversation's messages as history."""
     fake_messages = [{"role": "assistant", "content": "..."}]
-    agent = await _make_spec_agent(monkeypatch)
+    agent = _make_spec_agent()
     agent.agent.run = AsyncMock(
         side_effect=[
             _make_run_result(INVALID_SPEC_JSON, messages=fake_messages),

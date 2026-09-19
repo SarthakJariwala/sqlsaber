@@ -8,6 +8,7 @@ import tempfile
 from dataclasses import dataclass, field
 from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
+from typing import Protocol
 
 import platformdirs
 
@@ -34,6 +35,12 @@ class ResolvedSettings:
 
 class PluginSetupRequired(ValueError):
     """An installed plugin needs an explicit configuration choice."""
+
+
+class _SubagentModelStore(Protocol):
+    def get_subagent_model(self, agent: str) -> str | None: ...
+
+    def set_subagent_model(self, agent: str, model: str | None) -> None: ...
 
 
 def installed_plugins() -> dict[str, EntryPoint]:
@@ -214,3 +221,46 @@ def resolve_settings(
             secrets[setting.name] = value
         sources[setting.name] = source
     return ResolvedSettings(values, secrets, sources)
+
+
+def migrate_legacy_plugin_models(
+    store: PluginConfigStore | None = None,
+    *,
+    models: _SubagentModelStore | None = None,
+) -> tuple[str, ...]:
+    """Move leftover ``subagents.<plugin>`` values into plugin settings once."""
+    from sqlsaber.config.logging import get_logger
+    from sqlsaber.config.settings import CoreAgent, ModelConfigManager
+
+    store = store or PluginConfigStore()
+    manager: _SubagentModelStore = (
+        models if models is not None else ModelConfigManager()
+    )
+    adopted: list[str] = []
+    for name in installed_plugins():
+        if name == CoreAgent.HANDOFF.value:
+            continue
+        legacy = manager.get_subagent_model(name)
+        if not legacy:
+            continue
+        declaration = load_plugin_settings(name)
+        if declaration is None:
+            continue
+        model_fields = [field for field in declaration.fields if field.kind == "model"]
+        if len(model_fields) != 1:
+            continue
+        setting = model_fields[0]
+        saved = store.get(name)
+        settings = dict(saved.settings)
+        if setting.name not in settings:
+            try:
+                settings[setting.name] = setting.parse(legacy)
+            except ValueError:
+                get_logger(__name__).warning(
+                    "Dropping unparseable legacy %s model %r", name, legacy
+                )
+            else:
+                store.save(name, SavedPlugin(saved.enabled, settings))
+        manager.set_subagent_model(name, None)
+        adopted.append(name)
+    return tuple(adopted)

@@ -10,20 +10,20 @@ from typing import cast
 from pydantic import ValidationError
 from pydantic_ai import RunContext
 
-from sqlsaber.overrides import ModelOverides
+from sqlsaber.capabilities.plugins import PluginContext
 from sqlsaber.query_result_resolution import (
     find_query_result_reference,
     query_result_context_from_run,
     resolve_query_result,
 )
 from sqlsaber.query_results import (
-    QueryResultStore,
     QueryResultUnavailable,
 )
 from sqlsaber.render import blocks as b
 from sqlsaber.tools.base import Tool
 from sqlsaber.utils.json_utils import json_dumps
 
+from .config import DEFAULT_VIZ_CONFIG, VIZ, VizConfig
 from .data_loader import (
     extract_data_summary,
     find_tool_output_in_messages,
@@ -42,14 +42,18 @@ class VizTool(Tool):
 
     requires_ctx = True
 
-    def __init__(self, query_result_store: QueryResultStore) -> None:
+    def __init__(
+        self,
+        context: PluginContext,
+        config: VizConfig = DEFAULT_VIZ_CONFIG,
+    ) -> None:
         super().__init__()
-        self.query_result_store = query_result_store
+        self.context = context
+        self.config = config
         self._last_ctx: RunContext | None = None
         self._last_rows: list[dict] | None = None
         self._last_file: str | None = None
         self._replay_messages: list | None = None
-        self.model_overide: ModelOverides | None = None
 
     def set_replay_messages(self, messages: list) -> None:
         """Set message history for replay scenarios (e.g., threads show)."""
@@ -57,7 +61,7 @@ class VizTool(Tool):
 
     @property
     def name(self) -> str:
-        return "viz"
+        return VIZ
 
     def render_executing(self, args: dict):
         """Suppress default JSON rendering during execution."""
@@ -96,7 +100,7 @@ class VizTool(Tool):
             else:
                 resolved = await resolve_query_result(
                     reference,
-                    store=self.query_result_store,
+                    store=self.context.query_result_store,
                     context=query_result_context_from_run(ctx),
                 )
                 payload = resolved.payload()
@@ -111,10 +115,8 @@ class VizTool(Tool):
         self._last_rows = rows
         self._last_file = file
 
-        agent = _get_spec_agent_cls()(
-            model_name=self.model_overide.model_name if self.model_overide else None,
-            api_key=self.model_overide.api_key if self.model_overide else None,
-        )
+        child = self.context.resolve_subagent_model(self.config.model)
+        agent = _get_spec_agent_cls()(child.model)
 
         try:
             spec = await asyncio.wait_for(

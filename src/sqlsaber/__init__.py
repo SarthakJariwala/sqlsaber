@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     )
     from .capabilities import Knowledge, SqlTools
     from .config.settings import ThinkingLevel
-    from .overrides import ModelOverides
+    from .nested_model import pin
     from .query_results import (
         FilesystemQueryResultStore,
         InMemoryQueryResultStore,
@@ -64,7 +64,7 @@ __all__ = [
     "InMemoryQueryResultStore",
     "Knowledge",
     "LoadedQueryResult",
-    "ModelOverides",
+    "pin",
     "QueryResultContext",
     "QueryResultData",
     "QueryResultId",
@@ -136,10 +136,10 @@ def __getattr__(name: str):
         from . import query_results
 
         return getattr(query_results, name)
-    if name == "ModelOverides":
-        from .overrides import ModelOverides
+    if name == "pin":
+        from .nested_model import pin
 
-        return ModelOverides
+        return pin
     if name == "SqlTools":
         from .capabilities import SqlTools
 

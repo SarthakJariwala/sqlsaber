@@ -12,3 +12,6 @@ wheels/
 *.local.*
 
 .agents/skills/verify-sqlsaber/artifacts/
+
+# Agent decision trails (local only)
+.audit/

@@ -4,10 +4,16 @@ version = "0.8.0"
 description = "SQLsaber terminal visualization plugin"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["sqlsaber>=0.69.0", "plotext>=5.3.0,<6"]
+dependencies = ["sqlsaber>=0.79.0", "plotext>=5.3.0,<6"]
 
 [project.entry-points."sqlsaber.capabilities"]
 viz = "sqlsaber_viz:capability"
+
+[project.entry-points."sqlsaber.plugin_settings"]
+viz = "sqlsaber_viz.settings:settings"
+
+[tool.uv.sources]
+sqlsaber = { path = "../..", editable = true }
 
 [build-system]
 requires = ["hatchling"]

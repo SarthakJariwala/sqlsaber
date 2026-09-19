@@ -5,7 +5,7 @@ import os
 import platform
 import stat
 from collections.abc import Mapping
-from enum import Enum
+from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -14,7 +14,11 @@ import platformdirs
 from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
 
-SUBAGENT_KEYS: tuple[str, ...] = ("handoff", "viz", "notebook")
+
+class CoreAgent(StrEnum):
+    """Nested agents core owns."""
+
+    HANDOFF = "handoff"
 
 
 class ThinkingLevel(str, Enum):
@@ -276,10 +280,18 @@ class InMemoryModelConfigManager:
         self._model = model
         self._thinking_enabled = thinking_enabled
         self._thinking_level = thinking_level
+        unknown = [key for key in (subagents or {}) if key != CoreAgent.HANDOFF.value]
+        if unknown:
+            names = ", ".join(sorted(unknown))
+            raise ValueError(
+                "Plugin nested models are capability configuration: "
+                "NotebookConfig(model=pin(...)). "
+                f"Unknown subagent keys: {names}"
+            )
         self._subagents: dict[str, str] = {
             key: value
             for key, value in (subagents or {}).items()
-            if key in SUBAGENT_KEYS and value
+            if key == CoreAgent.HANDOFF.value and value
         }
 
     def get_model(self) -> str:
@@ -293,6 +305,12 @@ class InMemoryModelConfigManager:
         return model if model else None
 
     def set_subagent_model(self, agent: str, model: str | None) -> None:
+        if agent != CoreAgent.HANDOFF.value:
+            raise ValueError(
+                "Plugin nested models are capability configuration: "
+                "NotebookConfig(model=pin(...)). "
+                f"Unknown subagent keys: {agent}"
+            )
         if not model:
             self._subagents.pop(agent, None)
             return

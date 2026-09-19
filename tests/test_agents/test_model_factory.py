@@ -3,23 +3,26 @@
 from typing import Any
 
 import pytest
+from pydantic_ai import Agent
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.models.openai_codex import OpenAICodexModel
-from pydantic_ai.providers.openai_codex import OpenAICodexCredentials
 from pydantic_ai.models.xai import XaiModel
+from pydantic_ai.providers.openai_codex import OpenAICodexCredentials
 
 from sqlsaber.agents.model_factory import (
     UNIFIED_EFFORT_MAP,
     build_model,
     resolve_model,
+    resolve_nested_model,
 )
 from sqlsaber.agents.pydantic_ai_agent import SQLSaberAgent
-from sqlsaber.config.settings import ThinkingLevel
+from sqlsaber.config.settings import Config, ThinkingLevel
 from sqlsaber.database.sqlite import SQLiteConnection
+from sqlsaber.nested_model import INHERIT
 
 
 @pytest.mark.parametrize(
@@ -138,6 +141,51 @@ def test_resolve_openai_api_path_preserves_explicit_key():
     assert resolved.provider == "openai"
     assert resolved.api_key == "test-key"
     assert isinstance(resolved.model, OpenAIResponsesModel)
+
+
+@pytest.mark.asyncio
+async def test_inherit_nested_agent_exit_leaves_parent_http_client_open() -> None:
+    auth = Config.in_memory(
+        model_name="anthropic:claude-main",
+        api_keys={"anthropic": "main-key"},
+    ).auth
+    main = resolve_model(auth, "anthropic:claude-main")
+    inherited = resolve_nested_model(INHERIT, main=main, auth=auth)
+
+    assert inherited.model_name == main.model_name
+    assert inherited.api_key == main.api_key
+    assert inherited.provider == main.provider
+    assert inherited.model is not main.model
+    assert isinstance(main.model, AnthropicModel)
+    assert isinstance(inherited.model, AnthropicModel)
+    parent_http = main.model.provider._own_http_client
+    assert parent_http is not None
+    assert parent_http.is_closed is False
+
+    async with Agent(inherited.model):
+        pass
+
+    assert parent_http.is_closed is False
+
+
+def test_inherit_rebuilds_codex_model_from_name(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "sqlsaber.config.openai_codex.OpenAICodexCredentialStore",
+        FakeCodexCredentialSource,
+    )
+    auth = NoApiKeyAuth()
+    main = resolve_model(
+        auth,
+        "openai-codex:gpt-test",
+        codex_credential_source=FakeCodexCredentialSource(),
+    )
+    inherited = resolve_nested_model(INHERIT, main=main, auth=auth)
+
+    assert inherited.model_name == "openai-codex:gpt-test"
+    assert inherited.provider == "openai-codex"
+    assert inherited.api_key is None
+    assert isinstance(inherited.model, OpenAICodexModel)
+    assert inherited.model is not main.model
 
 
 @pytest.mark.asyncio

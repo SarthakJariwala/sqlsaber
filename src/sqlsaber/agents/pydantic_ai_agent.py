@@ -9,7 +9,12 @@ from pydantic_ai.messages import AgentStreamEvent, ModelMessage
 from pydantic_ai.models.anthropic import AnthropicModelSettings
 from pydantic_ai.usage import UsageLimits
 
-from sqlsaber.agents.model_factory import UNIFIED_EFFORT_MAP, resolve_model
+from sqlsaber.agents.model_factory import (
+    UNIFIED_EFFORT_MAP,
+    ResolvedModel,
+    resolve_model,
+    resolve_nested_model,
+)
 from sqlsaber.artifacts import ArtifactFailureMode, ArtifactStore
 from sqlsaber.capabilities import Knowledge, SqlTools
 from sqlsaber.capabilities.base import SqlSaberCapability
@@ -18,12 +23,12 @@ from sqlsaber.capabilities.plugins import (
     PluginContext,
     resolve_capability_specs,
 )
-from sqlsaber.config.settings import Config, ThinkingLevel
+from sqlsaber.config.settings import Config, CoreAgent, ThinkingLevel
 from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.knowledge.manager import KnowledgeManager
-from sqlsaber.overrides import ToolOveridesInput, normalize_tool_overides
+from sqlsaber.nested_model import parse_nested_model
 from sqlsaber.prompts.persona import PERSONA
 from sqlsaber.query_result_resolution import compact_legacy_query_result_history
 from sqlsaber.query_results import InMemoryQueryResultStore, QueryResultStore
@@ -63,7 +68,6 @@ class SQLSaberAgent:
         allow_dangerous: bool = False,
         csv_tool_results: bool = False,
         system_prompt: str | None = None,
-        tool_overides: ToolOveridesInput | None = None,
         capabilities: Sequence[CapabilitySpec] = (),
         artifact_store: ArtifactStore | None = None,
         artifact_failure_mode: ArtifactFailureMode = "required",
@@ -94,7 +98,6 @@ class SQLSaberAgent:
         self.db_type = self.db_connection.display_name
         self.allow_dangerous = allow_dangerous
         self.csv_tool_results = csv_tool_results
-        self._tool_overides = normalize_tool_overides(tool_overides)
         self._capability_specs = tuple(capabilities)
         self._artifact_store = artifact_store
         self._artifact_failure_mode = artifact_failure_mode
@@ -145,15 +148,14 @@ class SQLSaberAgent:
         )
 
         include_guidance = self.system_prompt_override is None
+        self._main = resolved
         context = PluginContext(
             registry=self.registry,
             knowledge_manager=self.knowledge_manager,
             allow_dangerous=self.allow_dangerous,
-            tool_overrides=self._tool_overides,
-            config=self.config,
-            main_model_name=model_name,
+            auth=self.config.auth,
+            main=resolved,
             query_result_store=self.query_result_store,
-            main_api_key=resolved.api_key,
             artifact_store=self._artifact_store,
             artifact_failure_mode=self._artifact_failure_mode,
             workspace_input_resolver=self._workspace_input_resolver,
@@ -211,6 +213,15 @@ class SQLSaberAgent:
         self.capabilities = capabilities
         self._tools = tools
         return agent
+
+    def resolve_core_agent_model(self, agent: CoreAgent) -> ResolvedModel:
+        """Resolve a core nested agent."""
+        choice = parse_nested_model(self.config.model.get_subagent_model(agent.value))
+        return resolve_nested_model(
+            choice,
+            main=self._main,
+            auth=self.config.auth,
+        )
 
     def system_prompt_text(self) -> str:
         """Return the combined managed-agent instructions as plain text."""

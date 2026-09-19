@@ -7,9 +7,8 @@ from typing import Any
 
 from pydantic import ValidationError
 from pydantic_ai import Agent
-from sqlsaber.agents.model_factory import resolve_model
+from pydantic_ai.models import Model
 from sqlsaber.config.logging import get_logger
-from sqlsaber.config.settings import Config
 
 from .prompts import VIZ_SYSTEM_PROMPT
 from .spec import VizSpec
@@ -23,30 +22,12 @@ MAX_RETRIES = 2
 class SpecAgent:
     """Internal agent for generating visualization specs."""
 
-    def __init__(self, model_name: str | None = None, api_key: str | None = None):
-        self.config = Config()
-        self._model_name_override = model_name
-        self._api_key_override = api_key
-        self.agent = self._build_agent()
-
-    def _build_agent(self):
-        model_name = (
-            self._model_name_override
-            or self.config.model.get_subagent_model("viz")
-            or self.config.model.name
-        )
-        resolved = resolve_model(
-            self.config.auth,
-            model_name,
-            api_key_override=self._api_key_override,
-        )
-        agent = Agent(
-            resolved.model,
+    def __init__(self, model: Model | str):
+        self.agent = Agent(
+            model,
             instructions=VIZ_SYSTEM_PROMPT,
         )
-        self._register_tools(agent)
-
-        return agent
+        self._register_tools(self.agent)
 
     def _register_tools(self, agent) -> None:
         """Register visualization helper tools on the agent."""
@@ -112,8 +93,8 @@ class SpecAgent:
         )
 
         message_history = None
-
-        for attempt in range(MAX_RETRIES + 1):
+        remaining = MAX_RETRIES
+        while True:
             result = await self.agent.run(prompt, message_history=message_history)
             output = str(result.output).strip()
 
@@ -121,24 +102,20 @@ class SpecAgent:
                 parsed = _parse_json(output)
                 return VizSpec.model_validate(parsed)
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
-                if attempt == MAX_RETRIES:
+                if remaining == 0:
                     raise
+                remaining -= 1
                 logger.debug(
                     "Spec validation failed (attempt %d/%d): %s",
-                    attempt + 1,
+                    MAX_RETRIES - remaining,
                     MAX_RETRIES + 1,
                     exc,
                 )
-                # Preserve the full conversation so the agent sees its
-                # prior tool calls, reasoning, and failed output.
                 message_history = result.all_messages()
                 prompt = (
                     f"The spec you returned failed validation:\n{exc}\n\n"
                     "Fix the JSON and return ONLY the corrected spec."
                 )
-
-        # Unreachable, but satisfies type checkers.
-        raise RuntimeError("Exhausted retries without raising")
 
     def _build_prompt(
         self,

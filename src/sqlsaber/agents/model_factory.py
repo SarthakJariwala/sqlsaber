@@ -20,6 +20,7 @@ from sqlsaber.config.settings import ThinkingLevel
 if TYPE_CHECKING:
     from pydantic_ai.providers.openai_codex import OpenAICodexCredentialSource
     from sqlsaber.config.openai_codex import PreflightOpenAICodexCredentialSource
+    from sqlsaber.nested_model import NestedModel
 
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
 
@@ -150,4 +151,26 @@ def resolve_model(
         model=build_model(full_model_str, api_key),
         provider=provider,
         api_key=api_key,
+    )
+
+
+def resolve_nested_model(
+    choice: NestedModel,
+    *,
+    main: ResolvedModel,
+    auth: ModelAuth,
+) -> ResolvedModel:
+    """Turn a configured nested-model choice into a usable child model."""
+    from sqlsaber.nested_model import Pinned
+
+    if isinstance(choice, Pinned):
+        return resolve_model(
+            auth,
+            str(choice.id),
+            api_key_override=choice.api_key,
+        )
+    return resolve_model(
+        auth,
+        main.model_name,
+        api_key_override=main.api_key,
     )

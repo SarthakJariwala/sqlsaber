@@ -377,7 +377,7 @@ saber models set openai:gpt-5 --agent handoff
 
 **Options:**
 
-- `--agent` - Agent to configure (`main`, `handoff`, `viz`, `notebook`). Defaults to `main`.
+- `--agent` - Agent to configure (`main` or `handoff`). Defaults to `main`. Plugin nested models use `saber plugins setup NAME --set model=PROVIDER:MODEL`.
 - `--thinking-level` - Main-model thinking mode: `off`, `minimal`, `low`, `medium`, `high`, or `maximum`.
 
 ### `saber models current`
@@ -388,7 +388,7 @@ saber models current
 
 **Options:**
 
-- `--agent` - Show the model for one agent (`main`, `handoff`, `viz`, `notebook`).
+- `--agent` - Show the model for one agent (`main` or `handoff`).
 
 ### `saber models reset`
 
@@ -401,7 +401,7 @@ saber models reset --agent handoff --yes
 
 **Options:**
 
-- `--agent` - Agent to reset (`main`, `handoff`, `viz`, `notebook`). Defaults to `main`.
+- `--agent` - Agent to reset (`main` or `handoff`). Defaults to `main`.
 - `--yes` - Skip confirmation (required when no interactive terminal is available).
 
 ---

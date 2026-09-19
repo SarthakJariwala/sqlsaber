@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from dataclasses import asdict
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -93,7 +92,8 @@ class KernelExecution:
                     f"{self.root}/controller.py",
                 )
                 await self.upload(
-                    json.dumps(asdict(self.config)).encode(), f"{self.root}/config.json"
+                    json.dumps(self.config.controller_config()).encode(),
+                    f"{self.root}/config.json",
                 )
                 await self.backend.start_controller(
                     [

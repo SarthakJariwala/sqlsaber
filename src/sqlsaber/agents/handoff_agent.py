@@ -8,9 +8,8 @@ import json
 
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
+from pydantic_ai.models import Model
 
-from sqlsaber.agents.model_factory import resolve_model
-from sqlsaber.config.settings import Config
 from sqlsaber.prompts.handoff import HANDOFF_INPUT_INSTRUCTIONS, HANDOFF_SYSTEM_PROMPT
 
 
@@ -21,36 +20,9 @@ class HandoffAgent:
     focused on summarizing conversations and extracting key context.
     """
 
-    def __init__(
-        self,
-        model_name: str | None = None,
-        api_key: str | None = None,
-    ):
-        """Initialize the handoff agent.
-
-        Args:
-            model_name: Optional model override. Defaults to configured model.
-            api_key: Optional API key override.
-        """
-        self.config = Config()
-        self._model_name_override = model_name
-        self._api_key_override = api_key
-        self.agent = self._build_agent()
-
-    def _build_agent(self) -> Agent:
-        """Create the pydantic-ai Agent with no tools."""
-        model_name = (
-            self._model_name_override
-            or self.config.model.get_subagent_model("handoff")
-            or self.config.model.name
-        )
-        resolved = resolve_model(
-            self.config.auth,
-            model_name,
-            api_key_override=self._api_key_override,
-        )
-        return Agent(
-            resolved.model,
+    def __init__(self, model: Model | str) -> None:
+        self.agent = Agent(
+            model,
             instructions=HANDOFF_SYSTEM_PROMPT,
         )
 

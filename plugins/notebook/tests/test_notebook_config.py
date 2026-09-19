@@ -69,7 +69,9 @@ async def run_analysis(
         query_result_store=InMemoryQueryResultStore(),
         workspace_input_resolver=Resolver(),
         artifact_store=InMemoryArtifactStore(),
-        resolve_subagent_model=lambda *args, **kwargs: ("test", model, "test"),
+        resolve_subagent_model=lambda *args, **kwargs: SimpleNamespace(
+            model=model, model_name="test", provider="test"
+        ),
     )
     capabilities = resolve_capability_specs(
         [partial(capability, config=config)], cast(Any, context)

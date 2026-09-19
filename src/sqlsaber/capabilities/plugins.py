@@ -2,23 +2,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any, TypeGuard
 
 from pydantic_ai.capabilities import AbstractCapability
-from pydantic_ai.models import Model
 
 from sqlsaber.config.logging import get_logger
-from sqlsaber.config.settings import Config
 from sqlsaber.database.registry import DatabaseRegistry
 from sqlsaber.knowledge.manager import KnowledgeManager
-from sqlsaber.overrides import ModelOverides
+from sqlsaber.nested_model import NestedModel
 from sqlsaber.query_results import QueryResultStore
 from sqlsaber.workspace_inputs import WorkspaceInputResolver
 
 if TYPE_CHECKING:
+    from sqlsaber.agents.model_factory import ModelAuth, ResolvedModel
     from sqlsaber.artifacts import ArtifactFailureMode, ArtifactStore
 
 logger = get_logger(__name__)
@@ -32,44 +31,26 @@ class PluginContext:
     registry: DatabaseRegistry
     knowledge_manager: KnowledgeManager
     allow_dangerous: bool
-    tool_overrides: Mapping[str, ModelOverides]
-    config: Config
-    main_model_name: str
+    auth: ModelAuth
+    main: ResolvedModel
     query_result_store: QueryResultStore
-    main_api_key: str | None = None
     artifact_store: ArtifactStore | None = None
     artifact_failure_mode: ArtifactFailureMode = "required"
     workspace_input_resolver: WorkspaceInputResolver | None = None
 
-    def resolve_subagent_model(
-        self,
-        name: str,
-        *,
-        tool_name: str | None = None,
-    ) -> tuple[str, Model | str, str]:
-        """Resolve a child model from tool, subagent, and main-agent settings."""
+    def resolve_subagent_model(self, configured: NestedModel) -> ResolvedModel:
+        """Resolve this capability's nested model.
 
-        override = self.tool_overrides.get(tool_name) if tool_name else None
-        subagent_model = self.config.model.get_subagent_model(name)
-        model_name = (
-            (override.model_name if override else None)
-            or subagent_model
-            or self.main_model_name
+        ``configured`` is the capability config value. Absent or inherit uses
+        the main agent. A pin never reuses the main API key.
+        """
+        from sqlsaber.agents.model_factory import resolve_nested_model
+
+        return resolve_nested_model(
+            configured,
+            main=self.main,
+            auth=self.auth,
         )
-
-        explicit_key = override.api_key if override else None
-        use_main_key = override is None and subagent_model is None
-        api_key = explicit_key or (self.main_api_key if use_main_key else None)
-        # Import lazily to avoid loading the managed-agent package while plugin
-        # discovery types themselves are being imported.
-        from sqlsaber.agents.model_factory import resolve_model
-
-        resolved = resolve_model(
-            self.config.auth,
-            model_name,
-            api_key_override=api_key,
-        )
-        return model_name, resolved.model, resolved.provider
 
 
 @dataclass(frozen=True, slots=True)

@@ -91,13 +91,16 @@ my_plugin = "my_plugin.settings:settings"
 
 Export a `sqlsaber.plugin_settings.PluginSettings` value. Its `fields` tuple is the
 allowlist used by setup, editing, and inspection. Each `Setting` declares a name,
-label, kind (`text`, `integer`, `number`, `boolean`, or `secret`), and optional
+label, kind (`text`, `integer`, `number`, `boolean`, `secret`, or `model`), and optional
 default, choices, environment alias, help, and advanced-field marker.
 
 Use `when(values)` to make a field conditional on an unconditional selector such
 as `provider`. Keep all fields in the declaration. SQLsaber excludes inactive
 fields from prompts and runtime values. A secret can declare a shared `credential`
 identity so two plugins use the same provider account without duplicating keys.
+Declare at most one `kind="model"` field. Unset inherits the session main model.
+Use `model_setting()` and `configured_model(values)` to round-trip that field
+into the plugin's runtime config.
 
 Supply these functions on `PluginSettings`:
 
@@ -120,7 +123,7 @@ SDK capability factories do not read saved CLI settings.
 
 ## Porting a legacy tool plugin
 
-The old `sqlsaber.tools` group and global `ToolRegistry` are removed. Keep your existing `Tool.execute` and rendering methods, put the instance in a `FunctionToolset`, expose it through `display_specs`, and change the entry point to `sqlsaber.capabilities`. Model overrides should be read from `context.tool_overrides` during construction rather than `ctx.deps`.
+The old `sqlsaber.tools` group and global `ToolRegistry` are removed. Keep your existing `Tool.execute` and rendering methods, put the instance in a `FunctionToolset`, expose it through `display_specs`, and change the entry point to `sqlsaber.capabilities`. Pin a nested model on the capability config (`NotebookConfig(model=pin(...))`) and resolve it with `context.resolve_subagent_model(config.model)`.
 
 ## Install a plugin locally
 

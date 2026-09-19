@@ -209,6 +209,25 @@ def test_legacy_sdk_module_paths_are_absent() -> None:
     assert legacy_imports == set()
 
 
+def test_plugin_settings_and_nested_model_stay_import_light() -> None:
+    code = """
+import sys
+import sqlsaber.nested_model
+import sqlsaber.plugin_settings
+
+heavy_modules = (
+    name
+    for name in sys.modules
+    if name == "pydantic_ai" or name.startswith(("openai", "google.genai"))
+)
+raise SystemExit(1 if any(heavy_modules) else 0)
+"""
+
+    result = subprocess.run([sys.executable, "-c", code], check=False)
+
+    assert result.returncode == 0
+
+
 def test_sdk_options_import_stays_lightweight() -> None:
     code = """
 import sys

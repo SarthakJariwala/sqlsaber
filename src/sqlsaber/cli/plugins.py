@@ -16,6 +16,7 @@ from sqlsaber.config.plugins import (
     SavedPlugin,
     installed_plugins,
     load_plugin_settings,
+    migrate_legacy_plugin_models,
     resolve_settings,
     save_secret,
 )
@@ -32,6 +33,7 @@ plugins_app = cyclopts.App(
 def _declaration(name: str) -> PluginSettings:
     if name not in installed_plugins():
         raise ValueError(f"Plugin '{name}' is not installed. Run: saber plugins list")
+    migrate_legacy_plugin_models()
     declaration = load_plugin_settings(name)
     if declaration is None:
         raise ValueError(
@@ -49,6 +51,7 @@ def list_plugins() -> None:
     """
     rows: list[dict[str, b.Cell]] = []
     try:
+        migrate_legacy_plugin_models()
         store = PluginConfigStore()
         for name in sorted(installed_plugins()):
             saved = store.get(name)
@@ -99,7 +102,9 @@ def show(name: str, field: str | None = None) -> None:
             secret = setting.kind == "secret"
             value = resolved.values.get(setting.name, None)
             if value is None:
-                value = "unset"
+                value = (
+                    "unset (uses main model)" if setting.kind == "model" else "unset"
+                )
             if secret:
                 value = (
                     "configured"
@@ -296,6 +301,7 @@ def setup(
     Examples:
         saber plugins setup notebook
         saber plugins setup notebook --set backend=docker --set memory_mb=4096
+        saber plugins setup viz --set model=openai:gpt-5-mini --yes
         saber plugins setup sandbox --set provider=e2b --secret-stdin e2b_api_key --yes
     """
     try:

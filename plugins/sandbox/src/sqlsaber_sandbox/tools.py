@@ -37,7 +37,7 @@ from sqlsaber.tools.renderer import ToolRenderContext
 from sqlsaber.utils.text_input import sanitize_terminal_text
 
 from .backends import SandboxBackend
-from .config import SandboxConfig
+from .config import ANALYZE_IN_SANDBOX, SandboxConfig
 from .execution import SandboxError
 from .publication import publish_analysis
 from .result import AnalysisResult
@@ -94,7 +94,7 @@ class AnalyzeSandboxTool(Tool):
 
     @property
     def name(self) -> str:
-        return "analyze_in_sandbox"
+        return ANALYZE_IN_SANDBOX
 
     def _session(self, ctx: RunContext, session_id: str) -> SandboxSession:
         entry = self.sessions.get(session_id)
@@ -162,12 +162,10 @@ class AnalyzeSandboxTool(Tool):
                     raise ValueError(
                         "A conversation identity is required for managed sandbox sessions"
                     )
-                _, model, provider = self.context.resolve_subagent_model(
-                    "sandbox", tool_name=self.name
-                )
+                child = self.context.resolve_subagent_model(self.config.model)
                 session = SandboxSession(
-                    model=model,
-                    model_provider=provider,
+                    model=child.model,
+                    model_provider=child.provider,
                     config=self.config,
                     backend=(
                         self._backend_factory()

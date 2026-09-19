@@ -10,6 +10,8 @@ from sqlsaber.plugin_settings import (
     Setting,
     SettingsValues,
     SettingValue,
+    configured_model,
+    model_setting,
 )
 
 from .config import DEFAULT_SANDBOX_CONFIG, SandboxConfig, WorkspaceLimits
@@ -110,6 +112,7 @@ def _sandbox_config(values: SettingsValues) -> SandboxConfig:
             int | None,
             _resolved(values, "max_lifetime_seconds", defaults.max_lifetime_seconds),
         ),
+        model=configured_model(values),
     )
 
 
@@ -196,6 +199,7 @@ settings = PluginSettings(
             required=True,
             help="Choose a local or remote provider explicitly.",
         ),
+        model_setting(label="Analyst model"),
         Setting(
             name="docker_image",
             label="Docker image",

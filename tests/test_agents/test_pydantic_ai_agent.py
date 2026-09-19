@@ -67,12 +67,6 @@ class TestSQLSaberAgentDeps:
             model_name="anthropic:claude-3-5-sonnet",
             api_key="test-key",
             capabilities=[viz_factory],
-            tool_overides={
-                "viz": {
-                    "model_name": "openai:gpt-5-mini",
-                    "api_key": "override-api-key",
-                }
-            },
         )
 
         captured: dict[str, object] = {}
@@ -96,9 +90,7 @@ class TestSQLSaberAgentDeps:
         assert "deps" not in captured
         assert captured["usage_limits"] is None
         assert captured["bound_usage_limits"] is None
-        viz = agent._tools["viz"]
-        assert viz.model_overide.model_name == "openai:gpt-5-mini"
-        assert viz.model_overide.api_key == "override-api-key"
+        assert "viz" in agent._tools
 
 
 class _ClosingCapability(SqlSaberCapability):
@@ -141,7 +133,7 @@ class TestSQLSaberAgentLifecycle:
 
         assert created == [plugin]
         assert plugin in agent.capabilities
-        assert [context.main_model_name for context in plugin.contexts] == [
+        assert [context.main.model_name for context in plugin.contexts] == [
             "anthropic:claude-3-5-sonnet",
             "anthropic:claude-3-5-sonnet",
             "anthropic:claude-3-5-haiku",

@@ -478,8 +478,10 @@ class SQLSaber:
         """Draft a handoff from the SDK-owned conversation history."""
         self._ensure_not_running()
         from sqlsaber.agents.handoff_agent import HandoffAgent
+        from sqlsaber.config.settings import CoreAgent
 
-        handoff_agent = HandoffAgent()
+        resolved = self._runtime.agent.resolve_core_agent_model(CoreAgent.HANDOFF)
+        handoff_agent = HandoffAgent(resolved.model)
         return await handoff_agent.generate_draft(
             message_history=list(self._message_history),
             goal=goal,

@@ -6,4 +6,6 @@ The `sqlsaber-viz` plugin adds a `viz` tool. It builds a chart spec from query r
 uv tool install --with sqlsaber-viz sqlsaber
 ```
 
-After a query, ask SQLsaber to plot the result. See [Plugins](https://sqlsaber.com/guides/plugins/).
+After a query, ask SQLsaber to plot the result. Pin a spec-agent model with
+`saber plugins setup viz --set model=PROVIDER:MODEL`. See
+[Plugins](https://sqlsaber.com/guides/plugins/).

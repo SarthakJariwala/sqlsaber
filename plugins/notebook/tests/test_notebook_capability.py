@@ -41,6 +41,11 @@ from sqlsaber.tools.renderer import ToolRenderContext
 from sqlsaber_notebook.result import AnalysisResult, ArtifactRef, WorkspaceFile
 
 
+def _child(model: object = "anthropic:claude-test", provider: str = "anthropic") -> Any:
+    name = model if isinstance(model, str) else "anthropic:claude-test"
+    return SimpleNamespace(model=model, model_name=name, provider=provider)
+
+
 def _ctx(messages: list[Any], *, tool_call_id: str = "analysis-call") -> Any:
     return SimpleNamespace(
         messages=messages,
@@ -637,11 +642,7 @@ async def test_analyze_tool_runs_attachment_only_analysis(
         workspace_input_resolver=Resolver(),
         query_result_store=InMemoryQueryResultStore(),
         artifact_store=None,
-        resolve_subagent_model=lambda *args, **kwargs: (
-            "anthropic:claude-test",
-            "anthropic:claude-test",
-            "anthropic",
-        ),
+        resolve_subagent_model=lambda *args, **kwargs: _child(),
     )
     backend = SimpleNamespace(name="docker")
     captured: dict[str, Any] = {}
@@ -693,11 +694,7 @@ async def test_analyze_tool_renders_notebook_and_child_answer(
         query_result_store=InMemoryQueryResultStore(),
         workspace_input_resolver=None,
         artifact_store=None,
-        resolve_subagent_model=lambda *args, **kwargs: (
-            "anthropic:claude-test",
-            "anthropic:claude-test",
-            "anthropic",
-        ),
+        resolve_subagent_model=lambda *args, **kwargs: _child(),
     )
     backend = SimpleNamespace(name="docker")
     captured: dict[str, Any] = {}
@@ -843,11 +840,7 @@ async def test_analyze_tool_publishes_notebook_images_and_generated_files(
     context = SimpleNamespace(
         query_result_store=InMemoryQueryResultStore(),
         workspace_input_resolver=None,
-        resolve_subagent_model=lambda *args, **kwargs: (
-            "anthropic:claude-test",
-            "anthropic:claude-test",
-            "anthropic",
-        ),
+        resolve_subagent_model=lambda *args, **kwargs: _child(),
         artifact_store=store,
         artifact_failure_mode="required",
     )
@@ -920,11 +913,7 @@ async def test_analyze_tool_handles_artifact_publication_failure(
     context = SimpleNamespace(
         query_result_store=InMemoryQueryResultStore(),
         workspace_input_resolver=None,
-        resolve_subagent_model=lambda *args, **kwargs: (
-            "anthropic:claude-test",
-            "anthropic:claude-test",
-            "anthropic",
-        ),
+        resolve_subagent_model=lambda *args, **kwargs: _child(),
         artifact_store=FailingStore(),
         artifact_failure_mode=failure_mode,
     )
@@ -976,11 +965,7 @@ async def test_analyze_tool_maps_backend_failure_to_bounded_error(
         query_result_store=InMemoryQueryResultStore(),
         workspace_input_resolver=None,
         artifact_store=None,
-        resolve_subagent_model=lambda *args, **kwargs: (
-            "anthropic:claude-test",
-            "anthropic:claude-test",
-            "anthropic",
-        ),
+        resolve_subagent_model=lambda *args, **kwargs: _child(),
     )
     monkeypatch.setattr(
         capability_module,

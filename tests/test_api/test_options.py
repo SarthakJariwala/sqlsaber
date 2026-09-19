@@ -90,6 +90,14 @@ def test_api_legacy_constructor_kwargs_are_rejected(
         SQLSaber(**kwargs)
 
 
+def test_options_reject_tool_overrides() -> None:
+    with pytest.raises(TypeError, match="tool_overrides"):
+        SQLSaberOptions(
+            database="sqlite:///:memory:",
+            tool_overrides={"viz": "openai:gpt-5-mini"},
+        )
+
+
 @pytest.mark.asyncio
 async def test_capabilities_are_appended_to_managed_agent() -> None:
     extra = Capability(id="custom", instructions="Custom capability")
