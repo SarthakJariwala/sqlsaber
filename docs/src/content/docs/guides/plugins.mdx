@@ -13,6 +13,36 @@ The `saber` CLI loads installed plugins from the `sqlsaber.capabilities` entry-p
 
 An embedded `SQLSaber` session does not load installed plugins. Import the plugin factories you want and list them in `SQLSaberOptions.capabilities`. See [Capabilities](/sdk/capabilities/).
 
+## Bundled handoff
+
+The handoff plugin ships with SQLsaber and is enabled in the CLI without additional
+installation or setup. Use `/handoff <goal>` to generate an editable continuation
+prompt, or ask the model to draft a handoff using its `draft_handoff` tool.
+The tool returns a draft only; it never clears history or starts another thread.
+
+Configure it like any other plugin:
+
+```bash
+saber plugins show handoff
+saber plugins set handoff model openai:gpt-5-mini
+saber plugins unset handoff model
+saber plugins disable handoff
+saber plugins enable handoff
+```
+
+Changes apply to new CLI sessions. Disabling handoff removes both the model tool
+and draft generation through `/handoff`; it preserves saved settings.
+
+`SQLSABER_HANDOFF_MODEL` overrides the saved plugin model. Without a plugin model,
+handoff uses the legacy `saber models set --agent handoff` override, if present,
+then the active session model. A plugin model takes precedence over that legacy
+setting; unsetting it restores the fallback. Authentication uses the configured
+provider credentials. When inheriting the session model, it also inherits the
+session's explicit API key.
+
+SDK sessions opt in explicitly, including for `saber.draft_handoff()`.
+See [Bundled handoff](/sdk/capabilities/#bundled-handoff).
+
 ## Visualization
 
 The visualization plugin renders charts in the terminal from query results.

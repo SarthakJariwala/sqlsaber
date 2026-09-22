@@ -65,6 +65,23 @@
     }
   },
   {
+    "description": "Draft a prompt to continue this conversation in a fresh thread.\n\nReturns a draft only: it does not start a thread or clear history.\nThe user decides whether to use it.",
+    "name": "draft_handoff",
+    "parameters_json_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "goal": {
+          "description": "What the user wants to accomplish in the new thread.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "goal"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "description": "Hand a data-analysis goal to a notebook subagent.\n\nUse this for multi-step calculations, statistical analysis, data\ntransformations, plots, or analysis of application-provided inputs.",
     "name": "analyze_data",
     "parameters_json_schema": {

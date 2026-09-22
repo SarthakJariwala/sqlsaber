@@ -52,6 +52,12 @@ packages = ["src/sqlsaber"]
 sqlsaber = "sqlsaber.cli.commands:main"
 saber = "sqlsaber.cli.commands:main"
 
+[project.entry-points."sqlsaber.capabilities"]
+handoff = "sqlsaber.bundled.handoff:capability"
+
+[project.entry-points."sqlsaber.plugin_settings"]
+handoff = "sqlsaber.bundled.handoff.settings:settings"
+
 [tool.ruff.lint]
 # Keep the existing lint policy explicit across Ruff default-rule changes.
 select = ["E4", "E7", "E9", "F"]

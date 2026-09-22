@@ -1,4 +1,4 @@
-"""Tests for the HandoffAgent."""
+"""Preserved transcript formatting and prompt behavior of the handoff plugin."""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -12,20 +12,17 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from sqlsaber.agents.handoff_agent import HandoffAgent
-from sqlsaber.prompts.handoff import HANDOFF_INPUT_INSTRUCTIONS
+from sqlsaber.bundled.handoff.runtime import Handoff
+from sqlsaber.bundled.handoff.prompts import HANDOFF_INPUT_INSTRUCTIONS
 
 
 def _create_agent_instance():
-    """Create a HandoffAgent instance without full initialization."""
-    agent = HandoffAgent.__new__(HandoffAgent)
-    agent.config = None
-    agent.agent = None
-    return agent
+    """Create an instance for testing the pure transcript formatter."""
+    return Handoff.__new__(Handoff)
 
 
-class TestHandoffAgentFormatHistory:
-    """Tests for HandoffAgent._format_history_for_prompt method."""
+class TestHandoffFormatHistory:
+    """Tests for Handoff._format_history_for_prompt method."""
 
     def test_format_empty_history(self):
         """Test formatting empty history."""
@@ -158,11 +155,12 @@ class TestHandoffAgentFormatHistory:
         )
 
 
-async def test_generate_draft_sends_labeled_transcript_and_instructions():
+async def test_generate_draft_sends_labeled_transcript_and_instructions(monkeypatch):
     agent = _create_agent_instance()
-    agent.agent = SimpleNamespace(
+    child = SimpleNamespace(
         run=AsyncMock(return_value=SimpleNamespace(output="  Draft handoff\n"))
     )
+    monkeypatch.setattr(agent, "_build_agent", lambda: child)
     history = [
         ModelRequest(parts=[UserPromptPart(content="Count active users")]),
         ModelResponse(
@@ -181,7 +179,9 @@ async def test_generate_draft_sends_labeled_transcript_and_instructions():
 
     result = await agent.generate_draft(history, "Compare inactive users")
 
-    agent.agent.run.assert_awaited_once_with(
+    from pydantic_ai.usage import UsageLimits
+
+    child.run.assert_awaited_once_with(
         "<source_conversation>\n"
         "[User]: Count active users\n\n"
         "[Assistant]: Checking active users.\n\n"
@@ -190,6 +190,8 @@ async def test_generate_draft_sends_labeled_transcript_and_instructions():
         "[Tool result - execute_sql]: 42\n"
         "</source_conversation>\n\n"
         "<handoff_goal>\nCompare inactive users\n</handoff_goal>\n\n"
-        f"{HANDOFF_INPUT_INSTRUCTIONS}\n"
+        f"{HANDOFF_INPUT_INSTRUCTIONS}\n",
+        usage=None,
+        usage_limits=UsageLimits(),
     )
     assert result == "Draft handoff"

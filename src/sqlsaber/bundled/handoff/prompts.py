@@ -1,4 +1,4 @@
-"""Prompts for the handoff agent."""
+"""Prompts owned by the bundled handoff plugin."""
 
 HANDOFF_SYSTEM_PROMPT = """You are a handoff assistant. Read a source conversation
 and produce a self-contained handoff that another assistant will use to pursue

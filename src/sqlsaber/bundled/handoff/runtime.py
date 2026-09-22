@@ -1,56 +1,65 @@
-"""Handoff Agent for generating context-aware handoff prompts.
-
-This is a dedicated agent with no tools, used solely for summarizing
-conversations and generating handoff prompts for fresh threads.
-"""
+"""Runtime for the bundled, model-callable handoff capability."""
 
 import json
+from typing import Any
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelMessage
+from pydantic_ai.toolsets import FunctionToolset
+from pydantic_ai.usage import RunUsage, UsageLimits
 
-from sqlsaber.agents.model_factory import resolve_model
-from sqlsaber.config.settings import Config
-from sqlsaber.prompts.handoff import HANDOFF_INPUT_INSTRUCTIONS, HANDOFF_SYSTEM_PROMPT
+from sqlsaber.capabilities.base import SqlSaberCapability
+from sqlsaber.capabilities.plugins import PluginContext
+from sqlsaber.run_usage import current_usage_limits
+
+from .prompts import HANDOFF_INPUT_INSTRUCTIONS, HANDOFF_SYSTEM_PROMPT
 
 
-class HandoffAgent:
-    """Dedicated agent for generating handoff prompts.
+class Handoff(SqlSaberCapability):
+    """Draft a continuation prompt without changing conversation or thread state."""
 
-    This agent has no tools registered and uses a specialized system prompt
-    focused on summarizing conversations and extracting key context.
-    """
+    id = "handoff"
+    description = "Generate a context-aware draft for continuing in a fresh thread."
 
     def __init__(
         self,
+        context: PluginContext,
+        *,
         model_name: str | None = None,
         api_key: str | None = None,
-    ):
-        """Initialize the handoff agent.
-
-        Args:
-            model_name: Optional model override. Defaults to configured model.
-            api_key: Optional API key override.
-        """
-        self.config = Config()
+    ) -> None:
+        self.context = context
         self._model_name_override = model_name
         self._api_key_override = api_key
-        self.agent = self._build_agent()
+        self._toolset = FunctionToolset[Any](id=self.id)
+        self._toolset.add_function(self.draft_handoff, takes_ctx=True)
+
+    def get_toolset(self) -> FunctionToolset[Any]:
+        return self._toolset
+
+    def update_context(self, context: PluginContext) -> None:
+        self.context = context
+
+    async def draft_handoff(self, ctx: RunContext[Any], goal: str) -> str:
+        """Draft a prompt to continue this conversation in a fresh thread.
+
+        Returns a draft only: it does not start a thread or clear history.
+        The user decides whether to use it.
+
+        Args:
+            goal: What the user wants to accomplish in the new thread.
+        """
+        return await self.generate_draft(list(ctx.messages), goal, usage=ctx.usage)
 
     def _build_agent(self) -> Agent:
         """Create the pydantic-ai Agent with no tools."""
-        model_name = (
-            self._model_name_override
-            or self.config.model.get_subagent_model("handoff")
-            or self.config.model.name
-        )
-        resolved = resolve_model(
-            self.config.auth,
-            model_name,
-            api_key_override=self._api_key_override,
+        _, model, _ = self.context.resolve_subagent_model(
+            "handoff",
+            model_name=self._model_name_override,
+            api_key=self._api_key_override,
         )
         return Agent(
-            resolved.model,
+            model,
             instructions=HANDOFF_SYSTEM_PROMPT,
         )
 
@@ -117,6 +126,8 @@ class HandoffAgent:
         self,
         message_history: list[ModelMessage],
         goal: str,
+        *,
+        usage: RunUsage | None = None,
     ) -> str:
         """Generate a handoff prompt draft.
 
@@ -140,5 +151,9 @@ class HandoffAgent:
 {HANDOFF_INPUT_INSTRUCTIONS}
 """
 
-        result = await self.agent.run(prompt)
+        result = await self._build_agent().run(
+            prompt,
+            usage=usage,
+            usage_limits=current_usage_limits() or UsageLimits(),
+        )
         return str(result.output).strip()

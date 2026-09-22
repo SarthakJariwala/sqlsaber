@@ -76,7 +76,7 @@ A `SQLSaber` instance keeps the completed history for its conversation. A second
 - `SQLSaber.info` returns immutable metadata such as database names, model details, thinking state, dangerous mode, and the current thread ID. Access it as `saber.info`.
 - `saber.set_thinking(enabled=..., level=...)` changes reasoning controls for later queries and returns the new `ThinkingState`.
 - `await saber.list_tables()` returns `TableInfo` values for every managed database.
-- `await saber.draft_handoff(goal)` creates a handoff draft from the conversation's history.
+- `await saber.draft_handoff(goal)` creates a handoff draft from the conversation's history; include the [bundled handoff capability](/sdk/capabilities/#bundled-handoff) in your options.
 - `await saber.end_thread()` marks the current persisted thread as ended.
 - `await saber.new_thread()` ends the current persisted thread, clears conversation history, and returns the previous thread ID.
 - `await SQLSaber.resume(thread_id, options=options)` restores a persisted thread. See [Advanced](/sdk/advanced/) for resume errors and storage details.

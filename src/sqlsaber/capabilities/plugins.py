@@ -46,19 +46,28 @@ class PluginContext:
         name: str,
         *,
         tool_name: str | None = None,
+        model_name: str | None = None,
+        api_key: str | None = None,
     ) -> tuple[str, Model | str, str]:
-        """Resolve a child model from tool, subagent, and main-agent settings."""
+        """Resolve explicit, tool, legacy subagent, then main-agent settings."""
 
-        override = self.tool_overrides.get(tool_name) if tool_name else None
+        override = (
+            self.tool_overrides.get(tool_name)
+            if tool_name and model_name is None
+            else None
+        )
         subagent_model = self.config.model.get_subagent_model(name)
+        use_main_key = (
+            model_name is None and override is None and subagent_model is None
+        )
         model_name = (
-            (override.model_name if override else None)
+            model_name
+            or (override.model_name if override else None)
             or subagent_model
             or self.main_model_name
         )
 
-        explicit_key = override.api_key if override else None
-        use_main_key = override is None and subagent_model is None
+        explicit_key = api_key or (override.api_key if override else None)
         api_key = explicit_key or (self.main_api_key if use_main_key else None)
         # Import lazily to avoid loading the managed-agent package while plugin
         # discovery types themselves are being imported.
