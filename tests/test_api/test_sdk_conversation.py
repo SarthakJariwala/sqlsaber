@@ -320,7 +320,10 @@ async def test_list_tables_returns_completion_metadata(temp_dir) -> None:
 
 @pytest.mark.asyncio
 async def test_handoff_uses_sdk_owned_history(monkeypatch) -> None:
-    saber = SQLSaber(options=_options())
+    from sqlsaber.bundled.handoff import capability
+    from sqlsaber.bundled.handoff.runtime import Handoff
+
+    saber = SQLSaber(options=_options(capabilities=(capability,)))
     created = _turn("question", "answer")
     captured: dict[str, object] = {}
 
@@ -328,30 +331,56 @@ async def test_handoff_uses_sdk_owned_history(monkeypatch) -> None:
         del prompt, kwargs
         return _RunResult(output="answer", created_messages=created, history=created)
 
-    class FakeHandoffAgent:
-        async def generate_draft(
-            self,
-            message_history: list[ModelMessage],
-            goal: str,
-        ) -> str:
-            captured["history"] = message_history
-            captured["goal"] = goal
-            return "draft"
+    async def generate_draft(self, message_history, goal):
+        captured["history"] = message_history
+        captured["goal"] = goal
+        with pytest.raises(RunInProgressError):
+            await saber.new_thread()
+        return "draft"
 
     monkeypatch.setattr(saber.agent, "run", fake_run)
-    monkeypatch.setattr(
-        "sqlsaber.agents.handoff_agent.HandoffAgent",
-        FakeHandoffAgent,
-    )
+    monkeypatch.setattr(Handoff, "generate_draft", generate_draft)
 
     try:
         await saber.query("question")
         draft = await saber.draft_handoff("continue elsewhere")
+        assert saber._message_history == created
+        assert not saber._query_in_progress
     finally:
         await saber.close()
 
     assert draft == "draft"
     assert captured == {"history": created, "goal": "continue elsewhere"}
+
+
+async def test_handoff_requires_explicit_capability() -> None:
+    async with SQLSaber(options=_options()) as saber:
+        with pytest.raises(ValueError, match="SQLSaberOptions.capabilities"):
+            await saber.draft_handoff("continue")
+
+
+@pytest.mark.parametrize(
+    "error", [ValueError("generation failed"), asyncio.CancelledError()]
+)
+async def test_handoff_failure_releases_session_without_changing_history(
+    monkeypatch, error
+):
+    from sqlsaber.bundled.handoff import capability
+    from sqlsaber.bundled.handoff.runtime import Handoff
+
+    async def fail(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(Handoff, "generate_draft", fail)
+    async with SQLSaber(options=_options(capabilities=(capability,))) as saber:
+        history = _turn("earlier", "answer")
+        saber._message_history = history.copy()
+        before = saber.info.thread_id
+        with pytest.raises(type(error)):
+            await saber.draft_handoff("continue")
+        assert not saber._query_in_progress
+        assert saber._message_history == history
+        assert saber.info.thread_id == before
 
 
 def _configure_database(temp_dir, monkeypatch, name: str = "analytics") -> None:

@@ -475,15 +475,29 @@ class SQLSaber:
         return tuple(tables)
 
     async def draft_handoff(self, goal: str) -> str:
-        """Draft a handoff from the SDK-owned conversation history."""
+        """Draft from SDK-owned history using an explicitly supplied handoff capability."""
         self._ensure_not_running()
-        from sqlsaber.agents.handoff_agent import HandoffAgent
+        from sqlsaber.bundled.handoff.runtime import Handoff
 
-        handoff_agent = HandoffAgent()
-        return await handoff_agent.generate_draft(
-            message_history=list(self._message_history),
-            goal=goal,
+        handoff = next(
+            (
+                item
+                for item in self._runtime.agent.capabilities
+                if isinstance(item, Handoff)
+            ),
+            None,
         )
+        if handoff is None:
+            raise ValueError(
+                "Handoff capability is unavailable. Enable the handoff plugin for new "
+                "CLI sessions with 'saber plugins enable handoff', or include "
+                "sqlsaber.bundled.handoff.capability in SQLSaberOptions.capabilities."
+            )
+        self._query_in_progress = True
+        try:
+            return await handoff.generate_draft(list(self._message_history), goal)
+        finally:
+            self._query_in_progress = False
 
     async def end_thread(self) -> str | None:
         """Mark the current persisted thread as ended."""
