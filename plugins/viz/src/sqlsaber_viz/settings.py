@@ -26,7 +26,7 @@ settings = PluginSettings(
             "model",
             "Visualization model",
             env="SQLSABER_VIZ_MODEL",
-            help="Unset uses an SDK tool override, otherwise the active session model.",
+            help="Unset uses the active session model.",
         ),
     ),
     validate=_validate,

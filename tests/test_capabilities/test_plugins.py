@@ -20,7 +20,6 @@ from sqlsaber.config.settings import Config
 from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
 from sqlsaber.database.sqlite import SQLiteConnection
 from sqlsaber.knowledge.manager import KnowledgeManager
-from sqlsaber.overrides import ModelOverides
 from sqlsaber.query_results import InMemoryQueryResultStore
 
 
@@ -54,9 +53,6 @@ def _context(config: Config | None = None) -> PluginContext:
         registry=registry,
         knowledge_manager=KnowledgeManager(),
         allow_dangerous=True,
-        tool_overrides={
-            "viz": ModelOverides(model_name="openai:gpt-test", api_key="tool-key")
-        },
         config=config
         or Config.in_memory(
             model_name="anthropic:claude-main",
@@ -88,7 +84,6 @@ def test_discover_capabilities_delivers_plugin_context(monkeypatch) -> None:
     assert [capability.id for capability in discovered] == ["test-plugin"]
     assert received == [context]
     assert received[0].allow_dangerous is True
-    assert received[0].tool_overrides["viz"].model_name == "openai:gpt-test"
 
 
 def test_discover_capabilities_sorts_entry_points_by_name(monkeypatch) -> None:
@@ -116,7 +111,6 @@ def test_discover_capabilities_sorts_entry_points_by_name(monkeypatch) -> None:
 @pytest.mark.parametrize(
     (
         "explicit_model",
-        "tool_name",
         "explicit_key",
         "expected_model",
         "expected_key",
@@ -124,19 +118,18 @@ def test_discover_capabilities_sorts_entry_points_by_name(monkeypatch) -> None:
     [
         (
             "openai:gpt-explicit",
-            "viz",
             "explicit-key",
             "openai:gpt-explicit",
             "explicit-key",
         ),
-        (None, "viz", None, "openai:gpt-test", "tool-key"),
-        (None, None, None, "anthropic:claude-main", "main-key"),
+        ("openai:gpt-explicit", None, "openai:gpt-explicit", None),
+        (None, None, "anthropic:claude-main", "main-key"),
+        (None, "explicit-key", "anthropic:claude-main", "explicit-key"),
     ],
 )
 def test_plugin_context_model_precedence(
     monkeypatch,
     explicit_model,
-    tool_name,
     explicit_key,
     expected_model,
     expected_key,
@@ -149,8 +142,6 @@ def test_plugin_context_model_precedence(
     monkeypatch.setattr("sqlsaber.agents.model_factory.resolve_model", resolve)
 
     model_name, model, provider = context.resolve_subagent_model(
-        "notebook",
-        tool_name=tool_name,
         model_name=explicit_model,
         api_key=explicit_key,
     )
@@ -188,7 +179,7 @@ def test_plugin_context_ignores_persisted_legacy_subagent(
     )
     monkeypatch.setattr("sqlsaber.agents.model_factory.resolve_model", resolve)
 
-    model_name, _, _ = context.resolve_subagent_model("notebook")
+    model_name, _, _ = context.resolve_subagent_model()
 
     assert model_name == "anthropic:claude-main"
     resolve.assert_called_once_with(
@@ -208,7 +199,7 @@ def test_plugin_context_resolves_explicit_codex_without_api_key(monkeypatch) -> 
     context = _context()
 
     model_name, model, provider = context.resolve_subagent_model(
-        "notebook", model_name="openai-codex:gpt-test"
+        model_name="openai-codex:gpt-test"
     )
 
     assert model_name == "openai-codex:gpt-test"
@@ -241,7 +232,6 @@ def test_plugin_context_requires_query_result_store() -> None:
             registry=registry,
             knowledge_manager=KnowledgeManager(),
             allow_dangerous=True,
-            tool_overrides={},
             config=Config.in_memory(
                 model_name="anthropic:claude-main",
                 api_keys={"anthropic": "main-key"},

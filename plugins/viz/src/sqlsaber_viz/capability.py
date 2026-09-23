@@ -18,14 +18,18 @@ class Visualization(SqlSaberCapability):
     description = "Generate a chart from the result of an SQL query."
 
     def __init__(
-        self, context: PluginContext, *, model_name: str | None = None
+        self,
+        context: PluginContext,
+        *,
+        model_name: str | None = None,
+        api_key: str | None = None,
     ) -> None:
         self.tool = VizTool(
             context.query_result_store,
             context=context,
             model_name=model_name,
+            api_key=api_key,
         )
-        self.tool.model_overide = context.tool_overrides.get(self.tool.name)
         self._toolset = FunctionToolset[Any](id=self.id)
         self._toolset.add_function(
             self.tool.execute,
@@ -42,7 +46,10 @@ class Visualization(SqlSaberCapability):
 
 
 def capability(
-    context: PluginContext, *, model_name: str | None = None
+    context: PluginContext,
+    *,
+    model_name: str | None = None,
+    api_key: str | None = None,
 ) -> Visualization:
     """Create the visualization capability for a managed SQLSaber agent."""
-    return Visualization(context, model_name=model_name)
+    return Visualization(context, model_name=model_name, api_key=api_key)

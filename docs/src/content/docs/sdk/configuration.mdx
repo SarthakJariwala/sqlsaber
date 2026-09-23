@@ -35,7 +35,6 @@ options = SQLSaberOptions(
 | `artifact_failure_mode` | `"required" \| "best_effort"`            | `"required"` | Fail the tool or retain its answer when artifact publication fails.                      |
 | `query_result_store` | `QueryResultStore \| None` | `None` | Store for complete SQL row results. Defaults to a session-owned in-memory store. Inject application storage for durable or tenant-scoped retrieval. |
 | `workspace_input_resolver` | `WorkspaceInputResolver \| None` | `None` | Application-owned resolver for opaque, authorized inputs to the managed notebook analyst. |
-| `tool_overrides`    | `Mapping[str, ModelOverides] \| None`         | `None`  | Per-tool model and API-key overrides. See [Advanced](/sdk/advanced/).                            |
 | `allow_dangerous`   | `bool`                                        | `False` | Allow write operations and a restricted subset of DDL. See [Advanced](/sdk/advanced/).       |
 | `csv_tool_results` | `bool` | `False` | Opt in to experimental CSV tables in model-facing SQL tool results. JSON remains the default. |
 

@@ -25,6 +25,11 @@ def test_api_options_are_required() -> None:
         SQLSaber(**kwargs)
 
 
+def test_tool_overrides_option_is_removed() -> None:
+    with pytest.raises(TypeError, match="tool_overrides"):
+        SQLSaberOptions(**{"tool_overrides": {}})
+
+
 def test_capabilities_are_exported_from_top_level() -> None:
     assert SqlTools.__name__ == "SqlTools"
     assert Knowledge.__name__ == "Knowledge"

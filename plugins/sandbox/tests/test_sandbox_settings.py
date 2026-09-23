@@ -168,6 +168,19 @@ def test_settings_reuse_runtime_defaults_and_validation() -> None:
         settings.validate({})
 
 
+def test_capability_factory_forwards_model_configuration() -> None:
+    from sqlsaber_sandbox.capability import capability
+
+    configured = capability(
+        SimpleNamespace(workspace_input_resolver=None),
+        model_name="openai:gpt-5-mini",
+        api_key="explicit-key",
+    )
+
+    assert configured.tool._model_name == "openai:gpt-5-mini"
+    assert configured.tool._api_key == "explicit-key"
+
+
 @pytest.mark.parametrize(
     ("provider", "field"),
     [

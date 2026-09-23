@@ -6,7 +6,6 @@ from types import SimpleNamespace
 import pytest
 
 import sqlsaber_viz.tools as tools
-from sqlsaber.overrides import ModelOverides
 from sqlsaber.render.blocks import Ansi
 from sqlsaber.query_results import InMemoryQueryResultStore
 from sqlsaber_viz.spec import VizSpec
@@ -132,7 +131,7 @@ def test_viz_tool_render_result(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_viz_tool_uses_capability_model_overide(
+async def test_standalone_viz_tool_uses_explicit_model_configuration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(tools, "_get_spec_agent_cls", lambda: DummyAgent)
@@ -145,9 +144,10 @@ async def test_viz_tool_uses_capability_model_overide(
         ],
     }
     ctx = _make_ctx(payload, "call-2")
-    tool = _tool()
-    tool.model_overide = ModelOverides(
-        model_name="openai:gpt-5-mini", api_key="override-api-key"
+    tool = VizTool(
+        InMemoryQueryResultStore(),
+        model_name="openai:gpt-5-mini",
+        api_key="override-api-key",
     )
 
     result = await tool.execute(ctx, request="show values", file="result_call-2.json")
@@ -175,6 +175,7 @@ async def test_viz_tool_resolves_bound_plugin_model_through_session_context(
         InMemoryQueryResultStore(),
         context=context,
         model_name="openai:gpt-5-mini",
+        api_key="explicit-key",
     )
     payload = {"row_count": 1, "results": [{"name": "A", "value": 1}]}
 
@@ -185,6 +186,9 @@ async def test_viz_tool_resolves_bound_plugin_model_through_session_context(
     )
 
     assert calls == [
-        (("viz",), {"tool_name": "viz", "model_name": "openai:gpt-5-mini"})
+        (
+            (),
+            {"model_name": "openai:gpt-5-mini", "api_key": "explicit-key"},
+        )
     ]
     assert DummyAgent.last_model is resolved_model

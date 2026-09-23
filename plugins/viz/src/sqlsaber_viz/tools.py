@@ -11,7 +11,6 @@ from pydantic import ValidationError
 from pydantic_ai import RunContext
 
 from sqlsaber.capabilities.plugins import PluginContext
-from sqlsaber.overrides import ModelOverides
 from sqlsaber.query_result_resolution import (
     find_query_result_reference,
     query_result_context_from_run,
@@ -49,6 +48,7 @@ class VizTool(Tool):
         *,
         context: PluginContext | None = None,
         model_name: str | None = None,
+        api_key: str | None = None,
     ) -> None:
         super().__init__()
         self.query_result_store = query_result_store
@@ -56,9 +56,9 @@ class VizTool(Tool):
         self._last_rows: list[dict] | None = None
         self._last_file: str | None = None
         self._replay_messages: list | None = None
-        self.model_overide: ModelOverides | None = None
         self._context = context
         self._model_name = model_name
+        self._api_key = api_key
 
     def set_replay_messages(self, messages: list) -> None:
         """Set message history for replay scenarios (e.g., threads show)."""
@@ -122,16 +122,13 @@ class VizTool(Tool):
 
         if self._context is None:
             agent = _get_spec_agent_cls()(
-                model_name=self.model_overide.model_name
-                if self.model_overide
-                else None,
-                api_key=self.model_overide.api_key if self.model_overide else None,
+                model_name=self._model_name,
+                api_key=self._api_key,
             )
         else:
             _, model, _ = self._context.resolve_subagent_model(
-                "viz",
-                tool_name=self.name,
                 model_name=self._model_name,
+                api_key=self._api_key,
             )
             agent = _get_spec_agent_cls()(model=model)
 

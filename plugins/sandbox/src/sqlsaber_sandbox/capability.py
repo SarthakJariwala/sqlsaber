@@ -25,8 +25,16 @@ class Sandbox(SqlSaberCapability):
         *,
         config: SandboxConfig = DEFAULT_SANDBOX_CONFIG,
         backend_factory: Callable[[], SandboxBackend] | None = None,
+        model_name: str | None = None,
+        api_key: str | None = None,
     ) -> None:
-        self.tool = AnalyzeSandboxTool(context, config, backend_factory=backend_factory)
+        self.tool = AnalyzeSandboxTool(
+            context,
+            config,
+            backend_factory=backend_factory,
+            model_name=model_name,
+            api_key=api_key,
+        )
         self._toolset = FunctionToolset[Any](id=self.id)
         self._toolset.add_function(
             self.tool.execute_with_attachments
@@ -73,9 +81,17 @@ def capability(
     *,
     config: SandboxConfig = DEFAULT_SANDBOX_CONFIG,
     backend_factory: Callable[[], SandboxBackend] | None = None,
+    model_name: str | None = None,
+    api_key: str | None = None,
 ) -> Sandbox:
     """Construct lazily; provider validation happens on the first analysis."""
-    return Sandbox(context, config=config, backend_factory=backend_factory)
+    return Sandbox(
+        context,
+        config=config,
+        backend_factory=backend_factory,
+        model_name=model_name,
+        api_key=api_key,
+    )
 
 
 def display_tools() -> Mapping[str, Tool]:

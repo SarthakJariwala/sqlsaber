@@ -23,7 +23,6 @@ from sqlsaber.database import BaseDatabaseConnection
 from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
 from sqlsaber.database.schema import SchemaManager
 from sqlsaber.knowledge.manager import KnowledgeManager
-from sqlsaber.overrides import ToolOveridesInput, normalize_tool_overides
 from sqlsaber.prompts.persona import PERSONA
 from sqlsaber.query_result_resolution import compact_legacy_query_result_history
 from sqlsaber.query_results import InMemoryQueryResultStore, QueryResultStore
@@ -63,7 +62,6 @@ class SQLSaberAgent:
         allow_dangerous: bool = False,
         csv_tool_results: bool = False,
         system_prompt: str | None = None,
-        tool_overides: ToolOveridesInput | None = None,
         capabilities: Sequence[CapabilitySpec] = (),
         artifact_store: ArtifactStore | None = None,
         artifact_failure_mode: ArtifactFailureMode = "required",
@@ -94,7 +92,6 @@ class SQLSaberAgent:
         self.db_type = self.db_connection.display_name
         self.allow_dangerous = allow_dangerous
         self.csv_tool_results = csv_tool_results
-        self._tool_overides = normalize_tool_overides(tool_overides)
         self._capability_specs = tuple(capabilities)
         self._artifact_store = artifact_store
         self._artifact_failure_mode = artifact_failure_mode
@@ -149,7 +146,6 @@ class SQLSaberAgent:
             registry=self.registry,
             knowledge_manager=self.knowledge_manager,
             allow_dangerous=self.allow_dangerous,
-            tool_overrides=self._tool_overides,
             config=self.config,
             main_model_name=model_name,
             query_result_store=self.query_result_store,

@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sqlsaber.config.settings import ThinkingLevel
-from sqlsaber.overrides import ToolOveridesInput
 
 if TYPE_CHECKING:
     from sqlsaber.artifacts import ArtifactFailureMode, ArtifactStore
@@ -46,7 +45,6 @@ class SQLSaberOptions:
     query_result_store: QueryResultStore | None = None
     workspace_input_resolver: WorkspaceInputResolver | None = None
 
-    # Tool overrides
-    tool_overrides: ToolOveridesInput | None = None
+    # SQL tool behavior
     allow_dangerous: bool = False
     csv_tool_results: bool = False

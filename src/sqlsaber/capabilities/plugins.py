@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any, TypeGuard
@@ -14,7 +14,6 @@ from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import Config
 from sqlsaber.database.registry import DatabaseRegistry
 from sqlsaber.knowledge.manager import KnowledgeManager
-from sqlsaber.overrides import ModelOverides
 from sqlsaber.query_results import QueryResultStore
 from sqlsaber.workspace_inputs import WorkspaceInputResolver
 
@@ -32,7 +31,6 @@ class PluginContext:
     registry: DatabaseRegistry
     knowledge_manager: KnowledgeManager
     allow_dangerous: bool
-    tool_overrides: Mapping[str, ModelOverides]
     config: Config
     main_model_name: str
     query_result_store: QueryResultStore
@@ -43,28 +41,15 @@ class PluginContext:
 
     def resolve_subagent_model(
         self,
-        name: str,
         *,
-        tool_name: str | None = None,
         model_name: str | None = None,
         api_key: str | None = None,
     ) -> tuple[str, Model | str, str]:
-        """Resolve explicit, tool, then main-agent settings."""
+        """Resolve a capability's explicit model or inherit the session model."""
 
-        override = (
-            self.tool_overrides.get(tool_name)
-            if tool_name and model_name is None
-            else None
-        )
-        use_main_key = model_name is None and override is None
-        model_name = (
-            model_name
-            or (override.model_name if override else None)
-            or self.main_model_name
-        )
-
-        explicit_key = api_key or (override.api_key if override else None)
-        api_key = explicit_key or (self.main_api_key if use_main_key else None)
+        use_main_key = model_name is None
+        model_name = model_name or self.main_model_name
+        api_key = api_key or (self.main_api_key if use_main_key else None)
         # Import lazily to avoid loading the managed-agent package while plugin
         # discovery types themselves are being imported.
         from sqlsaber.agents.model_factory import resolve_model
