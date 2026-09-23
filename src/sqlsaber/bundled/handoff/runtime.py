@@ -54,7 +54,6 @@ class Handoff(SqlSaberCapability):
     def _build_agent(self) -> Agent:
         """Create the pydantic-ai Agent with no tools."""
         _, model, _ = self.context.resolve_subagent_model(
-            "handoff",
             model_name=self._model_name_override,
             api_key=self._api_key_override,
         )

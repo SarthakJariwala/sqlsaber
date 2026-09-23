@@ -102,10 +102,14 @@ class AnalyzeDataTool(Tool):
         context: PluginContext,
         *,
         config: NotebookConfig = DEFAULT_NOTEBOOK_CONFIG,
+        model_name: str | None = None,
+        api_key: str | None = None,
     ) -> None:
         super().__init__()
         self._context = context
         self._config = config
+        self._model_name = model_name
+        self._api_key = api_key
         self._display_results: OrderedDict[str, _NotebookDisplay] = OrderedDict()
         self._resolved_publications: Mapping[str, ResolvedArtifactPublication] = {}
 
@@ -178,8 +182,8 @@ class AnalyzeDataTool(Tool):
                 limits=self._config.workspace,
             )
             model_name, model, provider = self._context.resolve_subagent_model(
-                "notebook",
-                tool_name=self.name,
+                model_name=self._model_name,
+                api_key=self._api_key,
             )
             backend = (
                 self._config.backend
@@ -356,8 +360,12 @@ class Notebook(SqlSaberCapability):
         context: PluginContext,
         *,
         config: NotebookConfig = DEFAULT_NOTEBOOK_CONFIG,
+        model_name: str | None = None,
+        api_key: str | None = None,
     ) -> None:
-        self.tool = AnalyzeDataTool(context, config=config)
+        self.tool = AnalyzeDataTool(
+            context, config=config, model_name=model_name, api_key=api_key
+        )
         self._toolset = FunctionToolset[Any](id=self.id)
         execute = (
             self.tool.execute_with_attachments
@@ -396,10 +404,12 @@ def capability(
     context: PluginContext,
     *,
     config: NotebookConfig = DEFAULT_NOTEBOOK_CONFIG,
+    model_name: str | None = None,
+    api_key: str | None = None,
 ) -> AbstractCapability[Any] | Sequence[AbstractCapability[Any]]:
     """Always expose the installed plugin; backend checks happen on use."""
 
-    return Notebook(context, config=config)
+    return Notebook(context, config=config, model_name=model_name, api_key=api_key)
 
 
 async def build_workspace_from_history(

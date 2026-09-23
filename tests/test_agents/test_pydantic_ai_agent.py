@@ -1,5 +1,6 @@
 """Tests for SQLSaberAgent overrides and lifecycle behavior."""
 
+from functools import partial
 from types import SimpleNamespace
 
 import pytest
@@ -66,13 +67,13 @@ class TestSQLSaberAgentDeps:
             db_connection=in_memory_db,
             model_name="anthropic:claude-3-5-sonnet",
             api_key="test-key",
-            capabilities=[viz_factory],
-            tool_overides={
-                "viz": {
-                    "model_name": "openai:gpt-5-mini",
-                    "api_key": "override-api-key",
-                }
-            },
+            capabilities=[
+                partial(
+                    viz_factory,
+                    model_name="openai:gpt-5-mini",
+                    api_key="override-api-key",
+                )
+            ],
         )
 
         captured: dict[str, object] = {}
@@ -97,8 +98,8 @@ class TestSQLSaberAgentDeps:
         assert captured["usage_limits"] is None
         assert captured["bound_usage_limits"] is None
         viz = agent._tools["viz"]
-        assert viz.model_overide.model_name == "openai:gpt-5-mini"
-        assert viz.model_overide.api_key == "override-api-key"
+        assert viz._model_name == "openai:gpt-5-mini"
+        assert viz._api_key == "override-api-key"
 
 
 class _ClosingCapability(SqlSaberCapability):

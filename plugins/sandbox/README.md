@@ -97,7 +97,12 @@ options = SQLSaberOptions(
     query_result_store=query_result_store,
     artifact_store=artifact_store,
     capabilities=[
-        partial(capability, config=SandboxConfig(provider="e2b")),
+        partial(
+            capability,
+            config=SandboxConfig(provider="e2b"),
+            model_name="openai:gpt-5-mini",
+            api_key="application-managed-key",
+        ),
     ],
 )
 

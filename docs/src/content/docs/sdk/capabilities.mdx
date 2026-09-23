@@ -34,8 +34,7 @@ To customize the child model, pass
 `partial(handoff, model_name="openai:gpt-5-mini")` from `functools.partial` in
 `capabilities`. An explicit child model uses credentials from the session's
 `Config.auth`; optionally pass `api_key` to the factory. Without an explicit
-model, the legacy `handoff` subagent setting takes precedence over the session
-model. Inheriting the session model also inherits its explicit API key.
+model, handoff uses the session model and inherits its explicit API key.
 
 **Migration:** `saber.draft_handoff()` now requires the handoff capability.
 It raises `ValueError` with configuration instructions when absent, rather than

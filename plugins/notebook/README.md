@@ -167,7 +167,7 @@ Backends never fall back automatically after selection or failure.
 Configure a dedicated analyst model with:
 
 ```bash
-saber models set --agent notebook
+saber plugins set notebook model openai:gpt-5
 ```
 
 For a web backend, list the notebook factory in `SQLSaberOptions.capabilities`.
@@ -247,7 +247,14 @@ config = NotebookConfig(
 
 options = SQLSaberOptions(
     database="analytics",
-    capabilities=[partial(notebook, config=config)],
+    capabilities=[
+        partial(
+            notebook,
+            config=config,
+            model_name="openai:gpt-5-mini",
+            api_key="application-managed-key",
+        )
+    ],
 )
 # The independent API accepts the same object:
 # result = await analyze(goal, workspace, model=model,

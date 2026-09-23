@@ -9,6 +9,9 @@ dependencies = ["sqlsaber>=0.69.0", "plotext>=5.3.0,<6"]
 [project.entry-points."sqlsaber.capabilities"]
 viz = "sqlsaber_viz:capability"
 
+[project.entry-points."sqlsaber.plugin_settings"]
+viz = "sqlsaber_viz.settings:settings"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

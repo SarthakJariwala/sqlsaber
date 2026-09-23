@@ -1037,8 +1037,12 @@ def test_managed_schema_exposes_attachment_refs_only_with_a_resolver() -> None:
 
 def test_installed_capability_is_always_registered() -> None:
     notebook = capability_module.capability(
-        cast(Any, SimpleNamespace(workspace_input_resolver=None))
+        cast(Any, SimpleNamespace(workspace_input_resolver=None)),
+        model_name="openai:gpt-5-mini",
+        api_key="explicit-key",
     )
     assert isinstance(notebook, Notebook)
     assert notebook.tool.name == "analyze_data"
+    assert notebook.tool._model_name == "openai:gpt-5-mini"
+    assert notebook.tool._api_key == "explicit-key"
     assert notebook.get_toolset().tools["analyze_data"].sequential is True

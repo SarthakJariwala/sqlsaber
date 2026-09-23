@@ -81,10 +81,14 @@ class AnalyzeSandboxTool(Tool):
         config: SandboxConfig,
         *,
         backend_factory: Callable[[], SandboxBackend] | None = None,
+        model_name: str | None = None,
+        api_key: str | None = None,
     ):
         self.context = context
         self.config = config
         self._backend_factory = backend_factory
+        self._model_name = model_name
+        self._api_key = api_key
         self.sessions: dict[str, tuple[str, SandboxSession]] = {}
         self.results: dict[str, AnalysisResult] = {}
         self.publications: dict[str, ArtifactPublication] = {}
@@ -163,7 +167,8 @@ class AnalyzeSandboxTool(Tool):
                         "A conversation identity is required for managed sandbox sessions"
                     )
                 _, model, provider = self.context.resolve_subagent_model(
-                    "sandbox", tool_name=self.name
+                    model_name=self._model_name,
+                    api_key=self._api_key,
                 )
                 session = SandboxSession(
                     model=model,

@@ -43,7 +43,7 @@ def capability(context: PluginContext):
     return MyCapability(context)
 ```
 
-Factories receive the active database registry, knowledge manager, dangerous-mode flag, and normalized tool overrides. They may return one capability, a sequence, or an empty sequence when conditionally disabled.
+Factories receive the active database registry, knowledge manager, dangerous-mode flag, and session model configuration. They may return one capability, a sequence, or an empty sequence when conditionally disabled.
 
 ## Configure installed plugins
 
@@ -120,7 +120,7 @@ SDK capability factories do not read saved CLI settings.
 
 ## Porting a legacy tool plugin
 
-The old `sqlsaber.tools` group and global `ToolRegistry` are removed. Keep your existing `Tool.execute` and rendering methods, put the instance in a `FunctionToolset`, expose it through `display_specs`, and change the entry point to `sqlsaber.capabilities`. Model overrides should be read from `context.tool_overrides` during construction rather than `ctx.deps`.
+The old `sqlsaber.tools` group and global `ToolRegistry` are removed. Keep your existing `Tool.execute` and rendering methods, put the instance in a `FunctionToolset`, expose it through `display_specs`, and change the entry point to `sqlsaber.capabilities`. Accept `model_name` and `api_key` on your capability factory, then pass them to `context.resolve_subagent_model(model_name=model_name, api_key=api_key)`. Unset values inherit the session model and credentials.
 
 ## Install a plugin locally
 

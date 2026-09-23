@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from pydantic import ValidationError
 
+import sqlsaber_viz.spec_agent as spec_agent_module
 from sqlsaber_viz.spec import VizSpec
 from sqlsaber_viz.spec_agent import MAX_RETRIES, SpecAgent, _parse_json
 
@@ -62,11 +63,45 @@ async def _make_spec_agent(monkeypatch: pytest.MonkeyPatch) -> SpecAgent:
     obj.config = None  # type: ignore[assignment]
     obj._model_name_override = None
     obj._api_key_override = None
+    obj._model = None
     obj.agent = AsyncMock()
     return obj
 
 
 # -- Tests ------------------------------------------------------------------
+
+
+def test_build_agent_uses_active_session_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    obj = object.__new__(SpecAgent)
+    auth = object()
+    obj.config = SimpleNamespace(
+        auth=auth,
+        model=SimpleNamespace(name="openai:gpt-session"),
+    )
+    obj._model_name_override = None
+    obj._api_key_override = None
+    obj._model = None
+    obj._register_tools = Mock()
+    resolved_model = object()
+    resolve = Mock(
+        return_value=SimpleNamespace(model=resolved_model, provider="openai")
+    )
+    agent = object()
+    agent_factory = Mock(return_value=agent)
+    monkeypatch.setattr(spec_agent_module, "resolve_model", resolve)
+    monkeypatch.setattr(spec_agent_module, "Agent", agent_factory)
+
+    assert obj._build_agent() is agent
+    resolve.assert_called_once_with(
+        auth,
+        "openai:gpt-session",
+        api_key_override=None,
+    )
+    agent_factory.assert_called_once_with(
+        resolved_model,
+        instructions=spec_agent_module.VIZ_SYSTEM_PROMPT,
+    )
+    obj._register_tools.assert_called_once_with(agent)
 
 
 @pytest.mark.asyncio

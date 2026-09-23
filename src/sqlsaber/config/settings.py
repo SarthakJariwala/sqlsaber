@@ -14,8 +14,6 @@ import platformdirs
 from sqlsaber.config import providers
 from sqlsaber.config.api_keys import APIKeyManager
 
-SUBAGENT_KEYS: tuple[str, ...] = ("handoff", "viz", "notebook")
-
 
 class ThinkingLevel(str, Enum):
     """Thinking levels that map to provider-specific configurations."""
@@ -141,10 +139,6 @@ class ModelConfigManager:
                 except OSError:
                     pass
 
-            subagents = config.get("subagents")
-            if subagents is not None and not isinstance(subagents, dict):
-                config.pop("subagents", None)
-
             return config
         except (json.JSONDecodeError, IOError):
             return {
@@ -173,47 +167,6 @@ class ModelConfigManager:
         config = self._load_config()
         config["model"] = model
         self._save_config(config)
-
-    def get_subagent_model(self, agent: str) -> str | None:
-        """Get the configured model override for a subagent."""
-
-        config = self._load_config()
-        subagents = config.get("subagents")
-        if isinstance(subagents, dict):
-            model = subagents.get(agent)
-            if isinstance(model, str) and model:
-                return model
-        return None
-
-    def set_subagent_model(self, agent: str, model: str | None) -> None:
-        """Set or clear the model override for a subagent."""
-
-        config = self._load_config()
-        subagents = config.get("subagents")
-        if not isinstance(subagents, dict):
-            subagents = {}
-
-        if model:
-            subagents[agent] = model
-            config["subagents"] = subagents
-        else:
-            if agent in subagents:
-                subagents.pop(agent, None)
-            if subagents:
-                config["subagents"] = subagents
-            else:
-                config.pop("subagents", None)
-
-        self._save_config(config)
-
-    def get_subagent_models(self) -> dict[str, str]:
-        """Get all configured subagent model overrides."""
-
-        config = self._load_config()
-        subagents = config.get("subagents")
-        if isinstance(subagents, dict):
-            return dict(subagents)
-        return {}
 
     def get_thinking_enabled(self) -> bool:
         """Get whether thinking is enabled."""
@@ -252,9 +205,6 @@ class ModelConfigManagerProtocol(Protocol):
 
     def get_model(self) -> str: ...
     def set_model(self, model: str) -> None: ...
-    def get_subagent_model(self, agent: str) -> str | None: ...
-    def set_subagent_model(self, agent: str, model: str | None) -> None: ...
-    def get_subagent_models(self) -> dict[str, str]: ...
     def get_thinking_enabled(self) -> bool: ...
     def set_thinking_enabled(self, enabled: bool) -> None: ...
     def get_thinking_level(self) -> ThinkingLevel: ...
@@ -271,35 +221,16 @@ class InMemoryModelConfigManager:
         model: str,
         thinking_enabled: bool,
         thinking_level: ThinkingLevel,
-        subagents: Mapping[str, str] | None = None,
     ) -> None:
         self._model = model
         self._thinking_enabled = thinking_enabled
         self._thinking_level = thinking_level
-        self._subagents: dict[str, str] = {
-            key: value
-            for key, value in (subagents or {}).items()
-            if key in SUBAGENT_KEYS and value
-        }
 
     def get_model(self) -> str:
         return self._model
 
     def set_model(self, model: str) -> None:
         self._model = model
-
-    def get_subagent_model(self, agent: str) -> str | None:
-        model = self._subagents.get(agent)
-        return model if model else None
-
-    def set_subagent_model(self, agent: str, model: str | None) -> None:
-        if not model:
-            self._subagents.pop(agent, None)
-            return
-        self._subagents[agent] = model
-
-    def get_subagent_models(self) -> dict[str, str]:
-        return dict(self._subagents)
 
     def get_thinking_enabled(self) -> bool:
         return self._thinking_enabled
@@ -335,21 +266,6 @@ class ModelConfig:
         """Set the model name."""
 
         self._manager.set_model(value)
-
-    def get_subagent_model(self, agent: str) -> str | None:
-        """Get the configured model override for a subagent."""
-
-        return self._manager.get_subagent_model(agent)
-
-    def set_subagent_model(self, agent: str, model: str | None) -> None:
-        """Set or clear the model override for a subagent."""
-
-        self._manager.set_subagent_model(agent, model)
-
-    def get_subagent_models(self) -> dict[str, str]:
-        """Get all configured subagent model overrides."""
-
-        return self._manager.get_subagent_models()
 
     @property
     def thinking_enabled(self) -> bool:
@@ -505,7 +421,6 @@ class Config:
         model_name: str | None = None,
         thinking_enabled: bool = False,
         thinking_level: ThinkingLevel | str = ThinkingLevel.MEDIUM,
-        subagent_models: Mapping[str, str] | None = None,
         api_keys: Mapping[str, str] | None = None,
     ) -> "Config":
         """Create an in-memory Config for SDK/tests without filesystem writes."""
@@ -518,7 +433,6 @@ class Config:
             model=model_name or ModelConfigManager.DEFAULT_MODEL,
             thinking_enabled=thinking_enabled,
             thinking_level=resolved_level,
-            subagents=subagent_models,
         )
         return cls(
             model=ModelConfig(manager=model_manager),

@@ -101,24 +101,22 @@ async def test_model_invokes_handoff_with_run_history_and_shared_usage(
 
 
 @pytest.mark.parametrize(
-    "explicit,legacy,expected_model,expected_key",
+    "plugin_model,expected_model,expected_key",
     [
-        (None, None, "openai:session", "session-key"),
-        (None, "anthropic:legacy", "anthropic:legacy", None),
-        ("anthropic:plugin", "openai:legacy", "anthropic:plugin", None),
+        (None, "openai:session", "session-key"),
+        ("anthropic:plugin", "anthropic:plugin", None),
     ],
 )
 async def test_model_precedence_and_session_auth(
-    monkeypatch, explicit, legacy, expected_model, expected_key
+    monkeypatch, plugin_model, expected_model, expected_key
 ):
-    factory = partial(capability, model_name=explicit)
+    factory = partial(capability, model_name=plugin_model)
     async with SQLSaber(
         options=options(
             capabilities=(factory,), model_name="openai:session", api_key="session-key"
         )
     ) as saber:
         plugin = next(c for c in saber.agent.capabilities if isinstance(c, Handoff))
-        plugin.context.config.model.set_subagent_model("handoff", legacy)
         resolve = Mock(
             return_value=SimpleNamespace(
                 model=FunctionModel(
@@ -158,6 +156,7 @@ def test_installed_cli_settings_bind_and_disable(monkeypatch, tmp_path):
     monkeypatch.setattr(plugins, "installed_plugins", lambda: {"handoff": entry})
     declaration = plugins.load_plugin_settings("handoff")
     assert declaration is not None
+    assert declaration.fields[0].help == "Unset: use the active session model."
     assert [item.name for item in configured_capabilities()] == ["handoff"]
     store = plugins.PluginConfigStore()
     store.save("handoff", plugins.SavedPlugin(settings={"model": "openai:saved"}))

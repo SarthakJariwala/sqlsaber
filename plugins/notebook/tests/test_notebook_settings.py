@@ -192,6 +192,21 @@ def test_bind_returns_capability_factory_with_resolved_config() -> None:
     assert config.cell_seconds is None
 
 
+def test_bind_passes_configured_model_to_capability() -> None:
+    factory = settings.bind({"backend": "docker", "model": "openai:gpt-5-mini"}, {})
+    capability = factory(SimpleNamespace(workspace_input_resolver=None))
+
+    assert capability.tool._model_name == "openai:gpt-5-mini"
+
+
+def test_model_setting_inherits_session_when_unset() -> None:
+    assert settings.field("model").env == "SQLSABER_NOTEBOOK_MODEL"
+    factory = settings.bind({"backend": "docker"}, {})
+    capability = factory(SimpleNamespace(workspace_input_resolver=None))
+
+    assert capability.tool._model_name is None
+
+
 def test_notice_describes_remote_upload_and_native_login() -> None:
     assert settings.notice({"backend": "docker"}) is None
     assert settings.notice({}) is None

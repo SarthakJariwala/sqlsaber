@@ -30,6 +30,12 @@ def _backend_is(expected: str) -> Callable[[SettingsValues], bool]:
 
 _FIELDS = (
     Setting(
+        name="model",
+        label="Notebook model",
+        env="SQLSABER_NOTEBOOK_MODEL",
+        help="Unset uses the active session model.",
+    ),
+    Setting(
         name="backend",
         label="Execution backend",
         default=DEFAULT_NOTEBOOK_BACKEND,
@@ -314,6 +320,7 @@ def build_notebook_config(
 
 
 def _validate(values: SettingsValues) -> None:
+    _text(values, "model")
     build_notebook_config(values)
 
 
@@ -321,7 +328,7 @@ def _bind(values: SettingsValues, secrets: Mapping[str, str]) -> object:
     config = build_notebook_config(values, secrets)
     from .capability import capability
 
-    return partial(capability, config=config)
+    return partial(capability, config=config, model_name=_text(values, "model"))
 
 
 _REMOTE_NOTICES = {
