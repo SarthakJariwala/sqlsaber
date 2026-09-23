@@ -1,6 +1,8 @@
 """Tests for capability plugin discovery."""
 
+import json
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from pydantic_ai.capabilities import Capability
@@ -37,7 +39,7 @@ class FakeCodexCredentialStore:
         del credentials
 
 
-def _context() -> PluginContext:
+def _context(config: Config | None = None) -> PluginContext:
     registry = DatabaseRegistry(
         [
             DatabaseEntry.from_connection(
@@ -52,8 +54,11 @@ def _context() -> PluginContext:
         registry=registry,
         knowledge_manager=KnowledgeManager(),
         allow_dangerous=True,
-        tool_overrides={"viz": ModelOverides(model_name="openai:gpt-test")},
-        config=Config.in_memory(
+        tool_overrides={
+            "viz": ModelOverides(model_name="openai:gpt-test", api_key="tool-key")
+        },
+        config=config
+        or Config.in_memory(
             model_name="anthropic:claude-main",
             api_keys={"anthropic": "main-key", "openai": "openai-key"},
         ),
@@ -108,46 +113,103 @@ def test_discover_capabilities_sorts_entry_points_by_name(monkeypatch) -> None:
     assert [capability.id for capability in discovered] == ["alpha", "zeta"]
 
 
-def test_plugin_context_resolves_subagent_precedence(monkeypatch) -> None:
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+@pytest.mark.parametrize(
+    (
+        "explicit_model",
+        "tool_name",
+        "explicit_key",
+        "expected_model",
+        "expected_key",
+    ),
+    [
+        (
+            "openai:gpt-explicit",
+            "viz",
+            "explicit-key",
+            "openai:gpt-explicit",
+            "explicit-key",
+        ),
+        (None, "viz", None, "openai:gpt-test", "tool-key"),
+        (None, None, None, "anthropic:claude-main", "main-key"),
+    ],
+)
+def test_plugin_context_model_precedence(
+    monkeypatch,
+    explicit_model,
+    tool_name,
+    explicit_key,
+    expected_model,
+    expected_key,
+) -> None:
     context = _context()
-
-    model_name, model, provider = context.resolve_subagent_model("notebook")
-    assert model_name == "anthropic:claude-main"
-    assert model.model_name == "claude-main"
-    assert provider == "anthropic"
-
-    context.config.model.set_subagent_model("notebook", "openai:gpt-notebook")
-    model_name, model, provider = context.resolve_subagent_model("notebook")
-    assert model_name == "openai:gpt-notebook"
-    assert model.model_name == "gpt-notebook"
-    assert provider == "openai"
-
-
-def test_plugin_context_tool_override_wins(monkeypatch) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    context = _context()
+    resolved_model = object()
+    resolve = Mock(
+        return_value=SimpleNamespace(model=resolved_model, provider="test-provider")
+    )
+    monkeypatch.setattr("sqlsaber.agents.model_factory.resolve_model", resolve)
 
     model_name, model, provider = context.resolve_subagent_model(
-        "notebook", tool_name="viz"
+        "notebook",
+        tool_name=tool_name,
+        model_name=explicit_model,
+        api_key=explicit_key,
     )
 
-    assert model_name == "openai:gpt-test"
-    assert model.model_name == "gpt-test"
-    assert provider == "openai"
+    assert (model_name, model, provider) == (
+        expected_model,
+        resolved_model,
+        "test-provider",
+    )
+    resolve.assert_called_once_with(
+        context.config.auth,
+        expected_model,
+        api_key_override=expected_key,
+    )
 
 
-def test_plugin_context_resolves_codex_subagent_without_api_key(monkeypatch) -> None:
+def test_plugin_context_ignores_persisted_legacy_subagent(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(
+        "platformdirs.user_config_dir", lambda *args, **kwargs: str(tmp_path)
+    )
+    config = Config()
+    legacy_payload = {
+        "version": 2,
+        "model": "anthropic:claude-main",
+        "thinking": {"enabled": True, "level": "medium"},
+        "subagents": {"notebook": "openai:gpt-legacy"},
+    }
+    legacy_text = json.dumps(legacy_payload, indent=2)
+    config.model._manager.config_file.write_text(legacy_text)
+    context = _context(config)
+    resolve = Mock(
+        return_value=SimpleNamespace(model="resolved-model", provider="anthropic")
+    )
+    monkeypatch.setattr("sqlsaber.agents.model_factory.resolve_model", resolve)
+
+    model_name, _, _ = context.resolve_subagent_model("notebook")
+
+    assert model_name == "anthropic:claude-main"
+    resolve.assert_called_once_with(
+        config.auth,
+        "anthropic:claude-main",
+        api_key_override="main-key",
+    )
+    assert config.model._manager.config_file.read_text() == legacy_text
+
+
+def test_plugin_context_resolves_explicit_codex_without_api_key(monkeypatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setattr(
         "sqlsaber.config.openai_codex.OpenAICodexCredentialStore",
         FakeCodexCredentialStore,
     )
     context = _context()
-    context.config.model.set_subagent_model("notebook", "openai-codex:gpt-test")
 
-    model_name, model, provider = context.resolve_subagent_model("notebook")
+    model_name, model, provider = context.resolve_subagent_model(
+        "notebook", model_name="openai-codex:gpt-test"
+    )
 
     assert model_name == "openai-codex:gpt-test"
     assert isinstance(model, OpenAICodexModel)

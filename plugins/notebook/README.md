@@ -167,7 +167,7 @@ Backends never fall back automatically after selection or failure.
 Configure a dedicated analyst model with:
 
 ```bash
-saber models set --agent notebook
+saber plugins set notebook model openai:gpt-5
 ```
 
 For a web backend, list the notebook factory in `SQLSaberOptions.capabilities`.

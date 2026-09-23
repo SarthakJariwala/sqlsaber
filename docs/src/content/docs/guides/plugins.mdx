@@ -34,9 +34,8 @@ Changes apply to new CLI sessions. Disabling handoff removes both the model tool
 and draft generation through `/handoff`; it preserves saved settings.
 
 `SQLSABER_HANDOFF_MODEL` overrides the saved plugin model. Without a plugin model,
-handoff uses the legacy `saber models set --agent handoff` override, if present,
-then the active session model. A plugin model takes precedence over that legacy
-setting; unsetting it restores the fallback. Authentication uses the configured
+handoff uses the active session model. Unsetting the plugin model restores that
+fallback. Authentication uses the configured
 provider credentials. When inheriting the session model, it also inherits the
 session's explicit API key.
 
@@ -86,7 +85,7 @@ Docker is the default local backend. After a query, ask SQLsaber to analyze or p
 Set a dedicated notebook model without changing the main model:
 
 ```bash
-saber models set --agent notebook
+saber plugins set notebook model openai:gpt-5
 ```
 
 Select a backend with `SQLSABER_NOTEBOOK_BACKEND`. Backends never fall back automatically.

@@ -15,7 +15,6 @@ from sqlsaber.cli.safety import confirm_action
 from sqlsaber.config import providers
 from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import (
-    SUBAGENT_KEYS,
     Config,
     ModelConfigManager,
     ThinkingLevel,
@@ -33,8 +32,6 @@ models_app = cyclopts.App(
         "saber models set openai:gpt-5 --thinking-level medium"
     ),
 )
-
-AGENT_CHOICES: tuple[str, ...] = ("main", *SUBAGENT_KEYS)
 
 
 class FetchedModel(TypedDict):
@@ -236,14 +233,6 @@ class ModelManager:
 model_manager = ModelManager()
 
 
-def _normalize_agent(agent: str) -> str:
-    normalized = agent.strip().lower()
-    if normalized not in AGENT_CHOICES:
-        options = ", ".join(AGENT_CHOICES)
-        raise ValueError(f"Invalid agent '{agent}'. Choose from: {options}.")
-    return normalized
-
-
 @models_app.command(name="list", help_epilogue="Example:\n\nsaber models list")
 def list_models() -> None:
     """List available AI models.
@@ -377,7 +366,7 @@ async def _prompt_thinking_level(prompter: Any) -> tuple[bool, ThinkingLevel]:
         "Examples:\n\n"
         "saber models set\n\n"
         "saber models set openai:gpt-5 --thinking-level medium\n\n"
-        "saber models set openai:gpt-5 --agent handoff"
+        "For plugin models: saber plugins set handoff model openai:gpt-5"
     ),
 )
 def set_model_command(
@@ -387,13 +376,6 @@ def set_model_command(
             help="Provider-prefixed model ID (omit to select interactively)",
         ),
     ] = None,
-    agent: Annotated[
-        str,
-        cyclopts.Parameter(
-            ["--agent"],
-            help="Target agent (main, handoff, viz, notebook)",
-        ),
-    ] = "main",
     thinking_level: Annotated[
         str | None,
         cyclopts.Parameter(
@@ -407,20 +389,8 @@ def set_model_command(
     Examples:
         saber models set
         saber models set anthropic:claude-sonnet-4-5-20250929 --thinking-level medium
-        saber models set openai:gpt-5 --agent handoff
     """
     logger.info("models.set.start")
-
-    try:
-        target_agent = _normalize_agent(agent)
-    except ValueError as exc:
-        fail_usage(f"{exc}\n  Example: saber models set openai:gpt-5 --agent handoff")
-
-    if thinking_level is not None and target_agent != "main":
-        fail_usage(
-            "--thinking-level applies only to the main model.\n"
-            "  Example: saber models set openai:gpt-5 --agent handoff"
-        )
 
     resolved_thinking: tuple[bool, ThinkingLevel] | None = None
     if thinking_level is not None:
@@ -446,19 +416,15 @@ def set_model_command(
                 f"  Providers: {provider_choices}\n"
                 "  Example: saber models set openai:gpt-5 --thinking-level medium"
             )
-        if target_agent == "main":
-            if not model_manager.set_model(model):
-                raise SystemExit(1)
-            out(b.success(f"Model set to: {model}"))
-            if resolved_thinking is not None:
-                thinking_enabled, level = resolved_thinking
-                Config().model.set_thinking(thinking_enabled, level)
-                thinking_status = level.value if thinking_enabled else "disabled"
-                out(b.success(f"Thinking: {thinking_status}"))
-        else:
-            Config().model.set_subagent_model(target_agent, model)
-            out(b.success(f"{target_agent.title()} model set to: {model}"))
-        logger.info("models.set.done", model=model, agent=target_agent)
+        if not model_manager.set_model(model):
+            raise SystemExit(1)
+        out(b.success(f"Model set to: {model}"))
+        if resolved_thinking is not None:
+            thinking_enabled, level = resolved_thinking
+            Config().model.set_thinking(thinking_enabled, level)
+            thinking_status = level.value if thinking_enabled else "disabled"
+            out(b.success(f"Thinking: {thinking_status}"))
+        logger.info("models.set.done", model=model)
         return
 
     async def interactive_set() -> None:
@@ -481,162 +447,73 @@ def set_model_command(
         )
 
         if selected_model:
-            if target_agent == "main":
-                if model_manager.set_model(selected_model):
-                    out(b.success(f"Model set to: {selected_model}"))
-                    logger.info(
-                        "models.set.done", model=selected_model, agent=target_agent
-                    )
+            if model_manager.set_model(selected_model):
+                out(b.success(f"Model set to: {selected_model}"))
+                logger.info("models.set.done", model=selected_model)
 
-                    if resolved_thinking is None:
-                        thinking_enabled, selected_level = await _prompt_thinking_level(
-                            prompter
-                        )
-                    else:
-                        thinking_enabled, selected_level = resolved_thinking
-                    config = Config()
-                    config.model.set_thinking(thinking_enabled, selected_level)
-
-                    if thinking_enabled:
-                        out(b.success(f"Thinking: {selected_level.value}"))
-                    else:
-                        out(b.success("Thinking: disabled"))
-                    logger.info(
-                        "models.set.thinking",
-                        enabled=thinking_enabled,
-                        level=selected_level.value,
-                        agent=target_agent,
+                if resolved_thinking is None:
+                    thinking_enabled, selected_level = await _prompt_thinking_level(
+                        prompter
                     )
                 else:
-                    logger.error(
-                        "models.set.failed", model=selected_model, agent=target_agent
-                    )
-                    fail("failed to set model.")
-            else:
+                    thinking_enabled, selected_level = resolved_thinking
                 config = Config()
-                config.model.set_subagent_model(target_agent, selected_model)
-                out(b.success(f"{target_agent.title()} model set to: {selected_model}"))
+                config.model.set_thinking(thinking_enabled, selected_level)
+
+                if thinking_enabled:
+                    out(b.success(f"Thinking: {selected_level.value}"))
+                else:
+                    out(b.success("Thinking: disabled"))
                 logger.info(
-                    "models.set.subagent",
-                    model=selected_model,
-                    agent=target_agent,
+                    "models.set.thinking",
+                    enabled=thinking_enabled,
+                    level=selected_level.value,
                 )
+            else:
+                logger.error("models.set.failed", model=selected_model)
+                fail("failed to set model.")
         else:
             out(b.warn("Operation cancelled"))
-            logger.info("models.set.cancelled", agent=target_agent)
+            logger.info("models.set.cancelled")
 
     asyncio.run(interactive_set())
 
 
 @models_app.command(
     name="current",
-    help_epilogue=(
-        "Examples:\n\nsaber models current\n\nsaber models current --agent handoff"
-    ),
+    help_epilogue="Example:\n\nsaber models current",
 )
-def current_model(
-    agent: Annotated[
-        str | None,
-        cyclopts.Parameter(
-            ["--agent"],
-            help="Show model for agent (main, handoff, viz, notebook)",
-        ),
-    ] = None,
-) -> None:
+def current_model() -> None:
     """Show the currently configured model and thinking settings.
 
     Examples:
         saber models current
-        saber models current --agent handoff
     """
     current = model_manager.get_current_model()
     config = Config()
     thinking_enabled = config.model.thinking_enabled
     thinking_level = config.model.thinking_level
 
-    if agent is not None:
-        try:
-            target_agent = _normalize_agent(agent)
-        except ValueError as exc:
-            fail_usage(f"{exc}\n  Example: saber models current --agent handoff")
-
-        if target_agent == "main":
-            pairs: list[tuple[str, str]] = [("Current model", current)]
-            if thinking_enabled:
-                pairs.append(("Thinking", f"enabled ({thinking_level.value})"))
-            else:
-                pairs.append(("Thinking", "disabled"))
-            out(b.key_values(pairs))
-        else:
-            override = config.model.get_subagent_model(target_agent)
-            effective_model = override or current
-            pairs = [(f"{target_agent.title()} model", effective_model)]
-            if override:
-                pairs.append(("Override", override))
-            else:
-                pairs.append(("Override", "not set (uses main)"))
-            pairs.append(("Main model", current))
-            out(b.key_values(pairs))
-
-        logger.info(
-            "models.current",
-            model=current,
-            thinking_enabled=thinking_enabled,
-            thinking_level=thinking_level.value,
-            agent=target_agent,
-        )
-        return
-
     pairs = [("Current model", current)]
     if thinking_enabled:
         pairs.append(("Thinking", f"enabled ({thinking_level.value})"))
     else:
         pairs.append(("Thinking", "disabled"))
-    out(b.key_values(pairs, caption="Subagent overrides"))
-    override_rows = []
-    subagents = config.model.get_subagent_models()
-    for subagent in SUBAGENT_KEYS:
-        override = subagents.get(subagent)
-        override_rows.append(
-            {
-                "subagent": subagent,
-                "model": override if override else "(uses main)",
-            }
-        )
-    out(
-        b.table(
-            override_rows,
-            columns=(
-                b.Column("subagent", "Subagent"),
-                b.Column("model", "Model"),
-            ),
-            max_rows=1000,
-        )
-    )
+    out(b.key_values(pairs))
 
     logger.info(
         "models.current",
         model=current,
         thinking_enabled=thinking_enabled,
         thinking_level=thinking_level.value,
-        agent="all",
     )
 
 
 @models_app.command(
     name="reset",
-    help_epilogue=(
-        "Examples:\n\nsaber models reset\n\nsaber models reset --agent handoff --yes"
-    ),
+    help_epilogue=("Examples:\n\nsaber models reset\n\nsaber models reset --yes"),
 )
 def reset_model_command(
-    agent: Annotated[
-        str,
-        cyclopts.Parameter(
-            ["--agent"],
-            help="Reset model for agent (main, handoff, viz, notebook)",
-        ),
-    ] = "main",
     yes: Annotated[
         bool,
         cyclopts.Parameter(["--yes"], help="Skip confirmation prompt"),
@@ -646,45 +523,24 @@ def reset_model_command(
 
     Examples:
         saber models reset
-        saber models reset --agent handoff --yes
+        saber models reset --yes
     """
     logger.info("models.reset.start")
 
-    try:
-        target_agent = _normalize_agent(agent)
-    except ValueError as exc:
-        fail_usage(f"{exc}\n  Example: saber models reset --agent handoff --yes")
-
-    prompt = (
-        f"Reset to default model ({ModelManager.DEFAULT_MODEL})?"
-        if target_agent == "main"
-        else f"Clear {target_agent} model override (use main model)?"
-    )
-    command = f"saber models reset --agent {target_agent} --yes"
     if not confirm_action(
         yes=yes,
-        prompt=prompt,
-        non_interactive_command=command,
+        prompt=f"Reset to default model ({ModelManager.DEFAULT_MODEL})?",
+        non_interactive_command="saber models reset --yes",
     ):
         out(b.warn("Operation cancelled"))
-        logger.info("models.reset.cancelled", agent=target_agent)
+        logger.info("models.reset.cancelled")
         return
 
-    if target_agent == "main":
-        if not model_manager.reset_model():
-            logger.error("models.reset.failed", agent=target_agent)
-            fail("failed to reset model.")
-        out(b.success(f"Model reset to default: {ModelManager.DEFAULT_MODEL}"))
-        logger.info(
-            "models.reset.done",
-            model=ModelManager.DEFAULT_MODEL,
-            agent=target_agent,
-        )
-        return
-
-    Config().model.set_subagent_model(target_agent, None)
-    out(b.success(f"{target_agent.title()} model override cleared"))
-    logger.info("models.reset.subagent", agent=target_agent)
+    if not model_manager.reset_model():
+        logger.error("models.reset.failed")
+        fail("failed to reset model.")
+    out(b.success(f"Model reset to default: {ModelManager.DEFAULT_MODEL}"))
+    logger.info("models.reset.done", model=ModelManager.DEFAULT_MODEL)
 
 
 def create_models_app() -> cyclopts.App:

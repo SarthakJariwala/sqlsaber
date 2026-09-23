@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import ValidationError
 from pydantic_ai import Agent
+from pydantic_ai.models import Model
 from sqlsaber.agents.model_factory import resolve_model
 from sqlsaber.config.logging import get_logger
 from sqlsaber.config.settings import Config
@@ -23,25 +24,30 @@ MAX_RETRIES = 2
 class SpecAgent:
     """Internal agent for generating visualization specs."""
 
-    def __init__(self, model_name: str | None = None, api_key: str | None = None):
+    def __init__(
+        self,
+        model_name: str | None = None,
+        api_key: str | None = None,
+        *,
+        model: Model | str | None = None,
+    ):
         self.config = Config()
         self._model_name_override = model_name
         self._api_key_override = api_key
+        self._model = model
         self.agent = self._build_agent()
 
     def _build_agent(self):
-        model_name = (
-            self._model_name_override
-            or self.config.model.get_subagent_model("viz")
-            or self.config.model.name
-        )
-        resolved = resolve_model(
-            self.config.auth,
-            model_name,
-            api_key_override=self._api_key_override,
-        )
+        model = self._model
+        if model is None:
+            resolved = resolve_model(
+                self.config.auth,
+                self._model_name_override or self.config.model.name,
+                api_key_override=self._api_key_override,
+            )
+            model = resolved.model
         agent = Agent(
-            resolved.model,
+            model,
             instructions=VIZ_SYSTEM_PROMPT,
         )
         self._register_tools(agent)

@@ -102,10 +102,12 @@ class AnalyzeDataTool(Tool):
         context: PluginContext,
         *,
         config: NotebookConfig = DEFAULT_NOTEBOOK_CONFIG,
+        model_name: str | None = None,
     ) -> None:
         super().__init__()
         self._context = context
         self._config = config
+        self._model_name = model_name
         self._display_results: OrderedDict[str, _NotebookDisplay] = OrderedDict()
         self._resolved_publications: Mapping[str, ResolvedArtifactPublication] = {}
 
@@ -180,6 +182,7 @@ class AnalyzeDataTool(Tool):
             model_name, model, provider = self._context.resolve_subagent_model(
                 "notebook",
                 tool_name=self.name,
+                model_name=self._model_name,
             )
             backend = (
                 self._config.backend
@@ -356,8 +359,9 @@ class Notebook(SqlSaberCapability):
         context: PluginContext,
         *,
         config: NotebookConfig = DEFAULT_NOTEBOOK_CONFIG,
+        model_name: str | None = None,
     ) -> None:
-        self.tool = AnalyzeDataTool(context, config=config)
+        self.tool = AnalyzeDataTool(context, config=config, model_name=model_name)
         self._toolset = FunctionToolset[Any](id=self.id)
         execute = (
             self.tool.execute_with_attachments
@@ -396,10 +400,11 @@ def capability(
     context: PluginContext,
     *,
     config: NotebookConfig = DEFAULT_NOTEBOOK_CONFIG,
+    model_name: str | None = None,
 ) -> AbstractCapability[Any] | Sequence[AbstractCapability[Any]]:
     """Always expose the installed plugin; backend checks happen on use."""
 
-    return Notebook(context, config=config)
+    return Notebook(context, config=config, model_name=model_name)
 
 
 async def build_workspace_from_history(

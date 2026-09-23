@@ -10,6 +10,7 @@ from typing import cast
 from pydantic import ValidationError
 from pydantic_ai import RunContext
 
+from sqlsaber.capabilities.plugins import PluginContext
 from sqlsaber.overrides import ModelOverides
 from sqlsaber.query_result_resolution import (
     find_query_result_reference,
@@ -42,7 +43,13 @@ class VizTool(Tool):
 
     requires_ctx = True
 
-    def __init__(self, query_result_store: QueryResultStore) -> None:
+    def __init__(
+        self,
+        query_result_store: QueryResultStore,
+        *,
+        context: PluginContext | None = None,
+        model_name: str | None = None,
+    ) -> None:
         super().__init__()
         self.query_result_store = query_result_store
         self._last_ctx: RunContext | None = None
@@ -50,6 +57,8 @@ class VizTool(Tool):
         self._last_file: str | None = None
         self._replay_messages: list | None = None
         self.model_overide: ModelOverides | None = None
+        self._context = context
+        self._model_name = model_name
 
     def set_replay_messages(self, messages: list) -> None:
         """Set message history for replay scenarios (e.g., threads show)."""
@@ -111,10 +120,20 @@ class VizTool(Tool):
         self._last_rows = rows
         self._last_file = file
 
-        agent = _get_spec_agent_cls()(
-            model_name=self.model_overide.model_name if self.model_overide else None,
-            api_key=self.model_overide.api_key if self.model_overide else None,
-        )
+        if self._context is None:
+            agent = _get_spec_agent_cls()(
+                model_name=self.model_overide.model_name
+                if self.model_overide
+                else None,
+                api_key=self.model_overide.api_key if self.model_overide else None,
+            )
+        else:
+            _, model, _ = self._context.resolve_subagent_model(
+                "viz",
+                tool_name=self.name,
+                model_name=self._model_name,
+            )
+            agent = _get_spec_agent_cls()(model=model)
 
         try:
             spec = await asyncio.wait_for(

@@ -1,6 +1,6 @@
 ---
 title: Models
-description: Choose the model SQLsaber uses for SQL generation. Set the default, override subagents, and configure thinking.
+description: Choose the model SQLsaber uses for SQL generation. Set the default, configure plugin models, and configure thinking.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -58,20 +58,21 @@ saber models set openai:gpt-5 --thinking-level medium
 saber models set openai-codex:gpt-5.6-sol
 ```
 
-## Override a subagent model
+## Configure a plugin model
 
 Set a model for handoff, viz, or notebook without changing the main model:
 
 ```bash
-saber models set --agent handoff
-saber models set --agent viz
-saber models set --agent notebook
-
-# Direct, non-interactive override
-saber models set openai:gpt-5 --agent handoff
+saber plugins set handoff model openai:gpt-5
+saber plugins set viz model openai:gpt-5
+saber plugins set notebook model openai:gpt-5
+saber plugins show handoff model
+saber plugins unset handoff model
 ```
 
-If no override is set, the subagent uses the main model.
+If no plugin model is set, the plugin uses the session model. Changes apply to new
+CLI sessions. Legacy `models --agent` commands are no longer supported, and old
+subagent overrides are ignored. Set those models again through `saber plugins`.
 
 ## Reset to the default
 

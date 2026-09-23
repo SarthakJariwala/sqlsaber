@@ -136,6 +136,34 @@ def test_models_set_rejects_unsupported_provider(capsys):
     assert "supported PROVIDER:MODEL" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    "command",
+    [["set", "openai:gpt-5"], ["set"], ["current"], ["reset", "--yes"]],
+)
+def test_models_reject_legacy_agent_without_changing_config(
+    command, tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr(
+        "platformdirs.user_config_dir", lambda *args, **kwargs: str(tmp_path)
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        app(["models", *command, "--agent", "handoff"])
+
+    assert exc_info.value.code != 0
+    assert "--agent" in capsys.readouterr().err
+    assert not (tmp_path / "model_config.json").exists()
+    assert not (tmp_path / "plugin_config.json").exists()
+
+
+@pytest.mark.parametrize("command", ["set", "current", "reset"])
+def test_models_help_does_not_offer_agent(command, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        app(["models", command, "--help"])
+
+    assert exc_info.value.code == 0
+    assert "--agent" not in capsys.readouterr().out
+
+
 def test_theme_set_directly_without_prompting():
     with (
         patch.object(

@@ -49,21 +49,17 @@ class PluginContext:
         model_name: str | None = None,
         api_key: str | None = None,
     ) -> tuple[str, Model | str, str]:
-        """Resolve explicit, tool, legacy subagent, then main-agent settings."""
+        """Resolve explicit, tool, then main-agent settings."""
 
         override = (
             self.tool_overrides.get(tool_name)
             if tool_name and model_name is None
             else None
         )
-        subagent_model = self.config.model.get_subagent_model(name)
-        use_main_key = (
-            model_name is None and override is None and subagent_model is None
-        )
+        use_main_key = model_name is None and override is None
         model_name = (
             model_name
             or (override.model_name if override else None)
-            or subagent_model
             or self.main_model_name
         )
 

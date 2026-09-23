@@ -32,10 +32,18 @@ def _make_ctx(
 class DummyAgent:
     last_model_name: str | None = None
     last_api_key: str | None = None
+    last_model: object | None = None
 
-    def __init__(self, model_name: str | None = None, api_key: str | None = None):
+    def __init__(
+        self,
+        model_name: str | None = None,
+        api_key: str | None = None,
+        *,
+        model: object | None = None,
+    ):
         type(self).last_model_name = model_name
         type(self).last_api_key = api_key
+        type(self).last_model = model
 
     async def generate_spec(
         self,
@@ -148,3 +156,35 @@ async def test_viz_tool_uses_capability_model_overide(
     assert parsed["chart"]["type"] == "bar"
     assert DummyAgent.last_model_name == "openai:gpt-5-mini"
     assert DummyAgent.last_api_key == "override-api-key"
+
+
+@pytest.mark.asyncio
+async def test_viz_tool_resolves_bound_plugin_model_through_session_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tools, "_get_spec_agent_cls", lambda: DummyAgent)
+    resolved_model = object()
+    calls: list[tuple[tuple, dict]] = []
+
+    def resolve(*args, **kwargs):
+        calls.append((args, kwargs))
+        return "openai:gpt-5-mini", resolved_model, "openai"
+
+    context = SimpleNamespace(resolve_subagent_model=resolve)
+    tool = VizTool(
+        InMemoryQueryResultStore(),
+        context=context,
+        model_name="openai:gpt-5-mini",
+    )
+    payload = {"row_count": 1, "results": [{"name": "A", "value": 1}]}
+
+    await tool.execute(
+        _make_ctx(payload, "call-3"),
+        request="show values",
+        file="result_call-3.json",
+    )
+
+    assert calls == [
+        (("viz",), {"tool_name": "viz", "model_name": "openai:gpt-5-mini"})
+    ]
+    assert DummyAgent.last_model is resolved_model
