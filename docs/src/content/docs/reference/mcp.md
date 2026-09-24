@@ -51,6 +51,37 @@ The command binds only to loopback and validates HTTP Host/Origin headers.
 databases. Do not expose this endpoint through a public proxy or tunnel.
 Stop the server with Ctrl+C when finished.
 
+## CSV tool results
+
+Start either transport with `--csv-tool-results` to use the regular CLI's CSV
+formatter for tabular tool text:
+
+```bash
+saber mcp -d analytics --csv-tool-results
+saber mcp -d analytics --transport http --csv-tool-results
+```
+
+For a stdio client configuration, add `"--csv-tool-results"` to the server's
+`args` array. For a Python-created server, use
+`create_server(database, csv_tool_results=True)`.
+
+The option applies to all four tools. Database lists, table lists, and query rows
+use CSV. Schema introspection uses a CSV column table for each database table.
+Metadata such as database names, constraints, row counts, and truncation flags
+stays JSON. Empty results stay JSON, and failures remain MCP tool errors.
+
+CSV follows the existing SQLsaber conventions: null is `\N`, literal backslashes
+are doubled, and commas, quotes, and newlines use CSV quoting. Decimal strings
+retain their precision.
+
+MCP `content` contains the CSV presentation, while `structuredContent` always
+contains the same JSON object as default mode. Clients that display or forward
+`structuredContent` still receive JSON; this option does not reduce both copies
+to CSV. Each representation must fit the 1 MB limit.
+
+JSON is the default. Omit the flag or pass `--no-csv-tool-results` to use JSON text.
+The format is fixed for the server process, not selected per tool call.
+
 ## Database selection
 
 ```bash

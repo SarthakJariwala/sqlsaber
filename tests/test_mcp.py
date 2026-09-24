@@ -1,8 +1,11 @@
 """MCP contract tests using real databases and protocol clients."""
 
 import asyncio
+import csv
 import datetime
 from decimal import Decimal
+import io
+import json
 from pathlib import Path
 import sqlite3
 import sys
@@ -177,18 +180,138 @@ async def test_database_routing_and_error_masking(database, tmp_path):
 
 def test_result_serialization_and_byte_budget():
     assert _response(
+        "execute_sql",
         {
             "values": [
                 Decimal("123456789.123456789"),
                 datetime.date(2026, 9, 23),
                 b"\x00\xff",
             ]
-        }
-    ) == {"values": ["123456789.123456789", "2026-09-23", "AP8="]}
+        },
+    ).structured_content == {"values": ["123456789.123456789", "2026-09-23", "AP8="]}
     with pytest.raises(ToolError, match="unsupported"):
-        _response({"value": float("inf")})
+        _response("execute_sql", {"value": float("inf")})
     with pytest.raises(ToolError, match="exceeds"):
-        _response({"value": "é" * 500_000})
+        _response("execute_sql", {"value": "é" * 500_000})
+
+
+async def test_csv_all_tools_preserve_json_contract(database):
+    async with (
+        Client(create_server(str(database))) as json_client,
+        Client(create_server(str(database), csv_tool_results=True)) as csv_client,
+    ):
+        assert await json_client.list_tools() == await csv_client.list_tools()
+        for name, arguments, label in [
+            ("list_dbs", {}, "databases"),
+            ("list_tables", {}, "tables"),
+            ("introspect_schema", {"table_pattern": "%items"}, "columns"),
+            (
+                "execute_sql",
+                {"query": "SELECT amount FROM items WHERE id = 7"},
+                "results",
+            ),
+        ]:
+            ordinary = await json_client.call_tool(name, arguments)
+            compact = await csv_client.call_tool(name, arguments)
+            assert compact.data == ordinary.data
+            assert json.loads(ordinary.content[0].text) == ordinary.data
+            text = compact.content[0].text
+            prefix, csv_text = text.split(
+                f"{label} (CSV; null=\\N; backslashes escaped):\n"
+            )
+            rows = list(csv.DictReader(io.StringIO(csv_text, newline="")))
+            if name == "introspect_schema":
+                metadata = [json.loads(line) for line in prefix.splitlines()]
+                assert metadata[0] == {"db_name": "analytics"}
+                assert metadata[1]["table"] == "main.items"
+                assert metadata[1]["primary_keys"] == ["id"]
+                assert [row["name"] for row in rows] == ["id", "amount"]
+                assert all(row["data_type"] == "INTEGER" for row in rows)
+            elif name == "execute_sql":
+                assert json.loads(prefix)["row_count"] == 1
+                assert rows == [{"amount": "21"}]
+            elif name == "list_tables":
+                assert json.loads(prefix) == {"db_name": "analytics", "total_tables": 1}
+                assert rows[0]["name"] == "items"
+            else:
+                assert rows == [
+                    {
+                        "name": "analytics",
+                        "display_name": "SQLite",
+                        "dialect": "sqlite",
+                        "description": r"\N",
+                    }
+                ]
+
+
+async def test_csv_cells_empty_results_and_errors(database):
+    values = [None, "", r"\N", 'a,b"c\r\nd\re', "東京", r"C:\data"]
+    with sqlite3.connect(database) as conn:
+        conn.execute("CREATE TABLE edge (id INTEGER, value TEXT)")
+        conn.executemany("INSERT INTO edge VALUES (?, ?)", enumerate(values))
+    async with Client(create_server(str(database), csv_tool_results=True)) as client:
+        result = await client.call_tool(
+            "execute_sql", {"query": "SELECT value FROM edge ORDER BY id"}
+        )
+        assert result.data["results"] == [{"value": value} for value in values]
+        rows = list(
+            csv.reader(
+                io.StringIO(result.content[0].text.split("\n", 2)[2], newline="")
+            )
+        )
+        assert rows == [
+            ["value"],
+            [r"\N"],
+            [""],
+            [r"\\N"],
+            ['a,b"c\r\nd\re'],
+            ["東京"],
+            [r"C:\\data"],
+        ]
+        for name, args in [
+            ("execute_sql", {"query": "SELECT * FROM edge WHERE id = 99"}),
+            ("introspect_schema", {"table_pattern": "%missing%"}),
+        ]:
+            empty = await client.call_tool(name, args)
+            assert json.loads(empty.content[0].text) == empty.data
+        denied = await client.call_tool(
+            "execute_sql", {"query": "DELETE FROM edge"}, raise_on_error=False
+        )
+        assert denied.is_error
+        assert "CSV;" not in denied.content[0].text
+        limited = await client.call_tool(
+            "execute_sql", {"query": "SELECT id FROM items ORDER BY id LIMIT 5000"}
+        )
+        metadata = json.loads(limited.content[0].text.split("\n", 1)[0])
+        assert metadata == {
+            "db_name": "analytics",
+            "row_count": 1000,
+            "row_limit": 1000,
+            "truncated": True,
+        }
+        assert limited.data["row_count"] == 1000
+        assert limited.data["results"][-1] == {"id": 1000}
+
+
+def test_csv_decimal_precision_and_text_byte_budget(monkeypatch):
+    result = _response(
+        "execute_sql",
+        {"results": [{"value": Decimal("123456789.123456789")}]},
+        csv_tool_results=True,
+    )
+    assert result.structured_content == {"results": [{"value": "123456789.123456789"}]}
+    assert "123456789.123456789\r\n" in result.content[0].text
+    # JSON fits exactly; the CSV label and escaping make the text exceed the budget.
+    payload = {"results": [{"value": "é"}]}
+    monkeypatch.setattr(
+        "sqlsaber.mcp.MAX_RESPONSE_BYTES",
+        len(json.dumps(payload, ensure_ascii=False).encode()),
+    )
+    assert _response("execute_sql", payload).structured_content == payload
+    with pytest.raises(ToolError, match="CSV result exceeds"):
+        _response("execute_sql", payload, csv_tool_results=True)
+    with pytest.raises(ToolError, match="Result exceeds"):
+        _response("execute_sql", {"results": [{"value": "éé"}]}, csv_tool_results=True)
 
 
 async def test_lifespan_closes_registry(database, monkeypatch):
@@ -221,8 +344,11 @@ async def test_partial_startup_closes_registry(database, monkeypatch):
     close.assert_awaited_once()
 
 
-async def test_http_transport(database):
-    async with run_server_async(create_server(str(database))) as url:
+@pytest.mark.parametrize("csv_tool_results", [False, True])
+async def test_http_transport(database, csv_tool_results):
+    async with run_server_async(
+        create_server(str(database), csv_tool_results=csv_tool_results)
+    ) as url:
         async with Client(url) as client:
             responses = await asyncio.gather(
                 *[
@@ -235,6 +361,13 @@ async def test_http_transport(database):
                 [{"n": 19}],
                 [{"n": 31}],
             ]
+            for response, value in zip(responses, [7, 19, 31], strict=True):
+                text = response.content[0].text
+                if csv_tool_results:
+                    assert f"n\r\n{value}\r\n" in text
+                    assert "CSV;" in text
+                else:
+                    assert json.loads(text) == response.data
 
 
 async def test_http_rejects_untrusted_host_and_origin(database):
@@ -247,7 +380,10 @@ async def test_http_rejects_untrusted_host_and_origin(database):
             assert response.status_code in {400, 403, 421}
 
 
-async def test_stdio_cli_transport(database, tmp_path):
+@pytest.mark.parametrize(
+    "csv_flag", [None, "--csv-tool-results", "--no-csv-tool-results"]
+)
+async def test_stdio_cli_transport(database, tmp_path, csv_flag):
     # Explicit isolated config; no API keys forwarded to the server subprocess.
     env = {
         key: str(tmp_path / key.lower())
@@ -262,7 +398,14 @@ async def test_stdio_cli_transport(database, tmp_path):
     env["KEYRING_BACKEND"] = "keyring.backends.null.Keyring"
     transport = StdioTransport(
         command=sys.executable,
-        args=["-m", "sqlsaber", "mcp", "-d", str(database)],
+        args=[
+            "-m",
+            "sqlsaber",
+            "mcp",
+            "-d",
+            str(database),
+            *([csv_flag] if csv_flag else []),
+        ],
         env=env,
         cwd=str(Path(__file__).resolve().parents[1]),
         log_file=tmp_path / "server-stderr.log",
@@ -273,6 +416,12 @@ async def test_stdio_cli_transport(database, tmp_path):
             "execute_sql", {"query": "SELECT amount FROM items WHERE id = 7"}
         )
         assert result.data["results"] == [{"amount": 21}]
+        text = result.content[0].text
+        if csv_flag == "--csv-tool-results":
+            assert "CSV;" in text
+            assert "amount\r\n21\r\n" in text
+        else:
+            assert json.loads(text) == result.data
 
 
 async def test_csv_and_duckdb_queries(tmp_path):
