@@ -4,6 +4,9 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.messages import ModelResponse, ToolCallPart
+from pydantic_ai.models.function import FunctionModel
 
 import sqlsaber_viz.tools as tools
 from sqlsaber.render.blocks import Ansi
@@ -51,8 +54,11 @@ class DummyAgent:
         row_count: int,
         file: str,
         chart_type_hint: str | None = None,
+        *,
+        rows: list[dict],
     ) -> VizSpec:
         _ = request, columns, row_count, chart_type_hint
+        assert rows
         spec = {
             "version": "1",
             "data": {"source": {"file": file}},
@@ -192,3 +198,72 @@ async def test_viz_tool_resolves_bound_plugin_model_through_session_context(
         )
     ]
     assert DummyAgent.last_model is resolved_model
+
+
+async def test_viz_tool_reports_exhausted_output_retries(monkeypatch):
+    class FailingAgent(DummyAgent):
+        async def generate_spec(self, *args, **kwargs):
+            raise UnexpectedModelBehavior("Exceeded maximum output retries")
+
+    monkeypatch.setattr(tools, "_get_spec_agent_cls", lambda: FailingAgent)
+    payload = {"results": [{"name": "A", "value": 1}]}
+    result = await _tool().execute(
+        _make_ctx(payload, "call-4"), request="show values", file="result_call-4.json"
+    )
+    assert json.loads(result) == {
+        "error": "Failed to generate a valid visualization spec.",
+        "details": "Exceeded maximum output retries",
+    }
+
+
+async def test_typed_generation_retries_then_renders_real_chart():
+    calls = []
+
+    def respond(messages, info):
+        calls.append(messages)
+        output = {
+            "title": "Sales by region",
+            "data": {"source": {"file": "result_chart.json"}},
+            "chart": {
+                "type": "bar",
+                "encoding": {
+                    "x": {"field": "region", "type": "category"},
+                    "y": {
+                        "field": "invented" if len(calls) == 1 else "sales",
+                        "type": "number",
+                    },
+                },
+            },
+        }
+        # This is structurally valid even on the first, semantically invalid attempt.
+        VizSpec.model_validate(output)
+        return ModelResponse([ToolCallPart(info.output_tools[0].name, output)])
+
+    model = FunctionModel(respond)
+    context = SimpleNamespace(
+        resolve_subagent_model=lambda **kwargs: ("test", model, "test")
+    )
+    tool = VizTool(InMemoryQueryResultStore(), context=context)
+    result = await tool.execute(
+        _make_ctx(
+            {
+                "results": [
+                    {"region": "West", "sales": 6},
+                    {"region": "East", "sales": 11},
+                ]
+            },
+            "chart",
+        ),
+        request="Show sales by region",
+        file="result_chart.json",
+    )
+    assert len(calls) == 2
+    assert "Unknown fields" in str(calls[1])
+    assert json.loads(result)["chart"]["encoding"]["y"]["field"] == "sales"
+    rendered = tool.render_result(result)
+    assert rendered is not None
+    assert isinstance(rendered[0], Ansi)
+    text = tool._strip_ansi(rendered[0].text)
+    assert "Sales by region" in text
+    assert "West" in text and "East" in text
+    assert "error" not in text.lower()
