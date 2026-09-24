@@ -122,6 +122,7 @@ export default defineConfig({
 					items: [
 						{ label: "Commands", slug: "reference/commands" },
 						{ label: "RPC mode", slug: "reference/rpc" },
+						{ label: "MCP server", slug: "reference/mcp" },
 					],
 				},
 				{

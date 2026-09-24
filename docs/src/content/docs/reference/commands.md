@@ -41,6 +41,9 @@ saber --thread a1b2c3d4 "Now compare that with last quarter"
 
 Headless embedding uses [`saber rpc`](/reference/rpc/), not a flag on this command. Piped stdin (`echo "show users" | saber`) is still a one-shot question.
 
+External agents can use [`saber mcp`](/reference/mcp/) for read-only database tools
+over stdio or local Streamable HTTP, without invoking SQLsaber's internal model.
+
 **Global options:**
 
 - `--help, -h` - Show help
