@@ -9,11 +9,13 @@ from typing import Any
 import anyio
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
+from fastmcp.tools import ToolResult
 
 from sqlsaber.database.base import QueryTimeoutError
 from sqlsaber.database.registry import DatabaseEntry, DatabaseRegistry
 from sqlsaber.database.resolver import resolve_databases
 from sqlsaber.tools.execution import InvalidQuery, execute_guarded
+from sqlsaber.tools.model_output import format_sql_output
 from sqlsaber.utils.json_utils import EnhancedJSONEncoder
 
 MAX_ROWS = 1000
@@ -27,8 +29,10 @@ class _Encoder(EnhancedJSONEncoder):
         return super().default(o)
 
 
-def _response(payload: dict[str, Any]) -> dict[str, Any]:
-    """Normalize database scalars and bound the complete protocol payload."""
+def _response(
+    name: str, payload: dict[str, Any], *, csv_tool_results: bool = False
+) -> ToolResult:
+    """Bound both representations and preserve structured data in CSV mode."""
     try:
         encoded = json.dumps(payload, cls=_Encoder, ensure_ascii=False, allow_nan=False)
     except (ValueError, TypeError) as exc:
@@ -39,10 +43,27 @@ def _response(payload: dict[str, Any]) -> dict[str, Any]:
         raise ToolError(
             "Result exceeds 1 MB; select fewer columns or narrow the query."
         )
-    return json.loads(encoded)
+    data = json.loads(encoded)
+    text = None
+    if csv_tool_results:
+        if name == "introspect_schema":
+            if data["tables"]:
+                text = (
+                    json.dumps({"db_name": data["db_name"]}, ensure_ascii=False) + "\n"
+                )
+                text += format_sql_output(name, data["tables"])
+        else:
+            text = format_sql_output(name, data)
+        if text is not None and len(text.encode("utf-8")) > MAX_RESPONSE_BYTES:
+            raise ToolError(
+                "CSV result exceeds 1 MB; select fewer columns or narrow the query."
+            )
+    return ToolResult(content=text, structured_content=data)
 
 
-def create_server(database: str | list[str] | None = None) -> FastMCP:
+def create_server(
+    database: str | list[str] | None = None, *, csv_tool_results: bool = False
+) -> FastMCP:
     """Create a server whose lifespan owns only the selected databases."""
 
     @asynccontextmanager
@@ -110,40 +131,49 @@ def create_server(database: str | list[str] | None = None) -> FastMCP:
         "destructiveHint": False,
         "openWorldHint": False,
     }
+    output_schema = {"type": "object", "additionalProperties": True}
 
-    @server.tool(annotations=annotations)
-    async def list_dbs(ctx: Context) -> dict[str, Any]:
+    @server.tool(annotations=annotations, output_schema=output_schema)
+    async def list_dbs(ctx: Context) -> ToolResult:
         """List selected database aliases, SQL dialects, and descriptions."""
         async with operation(ctx) as registry:
-            return _response({"databases": registry.catalog()})
+            return _response(
+                "list_dbs",
+                {"databases": registry.catalog()},
+                csv_tool_results=csv_tool_results,
+            )
 
-    @server.tool(annotations=annotations)
-    async def list_tables(ctx: Context, db_name: str | None = None) -> dict[str, Any]:
+    @server.tool(annotations=annotations, output_schema=output_schema)
+    async def list_tables(ctx: Context, db_name: str | None = None) -> ToolResult:
         """List tables in a selected database. db_name may be omitted for one database."""
         async with operation(ctx) as registry:
             entry = target(registry, db_name)
             return _response(
-                {"db_name": entry.name, **await entry.schema_manager.list_tables()}
+                "list_tables",
+                {"db_name": entry.name, **await entry.schema_manager.list_tables()},
+                csv_tool_results=csv_tool_results,
             )
 
-    @server.tool(annotations=annotations)
+    @server.tool(annotations=annotations, output_schema=output_schema)
     async def introspect_schema(
         ctx: Context, table_pattern: str | None = None, db_name: str | None = None
-    ) -> dict[str, Any]:
+    ) -> ToolResult:
         """Inspect columns, keys and indexes; filter with SQL LIKE (e.g. main.user%)."""
         async with operation(ctx) as registry:
             entry = target(registry, db_name)
             return _response(
+                "introspect_schema",
                 {
                     "db_name": entry.name,
                     "tables": await entry.schema_manager.get_schema_info(table_pattern),
-                }
+                },
+                csv_tool_results=csv_tool_results,
             )
 
-    @server.tool(annotations=annotations)
+    @server.tool(annotations=annotations, output_schema=output_schema)
     async def execute_sql(
         ctx: Context, query: str, db_name: str | None = None
-    ) -> dict[str, Any]:
+    ) -> ToolResult:
         """Run one read-only SQL query. Returns at most 1000 rows with a truncation flag.
 
         Decimal values are exact strings, dates/times ISO strings, and binary
@@ -155,13 +185,15 @@ def create_server(database: str | list[str] | None = None) -> FastMCP:
                 entry.connection, query, max_rows=MAX_ROWS, bounded=True
             )
             return _response(
+                "execute_sql",
                 {
                     "db_name": entry.name,
                     "results": result.rows,
                     "row_count": len(result.rows),
                     "row_limit": MAX_ROWS,
                     "truncated": result.truncated,
-                }
+                },
+                csv_tool_results=csv_tool_results,
             )
 
     return server

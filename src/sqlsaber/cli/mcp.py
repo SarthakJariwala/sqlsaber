@@ -13,6 +13,7 @@ mcp_app = cyclopts.App(
     help_epilogue=(
         "Examples:\n\nsaber mcp -d analytics\n\n"
         "saber mcp -d sales -d analytics\n\n"
+        "saber mcp -d analytics --csv-tool-results\n\n"
         "saber mcp -d ./data.db --transport http --port 8000"
     ),
 )
@@ -29,6 +30,12 @@ def mcp(
         cyclopts.Parameter(help="stdio or Streamable HTTP (not legacy SSE)"),
     ] = "stdio",
     port: Annotated[int, cyclopts.Parameter(help="Local HTTP port (1-65535)")] = 8000,
+    csv_tool_results: Annotated[
+        bool,
+        cyclopts.Parameter(
+            help="Opt in to CSV text results; structured JSON is preserved (default: JSON)"
+        ),
+    ] = False,
 ) -> None:
     """Serve selected databases. HTTP listens on 127.0.0.1 at /mcp without auth."""
     if not 1 <= port <= 65535:
@@ -37,7 +44,7 @@ def mcp(
 
     from sqlsaber.mcp import create_server
 
-    server = create_server(database)
+    server = create_server(database, csv_tool_results=csv_tool_results)
     try:
         if transport == "stdio":
             server.run(transport="stdio", show_banner=False)
