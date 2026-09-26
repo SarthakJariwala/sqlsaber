@@ -181,6 +181,7 @@ _LAZY_SUBCOMMANDS: tuple[tuple[str, str, str], ...] = (
     ("sqlsaber.cli.plugins:plugins_app", "plugins", "Configure installed plugins"),
     ("sqlsaber.cli.theme:theme_app", "theme", "Manage theme settings"),
     ("sqlsaber.cli.threads:threads_app", "threads", "Manage SQLsaber threads"),
+    ("sqlsaber.cli.mcp:mcp_app", "mcp", "Serve read-only database tools over MCP"),
     (
         "sqlsaber.cli.rpc:rpc_app",
         "rpc",

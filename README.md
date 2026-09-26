@@ -96,6 +96,10 @@ saber -d sales -d analytics "Compare last month's revenue to web sessions"
 | Resume previous analysis | `saber threads list` then `saber threads resume <id>` |
 | Automate a thread follow-up | `saber --thread <id> "compare with last quarter"` |
 | Use deeper reasoning | `saber --thinking "analyze retention by cohort"` |
+| Give a coding agent read-only database tools | `saber mcp -d analytics` |
+
+The [MCP server](docs/src/content/docs/reference/mcp.md) supports stdio and local
+Streamable HTTP. It uses the client's model, so SQLsaber needs no model API key.
 
 ## Knowledge base
 

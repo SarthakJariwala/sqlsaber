@@ -34,7 +34,7 @@ from .display import (
     TableConfig,
     ToolDisplaySpec,
 )
-from .sql_guard import add_limit, validate_sql
+from .execution import execute_guarded
 
 
 def _as_cell(value: object) -> Cell:
@@ -436,31 +436,15 @@ class ExecuteSQLTool(SQLTool):
         max_rows = self.MAX_ROWS
 
         try:
-            dialect = target.dialect
-
-            validation_result = validate_sql(
-                query, dialect, allow_dangerous=self.allow_dangerous
-            )
-            if not validation_result.allowed:
-                return json_dumps({"error": validation_result.reason})
-
-            auto_limit_applied = bool(
-                validation_result.is_select
-                and max_rows
-                and not validation_result.has_limit
-            )
-            if auto_limit_applied:
-                query = add_limit(query, dialect, max_rows)
-
-            query_type = validation_result.query_type or "other"
-
-            commit = bool(self.allow_dangerous and query_type in {"dml", "ddl"})
-
-            results = await target.connection.execute_query(
+            execution = await execute_guarded(
+                target.connection,
                 query,
-                commit=commit,
-                read_only=not self.allow_dangerous,
+                allow_dangerous=self.allow_dangerous,
+                max_rows=max_rows,
             )
+            results = execution.rows
+            query_type = execution.query_type
+            auto_limit_applied = execution.auto_limit_applied
 
             tool_call_id = ctx.tool_call_id
             if query_type in {"dml", "ddl"}:
