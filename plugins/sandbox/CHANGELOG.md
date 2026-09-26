@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-sandbox-v0.6.0...sqlsaber-sandbox-v0.7.0) (2026-09-26)
+
+
+### Features
+
+* Configure plugin models through plugins CLI and SDK capabilities ([#301](https://github.com/SarthakJariwala/sqlsaber/issues/301)) ([c704b15](https://github.com/SarthakJariwala/sqlsaber/commit/c704b15431af3b60cc548eaa04bbde13b78d86bc))
+* support ChatGPT subscriptions through native Codex provider ([#293](https://github.com/SarthakJariwala/sqlsaber/issues/293)) ([d7e951e](https://github.com/SarthakJariwala/sqlsaber/commit/d7e951e550af5c96148397cd252b6c9437d681ed))
+
 ## [0.6.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-sandbox-v0.5.0...sqlsaber-sandbox-v0.6.0) (2026-09-17)
 
 
