@@ -13,6 +13,29 @@ All notable changes to SQLsaber will be documented here.
 
 ---
 
+## [0.79.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.78.1...sqlsaber-v0.79.0) (2026-09-26)
+
+
+### Features
+
+* add opt-in CSV text results to MCP server ([#304](https://github.com/SarthakJariwala/sqlsaber/issues/304)) ([36d5b53](https://github.com/SarthakJariwala/sqlsaber/commit/36d5b53a19f34814aacd81bec733ab9e06257715))
+* Configure plugin models through plugins CLI and SDK capabilities ([#301](https://github.com/SarthakJariwala/sqlsaber/issues/301)) ([c704b15](https://github.com/SarthakJariwala/sqlsaber/commit/c704b15431af3b60cc548eaa04bbde13b78d86bc))
+* **notebook:** Add E2B backend for notebook execution ([#292](https://github.com/SarthakJariwala/sqlsaber/issues/292)) ([0330071](https://github.com/SarthakJariwala/sqlsaber/commit/033007191b8d28538e01266cbe940ccf50ba7d75))
+* serve read-only database tools over MCP ([#303](https://github.com/SarthakJariwala/sqlsaber/issues/303)) ([5092ccb](https://github.com/SarthakJariwala/sqlsaber/commit/5092ccb333427977503618f4722c0166322779fc))
+* ship handoff as a configurable bundled capability ([#300](https://github.com/SarthakJariwala/sqlsaber/issues/300)) ([7c11b16](https://github.com/SarthakJariwala/sqlsaber/commit/7c11b16aaa694d461d6496cc6516b1555d74b832))
+* support ChatGPT subscriptions through native Codex provider ([#293](https://github.com/SarthakJariwala/sqlsaber/issues/293)) ([d7e951e](https://github.com/SarthakJariwala/sqlsaber/commit/d7e951e550af5c96148397cd252b6c9437d681ed))
+
+
+### Bug Fixes
+
+* **codex:** hide credential internals and expose models ([#298](https://github.com/SarthakJariwala/sqlsaber/issues/298)) ([fef4ea4](https://github.com/SarthakJariwala/sqlsaber/commit/fef4ea48d0c0d5458254a8a7e84dfc2672cb9b08))
+
+
+### Documentation
+
+* **auth:** explain ChatGPT subscription setup ([#297](https://github.com/SarthakJariwala/sqlsaber/issues/297)) ([7344a75](https://github.com/SarthakJariwala/sqlsaber/commit/7344a75214dba8822c304dbdd1ac331a49d8dc0f))
+* update verify-sqlsaber skill for plugins CLI ([#289](https://github.com/SarthakJariwala/sqlsaber/issues/289)) ([d3d514f](https://github.com/SarthakJariwala/sqlsaber/commit/d3d514fb0f1b1bbe42c8d550214524b8e9997934))
+
 ## [0.78.1](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-v0.78.0...sqlsaber-v0.78.1) (2026-09-17)
 
 

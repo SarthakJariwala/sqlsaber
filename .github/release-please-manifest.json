@@ -1,5 +1,5 @@
 {
-  ".": "0.78.1",
+  ".": "0.79.0",
   "plugins/viz": "0.8.0",
   "plugins/notebook": "0.9.1",
   "plugins/sandbox": "0.6.0"
