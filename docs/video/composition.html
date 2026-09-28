@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SQLsaber feature video</title>
+<meta name="viewport" content="width=1920">
+<style>
+/* Same self-hosted fonts as the docs site (docs/node_modules/@fontsource*). */
+@font-face {
+	font-family: "Doto";
+	src: url("../node_modules/@fontsource-variable/doto/files/doto-latin-full-normal.woff2") format("woff2");
+	font-weight: 100 900;
+	font-display: block;
+}
+@font-face {
+	font-family: "Space Grotesk";
+	src: url("../node_modules/@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2") format("woff2");
+	font-weight: 300 700;
+	font-display: block;
+}
+@font-face {
+	font-family: "Space Mono";
+	src: url("../node_modules/@fontsource/space-mono/files/space-mono-latin-400-normal.woff2") format("woff2");
+	font-weight: 400;
+	font-display: block;
+}
+@font-face {
+	font-family: "Space Mono";
+	src: url("../node_modules/@fontsource/space-mono/files/space-mono-latin-700-normal.woff2") format("woff2");
+	font-weight: 700;
+	font-display: block;
+}
+
+:root {
+	--bg: #000;
+	--surface: #080808;
+	--hair: #1c1c1c;
+	--line: #2c2c2c;
+	--dim: #5c5c5c;
+	--muted: #8c8c8c;
+	--soft: #bdbdbd;
+	--text: #e6e6e6;
+	--white: #fff;
+	--red: #d71921;
+	--red-hot: #ff4b4b;
+	--mono: "Space Mono", monospace;
+	--sans: "Space Grotesk", sans-serif;
+	--dot: "Doto", monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #000; }
+body { overflow: hidden; }
+
+#stage {
+	position: relative;
+	width: 1920px;
+	height: 1080px;
+	overflow: hidden;
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--sans);
+	-webkit-font-smoothing: antialiased;
+	transform-origin: 0 0;
+}
+
+#bg-grid {
+	position: absolute;
+	inset: 0;
+	background-image: radial-gradient(circle, #171717 1.4px, transparent 1.9px);
+	background-size: 40px 40px;
+	background-position: 20px 20px;
+}
+#bg-vignette {
+	position: absolute;
+	inset: 0;
+	background: radial-gradient(ellipse 75% 70% at 50% 46%, transparent 35%, #000 100%);
+}
+#flash {
+	position: absolute;
+	inset: 0;
+	background: radial-gradient(ellipse at 50% 50%, rgba(215, 25, 33, 0.55), rgba(215, 25, 33, 0.12) 60%, transparent 100%);
+	opacity: 0;
+	pointer-events: none;
+	mix-blend-mode: screen;
+}
+
+.scene { position: absolute; inset: 0; display: none; }
+.abs { position: absolute; }
+canvas.fx { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+/* Untyped text keeps its layout slot but stays invisible. */
+.ghost { color: transparent !important; }
+
+/* Instrument-panel label */
+.label {
+	font: 400 22px/1 var(--mono);
+	letter-spacing: 0.2em;
+	text-transform: uppercase;
+	color: var(--muted);
+	white-space: pre;
+}
+.sig {
+	display: inline-block;
+	width: 11px;
+	height: 11px;
+	background: var(--red);
+	margin-right: 18px;
+	vertical-align: 1px;
+}
+
+.headline {
+	font: 300 92px/1.04 var(--sans);
+	letter-spacing: -0.035em;
+	color: var(--white);
+	white-space: nowrap;
+}
+.mask {
+	display: inline-block;
+	overflow: hidden;
+	vertical-align: top;
+	padding: 0 0.04em 0.14em 0;
+	margin-bottom: -0.14em;
+}
+.mask > span { display: inline-block; }
+
+/* The saber: a red beam with a hot core */
+.beam {
+	position: absolute;
+	left: 0;
+	top: 0;
+	height: 4px;
+	transform-origin: 0 50%;
+	border-radius: 2px;
+	background: linear-gradient(90deg, rgba(255, 75, 75, 0) 0%, #ff4b4b 6%, #ffe5e5 50%, #ff4b4b 94%, rgba(255, 75, 75, 0) 100%);
+	box-shadow:
+		0 0 6px 1px rgba(255, 60, 60, 0.95),
+		0 0 22px 5px rgba(215, 25, 33, 0.75),
+		0 0 70px 16px rgba(215, 25, 33, 0.35);
+	opacity: 0;
+}
+
+/* ---------- ASK ---------- */
+.question {
+	font: 300 92px/1.1 var(--sans);
+	letter-spacing: -0.03em;
+	color: var(--white);
+	white-space: nowrap;
+}
+.question .w { display: inline-block; transform-origin: 0 0; }
+.question .c { position: relative; opacity: 0; }
+.cursor-block { position: absolute; background: var(--red); }
+
+/* ---------- DEMO / terminal ---------- */
+.term { position: absolute; }
+.term-bg { position: absolute; inset: 0; background: var(--surface); }
+.term-frame { position: absolute; left: 0; top: 0; overflow: visible; }
+.term-bar {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 52px;
+	border-bottom: 1px solid var(--hair);
+}
+.term-bar .lights { position: absolute; left: 22px; top: 21px; display: flex; gap: 9px; }
+.term-bar .lights i { display: block; width: 10px; height: 10px; background: #2a2a2a; }
+.term-bar .title {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 17px;
+	text-align: center;
+	font: 400 17px/1 var(--mono);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: #5a5a5a;
+}
+.term-view {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 53px;
+	bottom: 0;
+	overflow: hidden;
+	-webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 44px, #000 calc(100% - 20px), transparent 100%);
+	mask-image: linear-gradient(to bottom, transparent 0, #000 44px, #000 calc(100% - 20px), transparent 100%);
+}
+.term-content {
+	position: absolute;
+	left: 40px;
+	right: 40px;
+	top: 26px;
+	font: 400 28px/40px var(--mono);
+	color: #cfcfcf;
+	white-space: pre;
+}
+.row { position: relative; height: 40px; }
+.t-p { color: #5f5f5f; }
+.t-cmd { color: #fff; }
+.t-q { color: #fff; opacity: 0; }
+.t-dimb { color: #8a8a8a; font-weight: 700; }
+.t-dim { color: #6b6b6b; }
+.t-b { color: #fff; font-weight: 700; }
+.t-kw { color: #fff; font-weight: 700; }
+.t-fn { color: #fff; }
+.t-id { color: #a6a6a6; }
+.t-str { color: #ff5a5f; }
+.t-num { color: #ff5a5f; }
+.t-op { color: #6f6f6f; }
+.ico {
+	display: inline-block;
+	position: relative;
+	width: 2ch;
+	height: 40px;
+	vertical-align: top;
+}
+.ico svg { position: absolute; left: 0; top: 9px; }
+.term-cursor { position: absolute; width: 1ch; height: 34px; background: var(--red); }
+
+.tbl {
+	display: inline-grid;
+	grid-template-columns: 17ch 14ch;
+	border: 1px solid #333;
+	margin-top: 4px;
+}
+.tbl .tr { display: contents; }
+.tbl .tr > span { padding: 0 1ch; height: 40px; }
+.tbl .th > span { color: #fff; font-weight: 700; border-bottom: 1px solid #333; }
+.tbl .tr > span + span { border-left: 1px solid #333; }
+
+.steps-label { left: 1340px; top: 104px; }
+.step { position: absolute; left: 1340px; width: 480px; height: 110px; }
+.step .mk { position: absolute; left: 0; top: 15px; width: 14px; height: 14px; background: #000; }
+.step .mk i { position: absolute; inset: 0; border: 1.5px solid #3a3a3a; }
+.step .mk b { position: absolute; inset: 0; background: var(--red); opacity: 0; }
+.step .mk u { position: absolute; inset: 0; background: #fff; opacity: 0; }
+.step .ix { position: absolute; left: 40px; top: 1px; font: 900 36px/1 var(--dot); color: #fff; }
+.step .tt { position: absolute; left: 100px; top: 0; font: 400 36px/1.1 var(--sans); letter-spacing: -0.02em; color: #fff; white-space: nowrap; }
+.step .sb { position: absolute; left: 100px; top: 52px; font: 400 17px/1 var(--mono); letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; white-space: nowrap; }
+.rail { position: absolute; left: 1346px; width: 2px; background: #1e1e1e; }
+.rail > i { position: absolute; left: 0; top: 0; width: 2px; background: #fff; }
+
+.answer-card { left: 1340px; top: 640px; width: 480px; }
+.answer-card .big { font: 800 250px/0.8 var(--dot); color: #fff; margin: 34px 0 0 -10px; }
+.answer-card .cap { font: 400 30px/1.25 var(--sans); letter-spacing: -0.01em; color: var(--soft); margin-top: 30px; }
+
+/* ---------- SAFE ---------- */
+.drop {
+	font: 700 112px/1 var(--mono);
+	letter-spacing: -0.02em;
+	color: #fff;
+	white-space: pre;
+	padding: 16px 0;
+}
+.errline { font: 400 30px/1 var(--mono); color: #d4d4d4; white-space: pre; }
+.errline .ico { height: 30px; }
+.errline .ico svg { top: 3px; }
+.sub { font: 400 34px/1.3 var(--sans); letter-spacing: -0.01em; color: #9a9a9a; white-space: nowrap; }
+.sub code { font: 400 30px/1 var(--mono); color: #fff; letter-spacing: 0; }
+
+/* ---------- STACK ---------- */
+.tile { position: absolute; width: 512px; height: 196px; border: 1px solid #262626; background: rgba(8, 8, 8, 0.9); }
+.tile .nm { position: absolute; left: 32px; top: 30px; font: 400 50px/1 var(--sans); letter-spacing: -0.03em; color: #fff; }
+.tile .cp { position: absolute; left: 32px; bottom: 30px; font: 400 21px/1 var(--mono); color: #6f6f6f; }
+.tile .led { position: absolute; right: 26px; top: 28px; width: 12px; height: 12px; background: #2c2c2c; }
+.tile .glow { position: absolute; inset: -1px; border: 1px solid #fff; opacity: 0; }
+.strip { position: absolute; border: 1px solid #2c2c2c; background: var(--surface); font: 400 30px/1 var(--mono); color: #fff; white-space: pre; }
+.strip .t-p { color: #5f5f5f; }
+.marquee { position: absolute; left: 0; white-space: nowrap; font: 300 104px/1 var(--sans); letter-spacing: -0.035em; color: #fff; }
+.marquee .sep { display: inline-block; width: 16px; height: 16px; background: var(--red); margin: 0 58px; vertical-align: 26px; }
+.marquee.alt { font: 400 26px/1 var(--mono); letter-spacing: 0.2em; color: #555; text-transform: uppercase; }
+.marquee.alt .sep { width: 8px; height: 8px; margin: 0 30px; vertical-align: 5px; background: #333; }
+.fade-edges {
+	-webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14%, #000 86%, transparent 100%);
+	mask-image: linear-gradient(90deg, transparent 0, #000 14%, #000 86%, transparent 100%);
+}
+
+/* ---------- MORE ---------- */
+.card { position: absolute; width: 784px; height: 236px; border: 1px solid #242424; background: rgba(8, 8, 8, 0.92); }
+.card .ix { position: absolute; left: 32px; top: 29px; font: 900 36px/1 var(--dot); color: #fff; }
+.card .lb { position: absolute; left: 96px; top: 36px; font: 400 19px/1 var(--mono); letter-spacing: 0.18em; color: var(--muted); }
+.card .tt { position: absolute; left: 32px; top: 88px; font: 400 44px/1 var(--sans); letter-spacing: -0.025em; color: #fff; white-space: nowrap; }
+.card .cm { position: absolute; left: 32px; bottom: 30px; font: 400 23px/1 var(--mono); color: #bdbdbd; white-space: pre; }
+.card .cm .t-p { color: #555; }
+.card .glow { position: absolute; inset: -1px; border: 1px solid #fff; opacity: 0; }
+
+/* ---------- OUTRO ---------- */
+.tagline { font: 300 44px/1 var(--sans); letter-spacing: -0.02em; color: #cfcfcf; white-space: nowrap; }
+.install { position: absolute; height: 92px; border: 1px solid #333; background: var(--surface); font: 400 36px/92px var(--mono); color: #fff; white-space: pre; }
+.install .t-p { color: #5f5f5f; }
+.footer-line { font: 500 36px/1 var(--sans); letter-spacing: -0.02em; color: #fff; white-space: nowrap; }
+.footer-line .meta { font: 400 19px/1 var(--mono); letter-spacing: 0.2em; color: #777; vertical-align: 7px; }
+.footer-line .dotsep { display: inline-block; width: 8px; height: 8px; background: #444; margin: 0 28px; vertical-align: 9px; }
+/* Round LED dots for the dot-matrix display face (after the `font` shorthands,
+   which reset font-variation-settings). */
+.step .ix, .card .ix, .answer-card .big { font-variation-settings: "ROND" 100; }
+</style>
+</head>
+<body>
+<div id="stage">
+	<div id="bg-grid"></div>
+	<div id="bg-vignette"></div>
+</div>
+<script src="composition.js"></script>
+</body>
+</html>

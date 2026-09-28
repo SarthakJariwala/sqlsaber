@@ -1,0 +1,77 @@
+---
+/**
+ * Silent, looping product video for the landing page.
+ *
+ * Source and renderer live in docs/video/ (see docs/video/README.md).
+ * Playback starts from script so that visitors who prefer reduced motion keep
+ * the poster frame and get play controls instead.
+ */
+---
+
+<figure class="feature-video">
+	<video
+		width="1920"
+		height="1080"
+		muted
+		loop
+		playsinline
+		preload="none"
+		poster="/video/sqlsaber-feature-poster.jpg"
+		aria-describedby="feature-video-description"
+	>
+		<source src="/video/sqlsaber-feature-av1.mp4" type='video/mp4; codecs="av01.0.09M.08"' />
+		<source src="/video/sqlsaber-feature.mp4" type='video/mp4; codecs="avc1.64002A"' />
+	</video>
+	<script is:inline>
+		(() => {
+			const video = document.currentScript.previousElementSibling;
+			const showControls = () => {
+				video.controls = true;
+			};
+			if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+				showControls();
+				return;
+			}
+			video.preload = "auto";
+			// Fall back to controls when the browser blocks autoplay (e.g. low-power
+			// mode). A pause while play() is pending rejects with AbortError instead.
+			const play = () =>
+				video.play().catch((err) => {
+					if (err.name === "NotAllowedError") showControls();
+				});
+			if (!("IntersectionObserver" in window)) {
+				play();
+				return;
+			}
+			// Only play while the video is on screen.
+			new IntersectionObserver(([entry]) => {
+				if (entry.isIntersecting) play();
+				else video.pause();
+			}).observe(video);
+		})();
+	</script>
+	<figcaption id="feature-video-description" class="sr-only">
+		Product video: SQLsaber turns the question "How many VPs became president by election in the 20th
+		century?" into SQL, runs it read-only against a SQLite database, and answers: two, Richard Nixon
+		and George H. W. Bush. It then shows that write statements are blocked by default, the supported
+		databases and model providers, the knowledge base, threads, Python SDK, and MCP server, and the
+		install command uv tool install sqlsaber.
+	</figcaption>
+</figure>
+
+<style>
+	.feature-video {
+		width: min(100%, 64rem);
+		margin: 0 auto;
+		padding: 0 1rem var(--nd-space-2xl, 48px);
+	}
+
+	.feature-video video {
+		display: block;
+		width: 100%;
+		height: auto;
+		aspect-ratio: 16 / 9;
+		background: #000;
+		border: 1px solid var(--sl-color-hairline-light);
+	}
+</style>
