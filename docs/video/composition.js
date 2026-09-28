@@ -40,7 +40,6 @@
 		inCubic: (p) => p ** 3,
 		inOutCubic: (p) => (p < 0.5 ? 4 * p ** 3 : 1 - (-2 * p + 2) ** 3 / 2),
 		outQuart: (p) => 1 - (1 - p) ** 4,
-		outExpo: (p) => (p >= 1 ? 1 : 1 - 2 ** (-10 * p)),
 	};
 	// Eased progress of question word `i` on its way into the terminal.
 	const flight = (i, g) => E.inOutCubic(seg(g, MORPH + i * FLIGHT.stagger, MORPH + i * FLIGHT.stagger + FLIGHT.dur));
@@ -112,7 +111,7 @@
 	const ICON = {
 		check: (size = 22, color = "#fff") =>
 			`<svg width="${size}" height="${size}" viewBox="0 0 22 22"><path d="M3.5 11.5l5 5 10-11" fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="square"/></svg>`,
-		cross: (size = 22, color = "#d71921") =>
+		cross: (size = 22, color = "#ffffff") =>
 			`<svg width="${size}" height="${size}" viewBox="0 0 22 22"><path d="M5 5l12 12M17 5L5 17" fill="none" stroke="${color}" stroke-width="2.8" stroke-linecap="square"/></svg>`,
 		spinner: () => {
 			let s = '<svg width="22" height="22" viewBox="0 0 22 22">';
@@ -318,7 +317,7 @@
 	}
 
 	// Draw the lockup as an LED panel: dim dots everywhere, lit dots switching
-	// on in a left-to-right wave with a red leading edge.
+	// on in a left-to-right wave with a brief bloom.
 	function drawLockup(ctx, g, o) {
 		const { pitch, t } = o;
 		const m = 2;
@@ -356,12 +355,10 @@
 				if (on > 0.004) {
 					const k = E.outCubic(on);
 					ctx.globalAlpha = Math.min(1, on * 3) * alpha;
-					const cr = Math.round(lerp(255, 244, k));
-					const cg = Math.round(lerp(64, 244, k));
-					const cb = Math.round(lerp(64, 244, k));
-					ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
+					const v = Math.round(lerp(255, 244, k));
+					ctx.fillStyle = `rgb(${v},${v},${v})`;
 					ctx.beginPath();
-					ctx.arc(x, y, rLit * (1 + 0.55 * fresh), 0, Math.PI * 2);
+					ctx.arc(x, y, rLit * (1 + 0.45 * fresh), 0, Math.PI * 2);
 					ctx.fill();
 					if (fresh > 0.02) glows.push([x, y, fresh]);
 				}
@@ -369,29 +366,20 @@
 		}
 		ctx.globalCompositeOperation = "lighter";
 		for (const [x, y, f] of glows) {
-			ctx.globalAlpha = 0.35 * f * alpha;
-			ctx.fillStyle = "#d71921";
+			ctx.globalAlpha = 0.14 * f * alpha;
+			ctx.fillStyle = "#ffffff";
 			ctx.beginPath();
-			ctx.arc(x, y, rLit * 2.6, 0, Math.PI * 2);
+			ctx.arc(x, y, rLit * 2.4, 0, Math.PI * 2);
 			ctx.fill();
 		}
 		ctx.globalCompositeOperation = "source-over";
 		ctx.globalAlpha = 1;
 	}
 
-	// A saber beam starting at (x, y), `width` long and rotated by `angle` radians.
-	function renderBeam(beam, { x, y, width, angle = 0, intensity = 1, thickness = 4 }) {
-		beam.style.width = px(Math.max(0, width));
-		beam.style.height = px(thickness);
-		tf(beam, `translate(${x.toFixed(2)}px, ${(y - thickness / 2).toFixed(2)}px) rotate(${angle}rad)`);
-		op(beam, intensity);
-	}
-
 	// ---------------------------------------------------------------- scenes
 
 	let DPR = 1;
 	const stage = document.getElementById("stage");
-	const flash = h("div", { id: "flash" });
 	const bgGrid = document.getElementById("bg-grid");
 
 	function fxCanvas(parent) {
@@ -410,12 +398,10 @@
 		const lw = grid.cols * pitch;
 		const lh = grid.rows * pitch;
 		const lx = Math.round((W - lw) / 2);
-		const ly = Math.round(H / 2 - lh / 2 - 50);
+		const ly = Math.round(H / 2 - lh / 2 - 30);
 		const tag = h("div", { class: "label abs", style: { left: "0", width: px(W), textAlign: "center", paddingLeft: "0.2em", fontSize: "24px", letterSpacing: "0.34em", color: "#9a9a9a" } });
-		place(tag, 0, ly + lh + 96);
-		const beam = h("div", { class: "beam" });
-		el.append(tag, beam);
-		const beamY = ly + lh + 50;
+		place(tag, 0, ly + lh + 64);
+		el.append(tag);
 
 		return {
 			el,
@@ -423,20 +409,11 @@
 			render(t) {
 				ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 				ctx.clearRect(0, 0, W, H);
-				// Exit: the beam cuts across and the two halves part quickly.
-				const part = E.outCubic(seg(t, 3.02, 3.42));
-				const gone = E.inCubic(seg(t, 3.02, 3.36));
-				drawLockup(ctx, grid, { x: lx, y: ly - part * 190, pitch, t, panel: 0.0, on: 0.28, span: 0.8, alpha: 1 - gone });
+				// Exit: the dots switch off in a quick wave, then the panel fades.
+				const fade = E.inCubic(seg(t, 3.0, 3.4));
+				drawLockup(ctx, grid, { x: lx, y: ly, pitch, t, panel: 0.0, on: 0.28, span: 0.8, off: 2.75, offSpan: 0.4, alpha: 1 - fade });
 				scramble(tag, "AGENTIC SQL ASSISTANT", t, 1.15, 3, 0.03, 0.2);
-				op(tag, 1 - gone);
-				tf(tag, `translateY(${(part * 190).toFixed(2)}px)`);
-
-				const ignite = E.outExpo(seg(t, 1.8, 2.3));
-				const stretch = E.inOutCubic(seg(t, 2.8, 3.05));
-				const width = lerp(lw * ignite, W + 120, stretch);
-				const flicker = 0.93 + 0.07 * hash(Math.floor(t * 30));
-				const fade = 1 - E.outCubic(seg(t, 3.05, 3.5));
-				renderBeam(beam, { x: W / 2 - width / 2, y: beamY, width, intensity: Math.min(1, ignite * 1.4) * flicker * fade, thickness: lerp(4, 2, seg(t, 3.05, 3.5)) });
+				op(tag, 1 - E.inCubic(seg(t, 2.8, 3.2)));
 			},
 		};
 	}
@@ -898,18 +875,13 @@
 		const lab = label("Safe by default");
 		place(lab, 160, 238);
 		const TEXT = "DROP TABLE legislators;";
-		const mk = () => {
-			const d = h("div", { class: "drop abs" });
-			place(d, 156, 290);
-			const ty = new Typed(d, [[TEXT, ""]]);
-			el.append(d);
-			return { d, ty };
-		};
-		const full = mk();
-		const top = mk();
-		const bot = mk();
+		const X0 = 156;
+		const Y0 = 290;
+		const drop = h("div", { class: "drop abs" });
+		place(drop, X0, Y0);
+		const typed = new Typed(drop, [[TEXT, ""]]);
+		const strike = h("div", { class: "strike abs" });
 		const cursor = h("div", { class: "cursor-block" });
-		const beam = h("div", { class: "beam" });
 		const err = h("div", { class: "errline abs" });
 		place(err, 160, 500);
 		err.append(h("span", { class: "ico", html: ICON.cross(26) }));
@@ -922,79 +894,56 @@
 		const headWords = riseWords(head, "Read-only by default.");
 		const sub = h("div", { class: "sub abs", html: "Writes stay off unless you pass <code>--allow-dangerous</code>." });
 		place(sub, 160, 830);
-		el.append(lab, cursor, beam, err, head, sub);
+		el.append(drop, strike, lab, cursor, err, head, sub);
 
 		let geo = null;
-		const S = { type: [0.25, 0.95], cut: 1.3, err: [1.85, 2.45], head: 2.35, sub: 2.75, exit: [4.1, 4.55] };
+		const S = { type: [0.25, 0.95], strike: [1.3, 1.65], err: [1.85, 2.45], head: 2.35, sub: 2.75, exit: [4.1, 4.55] };
 
 		return {
 			el,
 			range: T.safe,
 			measure() {
-				const w = full.d.offsetWidth;
-				const hh = full.d.offsetHeight;
-				const y1 = hh * 0.66;
-				const y2 = hh * 0.36;
-				const ext = 260;
-				const clipTop = `polygon(${-ext}px ${-ext}px, ${w + ext}px ${-ext}px, ${w + ext}px ${y2 - ((y1 - y2) / w) * ext}px, ${-ext}px ${y1 + ((y1 - y2) / w) * ext}px)`;
-				const clipBot = `polygon(${-ext}px ${y1 + ((y1 - y2) / w) * ext}px, ${w + ext}px ${y2 - ((y1 - y2) / w) * ext}px, ${w + ext}px ${hh + ext}px, ${-ext}px ${hh + ext}px)`;
-				top.d.style.clipPath = clipTop;
-				bot.d.style.clipPath = clipBot;
-				const angle = Math.atan2(y2 - y1, w);
-				geo = { w, hh, y1, y2, angle, charW: w / TEXT.length, x0: 156, y0: 290 };
+				// A zero-size inline-block sits on the baseline of the statement.
+				const probe = h("span", { style: { display: "inline-block", width: "0", height: "0" } });
+				drop.append(probe);
+				const baseline = probe.offsetTop;
+				probe.remove();
+				const w = drop.offsetWidth;
+				const size = Number.parseFloat(getComputedStyle(drop).fontSize);
+				geo = { w, hh: drop.offsetHeight, baseline, charW: w / TEXT.length };
+				place(strike, X0 - 10, Math.round(Y0 + baseline - size * 0.31 - 3));
+				strike.style.width = px(w + 20);
 			},
 			render(t) {
 				const exit = E.inCubic(seg(t, S.exit[0], S.exit[1]));
 				op(el, seg(t, 0, 0.25) * (1 - exit));
 				renderLabel(lab, t, 0.1, 21);
 				const n = seg(t, S.type[0], S.type[1]) * TEXT.length;
-				for (const part of [full, top, bot]) part.ty.show(n);
+				typed.show(n);
 
-				const cutP = seg(t, S.cut + 0.12, S.cut + 0.5);
-				const split = E.outCubic(cutP);
-				const sliced = t >= S.cut + 0.12;
-				show(full.d, !sliced);
-				show(top.d, sliced);
-				show(bot.d, sliced);
-				const { angle } = geo;
-				const dx = Math.cos(angle);
-				const dy = Math.sin(angle);
-				const nx = -dy;
-				const ny = dx;
-				tf(top.d, `translate(${(dx * 44 * split - nx * 12 * split).toFixed(2)}px, ${(dy * 44 * split - ny * 12 * split).toFixed(2)}px)`);
-				tf(bot.d, `translate(${(-dx * 8 * split + nx * 5 * split).toFixed(2)}px, ${(-dy * 8 * split + ny * 5 * split).toFixed(2)}px)`);
-				const dimP = E.outCubic(seg(t, S.cut + 0.2, S.cut + 1.0));
-				const grey = Math.round(lerp(255, 70, dimP));
-				const col = `rgb(${grey},${grey},${grey})`;
-				top.d.style.color = col;
-				bot.d.style.color = col;
+				// The guard rejects the statement: strike it through and dim it.
+				const sp = E.inOutCubic(seg(t, S.strike[0], S.strike[1]));
+				tf(strike, `scaleX(${sp.toFixed(4)})`);
+				op(strike, sp > 0 ? 1 : 0);
+				const dim = E.outCubic(seg(t, S.strike[0] + 0.15, S.strike[1] + 0.5));
+				const textGrey = Math.round(lerp(255, 78, dim));
+				drop.style.color = `rgb(${textGrey},${textGrey},${textGrey})`;
+				const strikeGrey = Math.round(lerp(240, 150, dim));
+				strike.style.background = `rgb(${strikeGrey},${strikeGrey},${strikeGrey})`;
 
 				// Typing cursor.
-				const typing = t < S.cut;
+				const typing = t < S.strike[0];
 				const blink = t < S.type[1] || Math.floor(t * 2.4) % 2 === 0;
-				place(cursor, Math.round(geo.x0 + Math.floor(n) * geo.charW + 6), geo.y0 + 30);
+				place(cursor, Math.round(X0 + Math.floor(n) * geo.charW + 6), Y0 + 30);
 				cursor.style.width = "14px";
 				cursor.style.height = px(geo.hh - 60);
 				op(cursor, t > S.type[0] - 0.1 && typing && blink ? 1 : 0);
-
-				// The saber cut across the statement.
-				const grow = E.outExpo(seg(t, S.cut, S.cut + 0.16));
-				const glow = 1 - E.outCubic(seg(t, S.cut + 0.2, S.cut + 1.1));
-				const ext = 230;
-				const len = (geo.w + ext * 2) / Math.cos(angle);
-				const sx = geo.x0 - ext;
-				const syy = geo.y0 + geo.y1 + Math.tan(-angle) * ext;
-				// After the flash, the cut settles into a thin red scar.
-				renderBeam(beam, { x: sx, y: syy, width: len * grow, angle, intensity: grow > 0 ? lerp(0.3, 1, glow) : 0, thickness: lerp(5, 1.5, seg(t, S.cut + 0.2, S.cut + 1.1)) });
 
 				errTyped.show(seg(t, S.err[0], S.err[1]) * errTyped.length);
 				op(err.firstChild, seg(t, S.err[0], S.err[0] + 0.05));
 				renderRise(headWords, t, S.head);
 				op(sub, E.outCubic(seg(t, S.sub, S.sub + 0.5)));
 				tf(sub, `translateY(${((1 - E.outCubic(seg(t, S.sub, S.sub + 0.5))) * 16).toFixed(2)}px)`);
-			},
-			flash(t) {
-				return t >= S.cut + 0.1 ? 0.32 * (1 - E.outCubic(seg(t, S.cut + 0.1, S.cut + 0.45))) : 0;
 			},
 		};
 	}
@@ -1096,7 +1045,7 @@
 					let lit = 0;
 					if (i === 4) lit = n >= litAt[0] ? 1 : 0;
 					if (i === 5) lit = n >= litAt[1] ? 1 : 0;
-					tile.led.style.background = lit ? "#d71921" : "#2c2c2c";
+					tile.led.style.background = lit ? "#ffffff" : "#2c2c2c";
 					op(tile.glow, lit * 0.85);
 				});
 				op(strip, E.outCubic(seg(t, S.cmd[0] - 0.3, S.cmd[0])));
@@ -1179,13 +1128,11 @@
 		const typed = new Typed(box, TEXT);
 		const bcursor = h("div", { class: "cursor-block" });
 		box.append(bcursor);
-		const beam = h("div", { class: "beam" });
 		const foot = h("div", { class: "footer-line abs", style: { left: "0", width: px(W), textAlign: "center" } });
 		foot.innerHTML = 'sqlsaber.com<span class="dotsep"></span><span class="meta">OPEN SOURCE · APACHE-2.0</span>';
 		place(foot, 0, ly + lh + 330);
-		el.append(tag, box, beam, foot);
-		const boxY = ly + lh + 170;
-		const S = { on: 0.15, tag: 0.95, box: 1.3, type: [1.45, 2.1], beam: 2.25, foot: 2.5, off: 5.0 };
+		el.append(tag, box, foot);
+		const S = { on: 0.15, tag: 0.95, box: 1.3, type: [1.45, 2.1], foot: 2.5, off: 5.0 };
 
 		return {
 			el,
@@ -1207,10 +1154,6 @@
 				bcursor.style.width = "20px";
 				bcursor.style.height = "40px";
 				op(bcursor, t < S.type[1] || Math.floor((t - S.type[1]) * 2.2) % 2 === 0 ? 1 : 0);
-				const ignite = E.outExpo(seg(t, S.beam, S.beam + 0.5));
-				const bw = boxW * ignite;
-				const flicker = 0.93 + 0.07 * hash(Math.floor(t * 30) + 77);
-				renderBeam(beam, { x: W / 2 - bw / 2, y: boxY + 92, width: bw, intensity: ignite * flicker * (1 - end) * lerp(1, 0.7, seg(t, S.beam + 0.5, S.beam + 1.2)), thickness: 3 });
 				const fp = E.outCubic(seg(t, S.foot, S.foot + 0.5));
 				op(foot, fp * (1 - end));
 				tf(foot, `translateY(${((1 - fp) * 14).toFixed(2)}px)`);
@@ -1235,10 +1178,6 @@
 			if (on) s.render(t - a, t);
 		}
 		op(bgGrid, inOut(t, 3.1, 3.8, DURATION - 1.0, DURATION - 0.3));
-		let f = 0;
-		for (const s of scenes) if (s.flash && t >= s.range[0] && t < s.range[1]) f = Math.max(f, s.flash(t - s.range[0]));
-		f = Math.max(f, t >= 3.0 && t < 3.6 ? 0.3 * (1 - E.outCubic(seg(t, 3.0, 3.45))) : 0);
-		op(flash, f);
 	}
 
 	async function init() {
@@ -1265,7 +1204,6 @@
 		for (const s of scenes) stage.append(s.el);
 		ask.el.style.zIndex = "3";
 		demo.el.style.zIndex = "2";
-		stage.append(flash);
 
 		// Measure final layouts once (the morph targets and scroll plan need them).
 		for (const s of scenes) s.el.style.display = "block";

@@ -14,11 +14,11 @@ renders are deterministic and edits are ordinary code changes.
 
 ## Scenes
 
-1. **Intro**: the `[SQL]saber` lockup lights up as a dot-matrix display; a red "saber" beam cuts to the next scene.
+1. **Intro**: the `[SQL]saber` lockup lights up as a dot-matrix display, then switches off.
 2. **Ask**: the question from the README types out, then flies into the terminal.
 3. **Demo**: `saber -d ./legislators.db "How many VPs became president by election in the 20th century?"`
    with the real tool steps, SQL, and result from the sample `legislators.db`.
-4. **Safe by default**: `DROP TABLE legislators;` is cut and rejected with the real SQL guard message.
+4. **Safe by default**: `DROP TABLE legislators;` is struck through and rejected with the real SQL guard message.
 5. **Stack and models**: supported databases and file formats, then providers.
 6. **Workflow**: knowledge base, threads, Python SDK, MCP server.
 7. **Outro**: the install command and sqlsaber.com.
