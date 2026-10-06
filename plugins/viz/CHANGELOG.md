@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.9.0...sqlsaber-viz-v0.9.1) (2026-10-06)
+
+
+### Bug Fixes
+
+* **deps:** update vulnerable audit dependencies ([#306](https://github.com/SarthakJariwala/sqlsaber/issues/306)) ([8a9db37](https://github.com/SarthakJariwala/sqlsaber/commit/8a9db3702dc606f9d624d2d514809720be507c64))
+
 ## [0.9.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-viz-v0.8.0...sqlsaber-viz-v0.9.0) (2026-09-28)
 
 
