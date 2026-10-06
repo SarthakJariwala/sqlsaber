@@ -17,6 +17,11 @@
           "type": "toml",
           "path": "plugins/notebook/uv.lock",
           "jsonpath": "$.package[?(@.name.value=='sqlsaber')].version"
+        },
+        {
+          "type": "toml",
+          "path": "plugins/sandbox/uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='sqlsaber')].version"
         }
       ]
     },

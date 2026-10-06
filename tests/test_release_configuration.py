@@ -6,7 +6,7 @@ from typing import Any
 _REPOSITORY_ROOT = Path(__file__).parents[1]
 _CONFIG_PATH = _REPOSITORY_ROOT / ".github" / "release-please-config.json"
 _EXPECTED_LOCKFILES = {
-    ".": {"uv.lock", "plugins/notebook/uv.lock"},
+    ".": {"uv.lock", "plugins/notebook/uv.lock", "plugins/sandbox/uv.lock"},
     "plugins/notebook": {"uv.lock", "plugins/notebook/uv.lock"},
     "plugins/sandbox": {"uv.lock", "plugins/sandbox/uv.lock"},
     "plugins/viz": {"uv.lock", "plugins/viz/uv.lock"},

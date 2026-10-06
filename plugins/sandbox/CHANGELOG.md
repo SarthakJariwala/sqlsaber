@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-sandbox-v0.7.0...sqlsaber-sandbox-v0.7.1) (2026-10-06)
+
+
+### Bug Fixes
+
+* **deps:** update vulnerable audit dependencies ([#306](https://github.com/SarthakJariwala/sqlsaber/issues/306)) ([8a9db37](https://github.com/SarthakJariwala/sqlsaber/commit/8a9db3702dc606f9d624d2d514809720be507c64))
+
 ## [0.7.0](https://github.com/SarthakJariwala/sqlsaber/compare/sqlsaber-sandbox-v0.6.0...sqlsaber-sandbox-v0.7.0) (2026-09-28)
 
 
