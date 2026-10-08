@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from collections.abc import Mapping
 from typing import cast
 
 from pydantic import ValidationError
 from pydantic_ai import RunContext
+from pydantic_ai.exceptions import UnexpectedModelBehavior
 
 from sqlsaber.capabilities.plugins import PluginContext
 from sqlsaber.query_result_resolution import (
@@ -68,7 +70,7 @@ class VizTool(Tool):
     def name(self) -> str:
         return "viz"
 
-    def render_executing(self, args: dict):
+    def render_executing(self, args: Mapping[str, object]):
         """Suppress default JSON rendering during execution."""
         del args
         return ()
@@ -140,6 +142,7 @@ class VizTool(Tool):
                     row_count=row_count,
                     file=file,
                     chart_type_hint=chart_type,
+                    rows=rows,
                 ),
                 timeout=SPEC_TIMEOUT_SECONDS,
             )
@@ -152,7 +155,12 @@ class VizTool(Tool):
                     "details": f"Timed out after {SPEC_TIMEOUT_SECONDS} seconds.",
                 }
             )
-        except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+        except (
+            ValidationError,
+            json.JSONDecodeError,
+            ValueError,
+            UnexpectedModelBehavior,
+        ) as exc:
             return json_dumps(
                 {
                     "error": "Failed to generate a valid visualization spec.",
